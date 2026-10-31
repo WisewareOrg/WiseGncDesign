@@ -1,8 +1,8 @@
 """The C&DH partition's data dictionary: for each algorithm, which neutral input role and
 signal feeds which of its sample fields, and which of its state fields feeds which neutral
-output role and signal. No transport-specific type or field name appears here; a transport
-under `cdh/<transport>/` resolves these signals against its own wire format
-(`scripts/check-cdh-dictionary-neutral.sh` enforces it)."""
+output role and signal, entirely in this file's own vocabulary. Each transport under
+`gnc_cdh/<transport>/` resolves these signals against its own wire format;
+`scripts/check-cdh-dictionary-neutral.sh` keeps this file's vocabulary to itself."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -15,13 +15,15 @@ from gnc_algorithms.imu_dead_reckoning import ImuDeadReckoner, ImuSample
 class AlgorithmBinding:
     """Everything transport-independent about hosting one algorithm: how to build it, and its
     data dictionary. `inputs` is `{role: {sample_field: (signal, frame)}}`, `frame` naming a
-    transform the transport applies before the value reaches the algorithm (`None` for no
-    transform). `outputs` is `{role: {state_attr: signal}}`."""
+    transform the transport applies before the value reaches the algorithm (`None` names the
+    identity transform). `outputs` is `{role: {state_attr: signal}}`. `init_keys` names the keys
+    `initial_state()` must supply to `make_algorithm`, on top of a host's own parameters."""
 
     sample_type: type
     make_algorithm: Callable[[float, dict], Any]
     inputs: dict[str, dict[str, tuple[str, str | None]]]
     outputs: dict[str, dict[str, str]]
+    init_keys: tuple[str, ...]
 
 
 BINDINGS: dict[str, AlgorithmBinding] = {
@@ -40,5 +42,6 @@ BINDINGS: dict[str, AlgorithmBinding] = {
             "nav_att": {"sigma_BN": "sigma_BN"},
             "nav_trans": {"r_N": "r_N", "v_N": "v_N"},
         },
+        init_keys=("sigma0_BN", "r0_N", "v0_N"),
     ),
 }
