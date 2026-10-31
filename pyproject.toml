@@ -18,6 +18,7 @@ packages = ["algorithms/gnc_algorithms"]
 dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.0",
+    "jupytext>=1.17",
 ]
 
 [tool.pytest.ini_options]
@@ -25,6 +26,10 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+# notebooks/ is generated from algorithms/gnc_algorithms/*.py by jupytext; the .py source is
+# linted directly, so the paired .ipynb (whose cell splitting can shift isort's grouping) is not
+# linted a second time.
+extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
