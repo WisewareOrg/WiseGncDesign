@@ -3,8 +3,7 @@ run file must contain).
 
 For every run: attitude error e(t) = 4*atan|sigma_truth (-) sigma_est| in degrees, position error
 |r_truth - r_est| in m, velocity error |v_truth - v_est| in m/s. Across the ensemble: a summary
-and a plot per metric. The analysis package imports nothing from gnc_algorithms, gnc_cdh or
-Basilisk — see mrp.py for the local MRP math.
+and a plot per metric. Grades runs against truth with the independent MRP math in mrp.py.
 """
 
 import argparse
