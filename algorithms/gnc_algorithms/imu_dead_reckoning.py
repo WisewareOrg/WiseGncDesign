@@ -26,8 +26,6 @@ class DeadReckoningState:
 
 
 def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
-    if mu == 0.0:
-        return np.zeros(3)
     r_norm = float(np.linalg.norm(r))
     return mu * r / r_norm**3
 

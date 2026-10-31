@@ -6,11 +6,15 @@ from gnc_algorithms import mrp
 from gnc_algorithms.imu_dead_reckoning import ImuDeadReckoner, ImuSample
 
 _ZERO3 = np.zeros(3)
+# _gravity computes mu * r / |r|^3 with no special case at r = 0 (matching the spec literally);
+# tests that don't care about r_N/v_N still need a position away from the origin to avoid a
+# division by zero (0/0 is NaN even when mu = 0).
+_AWAY_FROM_ORIGIN = np.array([7.0e6, 0.0, 0.0])
 
 
 def _run_constant_rate(omega_B, total_t, n_steps, sigma0=None, mu=0.0, r0=None, v0=None):
     sigma0 = _ZERO3 if sigma0 is None else sigma0
-    r0 = _ZERO3 if r0 is None else r0
+    r0 = _AWAY_FROM_ORIGIN if r0 is None else r0
     v0 = _ZERO3 if v0 is None else v0
     reckoner = ImuDeadReckoner(sigma0_BN=sigma0, r0_N=r0, v0_N=v0, t0=0.0, mu=mu)
     dt = total_t / n_steps
@@ -66,14 +70,16 @@ def test_rotation_past_180_degrees_switches_to_shadow_set():
 
 
 def test_zero_mu_constant_acceleration_zero_rate_gives_analytic_v_and_r():
+    r0 = np.array([1.0e6, -2.0e5, 3.0e5])
+    v0 = np.array([10.0, -5.0, 2.0])
     accel = np.array([0.3, -0.1, 0.05])
     total_t = 10.0
-    reckoner = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=_ZERO3, v0_N=_ZERO3, t0=0.0, mu=0.0)
+    reckoner = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=r0, v0_N=v0, t0=0.0, mu=0.0)
 
     state = reckoner.step(ImuSample(t=total_t, omega_B=_ZERO3, accel_B=accel))
 
-    np.testing.assert_allclose(state.v_N, accel * total_t, atol=1e-9)
-    np.testing.assert_allclose(state.r_N, 0.5 * accel * total_t**2, atol=1e-6)
+    np.testing.assert_allclose(state.v_N, v0 + accel * total_t, atol=1e-9)
+    np.testing.assert_allclose(state.r_N, r0 + v0 * total_t + 0.5 * accel * total_t**2, atol=1e-6)
 
 
 def test_accelerometer_rotated_body_to_inertial_at_nontrivial_attitude():
@@ -84,10 +90,11 @@ def test_accelerometer_rotated_body_to_inertial_at_nontrivial_attitude():
     axis = np.array([0.0, 0.0, 1.0])
     theta = np.pi / 2.0
     sigma0 = np.tan(theta / 4.0) * axis
+    r0 = _AWAY_FROM_ORIGIN
     accel = np.array([1.0, 0.0, 0.0])
     total_t = 10.0
 
-    reckoner = ImuDeadReckoner(sigma0_BN=sigma0, r0_N=_ZERO3, v0_N=_ZERO3, t0=0.0, mu=0.0)
+    reckoner = ImuDeadReckoner(sigma0_BN=sigma0, r0_N=r0, v0_N=_ZERO3, t0=0.0, mu=0.0)
     state = reckoner.step(ImuSample(t=total_t, omega_B=_ZERO3, accel_B=accel))
 
     cos_t, sin_t = np.cos(theta), np.sin(theta)
@@ -97,7 +104,7 @@ def test_accelerometer_rotated_body_to_inertial_at_nontrivial_attitude():
     # C_NB = C_BN^T; C_BN = cos*I + (1-cos)*axis*axis^T - sin*skew(axis) (as used elsewhere here).
     expected_c_nb = cos_t * np.eye(3) + (1.0 - cos_t) * np.outer(axis, axis) + sin_t * skew_axis
     expected_v = expected_c_nb @ accel * total_t
-    expected_r = 0.5 * expected_c_nb @ accel * total_t**2
+    expected_r = r0 + 0.5 * expected_c_nb @ accel * total_t**2
 
     np.testing.assert_allclose(state.v_N, expected_v, atol=1e-9)
     np.testing.assert_allclose(state.r_N, expected_r, atol=1e-6)
@@ -133,7 +140,9 @@ def test_kinematics_match_dcm_derivative_for_nonaligned_rate():
     # independent identity by finite difference.
     sigma0 = np.array([0.1, 0.0, 0.0])
     omega = np.array([0.0, 0.0, 0.3])
-    reckoner = ImuDeadReckoner(sigma0_BN=sigma0, r0_N=_ZERO3, v0_N=_ZERO3, t0=0.0, mu=0.0)
+    reckoner = ImuDeadReckoner(
+        sigma0_BN=sigma0, r0_N=_AWAY_FROM_ORIGIN, v0_N=_ZERO3, t0=0.0, mu=0.0
+    )
     dt = 1e-5
 
     state = reckoner.step(ImuSample(t=dt, omega_B=omega, accel_B=_ZERO3))
