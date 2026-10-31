@@ -1,7 +1,8 @@
-"""The C&DH partition's data dictionary: for each algorithm, which neutral input role feeds
-which of its sample fields, and which of its state fields feeds which neutral output role.
-Transport-independent: no message type, payload field name, reader or writer here — a transport
-under `cdh/<transport>/` resolves this dictionary against its own wire formats."""
+"""The C&DH partition's data dictionary: for each algorithm, which neutral input role and
+signal feeds which of its sample fields, and which of its state fields feeds which neutral
+output role and signal. No transport-specific type or field name appears here; a transport
+under `cdh/<transport>/` resolves these signals against its own wire format
+(`scripts/check-cdh-dictionary-neutral.sh` enforces it)."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -11,47 +12,33 @@ from gnc_algorithms.imu_dead_reckoning import ImuDeadReckoner, ImuSample
 
 
 @dataclass(frozen=True)
-class InputBinding:
-    """One field of the algorithm's sample, supplied by one neutral input role. `frame` names
-    a frame transform the transport applies before the value reaches the algorithm (e.g.
-    `"platform_to_body"`); `None` means the value needs no transform."""
-
-    role: str
-    algorithm_field: str
-    frame: str | None = None
-
-
-@dataclass(frozen=True)
-class OutputBinding:
-    """One field of the algorithm's state, delivered to one neutral output role."""
-
-    algorithm_field: str
-    role: str
-
-
-@dataclass(frozen=True)
 class AlgorithmBinding:
     """Everything transport-independent about hosting one algorithm: how to build it, and its
-    data dictionary of input and output fields."""
+    data dictionary. `inputs` is `{role: {sample_field: (signal, frame)}}`, `frame` naming a
+    transform the transport applies before the value reaches the algorithm (`None` for no
+    transform). `outputs` is `{role: {state_attr: signal}}`."""
 
     sample_type: type
     make_algorithm: Callable[[float, dict], Any]
-    inputs: list[InputBinding]
-    outputs: list[OutputBinding]
+    inputs: dict[str, dict[str, tuple[str, str | None]]]
+    outputs: dict[str, dict[str, str]]
 
 
-IMU_DEAD_RECKONING_BINDING = AlgorithmBinding(
-    sample_type=ImuSample,
-    make_algorithm=lambda t0, init: ImuDeadReckoner(
-        init["sigma0_BN"], init["r0_N"], init["v0_N"], t0, init["mu"]
+BINDINGS: dict[str, AlgorithmBinding] = {
+    "imu_dead_reckoning": AlgorithmBinding(
+        sample_type=ImuSample,
+        make_algorithm=lambda t0, init: ImuDeadReckoner(
+            init["sigma0_BN"], init["r0_N"], init["v0_N"], t0, init["mu"]
+        ),
+        inputs={
+            "imu": {
+                "omega_B": ("angular_rate", "platform_to_body"),
+                "accel_B": ("specific_force", "platform_to_body"),
+            },
+        },
+        outputs={
+            "nav_att": {"sigma_BN": "sigma_BN"},
+            "nav_trans": {"r_N": "r_N", "v_N": "v_N"},
+        },
     ),
-    inputs=[
-        InputBinding(role="imu", algorithm_field="omega_B", frame="platform_to_body"),
-        InputBinding(role="imu", algorithm_field="accel_B", frame="platform_to_body"),
-    ],
-    outputs=[
-        OutputBinding(algorithm_field="sigma_BN", role="navAtt"),
-        OutputBinding(algorithm_field="r_N", role="navTrans"),
-        OutputBinding(algorithm_field="v_N", role="navTrans"),
-    ],
-)
+}

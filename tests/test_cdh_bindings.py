@@ -1,31 +1,44 @@
-"""Cross-checks cdh.bindings' neutral data dictionary against the Basilisk transport's
-resolution of it, so the two cannot silently drift apart."""
+"""Pins cdh.bindings' data dictionary against the Basilisk transport's signals table, so a typo
+in either resolves to the wrong Basilisk field instead of silently matching."""
 
-import cdh.basilisk.bindings as basilisk_bindings
-import cdh.bindings as data_dictionary
+from Basilisk.architecture import messaging
 
-
-def test_basilisk_resolves_every_neutral_input_field():
-    neutral = data_dictionary.IMU_DEAD_RECKONING_BINDING
-    resolved = basilisk_bindings.IMU_DEAD_RECKONING_BINDING
-
-    expected = {(ib.role, ib.algorithm_field, ib.frame is not None) for ib in neutral.inputs}
-    actual = {(fm.src.partition(".")[0], fm.dst, fm.frame is not None) for fm in resolved.input_map}
-    assert actual == expected
+from cdh.basilisk.signals import SIGNALS
+from cdh.bindings import BINDINGS
 
 
-def test_basilisk_resolves_every_neutral_output_field():
-    neutral = data_dictionary.IMU_DEAD_RECKONING_BINDING
-    resolved = basilisk_bindings.IMU_DEAD_RECKONING_BINDING
+def test_imu_dead_reckoning_inputs_resolve_to_the_expected_basilisk_fields():
+    binding = BINDINGS["imu_dead_reckoning"]
+    for role, sample_fields in binding.inputs.items():
+        for _sample_field, (signal, _frame) in sample_fields.items():
+            assert SIGNALS[(role, signal)][0] is messaging.IMUSensorMsgReader
 
-    expected = {(ob.algorithm_field, ob.role) for ob in neutral.outputs}
-    actual = {(fm.src, fm.dst.partition(".")[0]) for fm in resolved.output_map}
-    assert actual == expected
+    assert SIGNALS[("imu", "angular_rate")] == (messaging.IMUSensorMsgReader, "AngVelPlatform")
+    assert SIGNALS[("imu", "specific_force")] == (messaging.IMUSensorMsgReader, "AccelPlatform")
 
 
-def test_basilisk_binding_shares_the_neutral_sample_type_and_constructor():
-    neutral = data_dictionary.IMU_DEAD_RECKONING_BINDING
-    resolved = basilisk_bindings.IMU_DEAD_RECKONING_BINDING
+def test_imu_dead_reckoning_outputs_resolve_to_the_expected_basilisk_fields():
+    assert SIGNALS[("nav_att", "sigma_BN")] == (
+        (messaging.NavAttMsgPayload, messaging.NavAttMsg),
+        "sigma_BN",
+    )
+    assert SIGNALS[("nav_trans", "r_N")] == (
+        (messaging.NavTransMsgPayload, messaging.NavTransMsg),
+        "r_BN_N",
+    )
+    assert SIGNALS[("nav_trans", "v_N")] == (
+        (messaging.NavTransMsgPayload, messaging.NavTransMsg),
+        "v_BN_N",
+    )
 
-    assert resolved.sample_type is neutral.sample_type
-    assert resolved.make_algorithm is neutral.make_algorithm
+
+def test_every_neutral_signal_in_the_dictionary_has_a_basilisk_resolution():
+    binding = BINDINGS["imu_dead_reckoning"]
+
+    for role, sample_fields in binding.inputs.items():
+        for _sample_field, (signal, _frame) in sample_fields.items():
+            assert (role, signal) in SIGNALS, f"no Basilisk resolution for ({role!r}, {signal!r})"
+
+    for role, state_attrs in binding.outputs.items():
+        for _state_attr, signal in state_attrs.items():
+            assert (role, signal) in SIGNALS, f"no Basilisk resolution for ({role!r}, {signal!r})"

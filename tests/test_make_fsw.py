@@ -31,8 +31,8 @@ def test_make_fsw_builds_imu_dead_reckoning_and_steps_it():
     module.UpdateState(1_000_000_000)  # 1 s later
 
     assert module.algorithm.state.t == 1.0
-    out_att = module.outputs["navAtt"][1].read()
-    out_trans = module.outputs["navTrans"][1].read()
+    out_att = module.outputs["nav_att"][1].read()
+    out_trans = module.outputs["nav_trans"][1].read()
     np.testing.assert_allclose(out_att.sigma_BN, module.algorithm.state.sigma_BN)
     np.testing.assert_allclose(out_trans.r_BN_N, module.algorithm.state.r_N)
     np.testing.assert_allclose(out_trans.v_BN_N, module.algorithm.state.v_N)
