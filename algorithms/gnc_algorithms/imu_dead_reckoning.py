@@ -26,9 +26,9 @@ class DeadReckoningState:
 
 
 def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
-    r_norm = float(np.linalg.norm(r))
-    if r_norm == 0.0:
+    if mu == 0.0:
         return np.zeros(3)
+    r_norm = float(np.linalg.norm(r))
     return mu * r / r_norm**3
 
 
@@ -56,7 +56,7 @@ class ImuDeadReckoner:
         dr/dt = v; dv/dt = dcm_NB(sigma) @ accel_B - mu * r / |r|^3. Switches sigma to the
         shadow set when |sigma| > 1 after the step. Returns the new state."""
         dt = sample.t - self._state.t
-        if dt <= 0.0:
+        if not dt > 0.0:
             raise ValueError(f"dt must be > 0, got {dt}")
 
         omega = np.asarray(sample.omega_B, dtype=float)

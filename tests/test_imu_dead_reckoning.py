@@ -76,6 +76,33 @@ def test_zero_mu_constant_acceleration_zero_rate_gives_analytic_v_and_r():
     np.testing.assert_allclose(state.r_N, 0.5 * accel * total_t**2, atol=1e-6)
 
 
+def test_accelerometer_rotated_body_to_inertial_at_nontrivial_attitude():
+    # The constant-acceleration test above holds sigma at 0, where dcm_NB(0) = I = dcm_NB(0).T,
+    # so it cannot tell C_NB from C_BN. omega = 0 keeps sigma fixed at a non-trivial attitude for
+    # the whole step, so an independently computed DCM (not mrp.dcm_NB) pins which direction
+    # step() actually applies to accel_B.
+    axis = np.array([0.0, 0.0, 1.0])
+    theta = np.pi / 2.0
+    sigma0 = np.tan(theta / 4.0) * axis
+    accel = np.array([1.0, 0.0, 0.0])
+    total_t = 10.0
+
+    reckoner = ImuDeadReckoner(sigma0_BN=sigma0, r0_N=_ZERO3, v0_N=_ZERO3, t0=0.0, mu=0.0)
+    state = reckoner.step(ImuSample(t=total_t, omega_B=_ZERO3, accel_B=accel))
+
+    cos_t, sin_t = np.cos(theta), np.sin(theta)
+    skew_axis = np.array(
+        [[0.0, -axis[2], axis[1]], [axis[2], 0.0, -axis[0]], [-axis[1], axis[0], 0.0]]
+    )
+    # C_NB = C_BN^T; C_BN = cos*I + (1-cos)*axis*axis^T - sin*skew(axis) (as used elsewhere here).
+    expected_c_nb = cos_t * np.eye(3) + (1.0 - cos_t) * np.outer(axis, axis) + sin_t * skew_axis
+    expected_v = expected_c_nb @ accel * total_t
+    expected_r = 0.5 * expected_c_nb @ accel * total_t**2
+
+    np.testing.assert_allclose(state.v_N, expected_v, atol=1e-9)
+    np.testing.assert_allclose(state.r_N, expected_r, atol=1e-6)
+
+
 def test_circular_orbit_zero_accelerometer_matches_analytic_two_body_position():
     mu = 3.986004418e14  # m^3/s^2, Earth
     radius = 6_871_000.0  # m, ~500 km LEO altitude
