@@ -1,0 +1,30 @@
+name: checks
+
+# Repo-wide invariant: algorithms/ carries no simulation or flight-framework name, so flight
+# code stays host-swappable (scripts/check-no-framework.sh). Not a required-status-check
+# context (repository-floor.yml names only check-branch, pr-title and repo-floor); this is the
+# repo's own invariant gate.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check-no-framework:
+    name: check-no-framework
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: No simulation or flight-framework name appears under algorithms/
+        run: scripts/check-no-framework.sh
