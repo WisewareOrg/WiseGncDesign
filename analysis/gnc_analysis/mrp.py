@@ -1,7 +1,7 @@
-"""MRP math needed by the attitude-error analysis: an independent implementation, so the
-grader shares no code with the algorithms it measures. Uses numpy only; the analysis package
-imports nothing from gnc_algorithms, gnc_cdh or Basilisk. Follows Basilisk's convention (Schaub
-& Junkins): sigma_BN, body wrt inertial.
+"""An independent implementation of MRP kinematics for grading, so a convention error in the
+algorithms cannot hide from the grader that scores them; scripts/check-analysis-independent.sh
+enforces the separation. Follows Basilisk's convention (Schaub & Junkins): sigma_BN, body wrt
+inertial.
 
 Every function broadcasts over a leading batch dimension: a shape-(3,) or shape-(N, 3) array of
 MRP vectors both work.
