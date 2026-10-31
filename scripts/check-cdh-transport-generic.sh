@@ -8,11 +8,14 @@ if [ ! -f "$target" ]; then
 fi
 
 # gnc_cdh/basilisk/algorithm_module.py hosts any algorithm generically; a match here means
-# algorithm-specific vocabulary leaked into the generic host, including inside an identifier
-# (snake_case or camelCase), which is how this vocabulary actually leaks into code. Substring
-# matching, not word-bounded, mirroring WiseDynamics' scripts/check-hosting-generic.sh.
+# algorithm- or sensor-specific vocabulary leaked into the generic host, including inside an
+# identifier (snake_case or camelCase), which is how this vocabulary actually leaks into code.
+# Substring matching, not word-bounded, mirroring WiseDynamics' scripts/check-hosting-generic.sh,
+# whose full list this carries over including "dcm_pb" (the IMU sensor's platform-to-body DCM
+# attribute name): this module already uses the neutral "mountings"/"P->B" in its place, so
+# "dcm_pb" appearing here would mean a sensor-specific name crept back in.
 matches=$(command grep -niE \
-  'imu|gyro|accel|mrp|sigma|reckon|navatt|navtrans|tracker|omega|quaternion|attitude' \
+  'imu|gyro|accel|mrp|sigma|reckon|navatt|navtrans|tracker|omega|quaternion|dcm_pb|attitude' \
   "$target" || true)
 
 if [ -n "$matches" ]; then

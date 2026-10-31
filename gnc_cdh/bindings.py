@@ -16,8 +16,9 @@ class AlgorithmBinding:
     """Everything transport-independent about hosting one algorithm: how to build it, and its
     data dictionary. `inputs` is `{role: {sample_field: (signal, frame)}}`, `frame` naming a
     transform the transport applies before the value reaches the algorithm (`None` names the
-    identity transform). `outputs` is `{role: {state_attr: signal}}`. `init_keys` names the keys
-    `initial_state()` must supply to `make_algorithm`, on top of a host's own parameters."""
+    identity transform). `outputs` is `{role: {state_attr: signal}}`. `init_keys` names every
+    key `make_algorithm` needs, whether it arrives from `initial_state()` or from a host's own
+    parameters."""
 
     sample_type: type
     make_algorithm: Callable[[float, dict], Any]
@@ -42,6 +43,6 @@ BINDINGS: dict[str, AlgorithmBinding] = {
             "nav_att": {"sigma_BN": "sigma_BN"},
             "nav_trans": {"r_N": "r_N", "v_N": "v_N"},
         },
-        init_keys=("sigma0_BN", "r0_N", "v0_N"),
+        init_keys=("sigma0_BN", "r0_N", "v0_N", "mu"),
     ),
 }
