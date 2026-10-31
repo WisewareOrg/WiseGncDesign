@@ -69,14 +69,22 @@ def _dcm_bn_from_axis_angle(axis: np.ndarray, theta: float) -> np.ndarray:
 
 
 @pytest.mark.parametrize(
-    "axis",
-    [np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0]), np.array([0.0, 0.0, 1.0])],
+    "raw_axis",
+    [
+        np.array([1.0, 0.3, 0.2]),  # dominant x: selects branch 1
+        np.array([0.3, 1.0, 0.2]),  # dominant y: selects branch 2
+        np.array([0.3, 0.2, 1.0]),  # dominant z: selects branch 3
+    ],
 )
-def test_compose_near_180_degrees_exercises_non_trace_shepperd_branch(axis):
+def test_compose_near_180_degrees_exercises_non_trace_shepperd_branch(raw_axis):
     # Every other compose/subtract test stays near the identity, where the quaternion
-    # extraction's largest-of-four selection always picks the trace branch. A single-axis
-    # rotation whose angle exceeds 90 degrees makes that axis's own diagonal entry the
-    # largest candidate instead, exercising the other three branches.
+    # extraction's largest-of-four selection always picks the trace branch. A rotation whose
+    # angle exceeds 90 degrees makes one axis's own diagonal entry the largest candidate instead,
+    # exercising the other three branches. A *principal*-axis rotation would still leave each
+    # branch's symmetric off-diagonal sum terms (e.g. C12 + C21) identically zero, so a sign or
+    # index error in those terms would pass unnoticed; tilting the axis off-principal makes every
+    # term in the chosen branch nonzero.
+    axis = raw_axis / np.linalg.norm(raw_axis)
     theta_half = np.radians(85.0)
     sigma_half = np.tan(theta_half / 4.0) * axis
 

@@ -167,3 +167,6 @@ def test_non_positive_dt_raises():
 
     with pytest.raises(ValueError):
         reckoner.step(ImuSample(t=4.0, omega_B=_ZERO3, accel_B=_ZERO3))
+
+    with pytest.raises(ValueError):
+        reckoner.step(ImuSample(t=float("nan"), omega_B=_ZERO3, accel_B=_ZERO3))
