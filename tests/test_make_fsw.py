@@ -1,9 +1,10 @@
-"""`make_fsw` end to end against standalone Basilisk messages: no plant, no running task."""
+"""`make_fsw` end to end against standalone Basilisk messages, written directly."""
 
 import numpy as np
+import pytest
 from Basilisk.architecture import messaging
 
-from cdh.basilisk import make_fsw
+from gnc_cdh.basilisk import make_fsw
 
 
 def _write_imu(angvel, accel) -> messaging.IMUSensorMsg:
@@ -38,3 +39,43 @@ def test_make_fsw_builds_imu_dead_reckoning_and_steps_it():
     np.testing.assert_allclose(out_trans.v_BN_N, module.algorithm.state.v_N)
     # mu = 0, zero rate: accel_B = [1, 0, 0] at identity attitude integrates to v_N = [1, 0, 0].
     np.testing.assert_allclose(module.algorithm.state.v_N, [1.0, 0.0, 0.0], atol=1e-9)
+
+
+def test_make_fsw_applies_a_non_identity_platform_to_body_mounting():
+    # 90 deg rotation about +Z: platform-frame x becomes body-frame +y under this matrix's
+    # transpose (the same convention tests/test_algorithm_module.py pins for AlgorithmModule
+    # itself; this test pins that make_fsw resolves the neutral "platform_to_body" frame to it).
+    dcm_PB = np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    imu_reader = messaging.IMUSensorMsgReader()
+    imu_reader.subscribeTo(_write_imu([0.0, 0.0, 0.0], [1.0, 0.0, 0.0]))
+    r0_N = np.array([7.0e6, 0.0, 0.0])
+
+    module = make_fsw(
+        "imu_dead_reckoning",
+        inputs={"imu": imu_reader},
+        initial_state=lambda: {"sigma0_BN": np.zeros(3), "r0_N": r0_N, "v0_N": np.zeros(3)},
+        mountings={"imu": dcm_PB},
+        mu=0.0,
+    )
+
+    module.Reset(0)
+    module.UpdateState(1_000_000_000)
+
+    expected_v = dcm_PB.T @ np.array([1.0, 0.0, 0.0])
+    np.testing.assert_allclose(module.algorithm.state.v_N, expected_v, atol=1e-9)
+    assert not np.allclose(expected_v, [1.0, 0.0, 0.0])  # the mounting actually did something
+
+
+def test_make_fsw_raises_when_initial_state_is_missing_a_declared_init_key():
+    imu_reader = messaging.IMUSensorMsgReader()
+    imu_reader.subscribeTo(_write_imu([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
+
+    module = make_fsw(
+        "imu_dead_reckoning",
+        inputs={"imu": imu_reader},
+        initial_state=lambda: {"sigma0_BN": np.zeros(3), "v0_N": np.zeros(3)},  # r0_N missing
+        mu=0.0,
+    )
+
+    with pytest.raises(ValueError, match="r0_N"):
+        module.Reset(0)
