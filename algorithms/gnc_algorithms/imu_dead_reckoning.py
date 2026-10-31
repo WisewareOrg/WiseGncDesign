@@ -44,6 +44,8 @@ import numpy as np
 
 from gnc_algorithms.mrp import B, dcm_NB, shadow
 
+__all__ = ["ImuSample", "DeadReckoningState", "ImuDeadReckoner"]
+
 # %% [markdown]
 # ## Interface
 #
@@ -412,10 +414,61 @@ def check_invalid_dt_raises() -> None:
 
 
 # %% [markdown]
+# ## A sample run
+#
+# One ten-minute free tumble: truth (unbiased) against an estimate fed the same true rate plus a
+# representative constant gyro bias, with no correction. Plots the growing attitude error angle
+# between them — the error this demo exists to show. Needs matplotlib, imported here rather
+# than at module scope, so this module's core stays numpy-only.
+
+
+# %%
+def plot_sample_run_with_gyro_bias() -> None:
+    """Propagates truth and a constant-gyro-bias estimate over a 10-minute free tumble and
+    saves attitude_error_from_gyro_bias.png: the error angle between them vs time."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from gnc_algorithms.mrp import angle, subtract
+
+    true_omega = np.array([0.0, 0.0, 0.3])  # rad/s
+    gyro_bias = np.array([1e-4, -2e-4, 5e-5])  # rad/s, a representative constant bias
+    total_t = 600.0  # s
+    n_steps = 600
+
+    truth = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=_AWAY_FROM_ORIGIN, v0_N=_ZERO3, t0=0.0, mu=0.0)
+    estimate = ImuDeadReckoner(
+        sigma0_BN=_ZERO3, r0_N=_AWAY_FROM_ORIGIN, v0_N=_ZERO3, t0=0.0, mu=0.0
+    )
+
+    dt = total_t / n_steps
+    t_s = np.zeros(n_steps + 1)
+    error_deg = np.zeros(n_steps + 1)
+    for i in range(1, n_steps + 1):
+        t = i * dt
+        truth_state = truth.step(ImuSample(t=t, omega_B=true_omega, accel_B=_ZERO3))
+        est_state = estimate.step(ImuSample(t=t, omega_B=true_omega + gyro_bias, accel_B=_ZERO3))
+        t_s[i] = t
+        error_deg[i] = np.degrees(angle(subtract(truth_state.sigma_BN, est_state.sigma_BN)))
+
+    fig, ax = plt.subplots()
+    ax.plot(t_s, error_deg)
+    ax.set_xlabel("t [s]")
+    ax.set_ylabel("attitude error [deg]")
+    ax.set_title("Attitude error growth from a constant gyro bias")
+    fig.tight_layout()
+    fig.savefig("attitude_error_from_gyro_bias.png")
+    plt.close(fig)
+
+
+# %% [markdown]
 # ## Running the checks
 #
-# `run_checks` calls every check above and prints a one-line pass summary; it runs under
-# `python -m gnc_algorithms.imu_dead_reckoning`, under `jupytext --execute`, and when this
+# `run_checks` calls every check above and prints a one-line pass summary. Each check, and the
+# sample-run figure below, runs only when this module executes as `__main__` — under
+# `python -m gnc_algorithms.imu_dead_reckoning`, under `jupytext --execute`, or when this
 # notebook's cells are run top to bottom interactively — never on a plain import.
 
 
@@ -438,3 +491,4 @@ def run_checks() -> None:
 
 if __name__ == "__main__":
     run_checks()
+    plot_sample_run_with_gyro_bias()

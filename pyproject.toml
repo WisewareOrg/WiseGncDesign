@@ -19,6 +19,7 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.0",
     "jupytext>=1.17",
+    "matplotlib>=3.9",
 ]
 
 [tool.pytest.ini_options]

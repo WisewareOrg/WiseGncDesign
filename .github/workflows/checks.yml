@@ -77,13 +77,16 @@ jobs:
       # jupytext --sync has no standalone "is it in sync" flag: --check pipes the notebook into
       # another program and asserts a non-zero exit, which isn't this. --sync rewrites whichever
       # side is stale, so running it and then requiring a clean working tree is the actual check.
+      # `git status --porcelain`, not `git diff --exit-code`: the latter ignores untracked
+      # files, so a sync that *creates* a file (e.g. a first-time paired notebook) would pass.
       - name: notebooks/imu_dead_reckoning.ipynb matches algorithms/gnc_algorithms/imu_dead_reckoning.py
         run: |
           uv run jupytext --sync algorithms/gnc_algorithms/imu_dead_reckoning.py
-          git diff --exit-code
+          test -z "$(git status --porcelain)"
 
-      # Runs the literate module top to bottom, so its assertion cells execute; a failed
-      # assertion raises and fails this step. Plain `python -m`, not `jupytext --execute`: no
-      # Jupyter kernel dependency, and this is the same code path `import` already takes.
-      - name: Assertion cells in imu_dead_reckoning.py pass
+      # Runs the literate module as __main__, so its check_* functions and the sample-run
+      # figure execute via run_checks()/plot_sample_run_with_gyro_bias(); a failed assertion
+      # raises and fails this step. Plain `python -m`, not `jupytext --execute`: no Jupyter
+      # kernel dependency.
+      - name: Checks and the sample-run figure in imu_dead_reckoning.py run clean
         run: uv run python -m gnc_algorithms.imu_dead_reckoning
