@@ -40,6 +40,17 @@ jobs:
       - name: No WiseDynamics module is imported under cdh/
         run: scripts/check-cdh-independent.sh
 
+  check-cdh-dictionary-neutral:
+    name: check-cdh-dictionary-neutral
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: cdh/bindings.py names no transport-specific type or field
+        run: scripts/check-cdh-dictionary-neutral.sh
+
   ruff:
     name: ruff
     runs-on: ubuntu-latest
