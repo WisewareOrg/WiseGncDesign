@@ -79,3 +79,24 @@ def test_make_fsw_raises_when_initial_state_is_missing_a_declared_init_key():
 
     with pytest.raises(ValueError, match="r0_N"):
         module.Reset(0)
+
+
+def test_make_fsw_raises_when_mu_is_not_supplied_as_a_param():
+    # mu arrives via **params, not initial_state(), so it needs its own regression check: the
+    # validation has to cover init_keys against the *merged* dict, not just initial_state()'s.
+    imu_reader = messaging.IMUSensorMsgReader()
+    imu_reader.subscribeTo(_write_imu([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
+
+    module = make_fsw(
+        "imu_dead_reckoning",
+        inputs={"imu": imu_reader},
+        initial_state=lambda: {
+            "sigma0_BN": np.zeros(3),
+            "r0_N": np.array([7.0e6, 0.0, 0.0]),
+            "v0_N": np.zeros(3),
+        },
+        # no mu= kwarg
+    )
+
+    with pytest.raises(ValueError, match="mu"):
+        module.Reset(0)

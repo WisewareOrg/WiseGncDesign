@@ -21,9 +21,9 @@ def make_fsw(
 ) -> AlgorithmModule:
     """Looks up the named algorithm's data dictionary, resolves it against the Basilisk
     signals table into `AlgorithmModule`'s field maps and fresh output messages, and builds the
-    module with the caller's input readers. Passes `params` (e.g. `mu`) through to the
-    algorithm's construction alongside `initial_state()`'s own fields, checked at `Reset` time
-    against the binding's declared `init_keys`."""
+    module with the caller's input readers. `initial_state()`'s fields and `params` (e.g. `mu`)
+    are merged and checked at `Reset` time against the binding's declared `init_keys`, from
+    whichever of the two sources each key actually arrives."""
     binding = BINDINGS[name]
 
     input_map = []
@@ -48,11 +48,11 @@ def make_fsw(
             output_map.append(FieldMap(state_attr, f"{role}.{payload_field}"))
 
     def init_from() -> dict[str, Any]:
-        state = initial_state()
-        missing = [key for key in binding.init_keys if key not in state]
+        merged = {**initial_state(), **params}
+        missing = [key for key in binding.init_keys if key not in merged]
         if missing:
-            raise ValueError(f"initial_state() for {name!r} is missing {missing}")
-        return {**state, **params}
+            raise ValueError(f"initial_state()/params for {name!r} is missing {missing}")
+        return merged
 
     return AlgorithmModule(
         inputs=inputs,
