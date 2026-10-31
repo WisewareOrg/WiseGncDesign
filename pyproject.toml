@@ -10,9 +10,16 @@ dependencies = [
 [project.optional-dependencies]
 basilisk = ["bsk[all]", "numpy"]
 analysis = ["h5py>=3.11", "matplotlib>=3.9"]
+sim = ["wise-dynamics"]
 
 [project.scripts]
 gnc-analyze = "gnc_analysis.imu_dead_reckoning:main"
+
+[tool.uv.sources]
+# The flight repo pins a release of the sim; the sim depends on nothing (owner ruling). The tag
+# below will exist once the owner tags WiseDynamics PR #7's merge; until then this points at
+# that PR's branch directly. FLIP TO tag = "v0.1.0" once that tag exists.
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", branch = "task_6-imu_dead_reckoning_scenario_and_campaign" }
 
 [build-system]
 requires = ["hatchling"]
@@ -24,6 +31,7 @@ packages = ["algorithms/gnc_algorithms", "gnc_cdh", "analysis/gnc_analysis"]
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-xdist>=3.6",
     "ruff>=0.17.0",
     "jupytext>=1.17",
 ]
