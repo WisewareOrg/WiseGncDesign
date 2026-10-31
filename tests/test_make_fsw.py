@@ -3,7 +3,7 @@
 import numpy as np
 from Basilisk.architecture import messaging
 
-from hosts.basilisk import make_fsw
+from cdh.basilisk import make_fsw
 
 
 def _write_imu(angvel, accel) -> messaging.IMUSensorMsg:

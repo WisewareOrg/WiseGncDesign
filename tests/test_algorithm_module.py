@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
-from hosts.basilisk.algorithm_module import AlgorithmModule, FieldMap
+from cdh.basilisk.algorithm_module import AlgorithmModule, FieldMap
 
 
 @dataclass

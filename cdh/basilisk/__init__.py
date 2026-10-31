@@ -1,13 +1,14 @@
-"""Builds a named algorithm's Basilisk host module from its binding, so a scenario supplies only
-its own input readers, initial-state callable and algorithm parameters."""
+"""C&DH partition for the Basilisk host: marshals cdh.bindings' data dictionary to and from
+Basilisk messages, and builds a named algorithm's host module from a scenario's own input
+readers, initial-state callable and algorithm parameters."""
 
 from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 
-from hosts.basilisk.algorithm_module import AlgorithmModule
-from hosts.basilisk.bindings import IMU_DEAD_RECKONING_BINDING
+from cdh.basilisk.algorithm_module import AlgorithmModule
+from cdh.basilisk.bindings import IMU_DEAD_RECKONING_BINDING
 
 _BINDINGS = {"imu_dead_reckoning": IMU_DEAD_RECKONING_BINDING}
 
