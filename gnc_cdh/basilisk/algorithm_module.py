@@ -91,6 +91,18 @@ class AlgorithmModule(sysModel.SysModel):
                     "registered mounting"
                 )
 
+        mapped_fields = [fm.dst for fm in self.input_map]
+        duplicated = sorted({f for f in mapped_fields if mapped_fields.count(f) > 1})
+        if duplicated:
+            raise ValueError(f"input_map maps {duplicated} more than once")
+
+        uncovered = sorted((sample_fields - {"t"}) - set(mapped_fields))
+        if uncovered:
+            raise ValueError(
+                f"input_map covers {sorted(mapped_fields)}; {self.sample_type.__name__} also "
+                f"needs {uncovered}"
+            )
+
         for fm in self.output_map:
             if fm.frame is not None:
                 raise ValueError(f"frame transforms apply only to input maps, got {fm!r}")

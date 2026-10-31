@@ -1,6 +1,5 @@
-"""Unit tests for `AlgorithmModule` itself: no dead-reckoning algorithm, no full sim. A stub
-algorithm and standalone Basilisk messages (written directly, not through a running task) are
-enough to drive `Reset`/`UpdateState` and inspect what comes out."""
+"""Unit tests for `AlgorithmModule` itself, driving `Reset`/`UpdateState` with a stub algorithm
+and standalone Basilisk messages, written directly, to inspect what comes out."""
 
 from dataclasses import dataclass, field
 
@@ -8,7 +7,7 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
-from cdh.basilisk.algorithm_module import AlgorithmModule, FieldMap
+from gnc_cdh.basilisk.algorithm_module import AlgorithmModule, FieldMap
 
 
 @dataclass
@@ -143,7 +142,10 @@ def test_construction_raises_on_a_frame_in_an_output_map():
         AlgorithmModule(
             inputs={"imu": messaging.IMUSensorMsgReader()},
             outputs={"outAtt": (messaging.NavAttMsgPayload, messaging.NavAttMsg())},
-            input_map=[FieldMap("imu.AngVelPlatform", "a")],
+            input_map=[
+                FieldMap("imu.AngVelPlatform", "a"),
+                FieldMap("imu.AccelPlatform", "b"),
+            ],
             output_map=[FieldMap("value", "outAtt.sigma_BN", frame="P->B")],
             sample_type=StubSample,
             make_algorithm=lambda t0, init: StubAlgorithm(t0, init),
@@ -162,6 +164,36 @@ def test_construction_raises_on_p_to_b_for_an_input_with_no_registered_mounting(
             make_algorithm=lambda t0, init: StubAlgorithm(t0, init),
             init_from=lambda: {},
             mountings={},
+        )
+
+
+def test_construction_raises_when_input_map_does_not_cover_every_sample_field():
+    with pytest.raises(ValueError, match="'b'"):
+        AlgorithmModule(
+            inputs={"imu": messaging.IMUSensorMsgReader()},
+            outputs={"outAtt": (messaging.NavAttMsgPayload, messaging.NavAttMsg())},
+            input_map=[FieldMap("imu.AngVelPlatform", "a")],  # 'b' left uncovered
+            output_map=[FieldMap("value", "outAtt.sigma_BN")],
+            sample_type=StubSample,
+            make_algorithm=lambda t0, init: StubAlgorithm(t0, init),
+            init_from=lambda: {},
+        )
+
+
+def test_construction_raises_when_a_sample_field_is_mapped_more_than_once():
+    with pytest.raises(ValueError, match="'a'"):
+        AlgorithmModule(
+            inputs={"imu": messaging.IMUSensorMsgReader(), "nav": messaging.NavAttMsgReader()},
+            outputs={"outAtt": (messaging.NavAttMsgPayload, messaging.NavAttMsg())},
+            input_map=[
+                FieldMap("imu.AngVelPlatform", "a"),
+                FieldMap("nav.sigma_BN", "a"),  # 'a' mapped twice
+                FieldMap("imu.AccelPlatform", "b"),
+            ],
+            output_map=[FieldMap("value", "outAtt.sigma_BN")],
+            sample_type=StubSample,
+            make_algorithm=lambda t0, init: StubAlgorithm(t0, init),
+            init_from=lambda: {},
         )
 
 

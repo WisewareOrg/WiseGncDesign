@@ -37,7 +37,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: No WiseDynamics module is imported under cdh/
+      - name: No WiseDynamics module is imported under gnc_cdh/
         run: scripts/check-cdh-independent.sh
 
   check-cdh-dictionary-neutral:
@@ -48,8 +48,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: cdh/bindings.py names no transport-specific type or field
+      - name: gnc_cdh/bindings.py names no transport-specific type or field
         run: scripts/check-cdh-dictionary-neutral.sh
+
+  check-cdh-transport-generic:
+    name: check-cdh-transport-generic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: gnc_cdh/basilisk/algorithm_module.py carries no algorithm-specific vocabulary
+        run: scripts/check-cdh-transport-generic.sh
 
   ruff:
     name: ruff
