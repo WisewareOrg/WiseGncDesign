@@ -1,6 +1,6 @@
-"""MRP math needed by the attitude-error analysis, reimplemented locally with numpy, independent
-of WiseGncDesign and Basilisk. Follows Basilisk's convention (Schaub & Junkins): sigma_BN, body
-wrt inertial.
+"""MRP math needed by the attitude-error analysis, reimplemented locally: uses numpy only; the
+analysis package imports nothing from gnc_algorithms, gnc_cdh or Basilisk. Follows Basilisk's
+convention (Schaub & Junkins): sigma_BN, body wrt inertial.
 
 Every function broadcasts over a leading batch dimension: a shape-(3,) or shape-(N, 3) array of
 MRP vectors both work.
