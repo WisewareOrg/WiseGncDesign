@@ -151,9 +151,8 @@ class ImuDeadReckoner:
 # ## Checks
 #
 # Each check below documents and verifies one property of `step`, in its own function so no
-# check's local variables leak into another's. Every cell runs whenever this module executes —
-# on import, as `python -m gnc_algorithms.imu_dead_reckoning`, or as this paired notebook's own
-# "run all" — so a failing assertion fails CI the same way a failing pytest test would.
+# check's local variables leak into another's. Defining a function costs nothing, so importing
+# this module runs none of them; `run_checks`, at the end of this notebook, calls every one.
 
 # %%
 _ZERO3 = np.zeros(3)
@@ -192,7 +191,7 @@ def _propagate_constant_rate(
 
 
 # %%
-def _check_constant_rate_matches_analytic_mrp() -> None:
+def check_constant_rate_matches_analytic_mrp() -> None:
     omega = 0.5  # rad/s
     axis = np.array([1.0, 0.0, 0.0])
     total_t = 1.0
@@ -206,9 +205,6 @@ def _check_constant_rate_matches_analytic_mrp() -> None:
     )
 
 
-_check_constant_rate_matches_analytic_mrp()
-
-
 # %% [markdown]
 # ### Zero input with zero mu leaves the state unchanged
 #
@@ -217,7 +213,7 @@ _check_constant_rate_matches_analytic_mrp()
 
 
 # %%
-def _check_zero_input_zero_mu_leaves_state_unchanged() -> None:
+def check_zero_input_zero_mu_leaves_state_unchanged() -> None:
     sigma0 = np.array([0.1, -0.05, 0.2])
     r0 = np.array([1.0e6, 2.0e6, -3.0e6])
     reckoner = ImuDeadReckoner(sigma0_BN=sigma0, r0_N=r0, v0_N=_ZERO3, t0=0.0, mu=0.0)
@@ -230,9 +226,6 @@ def _check_zero_input_zero_mu_leaves_state_unchanged() -> None:
     assert abs(state.t - 1.0) < 1e-12, f"state.t should be 1.0, got {state.t}"
 
 
-_check_zero_input_zero_mu_leaves_state_unchanged()
-
-
 # %% [markdown]
 # ### A rotation past 180 degrees switches to the shadow set
 #
@@ -243,7 +236,7 @@ _check_zero_input_zero_mu_leaves_state_unchanged()
 
 
 # %%
-def _check_rotation_past_180_degrees_switches_to_shadow_set() -> None:
+def check_rotation_past_180_degrees_switches_to_shadow_set() -> None:
     omega = 1.0  # rad/s
     axis = np.array([1.0, 0.0, 0.0])
     total_t = np.pi * 1.2  # theta = 1.2*pi > pi
@@ -266,9 +259,6 @@ def _check_rotation_past_180_degrees_switches_to_shadow_set() -> None:
     )
 
 
-_check_rotation_past_180_degrees_switches_to_shadow_set()
-
-
 # %% [markdown]
 # ### Constant acceleration with zero rate, zero mu, and nonzero r0/v0
 #
@@ -279,7 +269,7 @@ _check_rotation_past_180_degrees_switches_to_shadow_set()
 
 
 # %%
-def _check_constant_acceleration_gives_analytic_v_and_r() -> None:
+def check_constant_acceleration_gives_analytic_v_and_r() -> None:
     r0 = np.array([1.0e6, -2.0e5, 3.0e5])
     v0 = np.array([10.0, -5.0, 2.0])
     accel = np.array([0.3, -0.1, 0.05])
@@ -299,9 +289,6 @@ def _check_constant_acceleration_gives_analytic_v_and_r() -> None:
     )
 
 
-_check_constant_acceleration_gives_analytic_v_and_r()
-
-
 # %% [markdown]
 # ### The accelerometer is rotated body-to-inertial at a non-trivial attitude
 #
@@ -312,7 +299,7 @@ _check_constant_acceleration_gives_analytic_v_and_r()
 
 
 # %%
-def _check_accelerometer_rotated_at_nontrivial_attitude() -> None:
+def check_accelerometer_rotated_at_nontrivial_attitude() -> None:
     axis = np.array([0.0, 0.0, 1.0])
     theta = np.pi / 2.0
     sigma0 = np.tan(theta / 4.0) * axis
@@ -338,9 +325,6 @@ def _check_accelerometer_rotated_at_nontrivial_attitude() -> None:
     )
 
 
-_check_accelerometer_rotated_at_nontrivial_attitude()
-
-
 # %% [markdown]
 # ### A quarter circular orbit matches the analytic two-body position
 #
@@ -350,7 +334,7 @@ _check_accelerometer_rotated_at_nontrivial_attitude()
 
 
 # %%
-def _check_circular_orbit_matches_analytic_two_body_position() -> None:
+def check_circular_orbit_matches_analytic_two_body_position() -> None:
     mu = 3.986004418e14  # m^3/s^2, Earth
     radius = 6_871_000.0  # m, ~500 km LEO altitude
     v_circ = np.sqrt(mu / radius)
@@ -373,9 +357,6 @@ def _check_circular_orbit_matches_analytic_two_body_position() -> None:
     assert position_error < 1.0, f"quarter-orbit position error {position_error} m exceeds 1 m"
 
 
-_check_circular_orbit_matches_analytic_two_body_position()
-
-
 # %% [markdown]
 # ### The MRP kinematics match the DCM time-derivative identity for a non-aligned rate
 #
@@ -387,7 +368,7 @@ _check_circular_orbit_matches_analytic_two_body_position()
 
 
 # %%
-def _check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
+def check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
     sigma0 = np.array([0.1, 0.0, 0.0])
     omega = np.array([0.0, 0.0, 0.3])
     reckoner = ImuDeadReckoner(
@@ -412,9 +393,6 @@ def _check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
     )
 
 
-_check_kinematics_match_dcm_derivative_for_nonaligned_rate()
-
-
 # %% [markdown]
 # ### A non-positive or NaN dt raises
 #
@@ -423,7 +401,7 @@ _check_kinematics_match_dcm_derivative_for_nonaligned_rate()
 
 
 # %%
-def _check_invalid_dt_raises() -> None:
+def check_invalid_dt_raises() -> None:
     reckoner = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=_ZERO3, v0_N=_ZERO3, t0=5.0, mu=0.0)
     for bad_t in (5.0, 4.0, float("nan")):
         try:
@@ -433,4 +411,30 @@ def _check_invalid_dt_raises() -> None:
         raise AssertionError(f"step() should have raised ValueError for t={bad_t}")
 
 
-_check_invalid_dt_raises()
+# %% [markdown]
+# ## Running the checks
+#
+# `run_checks` calls every check above and prints a one-line pass summary; it runs under
+# `python -m gnc_algorithms.imu_dead_reckoning`, under `jupytext --execute`, and when this
+# notebook's cells are run top to bottom interactively — never on a plain import.
+
+
+# %%
+def run_checks() -> None:
+    checks = (
+        check_constant_rate_matches_analytic_mrp,
+        check_zero_input_zero_mu_leaves_state_unchanged,
+        check_rotation_past_180_degrees_switches_to_shadow_set,
+        check_constant_acceleration_gives_analytic_v_and_r,
+        check_accelerometer_rotated_at_nontrivial_attitude,
+        check_circular_orbit_matches_analytic_two_body_position,
+        check_kinematics_match_dcm_derivative_for_nonaligned_rate,
+        check_invalid_dt_raises,
+    )
+    for check in checks:
+        check()
+    print(f"imu_dead_reckoning: {len(checks)} checks passed")
+
+
+if __name__ == "__main__":
+    run_checks()
