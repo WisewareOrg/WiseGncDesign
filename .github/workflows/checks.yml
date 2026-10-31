@@ -29,16 +29,16 @@ jobs:
       - name: No simulation or flight-framework name appears under algorithms/
         run: scripts/check-no-framework.sh
 
-  check-hosts-independent:
-    name: check-hosts-independent
+  check-cdh-independent:
+    name: check-cdh-independent
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: No WiseDynamics module is imported under hosts/
-        run: scripts/check-hosts-independent.sh
+      - name: No WiseDynamics module is imported under cdh/
+        run: scripts/check-cdh-independent.sh
 
   ruff:
     name: ruff
