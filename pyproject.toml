@@ -9,7 +9,7 @@ dependencies = [
 
 [project.optional-dependencies]
 basilisk = ["bsk[all]", "numpy"]
-analysis = ["h5py", "matplotlib"]
+analysis = ["h5py>=3.11", "matplotlib>=3.9"]
 
 [project.scripts]
 gnc-analyze = "gnc_analysis.imu_dead_reckoning:main"
