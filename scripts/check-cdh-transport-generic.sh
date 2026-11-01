@@ -14,11 +14,20 @@ fi
 # whose full list this carries over including "dcm_pb" (the IMU sensor's platform-to-body DCM
 # attribute name): this module already uses the neutral "mountings"/"P->B" in its place, so
 # "dcm_pb" appearing here would mean a sensor-specific name crept back in.
-matches=$(command grep -niE \
-  'imu|gyro|accel|mrp|sigma|reckon|navatt|navtrans|tracker|omega|quaternion|dcm_pb|attitude' \
-  "$target" || true)
+pattern='imu|gyro|accel|mrp|sigma|reckon|navatt|navtrans|tracker|omega|quaternion|dcm_pb|attitude'
 
-if [ -n "$matches" ]; then
+# "imu" also false-positives on the English words "simulation" and "maximum" (both contain "imu"
+# as a substring). Strip just those two word-fragments from each line before matching -- never
+# drop the whole line, since a real leak sharing a line with one of those words (for example
+# "simulation imu_bias") must still be caught.
+line_numbers=$(sed -E 's/simulat[a-z]*//Ig; s/maxim[a-z]*//Ig' "$target" \
+  | command grep -niE "$pattern" \
+  | cut -d: -f1 || true)
+
+if [ -n "$line_numbers" ]; then
+  matches=$(while IFS= read -r n; do
+    sed -n "${n}p" "$target" | sed "s/^/${n}:/"
+  done <<<"$line_numbers")
   echo "$matches"
   exit 1
 fi

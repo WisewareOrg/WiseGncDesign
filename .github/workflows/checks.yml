@@ -92,6 +92,10 @@ jobs:
   pytest:
     name: pytest
     runs-on: ubuntu-latest
+    # Both steps below run tests/sim (testpaths covers it): a missing sim/h5py here is a real
+    # failure, not something tests/sim/conftest.py should skip past.
+    env:
+      REQUIRE_SIM: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -105,6 +109,10 @@ jobs:
       # needing WiseDynamics' plant and pytest plugin installed.
       - run: uv sync --locked --extra basilisk --extra analysis --extra sim
       - run: uv run pytest
+      # Runs tests/sim again under pytest-xdist: a worker writing its run files into the wrong
+      # directory, or the campaign check silently no-op'ing in the controller, would only show
+      # up under -n, never in the serial run above.
+      - run: uv run pytest tests/sim -n 2 --sim-runs 2
 
   jupytext:
     name: jupytext

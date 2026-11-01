@@ -441,7 +441,7 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'analysis'", specifier = ">=3.9" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "numpy", marker = "extra == 'basilisk'" },
-    { name = "wise-dynamics", marker = "extra == 'sim'", git = "https://github.com/WisewareOrg/WiseDynamics?branch=task_6-imu_dead_reckoning_scenario_and_campaign" },
+    { name = "wise-dynamics", marker = "extra == 'sim'", git = "https://github.com/WisewareOrg/WiseDynamics?rev=4c2008118339869a1e3a32d262aba16e9f67d266" },
 ]
 provides-extras = ["basilisk", "analysis", "sim"]
 
@@ -1555,7 +1555,7 @@ wheels = [
 [[package]]
 name = "wise-dynamics"
 version = "0.1.0"
-source = { git = "https://github.com/WisewareOrg/WiseDynamics?branch=task_6-imu_dead_reckoning_scenario_and_campaign#4c66beb22e6427becad4323cbcf3c10ed543ba69" }
+source = { git = "https://github.com/WisewareOrg/WiseDynamics?rev=4c2008118339869a1e3a32d262aba16e9f67d266#4c2008118339869a1e3a32d262aba16e9f67d266" }
 dependencies = [
     { name = "bsk", extra = ["all"] },
     { name = "h5py" },

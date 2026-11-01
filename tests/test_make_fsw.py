@@ -98,5 +98,7 @@ def test_make_fsw_raises_when_mu_is_not_supplied_as_a_param():
         # no mu= kwarg
     )
 
-    with pytest.raises(ValueError, match="mu"):
+    # match the exact missing-key list, not the bare substring "mu": "imu_dead_reckoning" also
+    # contains "mu", so match="mu" would pass even if the wrong key were reported as missing.
+    with pytest.raises(ValueError, match=r"\['mu'\]"):
         module.Reset(0)
