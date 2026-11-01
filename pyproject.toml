@@ -1,0 +1,36 @@
+[project]
+name = "gnc-algorithms"
+version = "0.1.0"
+description = "Framework-free GNC algorithms, hosted unmodified by any simulation or flight target"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["algorithms/gnc_algorithms"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+    "jupytext>=1.17",
+    "matplotlib>=3.9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+# notebooks/ is generated from algorithms/gnc_algorithms/*.py by jupytext; the .py source is
+# linted directly, so the paired .ipynb (whose cell splitting can shift isort's grouping) is not
+# linted a second time.
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]

@@ -28,3 +28,65 @@ jobs:
 
       - name: No simulation or flight-framework name appears under algorithms/
         run: scripts/check-no-framework.sh
+
+  ruff:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.13.6"
+
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.13.6"
+
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  jupytext:
+    name: jupytext
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.13.6"
+
+      - run: uv sync --locked
+
+      # jupytext --sync has no standalone "is it in sync" flag: --check pipes the notebook into
+      # another program and asserts a non-zero exit, which isn't this. --sync rewrites whichever
+      # side is stale, so running it and then requiring a clean working tree is the actual check.
+      # `git status --porcelain`, not `git diff --exit-code`: the latter ignores untracked
+      # files, so a sync that *creates* a file (e.g. a first-time paired notebook) would pass.
+      - name: notebooks/imu_dead_reckoning.ipynb matches algorithms/gnc_algorithms/imu_dead_reckoning.py
+        run: |
+          uv run jupytext --sync algorithms/gnc_algorithms/imu_dead_reckoning.py
+          test -z "$(git status --porcelain)"
+
+      # Runs the literate module as __main__, so its check_* functions and the sample-run
+      # figure execute via run_checks()/plot_sample_run_with_gyro_bias(); a failed assertion
+      # raises and fails this step. Plain `python -m`, not `jupytext --execute`: no Jupyter
+      # kernel dependency.
+      - name: Checks and the sample-run figure in imu_dead_reckoning.py run clean
+        run: uv run python -m gnc_algorithms.imu_dead_reckoning
