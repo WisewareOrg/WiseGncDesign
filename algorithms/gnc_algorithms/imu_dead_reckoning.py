@@ -425,7 +425,10 @@ def check_invalid_dt_raises() -> None:
 # %%
 def plot_sample_run_with_gyro_bias() -> None:
     """Propagates truth and a constant-gyro-bias estimate over a 10-minute free tumble and
-    saves attitude_error_from_gyro_bias.png: the error angle between them vs time."""
+    saves notebooks/figures/attitude_error_from_gyro_bias.png: the error angle between them vs
+    time. That directory is gitignored, so running this never dirties the working tree."""
+    from pathlib import Path
+
     import matplotlib
 
     matplotlib.use("Agg")
@@ -459,7 +462,9 @@ def plot_sample_run_with_gyro_bias() -> None:
     ax.set_ylabel("attitude error [deg]")
     ax.set_title("Attitude error growth from a constant gyro bias")
     fig.tight_layout()
-    fig.savefig("attitude_error_from_gyro_bias.png")
+    figures_dir = Path("notebooks/figures")
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(figures_dir / "attitude_error_from_gyro_bias.png")
     plt.close(fig)
 
 
