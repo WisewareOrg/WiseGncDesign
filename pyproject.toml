@@ -1,0 +1,52 @@
+[project]
+name = "gnc-algorithms"
+version = "0.1.0"
+description = "Framework-free GNC algorithms, hosted unmodified by any simulation or flight target"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+]
+
+[project.optional-dependencies]
+basilisk = ["bsk[all]", "numpy"]
+analysis = ["h5py>=3.11", "matplotlib>=3.9"]
+sim = ["wise-dynamics"]
+
+[project.scripts]
+gnc-analyze = "gnc_analysis.imu_dead_reckoning:main"
+
+[tool.uv.sources]
+# The flight repo pins a release of the sim; the sim depends on nothing (owner ruling). The tag
+# below will exist once the owner tags WiseDynamics PR #7's merge; until then this pins the
+# commit directly (not the branch, which keeps moving). FLIP TO tag = "v0.1.0" once that tag
+# exists.
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "4c2008118339869a1e3a32d262aba16e9f67d266" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["algorithms/gnc_algorithms", "gnc_cdh", "analysis/gnc_analysis"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-xdist>=3.6",
+    "ruff>=0.17.0",
+    "jupytext>=1.17",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+# notebooks/ is generated from algorithms/gnc_algorithms/*.py by jupytext; the .py source is
+# linted directly, so the paired .ipynb (whose cell splitting can shift isort's grouping) is not
+# linted a second time.
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
