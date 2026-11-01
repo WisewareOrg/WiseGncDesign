@@ -24,7 +24,7 @@ _ran_scenario_cases = False
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     global _ran_scenario_cases
-    if "tests/sim/test_imu_dead_reckoning.py" in report.nodeid:
+    if report.nodeid.startswith("tests/sim/"):
         _ran_scenario_cases = True
 
 
