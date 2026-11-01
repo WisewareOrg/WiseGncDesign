@@ -462,7 +462,11 @@ def plot_sample_run_with_gyro_bias() -> None:
     ax.set_ylabel("attitude error [deg]")
     ax.set_title("Attitude error growth from a constant gyro bias")
     fig.tight_layout()
-    figures_dir = Path("notebooks/figures")
+    # Anchored at this file's own location (algorithms/gnc_algorithms/../../notebooks/figures),
+    # not the current directory, so the figure lands in the gitignored directory regardless of
+    # where this module is invoked from.
+    repo_root = Path(__file__).resolve().parents[2]
+    figures_dir = repo_root / "notebooks" / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
     fig.savefig(figures_dir / "attitude_error_from_gyro_bias.png")
     plt.close(fig)
