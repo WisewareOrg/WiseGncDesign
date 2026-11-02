@@ -42,8 +42,9 @@ WiseDynamics documents them in full in its `wise_dynamics/basilisk/README.md`.
 ## The campaign check
 
 Each scenario case records its run file with `record_property("run_file", path)`. At the end of
-a session, `tests/conftest.py` checks two things on the controlling process:
-- the recorded files are exactly the `run_*.h5` files in the campaign directory;
+a session, `tests/conftest.py` checks three things on the controlling process:
+- the recorded files share one directory, the campaign directory;
+- they are exactly the `run_*.h5` files in it;
 - the directory loads through `gnc_analysis.runs.load_campaign`.
 
 It names every missing or stale file and any file the loader rejects, and fails the session. On
