@@ -1,7 +1,7 @@
 name: checks
 
-# The commands in README.md's Development section. These jobs are required status checks on
-# pull requests.
+# The commands in README.md's Development section: the repository's test-suite checks on pull
+# requests.
 on:
   push:
     branches: [main]
