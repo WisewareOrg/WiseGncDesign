@@ -8,12 +8,13 @@
 # %% [markdown]
 # # IMU dead reckoning across a Monte Carlo campaign
 #
-# One run shows how the dead reckoner's error arises (`imu_dead_reckoning.ipynb`); a campaign
-# shows how large it is. This document flies the dead reckoner, hosted by `gnc_cdh.basilisk`,
-# on WiseDynamics' tumbling IMU spacecraft in a campaign of dispersed cases. Each case draws its
-# own initial attitude, body rate, gyro bias and accelerometer bias. The document then loads
-# the campaign through `gnc_analysis` and shows the ensemble's attitude, position and velocity
-# error, and each error against the accuracy bound its case's biases imply.
+# One run shows how the dead reckoner's error arises: `imu_dead_reckoning.ipynb`, beside this
+# notebook, walks through a single case. A campaign shows how large the error is. This
+# document flies the dead reckoner, hosted by `gnc_cdh.basilisk`, on WiseDynamics' tumbling IMU
+# spacecraft in a campaign of dispersed cases. Each case draws its own initial attitude, body
+# rate, gyro bias and accelerometer bias. The document then loads the campaign through
+# `gnc_analysis` and shows the ensemble's attitude, position and velocity error, and each
+# error against the accuracy bound its case's biases imply.
 #
 # The campaign is the repository's scenario test, `tests/sim/test_imu_dead_reckoning.py`, run
 # by pytest over many cases, so this document runs from a source checkout with the `sim`
@@ -23,11 +24,16 @@
 # **Run count.** `GNC_CAMPAIGN_RUNS` sets the number of cases (default 852) and
 # `GNC_CAMPAIGN_WORKERS` the number of pytest-xdist workers (default the CPU count). Both are
 # printed first, beside the seed and the duration of each case.
+#
+# Each step below is a function; the cells that run them sit under `if __name__ ==
+# "__main__":`, which holds in a notebook kernel and under `python
+# notebooks/imu_dead_reckoning_campaign.py`, so importing this file runs nothing.
 
 # %%
 """Runs the IMU dead-reckoning scenario as a Monte Carlo campaign and shows its ensemble error
 and bound ratios."""
 
+import importlib.util
 import io
 import os
 import subprocess
@@ -44,13 +50,13 @@ from gnc_analysis.navigation_error import metric_figure, summarize, write_report
 from gnc_analysis.runs import Run, load_campaign
 
 # %% [markdown]
-# A figure is shown by making it a cell's last expression wrapped in `Inline`, which a notebook
-# renders as an image.
+# A notebook shows a figure through `show`, which renders it as PNG; a script shows nothing,
+# and every figure is also saved to the report directory.
 
 
 # %%
 class Inline:
-    """`figure` rendered once as PNG, which a notebook displays as a cell's last expression."""
+    """`figure` rendered once as PNG, which a notebook front end displays."""
 
     def __init__(self, figure: Figure) -> None:
         buffer = io.BytesIO()
@@ -59,6 +65,16 @@ class Inline:
 
     def _repr_png_(self) -> bytes:
         return self._png
+
+
+def show(figure: Figure) -> None:
+    """Displays `figure` inline when running in an IPython kernel."""
+    if "IPython" in sys.modules:
+        from IPython import get_ipython
+        from IPython.display import display
+
+        if get_ipython() is not None:
+            display(Inline(figure))
 
 
 # %% [markdown]
@@ -86,7 +102,7 @@ class CampaignSettings:
     duration_s: float
 
     def line(self) -> str:
-        """The settings as one printed line."""
+        """The settings as the one line printed before the campaign runs."""
         return (
             f"campaign: {self.runs} runs, {self.workers} workers, seed {self.seed}, "
             f"{self.duration_s:g} s per case"
@@ -121,8 +137,9 @@ def campaign_settings() -> CampaignSettings:
     )
 
 
-settings = campaign_settings()
-print(settings.line())
+if __name__ == "__main__":
+    settings = campaign_settings()
+    print(settings.line())
 
 # %% [markdown]
 # ## Where the campaign runs
@@ -148,20 +165,21 @@ def repository_root(start: Path) -> Path:
     raise RuntimeError(f"no wise-gnc-design checkout at or above {start}")
 
 
-root = repository_root(Path.cwd().resolve())
-name = f"imu_dead_reckoning-{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
-out_dir = root / "campaign" / name
-report_dir = root / "report" / name
-print(f"run files: {out_dir}")
-print(f"report:    {report_dir}")
+if __name__ == "__main__":
+    root = repository_root(Path.cwd().resolve())
+    name = f"imu_dead_reckoning-{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
+    out_dir = root / "campaign" / name
+    report_dir = root / "report" / name
+    print(f"run files: {out_dir}")
+    print(f"report:    {report_dir}")
 
 # %% [markdown]
 # ## Running the campaign
 #
 # pytest runs as a subprocess, so every run of this document starts from a clean interpreter.
 # Its output streams into `pytest.log` in the campaign directory, and its last lines are shown
-# below, ending with the campaign check. A failed case or a failed campaign check stops the
-# document here.
+# below, ending with the campaign check. A failed case, a failed campaign check, or a campaign
+# holding any number of runs but the one requested stops the document here.
 
 
 # %%
@@ -194,9 +212,22 @@ def run_campaign(settings: CampaignSettings, root: Path, out_dir: Path) -> None:
         raise RuntimeError(f"pytest exited {status}; {log} ends:\n{tail}")
 
 
-run_campaign(settings, root, out_dir)
-runs = load_campaign(out_dir)
-print(f"loaded {len(runs)} runs from {out_dir}")
+def load_requested(settings: CampaignSettings, out_dir: Path) -> list[Run]:
+    """Loads the campaign in `out_dir`.
+
+    Raises:
+        RuntimeError: naming both counts when it holds other than `settings.runs` runs.
+    """
+    runs = load_campaign(out_dir)
+    if len(runs) != settings.runs:
+        raise RuntimeError(f"{out_dir} holds {len(runs)} runs; {settings.runs} were requested")
+    return runs
+
+
+if __name__ == "__main__":
+    run_campaign(settings, root, out_dir)
+    runs = load_requested(settings, out_dir)
+    print(f"loaded {len(runs)} runs from {out_dir}")
 
 # %% [markdown]
 # ## The ensemble
@@ -205,46 +236,35 @@ print(f"loaded {len(runs)} runs from {out_dir}")
 # figures and `summary.md` are also written to the report directory.
 
 # %%
-summary = summarize(runs)
-write_report(summary, report_dir)
-attitude, position, velocity = (metric_figure(summary, s) for s in summary.metrics)
-Inline(attitude)
-
-# %%
-Inline(position)
-
-# %%
-Inline(velocity)
+if __name__ == "__main__":
+    summary = summarize(runs)
+    write_report(summary, report_dir)
+    for metric_summary in summary.metrics:
+        show(metric_figure(summary, metric_summary))
 
 # %% [markdown]
 # ## Each error against its bound
 #
 # Each case's errors stay under `BOUND_FACTOR` (3) times their growth derived from the case's
-# drawn IMU biases, the IMU noise and the orbit (`gnc_analysis.error_bounds`). The bound reads
-# the plant's noise and step from WiseDynamics' nominal `ImuSpacecraft` configuration and its
-# gravitational parameter from a built plant: the same values the scenario's `sim_plant` gives
-# every case, since the campaign disperses only initial state and biases.
+# drawn IMU biases, the IMU noise and the orbit (`gnc_analysis.error_bounds`). The bound's
+# plant inputs come from the scenario test's own `bound_inputs()`, the one function that
+# supplies them to the scenario and to this document.
 
 
 # %%
-def plant_constants() -> dict[str, float]:
-    """The bound's plant inputs: gyro and accelerometer noise (per-sample 1-sigma), IMU step in
-    s, and the central body's gravitational parameter in m^3/s^2."""
-    from wise_dynamics.basilisk import ImuSpacecraft
-
-    config = ImuSpacecraft.nominal()
-    return {
-        "gyro_noise_std_rad_s": config.gyro_noise_std_rad_s,
-        "accel_noise_std_m_s2": config.accel_noise_std_m_s2,
-        "step_s": config.step_s,
-        "mu": ImuSpacecraft().mu,
-    }
+def scenario_bound_inputs(root: Path) -> dict[str, float]:
+    """The scenario test's `bound_inputs()`: per-sample gyro and accelerometer noise, the IMU
+    step in s, and the gravitational parameter in m^3/s^2."""
+    spec = importlib.util.spec_from_file_location("imu_dead_reckoning_scenario", root / SCENARIO)
+    scenario = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(scenario)
+    return scenario.bound_inputs()
 
 
-def campaign_ratios(runs: list[Run], constants: dict[str, float]) -> dict[str, np.ndarray]:
+def campaign_ratios(runs: list[Run], inputs: dict[str, float]) -> dict[str, np.ndarray]:
     """Each metric's bound ratio for every run and sample after t = 0, as
     `{metric: (n_runs, N - 1)}`."""
-    per_run = [bound_ratios(run, **constants) for run in runs]
+    per_run = [bound_ratios(run, **inputs) for run in runs]
     return {name: np.stack([ratios[name] for ratios in per_run]) for name in per_run[0]}
 
 
@@ -281,17 +301,18 @@ def worst_ratio_figure(runs: list[Run], ratios: dict[str, np.ndarray]) -> Figure
     return fig
 
 
-ratios = campaign_ratios(runs, plant_constants())
-print(ratio_table(runs, ratios))
-ratio_figure = worst_ratio_figure(runs, ratios)
-ratio_figure.savefig(report_dir / "bound_ratios.png", dpi=150)
-Inline(ratio_figure)
+if __name__ == "__main__":
+    ratios = campaign_ratios(runs, scenario_bound_inputs(root))
+    print(ratio_table(runs, ratios))
+    ratio_figure = worst_ratio_figure(runs, ratios)
+    ratio_figure.savefig(report_dir / "bound_ratios.png", dpi=150)
+    show(ratio_figure)
 
 # %% [markdown]
 # ## Summary
 
 # %%
-print(settings.line())
-print(f"loaded {len(runs)} runs; report in {report_dir}")
-for name, r in ratios.items():
-    print(f"{name}: worst ratio {r.max():.2f} against a bound factor of {BOUND_FACTOR:g}")
+if __name__ == "__main__":
+    print(f"summary: {len(runs)} of {settings.runs} requested runs loaded; report in {report_dir}")
+    for name, r in ratios.items():
+        print(f"{name}: worst ratio {r.max():.2f} against a bound factor of {BOUND_FACTOR:g}")

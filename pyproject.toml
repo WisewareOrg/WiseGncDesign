@@ -49,7 +49,3 @@ extend-exclude = ["notebooks/*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
-
-[tool.ruff.lint.per-file-ignores]
-# A notebook cell displays its last expression, such as a figure.
-"notebooks/*.py" = ["B018"]

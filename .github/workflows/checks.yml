@@ -98,5 +98,5 @@ jobs:
             uv run python "$path" > "$RUNNER_TEMP/campaign.log" 2>&1 || status=$?
             cat "$RUNNER_TEMP/campaign.log"
             [ "$status" -eq 0 ] || exit "$status"
-            [ "$(grep -c '^campaign: 2 runs, ' "$RUNNER_TEMP/campaign.log")" -ge 1 ]
+            [ "$(grep -c '^campaign: 2 runs, ' "$RUNNER_TEMP/campaign.log")" -eq 1 ]
           done
