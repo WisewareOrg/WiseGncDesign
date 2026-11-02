@@ -6,7 +6,7 @@ import numpy as np
 from gnc_analysis.navigation_error import attitude_error_deg, position_error_m, velocity_error_m_s
 from gnc_analysis.runs import Run
 
-__all__ = ["BOUND_FACTOR", "ERROR_AT_START", "bound_ratios", "error_growth"]
+__all__ = ["BOUND_FACTOR", "ERROR_AT_START", "bound_ratios", "error_growth", "violations"]
 
 ERROR_AT_START = 1e-9
 """Bound on every error at t = 0 (rad, m, m/s), where the estimate starts from truth."""
@@ -97,3 +97,26 @@ def bound_ratios(
     `BOUND_FACTOR`."""
     growths = error_growth(run, gyro_noise_std_rad_s, accel_noise_std_m_s2, step_s, mu)
     return {name: error[1:] / growth[1:] for name, (error, growth) in growths.items()}
+
+
+def violations(
+    run: Run, gyro_noise_std_rad_s: float, accel_noise_std_m_s2: float, step_s: float, mu: float
+) -> list[str]:
+    """Every way `run` leaves its bound, one message per metric: an error above
+    `ERROR_AT_START` at t = 0, or above `BOUND_FACTOR` times its `error_growth` at a later
+    sample, naming the first such sample. Empty when the run stays within its bound."""
+    t = run.t_s
+    found = []
+    growths = error_growth(run, gyro_noise_std_rad_s, accel_noise_std_m_s2, step_s, mu)
+    for name, (error, growth) in growths.items():
+        if error[0] > ERROR_AT_START:
+            found.append(f"{name} at t = 0 is {error[0]}, above {ERROR_AT_START}")
+            continue
+        over = np.flatnonzero(error[1:] > BOUND_FACTOR * growth[1:]) + 1
+        if over.size:
+            k = over[0]
+            found.append(
+                f"{name} first exceeds {BOUND_FACTOR} x its derived growth at t = {t[k]} s: "
+                f"{error[k]} > {BOUND_FACTOR * growth[k]}"
+            )
+    return found

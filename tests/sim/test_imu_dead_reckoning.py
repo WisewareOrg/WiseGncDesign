@@ -3,13 +3,12 @@ runs one dispersed spacecraft, writes its run file, and holds its estimate withi
 from its own drawn IMU biases."""
 
 from importlib.metadata import version
-from typing import Any
 
 import numpy as np
-from wise_dynamics.basilisk import RecordedField, run_case
+from wise_dynamics.basilisk import ImuSpacecraft, ImuSpacecraftConfig, RecordedField, run_case
 
-from gnc_analysis.error_bounds import BOUND_FACTOR, ERROR_AT_START, error_growth
-from gnc_analysis.runs import DATASETS, Run, load_run
+from gnc_analysis.error_bounds import violations
+from gnc_analysis.runs import DATASETS, load_run
 from gnc_cdh.basilisk import AlgorithmModule, make_fsw
 
 IMU_DCM_PB = np.eye(3)
@@ -27,23 +26,31 @@ def estimate_fields(fsw: AlgorithmModule) -> dict[str, RecordedField]:
     }
 
 
-def assert_within_bias_growth(run: Run, config: Any, mu: float) -> None:
-    """Holds each error under `ERROR_AT_START` at t = 0, and under `BOUND_FACTOR` times its
-    `error_growth` at every later sample, with the noise and step of the plant's `config`."""
-    t = run.t_s
-    growths = error_growth(
-        run, config.gyro_noise_std_rad_s, config.accel_noise_std_m_s2, config.step_s, mu
-    )
-    for name, (error, growth) in growths.items():
-        assert error[0] <= ERROR_AT_START, f"{name} at t = 0 is {error[0]}"
-        over = np.flatnonzero(error[1:] > BOUND_FACTOR * growth[1:]) + 1
-        assert over.size == 0, (
-            f"{name} first exceeds {BOUND_FACTOR} x its derived growth at t = {t[over[0]]} s: "
-            f"{error[over[0]]} > {BOUND_FACTOR * growth[over[0]]}"
-        )
+def bound_inputs() -> dict[str, float]:
+    """The plant inputs of the accuracy bound, for this scenario and the campaign notebook
+    alike: per-sample gyro and accelerometer noise and the IMU step from the nominal
+    `ImuSpacecraftConfig`, and the central body's gravitational parameter (m^3/s^2) from a
+    plant built at that configuration, the one public route to it. The campaign disperses
+    initial state and biases only, so these are every case's values."""
+    config = ImuSpacecraftConfig()
+    return {
+        "gyro_noise_std_rad_s": config.gyro_noise_std_rad_s,
+        "accel_noise_std_m_s2": config.accel_noise_std_m_s2,
+        "step_s": config.step_s,
+        "mu": ImuSpacecraft(config).mu,
+    }
 
 
 def test_imu_dead_reckoning_case(sim_plant, sim_duration_s, sim_run_writer, record_property):
+    inputs = bound_inputs()
+    plant_inputs = {
+        "gyro_noise_std_rad_s": sim_plant.config.gyro_noise_std_rad_s,
+        "accel_noise_std_m_s2": sim_plant.config.accel_noise_std_m_s2,
+        "step_s": sim_plant.config.step_s,
+        "mu": sim_plant.mu,
+    }
+    assert plant_inputs == inputs, "the case's plant differs from the bound's inputs"
+
     fsw = make_fsw(
         "imu_dead_reckoning",
         inputs=sim_plant.readers(),
@@ -60,4 +67,4 @@ def test_imu_dead_reckoning_case(sim_plant, sim_duration_s, sim_run_writer, reco
     run = load_run(path)
 
     assert run.versions["wise_gnc_design"] == distribution_version
-    assert_within_bias_growth(run, sim_plant.config, sim_plant.mu)
+    assert violations(run, **inputs) == []
