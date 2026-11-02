@@ -1,7 +1,7 @@
 name: checks
 
-# The commands in README.md's Development section. Not required-status-check contexts: the
-# process-gates ruleset requires only process-gates.yml's jobs.
+# The commands in README.md's Development section. These jobs are required status checks on
+# pull requests.
 on:
   push:
     branches: [main]
