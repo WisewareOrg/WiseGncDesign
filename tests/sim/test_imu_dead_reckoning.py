@@ -1,76 +1,98 @@
-"""One IMU on a tumbling spacecraft: `gnc_cdh.basilisk`'s `imu_dead_reckoning` flight software,
-built on WiseDynamics' plant, writes one run file per case via WiseDynamics' own writer, read
-back by this repository's own analysis loader."""
+"""The dead reckoner, hosted by `gnc_cdh.basilisk` on WiseDynamics' IMU spacecraft. Each case
+runs one dispersed spacecraft, writes its run file, and holds its estimate within bounds derived
+from its own drawn IMU biases."""
+
+from importlib.metadata import version
+from typing import Any
 
 import numpy as np
-from Basilisk.utilities import macros
-from gnc_analysis.runs import load_run
-from sim.basilisk.run import run_case
+from wise_dynamics.basilisk import RecordedField, run_case
 
-from gnc_cdh.basilisk import make_fsw
-from gnc_cdh.basilisk.signals import SIGNALS
-from gnc_cdh.bindings import BINDINGS
+from gnc_analysis.navigation_error import attitude_error_deg, position_error_m, velocity_error_m_s
+from gnc_analysis.runs import DATASETS, Run, load_run
+from gnc_cdh.basilisk import AlgorithmModule, make_fsw
 
-FSW_NAME = "imu_dead_reckoning"
+IMU_DCM_PB = np.eye(3)
+"""The flight software's mounting [PB] of the IMU: identity on this spacecraft."""
 
-# README's "What a run file must contain": dataset name -> units, for the plant's own truth and
-# IMU recorders (WiseDynamics' own vocabulary, not the C&DH dictionary's).
-_TRUTH_AND_IMU_EXPORT: dict[str, tuple[str, str, str]] = {
-    "truth/sigma_BN": ("truth", "sigma_BN", "MRP"),
-    "truth/omega_BN_B": ("truth", "omega_BN_B", "rad/s"),
-    "truth/r_N": ("truth", "r_BN_N", "m"),
-    "truth/v_N": ("truth", "v_BN_N", "m/s"),
-    "imu/gyro_P": ("imu", "AngVelPlatform", "rad/s"),
-    "imu/accel_P": ("imu", "AccelPlatform", "m/s^2"),
-}
+ERROR_AT_START = 1e-9
+"""Bound on every error at t = 0 (rad, m, m/s), where the estimate starts from truth."""
 
-# The units each neutral signal carries, keyed by signal name — the one place a unit is stated.
-_UNITS = {
-    "angular_rate": "rad/s",
-    "specific_force": "m/s^2",
-    "sigma_BN": "MRP",
-    "r_N": "m",
-    "v_N": "m/s",
-}
+BOUND_FACTOR = 3.0
+"""Margin on each derived error growth, covering the terms the derivation leaves out."""
 
 
-def _estimate_export() -> dict[str, tuple[str, str, str]]:
-    """Derives {dataset_name: (role, payload_field, units)} for the estimate's own datasets
-    directly from gnc_cdh's data dictionary and Basilisk signals table (the same ones make_fsw
-    itself resolves against), so a role, field or unit swapped in one place cannot pass here
-    without also breaking the flight software's own wiring."""
-    binding = BINDINGS[FSW_NAME]
-    export: dict[str, tuple[str, str, str]] = {}
-    for role, state_attrs in binding.outputs.items():
-        for state_attr, signal in state_attrs.items():
-            _, payload_field = SIGNALS[(role, signal)]
-            export[f"est/{state_attr}"] = (role, payload_field, _UNITS[signal])
-    return export
-
-
-def test_case(case_index, plant, duration_s, run_writer) -> None:
-    """One Monte Carlo case: boots the dead-reckoning flight software onto the already-
-    dispersed `plant` fixture, runs it, writes its `run_<NNNN>.h5` via WiseDynamics' own
-    writer, and checks that this repository's own analysis loader reads it back cleanly."""
-    fsw_module = make_fsw(
-        FSW_NAME,
-        inputs=plant.readers(),
-        initial_state=plant.initial_state,
-        mu=plant.mu,
-    )
-    fsw_outputs = {role: msg for role, (_, msg) in fsw_module.outputs.items()}
-
-    recorders = run_case(plant, fsw_module, fsw_outputs, duration_s=duration_s)
-    assert len(recorders["truth"].times()) > 0, "scenario produced no recorded samples"
-
-    export = {**_TRUTH_AND_IMU_EXPORT, **_estimate_export()}
-    arrays: dict[str, tuple[np.ndarray, str]] = {
-        "t_s": (recorders["truth"].times() * macros.NANO2SEC, "s"),
+def estimate_fields(fsw: AlgorithmModule) -> dict[str, RecordedField]:
+    """The estimate's run-file datasets, `est/<state field>`, read from the module's output
+    maps, in the units the loader requires."""
+    return {
+        f"est/{m.state_field}": RecordedField(
+            m.output, m.payload_field, DATASETS[f"est/{m.state_field}"].units
+        )
+        for m in fsw.output_maps
     }
-    for dataset_name, (recorder_name, field_name, units) in export.items():
-        data = np.array(getattr(recorders[recorder_name], field_name))
-        arrays[dataset_name] = (data, units)
 
-    run_path = run_writer(arrays)
 
-    load_run(run_path)  # raises RunDataError naming the file and the problem otherwise
+def assert_within_bias_growth(run: Run, config: Any) -> None:
+    """Holds each error, at every sample, under `BOUND_FACTOR` times its growth derived from
+    the run's drawn IMU biases, and under `ERROR_AT_START` at t = 0.
+
+    Derivation, with the IMU sampled every `dt = config.step_s`:
+    - A constant gyro bias `b_g` turns the estimate at most `|b_g|` faster than truth, so the
+      attitude error angle grows at most `|b_g| t`. The gyro's white noise, `sigma_g` per sample,
+      adds a random walk of `sigma_g sqrt(t dt)` per axis, taken at 3 sigma.
+    - A constant accelerometer bias `b_a` and noise `sigma_a` bound the velocity error the same
+      way: `|b_a| t + 3 sigma_a sqrt(t dt)`.
+    - The velocity error integrates to a position error of `|b_a| t^2 / 2`. The noise term is
+      negligible beside it.
+
+    `BOUND_FACTOR` covers what these leading terms omit:
+    - the RK4 step holds the rate constant over `dt` while the hub precesses;
+    - gravity is evaluated at the estimated position, not the true one;
+    - the attitude error rotates the accelerometer bias.
+    """
+    t = run.t_s
+    dt = config.step_s
+    b_g = float(np.linalg.norm(run.draws["gyro_bias_P"]))
+    b_a = float(np.linalg.norm(run.draws["accel_bias_P"]))
+    random_walk = 3.0 * np.sqrt(t * dt)
+    errors = {
+        "attitude error [rad]": (
+            np.radians(attitude_error_deg(run)),
+            b_g * t + config.gyro_noise_std_rad_s * random_walk,
+        ),
+        "velocity error [m/s]": (
+            velocity_error_m_s(run),
+            b_a * t + config.accel_noise_std_m_s2 * random_walk,
+        ),
+        "position error [m]": (position_error_m(run), 0.5 * b_a * t**2),
+    }
+    for name, (error, growth) in errors.items():
+        assert error[0] <= ERROR_AT_START, f"{name} at t = 0 is {error[0]}"
+        over = np.flatnonzero(error[1:] > BOUND_FACTOR * growth[1:]) + 1
+        assert over.size == 0, (
+            f"{name} first exceeds {BOUND_FACTOR} x its bias growth at t = {t[over[0]]} s: "
+            f"{error[over[0]]} > {BOUND_FACTOR * growth[over[0]]}"
+        )
+
+
+def test_imu_dead_reckoning_case(sim_campaign, sim_plant, sim_run_writer, record_property):
+    fsw = make_fsw(
+        "imu_dead_reckoning",
+        inputs=sim_plant.readers(),
+        initial_state=sim_plant.initial_state,
+        mountings={"imu": IMU_DCM_PB},
+        mu=sim_plant.mu,
+    )
+    recording = run_case(
+        sim_plant, fsw, fsw_outputs=fsw.output_messages, duration_s=sim_campaign.duration_s
+    )
+    datasets = recording.datasets({**sim_plant.recorded_fields, **estimate_fields(fsw)})
+    distribution_version = version("wise-gnc-design")
+
+    path = sim_run_writer(datasets, extra_attrs={"versions_wise_gnc_design": distribution_version})
+    record_property("run_file", str(path))
+    run = load_run(path)
+
+    assert run.versions["wise_gnc_design"] == distribution_version
+    assert_within_bias_growth(run, sim_plant.config)
