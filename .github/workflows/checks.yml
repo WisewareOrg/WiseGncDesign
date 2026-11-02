@@ -64,10 +64,11 @@ jobs:
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: "0.13.6"
-      - run: uv sync --locked
-      # jupytext --sync rewrites the stale half of a pair; a clean tree afterwards means every
-      # pair was in sync. Then each module runs as __main__: its checks and its figures.
-      - name: Sync and run every literate module
+      - run: uv sync --locked --group sim
+      # Literate documents: every algorithm module under algorithms/gnc_algorithms/ and every
+      # campaign document notebooks/*.py. jupytext --sync rewrites the stale half of each pair, so
+      # a clean tree afterwards means every pair was in sync.
+      - name: Sync every literate document; committed notebooks carry no outputs
         shell: bash
         run: |
           shopt -s nullglob
@@ -76,6 +77,26 @@ jobs:
             [ "$(basename "$path")" = __init__.py ] || modules+=("$path")
           done
           [ ${#modules[@]} -gt 0 ] || { echo "no literate module under algorithms/gnc_algorithms/"; exit 1; }
-          for path in "${modules[@]}"; do uv run jupytext --sync "$path"; done
+          for path in "${modules[@]}" notebooks/*.py; do uv run jupytext --sync "$path"; done
           test -z "$(git status --porcelain)"
-          for path in "${modules[@]}"; do uv run python -m "gnc_algorithms.$(basename "$path" .py)"; done
+          uv run python -c 'import json, pathlib, sys; bad = sorted(str(p) for p in pathlib.Path("notebooks").glob("*.ipynb") if any(c.get("outputs") or c.get("execution_count") is not None for c in json.loads(p.read_text())["cells"])); sys.exit(f"notebooks committed with outputs: {bad}" if bad else 0)'
+      - name: Run every algorithm module as a script
+        shell: bash
+        run: |
+          for path in algorithms/gnc_algorithms/*.py; do
+            module=$(basename "$path" .py)
+            [ "$module" = __init__ ] || uv run python -m "gnc_algorithms.$module"
+          done
+      - name: Run every campaign document with GNC_CAMPAIGN_RUNS=2
+        shell: bash
+        env:
+          GNC_CAMPAIGN_RUNS: "2"
+        run: |
+          shopt -s nullglob
+          for path in notebooks/*.py; do
+            status=0
+            uv run python "$path" > "$RUNNER_TEMP/campaign.log" 2>&1 || status=$?
+            cat "$RUNNER_TEMP/campaign.log"
+            [ "$status" -eq 0 ] || exit "$status"
+            [ "$(grep -c '^campaign: 2 runs, ' "$RUNNER_TEMP/campaign.log")" -ge 1 ]
+          done
