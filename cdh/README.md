@@ -103,7 +103,7 @@ It builds the host module for the binding `name`:
 The function refuses these, each by name:
 - an unknown binding;
 - a missing or wrongly typed reader;
-- a missing, stray or non-orthonormal mounting;
+- a missing or stray mounting, or one that is not a proper rotation;
 - an unknown parameter;
 - a key supplied by both `initial_state()` and `params`.
 

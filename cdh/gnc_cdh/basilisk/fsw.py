@@ -17,8 +17,12 @@ __all__ = ["make_fsw"]
 
 def _mounting(role: str, dcm: Any) -> np.ndarray:
     array = np.array(dcm, dtype=float)
-    if array.shape != (3, 3) or not np.allclose(array @ array.T, np.eye(3), atol=1e-9):
-        raise ValueError(f"mounting for {role!r} is not an orthonormal (3, 3) DCM: {dcm!r}")
+    if (
+        array.shape != (3, 3)
+        or not np.allclose(array @ array.T, np.eye(3), atol=1e-9)
+        or not np.isclose(np.linalg.det(array), 1.0, atol=1e-9)
+    ):
+        raise ValueError(f"mounting for {role!r} is not a proper rotation (3, 3) DCM: {dcm!r}")
     array.setflags(write=False)
     return array
 
@@ -49,10 +53,10 @@ def make_fsw(
     Raises:
         ValueError: when `name` is unknown; an input role is absent from `inputs` or its reader
             has the wrong type; a (role, signal) has no Basilisk resolution; a framed role has no
-            mounting, a mounting names a role without a frame, or a mounting is not an
-            orthonormal (3, 3) DCM; or a key of `params` names no constructor parameter. At
-            `Reset`, when `initial_state()` and `params` share a key or together miss a
-            required parameter.
+            mounting, a mounting names a role without a frame, or a mounting is not a (3, 3)
+            proper rotation (orthonormal, determinant +1); or a key of `params` names no
+            constructor parameter. At `Reset`, when `initial_state()` and `params` share a key
+            or together miss a required parameter.
     """
     algorithm_binding = binding(name)
     mountings = dict(mountings or {})
