@@ -14,6 +14,9 @@ TRUTH_RATE_RAD_S = 0.1  # rad/s, about TRUTH_AXIS: past 180 deg within a 60 s ru
 TRUTH_AXIS = np.array([0.0, 0.6, 0.8])
 ATTITUDE_ERROR_AXIS = np.array([1.0, 0.0, 0.0])
 POSITION_ERROR_AXIS = np.array([0.0, 1.0, 0.0])
+TRUTH_R_N = np.array([6_871_000.0, 0.0, 0.0])  # m, held fixed
+GYRO_BIAS = np.array([1e-4, -2e-4, 5e-5])  # rad/s, recorded as draw_gyro_bias_P
+ACCEL_BIAS = np.array([1e-4, -5e-5, 2e-4])  # m/s^2, recorded as draw_accel_bias_P
 
 
 def _axis_angle_quaternion(axis: np.ndarray, angle_rad: np.ndarray) -> np.ndarray:
@@ -53,7 +56,7 @@ def run_arrays(
     # truth ⊖ est = error, i.e. C_truth C_est^T = C_error, so C_est = C_error^T C_truth.
     q_est = _product(q_error_inverse, q_truth)
 
-    truth_r = np.zeros((n_steps, 3))
+    truth_r = np.tile(TRUTH_R_N, (n_steps, 1))
     truth_v = np.zeros((n_steps, 3))
     velocity_error = position_drift_rate_m_s * POSITION_ERROR_AXIS
     return {
@@ -90,7 +93,8 @@ def write_run_file(
         f.attrs["producer"] = "tests/analysis"
         f.attrs["created_utc"] = "2026-10-31T00:00:00Z"
         f.attrs["versions_wise_gnc_design"] = "0.0.0"
-        f.attrs["draw_gyro_bias"] = np.zeros(3)
+        f.attrs["draw_gyro_bias_P"] = GYRO_BIAS
+        f.attrs["draw_accel_bias_P"] = ACCEL_BIAS
         for name, data in arrays.items():
             f.create_dataset(name, data=data.astype(np.float64)).attrs["units"] = DATASETS[
                 name

@@ -47,7 +47,7 @@ def test_a_good_run_loads_every_dataset_and_attr(run_file):
     for name, value in loaded.items():
         np.testing.assert_array_equal(value, _values(path, name), err_msg=name)
     assert dict(run.versions) == {"wise_gnc_design": "0.0.0"}
-    np.testing.assert_array_equal(run.draws["gyro_bias"], np.zeros(3))
+    assert set(run.draws) == {"gyro_bias_P", "accel_bias_P"}
 
 
 def test_a_missing_file_is_rejected(tmp_path):

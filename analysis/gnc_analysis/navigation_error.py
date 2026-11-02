@@ -31,6 +31,7 @@ __all__ = [
     "growth_rate",
     "load_runs",
     "main",
+    "metric_figure",
     "position_error_m",
     "summarize",
     "velocity_error_m_s",
@@ -166,7 +167,9 @@ def _summary_markdown(summary: Summary) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _metric_figure(summary: Summary, s: MetricSummary) -> Figure:
+def metric_figure(summary: Summary, s: MetricSummary) -> Figure:
+    """One metric across the campaign: every run drawn faintly, the ensemble mean and ±3σ in
+    bold, against time in s."""
     fig = Figure(figsize=(8, 5))
     ax = fig.subplots()
     t_s = summary.t_s
@@ -193,7 +196,7 @@ def write_report(summary: Summary, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "summary.md").write_text(_summary_markdown(summary))
     for s in summary.metrics:
-        _metric_figure(summary, s).savefig(out_dir / s.metric.figure_name, dpi=150)
+        metric_figure(summary, s).savefig(out_dir / s.metric.figure_name, dpi=150)
 
 
 def load_runs(path: Path) -> list[Run]:
