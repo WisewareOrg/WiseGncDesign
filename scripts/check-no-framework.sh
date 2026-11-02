@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fails when a file under algorithms/ names a simulation or flight framework (README.md, Layout).
 set -uo pipefail
-pattern='\b(basilisk|fprime|f_prime)|Fw/|Svc/|cfe_|\b(osal|trick)([^a-z]|$)'
+pattern='\b(basilisk|fprime|f_prime|osapi|trickhla)|Fw/|Svc/|cfe_|\bcfe\b|\b(osal|trick)([^a-z]|$)'
 [ -d algorithms ] || { echo "algorithms/ is missing" >&2; exit 2; }
 command grep -rniE \
   --include='*.py' --include='*.c' --include='*.cc' --include='*.cpp' \
