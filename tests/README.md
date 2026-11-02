@@ -31,8 +31,8 @@ Its fixtures, used by `tests/sim/test_imu_dead_reckoning.py`:
 
 | Fixture | Value |
 | --- | --- |
-| `sim_campaign` | the session's campaign settings, from the options above |
 | `sim_case_index` | this case's index |
+| `sim_duration_s` | the case's simulated duration, in s, from `--sim-duration-s` |
 | `sim_draws` | this case's dispersed plant configuration values |
 | `sim_plant` | the plant built with those draws and its own noise seed |
 | `sim_run_writer(datasets, extra_attrs=None)` | writes this case's run file and returns its path |

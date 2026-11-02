@@ -106,7 +106,7 @@ def assert_within_bias_growth(run: Run, config: Any, mu: float) -> None:
         )
 
 
-def test_imu_dead_reckoning_case(sim_campaign, sim_plant, sim_run_writer, record_property):
+def test_imu_dead_reckoning_case(sim_plant, sim_duration_s, sim_run_writer, record_property):
     fsw = make_fsw(
         "imu_dead_reckoning",
         inputs=sim_plant.readers(),
@@ -114,9 +114,7 @@ def test_imu_dead_reckoning_case(sim_campaign, sim_plant, sim_run_writer, record
         mountings={"imu": IMU_DCM_PB},
         mu=sim_plant.mu,
     )
-    recording = run_case(
-        sim_plant, fsw, fsw_outputs=fsw.output_messages, duration_s=sim_campaign.duration_s
-    )
+    recording = run_case(sim_plant, fsw, fsw_outputs=fsw.output_messages, duration_s=sim_duration_s)
     datasets = recording.datasets({**sim_plant.recorded_fields, **estimate_fields(fsw)})
     distribution_version = version("wise-gnc-design")
 
