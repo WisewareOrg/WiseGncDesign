@@ -38,8 +38,8 @@ def make_fsw(
             no signal from are left out of the module.
         initial_state: returns the algorithm's initial state by constructor parameter name,
             called at each `Reset`; keys naming no parameter are left out.
-        mountings: the DCM [PB] by input role, for every role carrying a signal with a frame,
-            in the convention of `gnc_cdh.frames.platform_to_body`.
+        mountings: the DCM [PB] by input role, v_P = [PB] v_B, for every role carrying a
+            signal with a frame; the transform is `gnc_cdh.frames.platform_to_body`.
         **params: further constructor parameters, e.g. `mu` (m^3/s^2).
 
     Returns:

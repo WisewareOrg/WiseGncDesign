@@ -1,8 +1,10 @@
 """The campaign check in `tests/conftest.py`, run by pytester in a tree laid out like this
-repository's, under a bare `pytest -n 2`: it reports a loaded campaign, and fails naming a stale
-file or a run the loader rejects."""
+repository's, with its pytest options, under a bare `pytest -n 2`: it reports a loaded campaign,
+and fails naming a stale file or a run the loader rejects."""
 
+import json
 import textwrap
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,7 @@ import pytest
 pytest_plugins = ["pytester"]
 
 CONFTEST = Path(__file__).with_name("conftest.py")
+PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 
 # Stands in for WiseDynamics' plugin: the campaign directory is --sim-out.
 STUB_PLUGIN = """
@@ -52,7 +55,11 @@ STUB_SCENARIO = """
 
 @pytest.fixture
 def campaign_tree(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> Path:
-    pytester.makeini("[pytest]\ntestpaths = tests\n")
+    options = tomllib.loads(PYPROJECT.read_text())["tool"]["pytest"]["ini_options"]
+    pytester.makepyprojecttoml(
+        "[tool.pytest.ini_options]\n"
+        + "".join(f"{key} = {json.dumps(value)}\n" for key, value in options.items())
+    )
     (pytester.path / "wise_dynamics").mkdir()
     (pytester.path / "wise_dynamics" / "__init__.py").write_text("")
     (pytester.path / "wise_dynamics" / "pytest_plugin.py").write_text(textwrap.dedent(STUB_PLUGIN))
