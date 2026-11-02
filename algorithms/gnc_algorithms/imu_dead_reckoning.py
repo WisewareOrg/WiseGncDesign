@@ -44,10 +44,14 @@ velocity and position."""
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from gnc_algorithms.mrp import B, dcm_NB, shadow
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
 
 __all__ = ["DeadReckoningState", "ImuDeadReckoner", "ImuSample"]
 
@@ -169,14 +173,15 @@ class ImuDeadReckoner:
         Switches sigma to its shadow set when |sigma| > 1 after the step.
 
         Raises:
-            ValueError: when `dt` is not > 0 (including NaN).
+            ValueError: when `dt` is not > 0 (including NaN), or `omega_B` or `accel_B` is not a
+                finite 3-vector; the state is left unchanged.
         """
         dt = sample.t - self._state.t
         if not dt > 0.0:
             raise ValueError(f"dt must be > 0, got {dt}")
 
-        omega = np.asarray(sample.omega_B, dtype=float)
-        accel = np.asarray(sample.accel_B, dtype=float)
+        omega = _vector3("omega_B", sample.omega_B)
+        accel = _vector3("accel_B", sample.accel_B)
         mu = self._mu
 
         def derivs(
@@ -504,6 +509,38 @@ def check_invalid_dt_raises() -> None:
 
 
 # %% [markdown]
+# ### A non-finite or misshapen reading raises and leaves the state unchanged
+#
+# One NaN reading integrated into the state would corrupt every later step, so `step` rejects a
+# reading that is not a finite 3-vector before touching the state.
+
+
+# %%
+def check_invalid_reading_raises_and_keeps_the_state() -> None:
+    reckoner = ImuDeadReckoner(
+        sigma0_BN=_ZERO3, r0_N=_AWAY_FROM_ORIGIN, v0_N=_ZERO3, t0=0.0, mu=0.0
+    )
+    before = reckoner.state
+    bad_readings = [
+        ("omega_B", np.array([0.0, np.nan, 0.0]), _ZERO3),
+        ("accel_B", _ZERO3, np.array([np.inf, 0.0, 0.0])),
+        ("omega_B", np.zeros(4), _ZERO3),
+    ]
+    for name, omega_B, accel_B in bad_readings:
+        try:
+            reckoner.step(ImuSample(t=1.0, omega_B=omega_B, accel_B=accel_B))
+        except ValueError as exc:
+            if name not in str(exc):
+                raise AssertionError(f"error does not name {name}: {exc}") from exc
+            if reckoner.state is not before:
+                raise AssertionError(f"a rejected {name} changed the state") from exc
+            continue
+        raise AssertionError(
+            f"step() accepted {name}={omega_B if name == 'omega_B' else accel_B!r}"
+        )
+
+
+# %% [markdown]
 # ### Invalid construction arguments raise
 #
 # The constructor accepts finite 3-vectors, a finite `t0` and a finite, non-negative `mu`, and
@@ -542,7 +579,7 @@ def check_invalid_construction_raises() -> None:
 
 
 # %%
-def sample_run_figure():
+def sample_run_figure() -> "Figure":
     """Propagates truth and a constant-bias estimate over a 600 s orbital tumble and returns a
     `matplotlib.figure.Figure` of attitude error (deg) and position error (m) against time."""
     from matplotlib.figure import Figure
