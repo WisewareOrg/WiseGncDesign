@@ -44,7 +44,10 @@ A module reads top to bottom as a document:
 Importing a module runs none of its checks. Three things do run them:
 - `uv run python -m gnc_algorithms.<module>`, or running the notebook top to bottom in a kernel
   started as the root README's Development section shows. Either runs `run_checks` and writes
-  the figures under `figures/` in the working directory.
+  the figures under `figures/` in the working directory. The dead reckoner's campaign notebook,
+  `notebooks/imu_dead_reckoning_campaign.ipynb`, reads its run count from `GNC_CAMPAIGN_RUNS`
+  (default 852) and its worker count from `GNC_CAMPAIGN_WORKERS` (default the CPU count),
+  prints both, and runs in CI with 2 runs.
 - `tests/algorithms/test_literate_checks.py`. It runs every `check_*` of every paired module as
   its own pytest case, and renders every module's figures.
 - CI. It syncs every pair, requires a clean tree, and runs every module.

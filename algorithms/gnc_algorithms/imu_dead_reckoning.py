@@ -571,11 +571,12 @@ def check_invalid_construction_raises() -> None:
 # %% [markdown]
 # ## A sample run
 #
-# Ten minutes in a circular 500 km orbit with a 0.3 rad/s tumble: truth (an ideal IMU)
-# against an estimate fed the same motion plus a representative constant gyro bias and
-# accelerometer bias, with no correction. The two panels show the growing attitude error and
-# position error between them. matplotlib is imported here, inside the function, so importing
-# this module needs numpy alone.
+# A worked explanation of one case, not a measure of the error: the dispersed campaign in
+# `imu_dead_reckoning_campaign.ipynb` is that. Ten minutes in a circular 500 km orbit with a
+# 0.3 rad/s tumble: truth (an ideal IMU) against an estimate fed the same motion plus a
+# representative constant gyro bias and accelerometer bias, with no correction. The two panels
+# show the growing attitude error and position error between them. matplotlib is imported
+# here, inside the function, so importing this module needs numpy alone.
 
 
 # %%
@@ -701,3 +702,11 @@ def run_checks() -> None:
 if __name__ == "__main__":
     run_checks()
     save_figures(Path("figures"))
+
+# %% [markdown]
+# ## Across a campaign
+#
+# One case shows how the error arises. `imu_dead_reckoning_campaign.ipynb`, beside this
+# notebook, flies the dead reckoner on a simulated tumbling spacecraft over a dispersed Monte
+# Carlo campaign and shows how large the error is across it, against the bound each case's IMU
+# biases imply.

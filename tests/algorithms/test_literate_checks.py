@@ -1,5 +1,7 @@
-"""Runs every `check_*` of every literate module: each `notebooks/<name>.ipynb` paired with
-`algorithms/gnc_algorithms/<name>.py`, imported as `gnc_algorithms.<name>`."""
+"""Runs every `check_*` of every literate algorithm module, `algorithms/gnc_algorithms/<name>.py`
+imported as `gnc_algorithms.<name>`, and checks that every literate document has its notebook:
+each algorithm module and each campaign document `notebooks/<name>.py` pairs with
+`notebooks/<name>.ipynb`. Campaign documents are never imported or run here."""
 
 import importlib
 import inspect
@@ -30,11 +32,12 @@ def _checks() -> list[tuple[str, str, Callable[[], None]]]:
 CHECKS = _checks()
 
 
-def test_every_module_is_paired_with_a_notebook_and_defines_checks():
+def test_every_literate_document_is_paired_with_a_notebook_and_modules_define_checks():
     names = _module_names()
+    campaigns = sorted(p.stem for p in NOTEBOOKS.glob("*.py"))
 
     assert names, f"no literate module under {SOURCES}"
-    assert names == sorted(p.stem for p in NOTEBOOKS.glob("*.ipynb"))
+    assert sorted(names + campaigns) == sorted(p.stem for p in NOTEBOOKS.glob("*.ipynb"))
     assert sorted({module for module, _, _ in CHECKS}) == names
 
 
