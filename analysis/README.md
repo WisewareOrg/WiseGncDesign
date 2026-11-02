@@ -4,9 +4,8 @@
 truth.
 
 It grades independently of what it measures. It computes attitude error with its own MRP math, in
-`gnc_analysis.mrp`. It reads runs only through files. Its imports are numpy, h5py, matplotlib and
-the standard library. `scripts/check-analysis-independent.sh` enforces this: it fails on any import
-under this directory of `gnc_algorithms`, `gnc_cdh`, Basilisk or WiseDynamics.
+`gnc_analysis.mrp`, and reads runs only through files. Nothing under `analysis/` imports
+`gnc_algorithms`, `gnc_cdh`, Basilisk or WiseDynamics.
 
 ## Module map
 

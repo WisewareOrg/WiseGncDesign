@@ -7,7 +7,6 @@
 | `algorithms/` | every `check_*` of every literate module passes, every module's figures render, and `algorithms/README.md`'s example runs |
 | `cdh/` | `AlgorithmModule`, `make_fsw` and every binding, against standalone Basilisk messages |
 | `analysis/` | the grader's MRP math against an axis-angle oracle; every rule of the run-file loader; the summary statistics and `gnc-analyze` against synthetic runs with closed-form errors |
-| `gates/` | each `scripts/check-*.sh` against a temporary tree: clean passes, a seeded violation fails, a legal look-alike passes, a broken pattern or missing target errors |
 | `sim/` | the dead reckoner, hosted by `gnc_cdh.basilisk` on a WiseDynamics plant, stays within bounds derived from each case's drawn IMU biases, and writes a run file the loader accepts |
 | `test_campaign_check.py` | the campaign check below, run under `pytest -n 2` in a temporary tree |
 

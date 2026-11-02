@@ -7,15 +7,11 @@
 - one subpackage per transport. Each resolves the dictionary against that transport's messages and
   hosts the algorithm generically. `basilisk/` is the transport for the Basilisk simulator.
 
-Three gates keep the parts apart:
-- the neutral layer is the modules directly under `gnc_cdh/`, written in the dictionary's own
-  vocabulary. `scripts/check-cdh-dictionary-neutral.sh` fails on any Basilisk name there.
-- a transport's generic modules (`__init__.py`, `algorithm_module.py`, `fsw.py`) serve any
-  algorithm. `scripts/check-cdh-transport-generic.sh` fails on any algorithm or sensor vocabulary
-  there. A transport's `signals.py` is its one algorithm-specific table.
-- the partition depends on the algorithms and on its transports' own libraries.
-  `scripts/check-cdh-independent.sh` fails on any reference under `cdh/` to the simulation
-  repository.
+The parts stay apart:
+- The data dictionary and the other modules directly under `gnc_cdh/` name no transport.
+- A transport's generic modules (`__init__.py`, `algorithm_module.py`, `fsw.py`) name no
+  algorithm or sensor. A transport's `signals.py` is its one algorithm-specific table.
+- Nothing under `cdh/` imports the simulation repository.
 
 ## Module map
 
@@ -161,5 +157,4 @@ A transport is a sibling of `basilisk/` holding three modules:
 - a generic host module;
 - a `make_fsw`.
 
-The transport-generic gate covers the new directory's `__init__.py`, `algorithm_module.py` and
-`fsw.py`.
+Its `__init__.py`, generic host module and `fsw.py` name no algorithm or sensor.

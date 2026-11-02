@@ -2,9 +2,8 @@
 
 `gnc_algorithms` holds the GNC algorithms. Each algorithm is a literate module: its derivation,
 its code, the checks that verify it, and its figures, all in one file. Every module imports numpy
-and the standard library. That keeps an algorithm free of simulation and flight frameworks, so
-any host can run it unmodified. `scripts/check-no-framework.sh` enforces this by failing on any
-framework name under this directory.
+and the standard library. Nothing under `algorithms/` imports a simulation or flight framework,
+so any host can run an algorithm unmodified.
 
 ## Module map
 
