@@ -6,12 +6,11 @@ time with `step(sample)`. Its sample type is a dataclass with a field `t` (s) pl
 input signal; its state carries `t` (s) plus one attribute per output signal.
 """
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol
 
 __all__ = ["HostedAlgorithm", "HostedState"]
 
 
-@runtime_checkable
 class HostedState(Protocol):
     """A hosted algorithm's state at one instant: `t` in s, plus one attribute per output."""
 
@@ -19,7 +18,6 @@ class HostedState(Protocol):
     def t(self) -> float: ...
 
 
-@runtime_checkable
 class HostedAlgorithm(Protocol):
     """An algorithm a transport can host: a current `state`, and `step(sample)` advancing it
     to `sample.t` and returning the new state."""
