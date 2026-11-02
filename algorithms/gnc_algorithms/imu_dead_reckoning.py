@@ -231,6 +231,12 @@ def _dcm_BN_from_axis_angle(axis: np.ndarray, theta: float) -> np.ndarray:
     return cos_t * np.eye(3) + (1.0 - cos_t) * np.outer(axis, axis) - sin_t * _skew(axis)
 
 
+def _relative_angle_deg(dcm1: np.ndarray, dcm2: np.ndarray) -> float:
+    """Principal angle, in deg, of [1 2] = [1 N][2 N]^T, from its trace."""
+    cos_angle = (np.trace(dcm1 @ dcm2.T) - 1.0) / 2.0
+    return float(np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0))))
+
+
 def _propagate(
     omega_B: np.ndarray,
     accel_B: np.ndarray,
@@ -585,6 +591,56 @@ def save_figures(out_dir: Path) -> list[Path]:
     path = out_dir / "imu_dead_reckoning_sample_run.png"
     sample_run_figure().savefig(path)
     return [path]
+
+
+# %% [markdown]
+# ### The sample run matches its closed forms
+#
+# Each panel of the figure is checked against a closed form, reading the plotted series back.
+#
+# Attitude: a constant body rate is a rotation about a fixed axis, so truth is $R(\hat z,
+# 0.3\,t)$ and the estimate $R(\hat e', |\omega + b_g|\,t)$ with
+# $\hat e' = (\omega + b_g)/|\omega + b_g|$; the error is the principal angle of
+# $C_{\text{truth}} C_{\text{est}}^T$, matched within $10^{-3}$ deg.
+#
+# Position: the tumble is about inertial $z$, normal to the orbit plane, so the accelerometer
+# bias's $z$ component $a_z$ stays fixed in the inertial frame and drives the out-of-plane
+# Clohessy-Wiltshire solution $z(t) = (a_z / n^2)(1 - \cos nt)$. The in-plane components turn
+# with the spin and stay within about $|b_\perp| / \omega^2 \approx 1$ mm, and the attitude
+# error tilts the bias only to second order, so the error matches $z(t)$ within 5 cm.
+
+
+# %%
+def check_sample_run_matches_closed_forms() -> None:
+    fig = sample_run_figure()
+    attitude_line, position_line = fig.axes[0].lines[0], fig.axes[1].lines[0]
+    t_s = np.asarray(attitude_line.get_xdata())
+    attitude_error_deg = np.asarray(attitude_line.get_ydata())
+    position_error_m = np.asarray(position_line.get_ydata())
+    if t_s.size != 601 or t_s[0] != 0.0:
+        raise AssertionError(
+            f"sample run has {t_s.size} samples from t = {t_s[0]}, expected 601 from 0"
+        )
+
+    true_omega = np.array([0.0, 0.0, 0.3])
+    est_omega = true_omega + np.array([1e-4, -2e-4, 5e-5])
+    est_axis = est_omega / np.linalg.norm(est_omega)
+    expected_deg = [
+        _relative_angle_deg(
+            _dcm_BN_from_axis_angle(np.array([0.0, 0.0, 1.0]), 0.3 * t),
+            _dcm_BN_from_axis_angle(est_axis, np.linalg.norm(est_omega) * t),
+        )
+        for t in t_s
+    ]
+    np.testing.assert_allclose(
+        attitude_error_deg, expected_deg, atol=1e-3, err_msg="sample-run attitude error"
+    )
+
+    n = np.sqrt(3.986004418e14 / 6_871_000.0**3)  # rad/s, mean motion
+    expected_m = 2e-4 / n**2 * (1.0 - np.cos(n * t_s))
+    np.testing.assert_allclose(
+        position_error_m, expected_m, atol=0.05, err_msg="sample-run position error"
+    )
 
 
 # %% [markdown]

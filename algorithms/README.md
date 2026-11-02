@@ -49,8 +49,10 @@ Importing a module runs none of its checks. Three things do run them:
   its own pytest case, and renders every module's figures.
 - CI. It syncs every pair, requires a clean tree, and runs every module.
 
-All three discover modules by the pairing and checks by name. A new module or check needs no
-registration.
+The collector proves each check passes and is the runner for local work. Running the module
+proves the document executes top to bottom as a script, through its `__main__` path and its
+figures. All three discover modules by the pairing and checks by name, so a new module or check
+needs no registration.
 
 ## Example: step the dead reckoner by hand
 
