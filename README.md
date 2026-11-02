@@ -74,6 +74,16 @@ Running the module executes every check and writes its figures under `figures/`.
 pair, requires a clean tree afterwards, and runs every module
 ([`algorithms/README.md`](algorithms/README.md)).
 
+To work in the notebooks, start Jupyter inside this environment, so its kernel has the project's
+packages:
+
+```sh
+uv run --with jupyterlab jupyter lab notebooks/
+```
+
+A Jupyter started outside the environment opens a kernel without numpy or `gnc_algorithms`.
+Notebooks are committed without outputs: clear them before committing.
+
 ### A campaign and its analysis
 
 Run eight cases on four workers, then grade the campaign:

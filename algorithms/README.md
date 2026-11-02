@@ -42,8 +42,9 @@ A module reads top to bottom as a document:
 5. `run_checks`, which runs every `check_*` function.
 
 Importing a module runs none of its checks. Three things do run them:
-- `uv run python -m gnc_algorithms.<module>`, or running the notebook top to bottom in a kernel.
-  Either runs `run_checks` and writes the figures under `figures/` in the working directory.
+- `uv run python -m gnc_algorithms.<module>`, or running the notebook top to bottom in a kernel
+  started as the root README's Development section shows. Either runs `run_checks` and writes
+  the figures under `figures/` in the working directory.
 - `tests/algorithms/test_literate_checks.py`. It runs every `check_*` of every paired module as
   its own pytest case, and renders every module's figures.
 - CI. It syncs every pair, requires a clean tree, and runs every module.
