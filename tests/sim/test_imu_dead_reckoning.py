@@ -33,45 +33,70 @@ def estimate_fields(fsw: AlgorithmModule) -> dict[str, RecordedField]:
     }
 
 
-def assert_within_bias_growth(run: Run, config: Any) -> None:
-    """Holds each error, at every sample, under `BOUND_FACTOR` times its growth derived from
-    the run's drawn IMU biases, and under `ERROR_AT_START` at t = 0.
+def error_growth(run: Run, config: Any, mu: float) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Each error of `run` at every sample, beside its growth derived from the run's drawn IMU
+    biases (`draw_gyro_bias_P`, `draw_accel_bias_P`), the plant's per-sample noise (`sigma_g`,
+    `sigma_a`), the IMU step `dt` and the orbit's mean motion `n = sqrt(mu / |r0|^3)`.
 
-    Derivation, with the IMU sampled every `dt = config.step_s`:
-    - A constant gyro bias `b_g` turns the estimate at most `|b_g|` faster than truth, so the
-      attitude error angle grows at most `|b_g| t`. The gyro's white noise, `sigma_g` per sample,
-      adds a random walk of `sigma_g sqrt(t dt)` per axis, taken at 3 sigma.
-    - A constant accelerometer bias `b_a` and noise `sigma_a` bound the velocity error the same
-      way: `|b_a| t + 3 sigma_a sqrt(t dt)`.
-    - The velocity error integrates to a position error of `|b_a| t^2 / 2`. The noise term is
-      negligible beside it.
+    Attitude, rad: `|b_g| t + 1/2 max|omega_dot| dt t + 3 sigma_g sqrt(t dt)`.
+    - A constant gyro bias turns the estimate at most `|b_g|` faster than truth.
+    - The integrator holds the sampled rate over each step while the true rate changes by up to
+      `max|omega_dot| dt`, leaving at most half that per second; `max|omega_dot|` is the
+      largest finite difference of the run's own `truth/omega_BN_B`.
+    - The gyro's white noise is a random walk of `sigma_g sqrt(t dt)` per axis, taken at 3 sigma.
 
-    `BOUND_FACTOR` covers what these leading terms omit:
-    - the RK4 step holds the rate constant over `dt` while the hub precesses;
-    - gravity is evaluated at the estimated position, not the true one;
-    - the attitude error rotates the accelerometer bias.
+    Velocity, m/s: `|b_a| t (1 + (n t)^2 / 3) + 3 sigma_a sqrt(t dt)`.
+    - A constant accelerometer bias adds `|b_a| t`.
+    - Gravity is evaluated at the estimated position; the position error, at most
+      `|b_a| t^2 / 2`, feeds back through the gravity gradient, whose norm is at most `2 n^2`,
+      adding at most `|b_a| n^2 t^3 / 3`.
+    - The accelerometer's white noise is a random walk of `sigma_a sqrt(t dt)`, at 3 sigma.
+    - The held specific force adds no term: with every sensor error zero the error stays under
+      5e-11 m/s over an orbit.
+
+    Position, m: `|b_a| t^2 / 2 + 3 sigma_a sqrt(dt / 3) t^(3/2)`.
+    - The bias term integrates the velocity bias term.
+    - The noise term integrates the accelerometer random walk, at 3 sigma.
+    - The held specific force adds no term: with every sensor error zero the error stays under
+      4e-8 m over an orbit.
+
+    `BOUND_FACTOR` covers what the leading terms omit, chiefly the attitude error rotating the
+    accelerometer bias, which is second order and under 15% of the bias term.
     """
     t = run.t_s
     dt = config.step_s
     b_g = float(np.linalg.norm(run.draws["gyro_bias_P"]))
     b_a = float(np.linalg.norm(run.draws["accel_bias_P"]))
-    random_walk = 3.0 * np.sqrt(t * dt)
-    errors = {
+    omega_dot = np.linalg.norm(np.diff(run.truth.omega_BN_B, axis=0), axis=1) / np.diff(t)
+    n = np.sqrt(mu / float(np.linalg.norm(run.truth.r_N[0])) ** 3)
+    return {
         "attitude error [rad]": (
             np.radians(attitude_error_deg(run)),
-            b_g * t + config.gyro_noise_std_rad_s * random_walk,
+            b_g * t
+            + 0.5 * omega_dot.max() * dt * t
+            + 3.0 * config.gyro_noise_std_rad_s * np.sqrt(t * dt),
         ),
         "velocity error [m/s]": (
             velocity_error_m_s(run),
-            b_a * t + config.accel_noise_std_m_s2 * random_walk,
+            b_a * t * (1.0 + (n * t) ** 2 / 3.0)
+            + 3.0 * config.accel_noise_std_m_s2 * np.sqrt(t * dt),
         ),
-        "position error [m]": (position_error_m(run), 0.5 * b_a * t**2),
+        "position error [m]": (
+            position_error_m(run),
+            0.5 * b_a * t**2 + 3.0 * config.accel_noise_std_m_s2 * np.sqrt(dt / 3.0) * t**1.5,
+        ),
     }
-    for name, (error, growth) in errors.items():
+
+
+def assert_within_bias_growth(run: Run, config: Any, mu: float) -> None:
+    """Holds each error under `ERROR_AT_START` at t = 0, and under `BOUND_FACTOR` times its
+    `error_growth` at every later sample."""
+    t = run.t_s
+    for name, (error, growth) in error_growth(run, config, mu).items():
         assert error[0] <= ERROR_AT_START, f"{name} at t = 0 is {error[0]}"
         over = np.flatnonzero(error[1:] > BOUND_FACTOR * growth[1:]) + 1
         assert over.size == 0, (
-            f"{name} first exceeds {BOUND_FACTOR} x its bias growth at t = {t[over[0]]} s: "
+            f"{name} first exceeds {BOUND_FACTOR} x its derived growth at t = {t[over[0]]} s: "
             f"{error[over[0]]} > {BOUND_FACTOR * growth[over[0]]}"
         )
 
@@ -95,4 +120,4 @@ def test_imu_dead_reckoning_case(sim_campaign, sim_plant, sim_run_writer, record
     run = load_run(path)
 
     assert run.versions["wise_gnc_design"] == distribution_version
-    assert_within_bias_growth(run, sim_plant.config)
+    assert_within_bias_growth(run, sim_plant.config, sim_plant.mu)
