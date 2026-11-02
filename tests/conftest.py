@@ -1,6 +1,7 @@
 """The campaign check: at the end of a session that ran scenario cases, the run files those
-cases recorded share one directory, they are exactly the `run_*.h5` files in it, and that
-directory loads through `gnc_analysis.runs.load_campaign`.
+cases recorded share one directory, which is `--sim-out` when that option was given; they are
+exactly the `run_*.h5` files in it; and that directory loads through
+`gnc_analysis.runs.load_campaign`.
 
 Each scenario case records its run file with `record_property("run_file", path)`. These hooks
 live in this file because the pytest-xdist controller loads it for every session under
@@ -33,12 +34,16 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
     recorded = {p.resolve() for p in _recorded}
     directories = sorted({p.parent for p in recorded})
+    problems: list[str] = []
     if len(directories) > 1:
-        problems = [f"run files written to {len(directories)} directories: {directories}"]
+        problems.append(f"run files written to {len(directories)} directories: {directories}")
     else:
         out_dir = directories[0]
+        requested = session.config.getoption("--sim-out", default=None)
+        if requested and Path(requested).resolve() != out_dir:
+            problems.append(f"run files written to {out_dir}, not to --sim-out {requested}")
         present = {p.resolve() for p in out_dir.glob("run_*.h5")}
-        problems = [f"recorded but absent from {out_dir}: {p}" for p in sorted(recorded - present)]
+        problems += [f"recorded but absent from {out_dir}: {p}" for p in sorted(recorded - present)]
         problems += [
             f"present in {out_dir} but written by no case: {p}" for p in sorted(present - recorded)
         ]

@@ -39,11 +39,18 @@ Its fixtures, used by `tests/sim/test_imu_dead_reckoning.py`:
 
 WiseDynamics documents them in full in its `wise_dynamics/basilisk/README.md`.
 
+One case reruns alone, with the draws and noise it had in its campaign:
+
+```sh
+uv run pytest --sim-seed S --sim-runs N "tests/sim/test_imu_dead_reckoning.py::test_imu_dead_reckoning_case[k]"
+```
+
 ## The campaign check
 
 Each scenario case records its run file with `record_property("run_file", path)`. At the end of
 a session, `tests/conftest.py` checks three things on the controlling process:
-- the recorded files share one directory, the campaign directory;
+- the recorded files share one directory, the campaign directory, which is `--sim-out` when
+  that option is given;
 - they are exactly the `run_*.h5` files in it;
 - the directory loads through `gnc_analysis.runs.load_campaign`.
 

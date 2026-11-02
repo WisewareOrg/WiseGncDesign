@@ -1,7 +1,7 @@
 """The campaign check in `tests/conftest.py`, run by pytester in a tree laid out like this
 repository's, with its pytest options, under a bare `pytest -n 2`: it reports a loaded campaign,
-and fails naming a stale file, run files scattered over two directories, or a run the loader
-rejects."""
+and fails naming a stale file, run files scattered over two directories, run files outside the
+requested `--sim-out`, or a run the loader rejects."""
 
 import json
 import textwrap
@@ -45,6 +45,13 @@ STUB_SCENARIO = """
 """
 
 
+# Stands in for the simulation plugin's --sim-out option.
+SIM_OUT_PLUGIN = """
+    def pytest_addoption(parser):
+        parser.addoption("--sim-out")
+"""
+
+
 @pytest.fixture
 def campaign(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> Path:
     options = tomllib.loads(PYPROJECT.read_text())["tool"]["pytest"]["ini_options"]
@@ -57,14 +64,18 @@ def campaign(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> Path
     (pytester.path / "tests" / "sim" / "test_scenario.py").write_text(
         textwrap.dedent(STUB_SCENARIO)
     )
+    (pytester.path / "sim_out_plugin.py").write_text(textwrap.dedent(SIM_OUT_PLUGIN))
     directory = pytester.path / "campaign"
     monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    monkeypatch.setenv("PYTHONPATH", str(pytester.path))
     monkeypatch.setenv("CAMPAIGN", str(directory))
     return directory
 
 
-def _run(pytester: pytest.Pytester) -> pytest.RunResult:
-    return pytester.runpytest_subprocess("-p", "xdist.plugin", "-n", "2")
+def _run(pytester: pytest.Pytester, *args: str) -> pytest.RunResult:
+    return pytester.runpytest_subprocess(
+        "-p", "xdist.plugin", "-p", "sim_out_plugin", "-n", "2", *args
+    )
 
 
 def test_a_good_campaign_reports_its_runs(pytester, campaign):
@@ -91,6 +102,22 @@ def test_run_files_in_two_directories_fail_the_session(pytester, campaign, monke
 
     assert result.ret == pytest.ExitCode.TESTS_FAILED
     result.stdout.fnmatch_lines(["FAILED: run files written to 2 directories: *"])
+
+
+def test_run_files_outside_the_requested_sim_out_fail_the_session(pytester, campaign):
+    requested = campaign.with_name("requested")
+
+    result = _run(pytester, f"--sim-out={requested}")
+
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    result.stdout.fnmatch_lines([f"FAILED: run files written to {campaign}, not to --sim-out *"])
+
+
+def test_the_requested_sim_out_passes_when_the_cases_wrote_there(pytester, campaign):
+    result = _run(pytester, f"--sim-out={campaign}")
+
+    assert result.ret == 0
+    result.stdout.fnmatch_lines([f"campaign check: 2 runs loaded from {campaign}"])
 
 
 def test_a_campaign_the_loader_rejects_fails_the_session(pytester, campaign, monkeypatch):

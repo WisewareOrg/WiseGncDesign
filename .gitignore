@@ -2,5 +2,6 @@
 __pycache__/
 *.pyc
 figures/
+.ipynb_checkpoints/
 /campaign/
 /report/
