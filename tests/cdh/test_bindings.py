@@ -34,11 +34,15 @@ def test_init_keys_are_the_required_constructor_parameters_other_than_t0():
 
 @dataclass(frozen=True)
 class _Sample:
+    """A sample with one input field, `x`."""
+
     t: float
     x: np.ndarray
 
 
 class _Algorithm:
+    """An algorithm with one required parameter, `gain`, and one defaulted, `offset`."""
+
     def __init__(self, gain: float, t0: float, offset: float = 0.0) -> None:
         self.gain, self.t0, self.offset = gain, t0, offset
 

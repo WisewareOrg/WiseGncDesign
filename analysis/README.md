@@ -64,6 +64,9 @@ Across a campaign, `summarize` reports for each metric:
 
 ## Running the analysis on a directory
 
+`gnc-analyze` needs the `analysis` extra, h5py and matplotlib: install
+`wise-gnc-design[analysis]`. In this repository `uv sync` installs it.
+
 ```sh
 uv run gnc-analyze campaign --out report
 ```

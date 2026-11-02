@@ -181,7 +181,7 @@ class AlgorithmModule(sysModel.SysModel):
         """Steps the algorithm to the current time when it lies after the state's time.
 
         Raises:
-            RuntimeError: before the first `Reset`, or naming any input not yet written.
+            RuntimeError: before the first `Reset`, or naming any input never written.
         """
         algorithm = self.algorithm
         t = CurrentSimNanos / _NANOSECONDS_PER_SECOND

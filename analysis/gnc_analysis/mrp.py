@@ -36,8 +36,9 @@ def from_quaternion(q: np.ndarray) -> np.ndarray:
 
 
 def _quaternion_product(p: np.ndarray, q: np.ndarray) -> np.ndarray:
-    """Hamilton product `p ⊗ q`, scalar first: the rotation `q` followed by the rotation `p`
-    in the successive-frame (Schaub & Junkins) sense."""
+    """Quaternion product `p ⊗ q`, scalar first, in the successive-rotation convention
+    (Shuster, Schaub & Junkins), whose vector part carries `-p_vec × q_vec`: the rotation `q`
+    followed by the rotation `p`, so that C(p ⊗ q) = C(p) C(q)."""
     p0, pv = p[..., :1], p[..., 1:]
     q0, qv = q[..., :1], q[..., 1:]
     scalar = p0 * q0 - np.sum(pv * qv, axis=-1, keepdims=True)
