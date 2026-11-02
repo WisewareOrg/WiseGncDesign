@@ -6,8 +6,9 @@
 | --- | --- |
 | `algorithms/` | every `check_*` of every literate module passes, every module's figures render, and `algorithms/README.md`'s example runs |
 | `cdh/` | `AlgorithmModule`, `make_fsw` and every binding, against standalone Basilisk messages |
-| `analysis/` | the grader's MRP math against an axis-angle oracle; every rule of the run-file loader; the summary statistics and `gnc-analyze` against synthetic runs with closed-form errors |
+| `analysis/` | the grader's MRP math against an axis-angle oracle; every rule of the run-file loader; each term of the accuracy bound against its hand-computed value; the summary statistics and `gnc-analyze` against synthetic runs with closed-form errors |
 | `sim/` | the dead reckoner, hosted by `gnc_cdh.basilisk` on a WiseDynamics plant, stays within bounds derived from each case's drawn IMU biases, and writes a run file the loader accepts |
+| `notebooks/` | each campaign document imports without running, reads its counts from its two environment variables, finds the repository root, and refuses a campaign holding other than the requested run count |
 | `test_campaign_check.py` | the campaign check below, run under `pytest -n 2` in a temporary tree |
 
 ## Scenario tests and campaigns

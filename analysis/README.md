@@ -12,7 +12,8 @@ It grades independently of what it measures. It computes attitude error with its
 | Module | Public surface |
 | --- | --- |
 | `runs.py` | `load_run`, `load_campaign`, `Run` (with `Truth`, `Estimate`, `ImuReadings`), `DATASETS`, `RunDataError` |
-| `navigation_error.py` | per-run metrics `attitude_error_deg`, `position_error_m`, `velocity_error_m_s`; `summarize`, `write_report`, `analyze`; `main`, the `gnc-analyze` command |
+| `navigation_error.py` | per-run metrics `attitude_error_deg`, `position_error_m`, `velocity_error_m_s`; `summarize`, `metric_figure`, `write_report`, `analyze`; `main`, the `gnc-analyze` command |
+| `error_bounds.py` | the IMU dead-reckoning accuracy bound: `error_growth`, `bound_ratios`, `violations`, `BOUND_FACTOR`, `ERROR_AT_START` |
 | `mrp.py` | `subtract`, `angle`, `to_quaternion`, `from_quaternion` for `sigma_BN`, batched over a leading dimension |
 
 ## What a run file must contain
