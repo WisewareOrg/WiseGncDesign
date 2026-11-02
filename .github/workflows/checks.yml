@@ -60,8 +60,11 @@ jobs:
       - name: pytest -n 2 --sim-runs 2
         shell: bash
         run: |
-          uv run pytest -n 2 --sim-runs 2 --sim-out "$RUNNER_TEMP/campaign" | tee "$RUNNER_TEMP/pytest.log"
-          grep -q "^campaign check: 2 runs loaded from " "$RUNNER_TEMP/pytest.log"
+          status=0
+          uv run pytest -n 2 --sim-runs 2 --sim-out "$RUNNER_TEMP/campaign" > "$RUNNER_TEMP/pytest.log" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/pytest.log"
+          [ "$status" -eq 0 ] || exit "$status"
+          [ "$(grep -c '^campaign check: 2 runs loaded from ' "$RUNNER_TEMP/pytest.log")" -eq 1 ]
       - run: uv run gnc-analyze "$RUNNER_TEMP/campaign" --out "$RUNNER_TEMP/report"
 
   literate:
