@@ -1,148 +1,258 @@
-"""What a run file must contain, and the loader that is the only statement of it.
+"""Loads recorded runs: one HDF5 file per run, a campaign being a directory of them.
 
-See this repository's README, "What a run file must contain". This loader is the sole
-authority, raising RunDataError naming the file and the dataset, attribute or unit at fault.
+This loader is the single statement of what a run file must contain; `analysis/README.md`
+("What a run file must contain") renders the same table for readers. Every rejection raises
+`RunDataError` naming the file and the dataset, attribute or rule at fault.
 """
 
-from dataclasses import dataclass
+import dataclasses
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
+from typing import Any, NamedTuple
 
 import h5py
 import numpy as np
 
-# Dataset path within a run file -> its expected `units` attribute.
-DATASETS = {
-    "t_s": "s",
-    "truth/sigma_BN": "MRP",
-    "truth/omega_BN_B": "rad/s",
-    "truth/r_N": "m",
-    "truth/v_N": "m/s",
-    "est/sigma_BN": "MRP",
-    "est/r_N": "m",
-    "est/v_N": "m/s",
-    "imu/gyro_P": "rad/s",
-    "imu/accel_P": "m/s^2",
-}
+__all__ = [
+    "DATASETS",
+    "Dataset",
+    "Estimate",
+    "ImuReadings",
+    "Run",
+    "RunDataError",
+    "Truth",
+    "load_campaign",
+    "load_run",
+]
 
 
 class RunDataError(Exception):
-    """Signals a mismatch between a run file's content and what the loader requires."""
+    """A run file, or a campaign directory, differs from what `load_run` and `load_campaign`
+    read. The message names the file and the dataset, attribute or rule at fault."""
+
+
+class Dataset(NamedTuple):
+    """What one dataset must be: float64, carrying a string attr `units` equal to `units`, of
+    shape `(N,)` when `width` is `None` and `(N, width)` otherwise, `N` being `len(t_s)`."""
+
+    units: str
+    width: int | None
+
+
+def _channel(units: str, width: int | None = 3) -> Any:
+    return field(metadata={"units": units, "width": width})
+
+
+@dataclass(frozen=True)
+class Truth:
+    """Plant truth, one row per sample of `Run.t_s`. Read from group `truth/`.
+
+    Attributes:
+        sigma_BN: (N, 3) MRP of the body frame B with respect to the inertial frame N.
+        omega_BN_B: (N, 3) rad/s, angular rate of B with respect to N, in B.
+        r_N: (N, 3) m, inertial position.
+        v_N: (N, 3) m/s, inertial velocity.
+    """
+
+    sigma_BN: np.ndarray = _channel("MRP")
+    omega_BN_B: np.ndarray = _channel("rad/s")
+    r_N: np.ndarray = _channel("m")
+    v_N: np.ndarray = _channel("m/s")
+
+
+@dataclass(frozen=True)
+class Estimate:
+    """The flight software's estimate, one row per sample of `Run.t_s`. Read from group `est/`.
+
+    Attributes:
+        sigma_BN: (N, 3) MRP of B with respect to N.
+        r_N: (N, 3) m, inertial position.
+        v_N: (N, 3) m/s, inertial velocity.
+    """
+
+    sigma_BN: np.ndarray = _channel("MRP")
+    r_N: np.ndarray = _channel("m")
+    v_N: np.ndarray = _channel("m/s")
+
+
+@dataclass(frozen=True)
+class ImuReadings:
+    """The IMU's own output, in its sensor (platform) frame P, one row per sample of
+    `Run.t_s`. Read from group `imu/`.
+
+    Attributes:
+        gyro_P: (N, 3) rad/s, angular rate in P.
+        accel_P: (N, 3) m/s^2, non-gravitational acceleration in P.
+    """
+
+    gyro_P: np.ndarray = _channel("rad/s")
+    accel_P: np.ndarray = _channel("m/s^2")
+
+
+_GROUPS: dict[str, type] = {"truth": Truth, "est": Estimate, "imu": ImuReadings}
+
+DATASETS: Mapping[str, Dataset] = MappingProxyType(
+    {
+        "t_s": Dataset("s", None),
+        **{
+            f"{group}/{f.name}": Dataset(f.metadata["units"], f.metadata["width"])
+            for group, cls in _GROUPS.items()
+            for f in dataclasses.fields(cls)
+        },
+    }
+)
+"""Every dataset a run file must contain, by its path in the file."""
 
 
 @dataclass(frozen=True)
 class Run:
+    """One loaded run.
+
+    Attributes:
+        path: the file it was read from.
+        case: root attr `case`, the run's index in its campaign.
+        seed: root attr `seed`, the campaign seed it was drawn from.
+        draws: every root attr `draw_<name>`, keyed by `<name>`.
+        versions: every root attr `versions_<name>`, keyed by `<name>`.
+        t_s: (N,) s, sample times, strictly increasing from 0.
+        truth: plant truth at `t_s`.
+        est: the flight software's estimate at `t_s`.
+        imu: the IMU's output at `t_s`.
+    """
+
     path: Path
     case: int
     seed: int
-    draws: dict[str, np.ndarray]
-    versions: dict[str, str]
+    draws: Mapping[str, np.ndarray]
+    versions: Mapping[str, str]
     t_s: np.ndarray
-    truth_sigma_BN: np.ndarray
-    truth_omega_BN_B: np.ndarray
-    truth_r_N: np.ndarray
-    truth_v_N: np.ndarray
-    est_sigma_BN: np.ndarray
-    est_r_N: np.ndarray
-    est_v_N: np.ndarray
-    imu_gyro_P: np.ndarray
-    imu_accel_P: np.ndarray
+    truth: Truth
+    est: Estimate
+    imu: ImuReadings
 
 
-def _read_dataset(f: h5py.File, path: Path, rel_path: str, expected_units: str) -> np.ndarray:
-    if rel_path not in f:
-        raise RunDataError(f"{path}: missing dataset '{rel_path}'")
+def _read_dataset(f: h5py.File, path: Path, name: str, spec: Dataset, rows: int | None) -> Any:
+    if name not in f or not isinstance(f[name], h5py.Dataset):
+        raise RunDataError(f"{path}: missing dataset '{name}'")
+    dataset = f[name]
 
-    dataset = f[rel_path]
-    data = dataset[()]
+    units = dataset.attrs.get("units")
+    if isinstance(units, bytes):
+        units = units.decode()
+    if units != spec.units:
+        raise RunDataError(f"{path}: dataset '{name}' has units {units!r}, expected {spec.units!r}")
+    if dataset.dtype != np.float64:
+        raise RunDataError(f"{path}: dataset '{name}' has dtype {dataset.dtype}, expected float64")
 
-    actual_units = dataset.attrs.get("units")
-    if actual_units != expected_units:
+    expected_ndim = 1 if spec.width is None else 2
+    if dataset.ndim != expected_ndim or (spec.width is not None and dataset.shape[1] != spec.width):
+        expected = "(N,)" if spec.width is None else f"(N, {spec.width})"
         raise RunDataError(
-            f"{path}: dataset '{rel_path}' has units {actual_units!r}, expected {expected_units!r}"
+            f"{path}: dataset '{name}' has shape {dataset.shape}, expected {expected}"
+        )
+    if rows is not None and dataset.shape[0] != rows:
+        raise RunDataError(
+            f"{path}: dataset '{name}' has {dataset.shape[0]} rows, expected {rows} (len(t_s))"
         )
 
-    if np.isnan(data).any():
-        raise RunDataError(f"{path}: dataset '{rel_path}' contains NaN")
-
+    data = dataset[()]
+    if not np.isfinite(data).all():
+        raise RunDataError(f"{path}: dataset '{name}' contains NaN or inf")
     return data
 
 
+def _integral_attr(f: h5py.File, path: Path, name: str) -> int:
+    if name not in f.attrs:
+        raise RunDataError(f"{path}: missing root attr '{name}'")
+    value = np.asarray(f.attrs[name])
+    if value.shape != () or not np.issubdtype(value.dtype, np.integer):
+        raise RunDataError(f"{path}: root attr '{name}' is {value!r}, expected an integer")
+    return int(value)
+
+
 def load_run(path: str | Path) -> Run:
-    """Load one run_<NNNN>.h5. Reads each dataset in DATASETS by name, checks its `units`
-    attribute, rejects NaN, and requires t_s strictly increasing from 0; requires the root attrs
-    `case` and `seed`. `draw_*` and `versions_*` attrs are read best-effort. Extra datasets and
-    attributes are ignored. Raises RunDataError naming the file and the dataset, attribute or
-    unit at fault."""
+    """Loads one run file.
+
+    Reads every dataset in `DATASETS` by name and requires its `units`, its float64 dtype, its
+    shape, `len(t_s)` rows and finite values; requires `t_s` to start at 0 and increase strictly;
+    requires integer root attrs `case` and `seed`. Collects `draw_*` and `versions_*` root attrs.
+    Ignores every other dataset and attr.
+
+    Raises:
+        RunDataError: naming the file and the dataset, attr or rule at fault.
+    """
     path = Path(path)
     if not path.is_file():
         raise RunDataError(f"{path}: file does not exist")
-
     try:
         handle = h5py.File(path, "r")
     except OSError as exc:
         raise RunDataError(f"{path}: could not be opened as HDF5 ({exc})") from exc
 
     with handle as f:
-        values = {
-            rel_path: _read_dataset(f, path, rel_path, units)
-            for rel_path, units in DATASETS.items()
+        t_s = _read_dataset(f, path, "t_s", DATASETS["t_s"], rows=None)
+        if t_s.size == 0 or t_s[0] != 0.0:
+            raise RunDataError(f"{path}: t_s does not start at 0")
+        if np.any(np.diff(t_s) <= 0.0):
+            raise RunDataError(f"{path}: t_s is not strictly increasing")
+
+        groups = {
+            group: cls(
+                **{
+                    f_.name: _read_dataset(
+                        f, path, f"{group}/{f_.name}", DATASETS[f"{group}/{f_.name}"], t_s.size
+                    )
+                    for f_ in dataclasses.fields(cls)
+                }
+            )
+            for group, cls in _GROUPS.items()
         }
 
-        t_s = values["t_s"]
-        not_increasing_from_zero = (
-            t_s.size == 0 or t_s[0] != 0 or (t_s.size > 1 and (t_s[1:] <= t_s[:-1]).any())
-        )
-        if not_increasing_from_zero:
-            raise RunDataError(f"{path}: t_s is not strictly increasing from 0")
-
-        if "case" not in f.attrs:
-            raise RunDataError(f"{path}: missing root attr 'case'")
-        if "seed" not in f.attrs:
-            raise RunDataError(f"{path}: missing root attr 'seed'")
-        case = int(f.attrs["case"])
-        seed = int(f.attrs["seed"])
+        case = _integral_attr(f, path, "case")
+        seed = _integral_attr(f, path, "seed")
         draws = {
             name.removeprefix("draw_"): np.asarray(value)
             for name, value in f.attrs.items()
             if name.startswith("draw_")
         }
         versions = {
-            name: str(value) for name, value in f.attrs.items() if name.startswith("versions_")
+            name.removeprefix("versions_"): str(value)
+            for name, value in f.attrs.items()
+            if name.startswith("versions_")
         }
 
-        return Run(
-            path=path,
-            case=case,
-            seed=seed,
-            draws=draws,
-            versions=versions,
-            t_s=t_s,
-            truth_sigma_BN=values["truth/sigma_BN"],
-            truth_omega_BN_B=values["truth/omega_BN_B"],
-            truth_r_N=values["truth/r_N"],
-            truth_v_N=values["truth/v_N"],
-            est_sigma_BN=values["est/sigma_BN"],
-            est_r_N=values["est/r_N"],
-            est_v_N=values["est/v_N"],
-            imu_gyro_P=values["imu/gyro_P"],
-            imu_accel_P=values["imu/accel_P"],
-        )
+    return Run(
+        path=path,
+        case=case,
+        seed=seed,
+        draws=MappingProxyType(draws),
+        versions=MappingProxyType(versions),
+        t_s=t_s,
+        **groups,
+    )
 
 
 def load_campaign(directory: str | Path) -> list[Run]:
-    """Load every run_*.h5 in directory, sorted by filename, via load_run. Raises RunDataError
-    naming the offending file if any run's t_s differs from the others."""
+    """Loads every `run_*.h5` in `directory`, sorted by file name, through `load_run`, and
+    requires every run to share the first run's `t_s` (equal within 1e-9 s).
+
+    Raises:
+        RunDataError: when the directory holds no run file, when any run fails `load_run`, or
+            naming the first run whose `t_s` differs.
+    """
     directory = Path(directory)
     paths = sorted(directory.glob("run_*.h5"))
     if not paths:
         raise RunDataError(f"{directory}: no run_*.h5 files found")
 
     runs = [load_run(p) for p in paths]
-
     reference = runs[0]
     for run in runs[1:]:
-        same_shape = run.t_s.shape == reference.t_s.shape
-        if not same_shape or not np.allclose(run.t_s, reference.t_s, rtol=0, atol=1e-9):
+        same = run.t_s.shape == reference.t_s.shape and np.allclose(
+            run.t_s, reference.t_s, rtol=0.0, atol=1e-9
+        )
+        if not same:
             raise RunDataError(f"{run.path}: t_s differs from {reference.path}'s t_s")
-
     return runs
