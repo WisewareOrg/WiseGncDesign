@@ -35,6 +35,7 @@ dev = [
     "pytest-xdist>=3.6",
     "ruff>=0.17.0",
     "jupytext>=1.17",
+    "matplotlib>=3.9",
 ]
 
 [tool.pytest.ini_options]
