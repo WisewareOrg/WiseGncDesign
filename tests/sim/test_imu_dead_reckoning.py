@@ -29,15 +29,15 @@ def estimate_fields(fsw: AlgorithmModule) -> dict[str, RecordedField]:
 def bound_inputs() -> dict[str, float]:
     """The plant inputs of the accuracy bound, for this scenario and the campaign notebook
     alike: per-sample gyro and accelerometer noise and the IMU step from the nominal
-    `ImuSpacecraftConfig`, and the central body's gravitational parameter (m^3/s^2) from a
-    plant built at that configuration, the one public route to it. The campaign disperses
-    initial state and biases only, so these are every case's values."""
+    `ImuSpacecraftConfig`, and the central body's gravitational parameter (m^3/s^2) from
+    `ImuSpacecraft.mu`, all read without building a plant. The campaign disperses initial state
+    and biases only, so these are every case's values."""
     config = ImuSpacecraftConfig()
     return {
         "gyro_noise_std_rad_s": config.gyro_noise_std_rad_s,
         "accel_noise_std_m_s2": config.accel_noise_std_m_s2,
         "step_s": config.step_s,
-        "mu": ImuSpacecraft(config).mu,
+        "mu": ImuSpacecraft.mu,
     }
 
 
