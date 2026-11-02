@@ -1,4 +1,3 @@
-# Pairs the literate algorithm modules under algorithms/gnc_algorithms/ (percent-format .py,
-# the importable source of truth) with notebooks/*.ipynb (generated, for interactive editing).
-# mrp.py is a plain helper module, not paired: its checks live in tests/test_mrp.py instead.
+# Pairs each literate module under algorithms/gnc_algorithms/ (percent-format .py, the
+# importable source of truth) with notebooks/<module>.ipynb.
 formats = "algorithms/gnc_algorithms///py:percent,notebooks///ipynb"

@@ -2,21 +2,21 @@
 # # Strapdown inertial dead reckoning
 #
 # Pure dead reckoning for a spacecraft carrying one IMU: the gyro's body-frame angular rate is
-# integrated to attitude, the accelerometer's body-frame reading is rotated into the inertial
-# frame by that attitude and combined with a point-mass gravity model to integrate to velocity
-# and position. No correction, no filter — an attitude error feeds the navigation error directly
-# through the frame rotation, which is the coupling this algorithm exists to show.
+# integrated to attitude, and the accelerometer's body-frame reading is rotated into the
+# inertial frame by that attitude and combined with a point-mass gravity model to integrate to
+# velocity and position. No measurement corrects the estimate, so an attitude error feeds the
+# navigation error directly through the frame rotation.
 #
 # ## Attitude kinematics
 #
-# Attitude is the modified Rodrigues parameter (MRP) $\sigma_{BN}$, body frame $B$ with respect
-# to inertial frame $N$ (Schaub & Junkins; see `mrp.py`). Its kinematic differential equation,
-# given the body-frame angular rate $\omega$:
+# Attitude is the modified Rodrigues parameter (MRP) set $\sigma_{BN}$, body frame $B$ with
+# respect to inertial frame $N$ (Schaub & Junkins; see `mrp.py`). Its kinematic differential
+# equation, given the body-frame angular rate $\omega = \omega_{BN}$ expressed in $B$:
 #
 # $$\dot\sigma = \tfrac{1}{4} B(\sigma)\,\omega$$
 #
 # where $B(\sigma)$ is `mrp.B`. $\sigma$ switches to its shadow set (`mrp.shadow`) whenever
-# $|\sigma| > 1$, so it never grows without bound.
+# $|\sigma| > 1$, so it stays bounded.
 #
 # ## Translational kinematics
 #
@@ -26,61 +26,94 @@
 # $$\dot r = v \qquad \dot v = C_{NB}(\sigma)\,a_B - \mu \frac{r}{|r|^3}$$
 #
 # where $C_{NB}(\sigma)$ (`mrp.dcm_NB`) rotates a body-frame vector into the inertial frame,
-# $a_B$ is the accelerometer's body-frame reading, and $\mu$ is the gravitational parameter,
-# supplied by the host so truth and estimate share the same constant.
+# $a_B$ is the accelerometer's body-frame reading of non-gravitational acceleration, and $\mu$
+# is the gravitational parameter, supplied by the host so truth and estimate share one constant.
 #
 # ## Integration
 #
 # One `step()` call advances $(\sigma, r, v)$ by one RK4 step over `dt = sample.t - state.t`,
-# with $\omega$ and $a_B$ held constant across the step — the sensor contract's promise of raw
-# rates and accelerations, not pre-integrated angles. All three states share the same four
-# stages, so an attitude error at any stage immediately biases that stage's rotated
-# acceleration: the coupling this module exists to demonstrate.
+# with $\omega$ and $a_B$ held constant across the step: the sensor delivers raw rates and
+# accelerations, not pre-integrated angles. All three states share the same four stages, so an
+# attitude error at any stage biases that stage's rotated acceleration — the coupling between
+# attitude and navigation error this module demonstrates.
 
 # %%
+"""Strapdown inertial dead reckoning: gyro rates integrated to an MRP attitude, and the
+accelerometer, rotated by that attitude, plus point-mass gravity integrated to inertial
+velocity and position."""
+
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
 from gnc_algorithms.mrp import B, dcm_NB, shadow
 
-__all__ = ["ImuSample", "DeadReckoningState", "ImuDeadReckoner"]
+__all__ = ["DeadReckoningState", "ImuDeadReckoner", "ImuSample"]
 
 # %% [markdown]
 # ## Interface
 #
 # `ImuSample` is one timestamped, raw body-frame reading. `DeadReckoningState` is the
-# estimator's state at one instant.
+# estimator's state at one instant. Both are immutable values.
 
 
 # %%
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ImuSample:
-    t: float  # s
-    omega_B: np.ndarray  # (3,) rad/s, body-frame angular rate
-    accel_B: np.ndarray  # (3,) m/s^2, body-frame non-gravitational acceleration
+    """One raw IMU reading, already rotated into the body frame by the host.
 
+    Attributes:
+        t: s, the time the reading applies at.
+        omega_B: (3,) rad/s, angular rate of B with respect to N, in B.
+        accel_B: (3,) m/s^2, non-gravitational acceleration, in B.
+    """
 
-@dataclass
-class DeadReckoningState:
     t: float
-    sigma_BN: np.ndarray  # (3,) MRP, body wrt inertial
-    r_N: np.ndarray  # (3,) m, inertial position
-    v_N: np.ndarray  # (3,) m/s, inertial velocity
+    omega_B: np.ndarray
+    accel_B: np.ndarray
+
+
+@dataclass(frozen=True, slots=True)
+class DeadReckoningState:
+    """The estimator's state at one instant. Its arrays are read-only.
+
+    Attributes:
+        t: s, the time the state applies at.
+        sigma_BN: (3,) MRP of B with respect to N, with |sigma_BN| <= 1.
+        r_N: (3,) m, inertial position.
+        v_N: (3,) m/s, inertial velocity.
+    """
+
+    t: float
+    sigma_BN: np.ndarray
+    r_N: np.ndarray
+    v_N: np.ndarray
 
 
 # %% [markdown]
 # ## Gravity
 #
-# $\mu r / |r|^3$, literally, with no special case at $r = 0$: away from the origin this is
-# finite for any $\mu$; at the origin it is $0/0$ (NaN) regardless of $\mu$, by design — the
-# host supplies a real position.
+# $\mu r / |r|^3$, literally: finite for any $\mu$ away from the origin, and $0/0$ (NaN) at the
+# origin, where no spacecraft state lies.
 
 
 # %%
 def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
     r_norm = float(np.linalg.norm(r))
     return mu * r / r_norm**3
+
+
+def _frozen(value: np.ndarray) -> np.ndarray:
+    value.setflags(write=False)
+    return value
+
+
+def _vector3(name: str, value: np.ndarray) -> np.ndarray:
+    array = np.array(value, dtype=float)
+    if array.shape != (3,) or not np.isfinite(array).all():
+        raise ValueError(f"{name} must be a finite 3-vector, got {value!r}")
+    return _frozen(array)
 
 
 # %% [markdown]
@@ -93,28 +126,51 @@ def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
 
 # %%
 class ImuDeadReckoner:
-    """Propagates attitude (MRP), position and velocity from raw body-frame IMU samples."""
+    """Propagates attitude (MRP), inertial position and inertial velocity from raw body-frame
+    IMU samples, with point-mass gravity of parameter `mu`.
+
+    Args:
+        sigma0_BN: (3,) MRP of B with respect to N at `t0`.
+        r0_N: (3,) m, inertial position at `t0`.
+        v0_N: (3,) m/s, inertial velocity at `t0`.
+        t0: s, the time the initial state applies at.
+        mu: m^3/s^2, gravitational parameter of the central body, >= 0.
+
+    Raises:
+        ValueError: when a vector is not a finite 3-vector, `t0` is not finite, or `mu` is not
+            finite and >= 0.
+    """
 
     def __init__(
         self, sigma0_BN: np.ndarray, r0_N: np.ndarray, v0_N: np.ndarray, t0: float, mu: float
     ) -> None:
-        self._mu = mu
+        if not np.isfinite(t0):
+            raise ValueError(f"t0 must be finite, got {t0!r}")
+        if not (np.isfinite(mu) and mu >= 0.0):
+            raise ValueError(f"mu must be finite and >= 0, got {mu!r}")
+        self._mu = float(mu)
         self._state = DeadReckoningState(
-            t=t0,
-            sigma_BN=np.array(sigma0_BN, dtype=float),
-            r_N=np.array(r0_N, dtype=float),
-            v_N=np.array(v0_N, dtype=float),
+            t=float(t0),
+            sigma_BN=_vector3("sigma0_BN", sigma0_BN),
+            r_N=_vector3("r0_N", r0_N),
+            v_N=_vector3("v0_N", v0_N),
         )
 
     @property
     def state(self) -> DeadReckoningState:
+        """The current state."""
         return self._state
 
     def step(self, sample: ImuSample) -> DeadReckoningState:
-        """dt = sample.t - state.t (must be > 0). One RK4 step over dt of the coupled state
-        (sigma, r, v) with omega and accel_B held constant: dsigma/dt = 1/4 B(sigma) @ omega;
-        dr/dt = v; dv/dt = dcm_NB(sigma) @ accel_B - mu * r / |r|^3. Switches sigma to the
-        shadow set when |sigma| > 1 after the step. Returns the new state."""
+        """Advances the state to `sample.t` by one RK4 step and returns the new state.
+
+        Over `dt = sample.t - state.t`, with `omega_B` and `accel_B` held constant:
+        dsigma/dt = 1/4 B(sigma) omega_B; dr/dt = v; dv/dt = dcm_NB(sigma) accel_B - mu r/|r|^3.
+        Switches sigma to its shadow set when |sigma| > 1 after the step.
+
+        Raises:
+            ValueError: when `dt` is not > 0 (including NaN).
+        """
         dt = sample.t - self._state.t
         if not dt > 0.0:
             raise ValueError(f"dt must be > 0, got {dt}")
@@ -145,30 +201,39 @@ class ImuDeadReckoner:
         if np.linalg.norm(sigma_new) > 1.0:
             sigma_new = shadow(sigma_new)
 
-        self._state = DeadReckoningState(t=sample.t, sigma_BN=sigma_new, r_N=r_new, v_N=v_new)
+        self._state = DeadReckoningState(
+            t=sample.t, sigma_BN=_frozen(sigma_new), r_N=_frozen(r_new), v_N=_frozen(v_new)
+        )
         return self._state
 
 
 # %% [markdown]
 # ## Checks
 #
-# Each check below documents and verifies one property of `step`, in its own function so no
-# check's local variables leak into another's. Defining a function costs nothing, so importing
-# this module runs none of them; `run_checks`, at the end of this notebook, calls every one.
+# Each check below states and verifies one property of the estimator, in its own function so
+# no check's local variables reach another's. `run_checks`, at the end of this notebook, runs
+# every function whose name starts with `check_`; importing the module runs none of them.
 
 # %%
 _ZERO3 = np.zeros(3)
-# A position away from the origin, so _gravity's r / |r|^3 stays finite in checks that hold
-# mu = 0 and don't otherwise care about r_N/v_N (see the Gravity note above).
+# A position away from the origin, keeping r / |r|^3 finite in checks that hold mu = 0.
 _AWAY_FROM_ORIGIN = np.array([7.0e6, 0.0, 0.0])
 
 
 def _skew(v: np.ndarray) -> np.ndarray:
+    """The checks' own cross-product matrix, kept apart from `mrp`'s as an independent oracle."""
     return np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
 
 
-def _propagate_constant_rate(
+def _dcm_BN_from_axis_angle(axis: np.ndarray, theta: float) -> np.ndarray:
+    """[BN] for B rotated from N by `theta` about unit `axis` (Schaub & Junkins eq. 3.62)."""
+    cos_t, sin_t = np.cos(theta), np.sin(theta)
+    return cos_t * np.eye(3) + (1.0 - cos_t) * np.outer(axis, axis) - sin_t * _skew(axis)
+
+
+def _propagate(
     omega_B: np.ndarray,
+    accel_B: np.ndarray,
     total_t: float,
     n_steps: int,
     sigma0: np.ndarray = _ZERO3,
@@ -180,7 +245,7 @@ def _propagate_constant_rate(
     dt = total_t / n_steps
     state = reckoner.state
     for i in range(1, n_steps + 1):
-        state = reckoner.step(ImuSample(t=i * dt, omega_B=np.asarray(omega_B), accel_B=_ZERO3))
+        state = reckoner.step(ImuSample(t=i * dt, omega_B=omega_B, accel_B=accel_B))
     return state
 
 
@@ -189,7 +254,7 @@ def _propagate_constant_rate(
 #
 # For a rotation held about a single, fixed body axis, the MRP kinematic equation has a closed
 # form: $\sigma(t) = \tan(\theta(t)/4)\,\hat e$, with $\theta(t) = \omega t$. Stepping finely
-# should converge to it.
+# converges to it.
 
 
 # %%
@@ -198,12 +263,11 @@ def check_constant_rate_matches_analytic_mrp() -> None:
     axis = np.array([1.0, 0.0, 0.0])
     total_t = 1.0
 
-    state = _propagate_constant_rate(omega * axis, total_t, n_steps=2000)
+    state = _propagate(omega * axis, _ZERO3, total_t, n_steps=2000)
 
-    theta = omega * total_t
-    expected = np.tan(theta / 4.0) * axis
+    expected = np.tan(omega * total_t / 4.0) * axis
     np.testing.assert_allclose(
-        state.sigma_BN, expected, atol=1e-6, err_msg="constant-rate MRP does not match tan(theta/4)"
+        state.sigma_BN, expected, atol=1e-6, err_msg="constant-rate MRP is not tan(theta/4)"
     )
 
 
@@ -211,7 +275,7 @@ def check_constant_rate_matches_analytic_mrp() -> None:
 # ### Zero input with zero mu leaves the state unchanged
 #
 # With `omega_B = 0`, `accel_B = 0` and `mu = 0`, nothing drives any of the three states: the
-# next state should equal the current one, with only `t` advancing.
+# next state equals the current one, with only `t` advancing.
 
 
 # %%
@@ -225,49 +289,42 @@ def check_zero_input_zero_mu_leaves_state_unchanged() -> None:
     np.testing.assert_allclose(state.sigma_BN, sigma0, atol=1e-12, err_msg="sigma_BN drifted")
     np.testing.assert_allclose(state.r_N, r0, atol=1e-9, err_msg="r_N drifted")
     np.testing.assert_allclose(state.v_N, _ZERO3, atol=1e-12, err_msg="v_N drifted")
-    assert abs(state.t - 1.0) < 1e-12, f"state.t should be 1.0, got {state.t}"
+    np.testing.assert_allclose(state.t, 1.0, atol=1e-12, err_msg="t did not advance to 1.0")
 
 
 # %% [markdown]
 # ### A rotation past 180 degrees switches to the shadow set
 #
-# $\tan(\theta/4)$ exceeds unit magnitude once $\theta > 180°$; the estimator should switch to
-# the shadow set (`mrp.shadow`) at that point, keeping $|\sigma| \le 1$ while still representing
-# the same attitude — checked against the DCM from an independent axis-angle formula, not
-# `mrp.dcm_NB` itself.
+# $\tan(\theta/4)$ exceeds unit magnitude once $\theta > 180°$; the estimator switches to the
+# shadow set (`mrp.shadow`) there, keeping $|\sigma| \le 1$ while representing the same
+# attitude — checked against the DCM of an independent axis-angle formula.
 
 
 # %%
 def check_rotation_past_180_degrees_switches_to_shadow_set() -> None:
     omega = 1.0  # rad/s
     axis = np.array([1.0, 0.0, 0.0])
-    total_t = np.pi * 1.2  # theta = 1.2*pi > pi
+    total_t = np.pi * 1.2  # theta = 1.2 pi > pi
 
-    state = _propagate_constant_rate(omega * axis, total_t, n_steps=4000)
+    state = _propagate(omega * axis, _ZERO3, total_t, n_steps=4000)
 
-    assert np.linalg.norm(state.sigma_BN) <= 1.0, "sigma_BN did not switch to the shadow set"
-
-    theta = omega * total_t
-    cos_t, sin_t = np.cos(theta), np.sin(theta)
-    skew_axis = _skew(axis)
-    expected_dcm_bn = cos_t * np.eye(3) + (1.0 - cos_t) * np.outer(axis, axis) - sin_t * skew_axis
-
-    actual_dcm_bn = dcm_NB(state.sigma_BN).T
+    norm = np.linalg.norm(state.sigma_BN)
+    if not norm <= 1.0:
+        raise AssertionError(f"sigma_BN has norm {norm} > 1: no switch to the shadow set")
     np.testing.assert_allclose(
-        actual_dcm_bn,
-        expected_dcm_bn,
+        dcm_NB(state.sigma_BN).T,
+        _dcm_BN_from_axis_angle(axis, omega * total_t),
         atol=1e-5,
-        err_msg="shadow-set DCM does not match the axis-angle DCM",
+        err_msg="shadow-set DCM differs from the axis-angle DCM",
     )
 
 
 # %% [markdown]
 # ### Constant acceleration with zero rate, zero mu, and nonzero r0/v0
 #
-# With $\omega = 0$ (so $\sigma$, and therefore $C_{NB}$, stays fixed at its initial value) and
-# $\mu = 0$ (so gravity drops out), $\dot v$ is the constant rotated acceleration: $v(t) = v_0 +
-# a t$ and $r(t) = r_0 + v_0 t + \tfrac12 a t^2$ exactly, which RK4 integrates without error for
-# a constant derivative.
+# With $\omega = 0$ ($\sigma$, and so $C_{NB}$, fixed at its initial value) and $\mu = 0$
+# (no gravity), $\dot v$ is the constant rotated acceleration: $v(t) = v_0 + a t$ and
+# $r(t) = r_0 + v_0 t + \tfrac12 a t^2$, which RK4 integrates exactly.
 
 
 # %%
@@ -281,23 +338,22 @@ def check_constant_acceleration_gives_analytic_v_and_r() -> None:
     state = reckoner.step(ImuSample(t=total_t, omega_B=_ZERO3, accel_B=accel))
 
     np.testing.assert_allclose(
-        state.v_N, v0 + accel * total_t, atol=1e-9, err_msg="v_N does not match v0 + a*T"
+        state.v_N, v0 + accel * total_t, atol=1e-9, err_msg="v_N is not v0 + a T"
     )
     np.testing.assert_allclose(
         state.r_N,
         r0 + v0 * total_t + 0.5 * accel * total_t**2,
         atol=1e-6,
-        err_msg="r_N does not match r0 + v0*T + 1/2*a*T^2",
+        err_msg="r_N is not r0 + v0 T + a T^2 / 2",
     )
 
 
 # %% [markdown]
 # ### The accelerometer is rotated body-to-inertial at a non-trivial attitude
 #
-# The check above holds $\sigma = 0$, where $C_{NB}(0) = I = C_{NB}(0)^T$, so it cannot tell
-# $C_{NB}$ from $C_{BN}$ — a transposed rotation would still pass it. Holding $\omega = 0$ keeps
-# $\sigma$ fixed at a 90-degree attitude for the whole step, so an independently computed DCM
-# (not `mrp.dcm_NB`) pins which direction `step` actually applies to `accel_B`.
+# At $\sigma = 0$, $C_{NB} = I = C_{NB}^T$, so the check above cannot tell $C_{NB}$ from
+# $C_{BN}$. Holding $\omega = 0$ keeps $\sigma$ at a 90-degree attitude for the whole step, so
+# an independently computed DCM pins which direction `step` applies to `accel_B`.
 
 
 # %%
@@ -305,68 +361,101 @@ def check_accelerometer_rotated_at_nontrivial_attitude() -> None:
     axis = np.array([0.0, 0.0, 1.0])
     theta = np.pi / 2.0
     sigma0 = np.tan(theta / 4.0) * axis
-    r0 = _AWAY_FROM_ORIGIN
     accel = np.array([1.0, 0.0, 0.0])
     total_t = 10.0
 
-    reckoner = ImuDeadReckoner(sigma0_BN=sigma0, r0_N=r0, v0_N=_ZERO3, t0=0.0, mu=0.0)
+    reckoner = ImuDeadReckoner(
+        sigma0_BN=sigma0, r0_N=_AWAY_FROM_ORIGIN, v0_N=_ZERO3, t0=0.0, mu=0.0
+    )
     state = reckoner.step(ImuSample(t=total_t, omega_B=_ZERO3, accel_B=accel))
 
-    cos_t, sin_t = np.cos(theta), np.sin(theta)
-    skew_axis = _skew(axis)
-    # C_NB = C_BN^T; C_BN = cos*I + (1-cos)*axis*axis^T - sin*skew(axis) (as used above).
-    expected_c_nb = cos_t * np.eye(3) + (1.0 - cos_t) * np.outer(axis, axis) + sin_t * skew_axis
-    expected_v = expected_c_nb @ accel * total_t
-    expected_r = r0 + 0.5 * expected_c_nb @ accel * total_t**2
-
+    accel_N = _dcm_BN_from_axis_angle(axis, theta).T @ accel
     np.testing.assert_allclose(
-        state.v_N, expected_v, atol=1e-9, err_msg="accel_B was rotated by the wrong DCM (v_N)"
+        state.v_N, accel_N * total_t, atol=1e-9, err_msg="accel_B rotated by the wrong DCM (v_N)"
     )
     np.testing.assert_allclose(
-        state.r_N, expected_r, atol=1e-6, err_msg="accel_B was rotated by the wrong DCM (r_N)"
+        state.r_N,
+        _AWAY_FROM_ORIGIN + 0.5 * accel_N * total_t**2,
+        atol=1e-6,
+        err_msg="accel_B rotated by the wrong DCM (r_N)",
+    )
+
+
+# %% [markdown]
+# ### The accelerometer is rotated by the attitude at every RK4 stage
+#
+# With $\sigma_0 = 0$, $\mu = 0$, a constant rate $\omega$ about body $+z$ and a constant
+# reading $a$ along body $x$, body $x$ turns in the inertial plane, $a_N(t) = a\,[\cos\omega t,
+# \sin\omega t, 0]$, which integrates in closed form:
+#
+# $$v_N(T) = \frac{a}{\omega}\,[\sin\omega T,\ 1 - \cos\omega T,\ 0] \qquad
+# r_N(T) = r_0 + \frac{a}{\omega}\left[\frac{1 - \cos\omega T}{\omega},\
+# T - \frac{\sin\omega T}{\omega},\ 0\right]$$
+#
+# Rotating the reading by the step-start attitude in every stage misses it by centimetres per
+# second here; the coupled RK4 stays within $10^{-6}$.
+
+
+# %%
+def check_rotating_accelerometer_matches_closed_form() -> None:
+    omega = 0.5  # rad/s
+    a = 1.0  # m/s^2
+    total_t = 10.0
+
+    state = _propagate(np.array([0.0, 0.0, omega]), np.array([a, 0.0, 0.0]), total_t, n_steps=100)
+
+    wt = omega * total_t
+    expected_v = (a / omega) * np.array([np.sin(wt), 1.0 - np.cos(wt), 0.0])
+    expected_r = _AWAY_FROM_ORIGIN + (a / omega) * np.array(
+        [(1.0 - np.cos(wt)) / omega, total_t - np.sin(wt) / omega, 0.0]
+    )
+    np.testing.assert_allclose(
+        state.v_N, expected_v, atol=1e-6, err_msg="rotating accelerometer: v_N"
+    )
+    np.testing.assert_allclose(
+        state.r_N, expected_r, atol=1e-6, err_msg="rotating accelerometer: r_N"
     )
 
 
 # %% [markdown]
 # ### A quarter circular orbit matches the analytic two-body position
 #
-# Zero accelerometer input and a nonzero `mu` leave pure two-body motion: a circular orbit
-# propagated for a quarter period should land within 1 m of the analytic position at the
-# elapsed time actually reached by the discrete steps.
+# Zero accelerometer input and Earth's $\mu$ leave pure two-body motion: a circular orbit
+# propagated for a quarter period lands within 1 m of the analytic position at the elapsed
+# time the discrete steps reach.
 
 
 # %%
 def check_circular_orbit_matches_analytic_two_body_position() -> None:
     mu = 3.986004418e14  # m^3/s^2, Earth
-    radius = 6_871_000.0  # m, ~500 km LEO altitude
-    v_circ = np.sqrt(mu / radius)
-    n = np.sqrt(mu / radius**3)  # mean motion, rad/s
-    period = 2.0 * np.pi / n
+    radius = 6_871_000.0  # m, about 500 km altitude
+    n = np.sqrt(mu / radius**3)  # rad/s, mean motion
+    n_steps = round((2.0 * np.pi / n / 4.0) / 1.0)
 
-    r0 = np.array([radius, 0.0, 0.0])
-    v0 = np.array([0.0, v_circ, 0.0])
-    reckoner = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=r0, v0_N=v0, t0=0.0, mu=mu)
-
-    dt = 1.0
-    n_steps = round((period / 4.0) / dt)
-    state = reckoner.state
-    for i in range(1, n_steps + 1):
-        state = reckoner.step(ImuSample(t=i * dt, omega_B=_ZERO3, accel_B=_ZERO3))
+    state = _propagate(
+        _ZERO3,
+        _ZERO3,
+        total_t=float(n_steps),
+        n_steps=n_steps,
+        mu=mu,
+        r0=np.array([radius, 0.0, 0.0]),
+        v0=np.array([0.0, np.sqrt(mu / radius), 0.0]),
+    )
 
     theta = n * state.t
     expected_r = radius * np.array([np.cos(theta), np.sin(theta), 0.0])
-    position_error = np.linalg.norm(state.r_N - expected_r)
-    assert position_error < 1.0, f"quarter-orbit position error {position_error} m exceeds 1 m"
+    np.testing.assert_allclose(
+        state.r_N, expected_r, atol=1.0, err_msg="quarter-orbit position error exceeds 1 m"
+    )
 
 
 # %% [markdown]
 # ### The MRP kinematics match the DCM time-derivative identity for a non-aligned rate
 #
-# Every check above holds $\sigma$ parallel to $\omega$, where `mrp.B`'s cross-product term
-# vanishes identically and cannot exercise its sign. $\dot C_{BN} = -[\omega_B\times] C_{BN}$
-# holds regardless of attitude parameterization (Schaub & Junkins eq. 3.28); checking a step
-# against that independent identity by finite difference, with $\sigma$ and $\omega$ not
-# aligned, pins the sign a lone-axis case cannot.
+# The checks above hold $\sigma$ parallel to $\omega$, where `mrp.B`'s cross-product term
+# vanishes. $\dot C_{BN} = -[\omega_B\times] C_{BN}$ holds for any attitude parameterization
+# (Schaub & Junkins eq. 3.28); a finite-difference step with $\sigma$ and $\omega$ not aligned
+# pins the sign of that term.
 
 
 # %%
@@ -382,24 +471,19 @@ def check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
 
     c0 = dcm_NB(sigma0).T
     c1 = dcm_NB(state.sigma_BN).T
-    cdot_finite_difference = (c1 - c0) / dt
-
-    skew_omega = _skew(omega)
-    expected_cdot = -skew_omega @ c0
-
     np.testing.assert_allclose(
-        cdot_finite_difference,
-        expected_cdot,
+        (c1 - c0) / dt,
+        -_skew(omega) @ c0,
         atol=1e-3,
-        err_msg="MRP kinematics do not match the DCM derivative identity",
+        err_msg="MRP kinematics differ from the DCM derivative identity",
     )
 
 
 # %% [markdown]
 # ### A non-positive or NaN dt raises
 #
-# The sensor contract requires `dt = sample.t - state.t` to be strictly positive; `step` should
-# reject `dt <= 0` and `dt = NaN` alike (NaN is not `> 0`, so the same comparison catches it).
+# `step` requires `dt = sample.t - state.t` to be strictly positive and rejects `dt <= 0` and
+# `dt = NaN` alike.
 
 
 # %%
@@ -410,89 +494,112 @@ def check_invalid_dt_raises() -> None:
             reckoner.step(ImuSample(t=bad_t, omega_B=_ZERO3, accel_B=_ZERO3))
         except ValueError:
             continue
-        raise AssertionError(f"step() should have raised ValueError for t={bad_t}")
+        raise AssertionError(f"step() accepted t={bad_t} from state t=5.0")
+
+
+# %% [markdown]
+# ### Invalid construction arguments raise
+#
+# The constructor accepts finite 3-vectors, a finite `t0` and a finite, non-negative `mu`, and
+# raises `ValueError` naming the argument otherwise.
+
+
+# %%
+def check_invalid_construction_raises() -> None:
+    good = {"sigma0_BN": _ZERO3, "r0_N": _AWAY_FROM_ORIGIN, "v0_N": _ZERO3, "t0": 0.0, "mu": 0.0}
+    bad_values = [
+        ("sigma0_BN", np.zeros((3, 1))),
+        ("r0_N", np.zeros(4)),
+        ("v0_N", np.array([0.0, np.nan, 0.0])),
+        ("t0", float("inf")),
+        ("mu", -1.0),
+        ("mu", float("nan")),
+    ]
+    for name, value in bad_values:
+        try:
+            ImuDeadReckoner(**{**good, name: value})
+        except ValueError as exc:
+            if name not in str(exc):
+                raise AssertionError(f"error for {name}={value!r} does not name it: {exc}") from exc
+            continue
+        raise AssertionError(f"ImuDeadReckoner accepted {name}={value!r}")
 
 
 # %% [markdown]
 # ## A sample run
 #
-# One ten-minute free tumble: truth (unbiased) against an estimate fed the same true rate plus a
-# representative constant gyro bias, with no correction. Plots the growing attitude error angle
-# between them — the error this demo exists to show. Needs matplotlib, imported here rather
-# than at module scope, so this module's core stays numpy-only.
+# Ten minutes in a circular 500 km orbit with a 0.3 rad/s tumble: truth (an ideal IMU)
+# against an estimate fed the same motion plus a representative constant gyro bias and
+# accelerometer bias, with no correction. The two panels show the growing attitude error and
+# position error between them. matplotlib is imported here, inside the function, so importing
+# this module needs numpy alone.
 
 
 # %%
-def plot_sample_run_with_gyro_bias() -> None:
-    """Propagates truth and a constant-gyro-bias estimate over a 10-minute free tumble and
-    saves notebooks/figures/attitude_error_from_gyro_bias.png: the error angle between them vs
-    time. That directory is gitignored, so running this never dirties the working tree."""
-    from pathlib import Path
-
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+def sample_run_figure():
+    """Propagates truth and a constant-bias estimate over a 600 s orbital tumble and returns a
+    `matplotlib.figure.Figure` of attitude error (deg) and position error (m) against time."""
+    from matplotlib.figure import Figure
 
     from gnc_algorithms.mrp import angle, subtract
 
+    mu = 3.986004418e14  # m^3/s^2, Earth
+    radius = 6_871_000.0  # m
+    r0 = np.array([radius, 0.0, 0.0])
+    v0 = np.array([0.0, np.sqrt(mu / radius), 0.0])
     true_omega = np.array([0.0, 0.0, 0.3])  # rad/s
-    gyro_bias = np.array([1e-4, -2e-4, 5e-5])  # rad/s, a representative constant bias
-    total_t = 600.0  # s
-    n_steps = 600
+    gyro_bias = np.array([1e-4, -2e-4, 5e-5])  # rad/s
+    accel_bias = np.array([1e-4, -5e-5, 2e-4])  # m/s^2
 
-    truth = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=_AWAY_FROM_ORIGIN, v0_N=_ZERO3, t0=0.0, mu=0.0)
-    estimate = ImuDeadReckoner(
-        sigma0_BN=_ZERO3, r0_N=_AWAY_FROM_ORIGIN, v0_N=_ZERO3, t0=0.0, mu=0.0
-    )
+    truth = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=r0, v0_N=v0, t0=0.0, mu=mu)
+    estimate = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=r0, v0_N=v0, t0=0.0, mu=mu)
 
-    dt = total_t / n_steps
-    t_s = np.zeros(n_steps + 1)
-    error_deg = np.zeros(n_steps + 1)
-    for i in range(1, n_steps + 1):
-        t = i * dt
-        truth_state = truth.step(ImuSample(t=t, omega_B=true_omega, accel_B=_ZERO3))
-        est_state = estimate.step(ImuSample(t=t, omega_B=true_omega + gyro_bias, accel_B=_ZERO3))
-        t_s[i] = t
-        error_deg[i] = np.degrees(angle(subtract(truth_state.sigma_BN, est_state.sigma_BN)))
+    t_s = np.arange(601, dtype=float)
+    attitude_error_deg = np.zeros_like(t_s)
+    position_error_m = np.zeros_like(t_s)
+    for i, t in enumerate(t_s[1:], start=1):
+        true_state = truth.step(ImuSample(t=t, omega_B=true_omega, accel_B=_ZERO3))
+        est_state = estimate.step(
+            ImuSample(t=t, omega_B=true_omega + gyro_bias, accel_B=accel_bias)
+        )
+        attitude_error_deg[i] = np.degrees(angle(subtract(true_state.sigma_BN, est_state.sigma_BN)))
+        position_error_m[i] = np.linalg.norm(true_state.r_N - est_state.r_N)
 
-    fig, ax = plt.subplots()
-    ax.plot(t_s, error_deg)
-    ax.set_xlabel("t [s]")
-    ax.set_ylabel("attitude error [deg]")
-    ax.set_title("Attitude error growth from a constant gyro bias")
+    fig = Figure(figsize=(8, 6))
+    att_ax, pos_ax = fig.subplots(2, 1, sharex=True)
+    att_ax.plot(t_s, attitude_error_deg)
+    att_ax.set_ylabel("attitude error [deg]")
+    att_ax.set_title("Dead-reckoning error from constant IMU biases")
+    pos_ax.plot(t_s, position_error_m)
+    pos_ax.set_ylabel("position error [m]")
+    pos_ax.set_xlabel("t [s]")
     fig.tight_layout()
-    # Anchored at this file's own location (algorithms/gnc_algorithms/../../notebooks/figures),
-    # not the current directory, so the figure lands in the gitignored directory regardless of
-    # where this module is invoked from.
-    repo_root = Path(__file__).resolve().parents[2]
-    figures_dir = repo_root / "notebooks" / "figures"
-    figures_dir.mkdir(parents=True, exist_ok=True)
-    fig.savefig(figures_dir / "attitude_error_from_gyro_bias.png")
-    plt.close(fig)
+    return fig
+
+
+def save_figures(out_dir: Path) -> list[Path]:
+    """Writes this module's figures as PNG files into `out_dir`, creating it if needed, and
+    returns their paths."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "imu_dead_reckoning_sample_run.png"
+    sample_run_figure().savefig(path)
+    return [path]
 
 
 # %% [markdown]
 # ## Running the checks
 #
-# `run_checks` calls every check above and prints a one-line pass summary. Each check, and the
-# sample-run figure below, runs only when this module executes as `__main__` — under
-# `python -m gnc_algorithms.imu_dead_reckoning`, under `jupytext --execute`, or when this
-# notebook's cells are run top to bottom interactively — never on a plain import.
+# `run_checks` runs every `check_*` function above and prints a one-line summary. The checks
+# and the figure run only when this module executes as `__main__`: `python -m
+# gnc_algorithms.imu_dead_reckoning`, or this notebook's cells run top to bottom in a kernel.
+# The figure lands in `figures/` under the working directory.
 
 
 # %%
 def run_checks() -> None:
-    checks = (
-        check_constant_rate_matches_analytic_mrp,
-        check_zero_input_zero_mu_leaves_state_unchanged,
-        check_rotation_past_180_degrees_switches_to_shadow_set,
-        check_constant_acceleration_gives_analytic_v_and_r,
-        check_accelerometer_rotated_at_nontrivial_attitude,
-        check_circular_orbit_matches_analytic_two_body_position,
-        check_kinematics_match_dcm_derivative_for_nonaligned_rate,
-        check_invalid_dt_raises,
-    )
+    """Runs every `check_*` function in this module, in definition order."""
+    checks = [obj for name, obj in globals().items() if name.startswith("check_")]
     for check in checks:
         check()
     print(f"imu_dead_reckoning: {len(checks)} checks passed")
@@ -500,4 +607,4 @@ def run_checks() -> None:
 
 if __name__ == "__main__":
     run_checks()
-    plot_sample_run_with_gyro_bias()
+    save_figures(Path("figures"))
