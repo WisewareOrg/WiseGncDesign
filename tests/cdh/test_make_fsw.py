@@ -79,10 +79,11 @@ def test_initial_state_keys_naming_no_parameter_are_left_out(imu_reader):
     [
         ({"mountings": None}, r"roles \['imu'\] need a mounting"),
         ({"mountings": {"imu": np.eye(3), "gps": np.eye(3)}}, r"mountings for \['gps'\]"),
-        ({"mountings": {"imu": np.eye(2)}}, "not a proper rotation"),
-        ({"mountings": {"imu": 2.0 * np.eye(3)}}, "not a proper rotation"),
-        # Swapped x and y: orthonormal with determinant -1, a mirror.
-        ({"mountings": {"imu": np.eye(3)[[1, 0, 2]]}}, "not a proper rotation"),
+        ({"mountings": {"imu": np.eye(2)}}, "mounting for 'imu' is not a proper rotation"),
+        ({"mountings": {"imu": 2.0 * np.eye(3)}}, "mounting for 'imu' is not a proper rotation"),
+        # Orthonormal with determinant -1: a mirrored z axis, and swapped x and y.
+        ({"mountings": {"imu": np.diag([1.0, 1.0, -1.0])}}, "mounting for 'imu' is not a proper"),
+        ({"mountings": {"imu": np.eye(3)[[1, 0, 2]]}}, "mounting for 'imu' is not a proper"),
         ({"inputs": {}}, "inputs has no role 'imu'"),
         ({"inputs": {"imu": messaging.NavAttMsgReader()}}, "expected IMUSensorMsgReader"),
         ({"muu": 0.0}, r"params \['muu'\]"),

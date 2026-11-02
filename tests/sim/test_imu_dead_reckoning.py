@@ -50,18 +50,18 @@ def error_growth(run: Run, config: Any, mu: float) -> dict[str, tuple[np.ndarray
       `sigma_a sqrt(t dt)`, taken at 3 sigma.
     - Gravity is evaluated at the estimated position, so the position error feeds back through
       the gravity gradient `G = (mu / r^3)(3 r_hat r_hat^T - I)`, whose eigenvalues are `2 n^2`,
-      `-n^2` and `-n^2`. Integrating `|G| <= 2 n^2` over a position error of `|b_a| t^2 / 2`
-      adds `|b_a| t (n t)^2 / 3`: the first-order gravity-gradient growth. The linearized worst
-      case over any bias-direction history is within 1.03 times it; applying the factor to the
-      noise term as well covers the noise's own feedback.
+      `-n^2` and `-n^2`. The factor `1 + (n t)^2 / 3` is that feedback to first order: the
+      first Picard iterate of `dv/dt = G dr + f` with `|G| <= 2 n^2`. The linearized worst case
+      over any bias-direction history is within 1.03 times it, verified to 4 orbits. It
+      multiplies the noise term as well, which feeds back the same way.
 
     Position, m: `(1 + (n t)^2 / 6) (|b_a| t^2 / 2 + 3 sigma_a sqrt(dt / 3) t^(3/2))`.
-    - The bias term integrates the velocity bias term; the noise term integrates the
-      accelerometer random walk, taken at 3 sigma.
-    - The factor integrates the velocity's gravity-gradient growth. It covers the
-      Clohessy-Wiltshire along-track secular growth, which reaches 3.29 times `|b_a| t^2 / 2`
-      for the worst bias-direction history; the linearized worst case is within 1.002 times
-      the factored form.
+    - A constant accelerometer bias gives `|b_a| t^2 / 2` before feedback; the accelerometer
+      random walk integrates to `sigma_a sqrt(dt / 3) t^(3/2)`, taken at 3 sigma.
+    - The factor `1 + (n t)^2 / 6` is the gravity-gradient feedback to first order, the first
+      Picard iterate of the same equation. Without it the Clohessy-Wiltshire along-track
+      secular growth reaches 3.29 times `|b_a| t^2 / 2` for the worst bias-direction history;
+      the linearized worst case is within 1.002 times the factored form, verified to 4 orbits.
 
     The linearization holds to 4 orbits, where the position error stays within about 6% of the
     orbit radius at the largest drawn bias. With every sensor error zero, velocity and position
