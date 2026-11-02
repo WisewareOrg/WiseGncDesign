@@ -35,33 +35,39 @@ def estimate_fields(fsw: AlgorithmModule) -> dict[str, RecordedField]:
 
 def error_growth(run: Run, config: Any, mu: float) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """Each error of `run` at every sample, beside its growth derived from the run's drawn IMU
-    biases (`draw_gyro_bias_P`, `draw_accel_bias_P`), the plant's per-sample noise (`sigma_g`,
-    `sigma_a`), the IMU step `dt` and the orbit's mean motion `n = sqrt(mu / |r0|^3)`.
+    biases `b_g`, `b_a` (`draw_gyro_bias_P`, `draw_accel_bias_P`), the plant's per-sample noise
+    `sigma_g`, `sigma_a`, the IMU step `dt`, and the run's own mean motion `n = sqrt(mu / |r0|^3)`.
 
     Attitude, rad: `|b_g| t + 1/2 max|omega_dot| dt t + 3 sigma_g sqrt(t dt)`.
     - A constant gyro bias turns the estimate at most `|b_g|` faster than truth.
-    - The integrator holds the sampled rate over each step while the true rate changes by up to
-      `max|omega_dot| dt`, leaving at most half that per second; `max|omega_dot|` is the
+    - The integrator holds each sampled rate over its step while the true rate changes by up to
+      `max|omega_dot| dt`, which leaves at most half that per second. `max|omega_dot|` is the
       largest finite difference of the run's own `truth/omega_BN_B`.
     - The gyro's white noise is a random walk of `sigma_g sqrt(t dt)` per axis, taken at 3 sigma.
 
-    Velocity, m/s: `|b_a| t (1 + (n t)^2 / 3) + 3 sigma_a sqrt(t dt)`.
-    - A constant accelerometer bias adds `|b_a| t`.
-    - Gravity is evaluated at the estimated position; the position error, at most
-      `|b_a| t^2 / 2`, feeds back through the gravity gradient, whose norm is at most `2 n^2`,
-      adding at most `|b_a| n^2 t^3 / 3`.
-    - The accelerometer's white noise is a random walk of `sigma_a sqrt(t dt)`, at 3 sigma.
-    - The held specific force adds no term: with every sensor error zero the error stays under
-      5e-11 m/s over an orbit.
+    Velocity, m/s: `(1 + (n t)^2 / 3) (|b_a| t + 3 sigma_a sqrt(t dt))`.
+    - A constant accelerometer bias adds `|b_a| t`; its white noise is a random walk of
+      `sigma_a sqrt(t dt)`, taken at 3 sigma.
+    - Gravity is evaluated at the estimated position, so the position error feeds back through
+      the gravity gradient `G = (mu / r^3)(3 r_hat r_hat^T - I)`, whose eigenvalues are `2 n^2`,
+      `-n^2` and `-n^2`. Integrating `|G| <= 2 n^2` over a position error of `|b_a| t^2 / 2`
+      adds `|b_a| t (n t)^2 / 3`: the first-order gravity-gradient growth. The linearized worst
+      case over any bias-direction history is within 1.03 times it; applying the factor to the
+      noise term as well covers the noise's own feedback.
 
-    Position, m: `|b_a| t^2 / 2 + 3 sigma_a sqrt(dt / 3) t^(3/2)`.
-    - The bias term integrates the velocity bias term.
-    - The noise term integrates the accelerometer random walk, at 3 sigma.
-    - The held specific force adds no term: with every sensor error zero the error stays under
-      4e-8 m over an orbit.
+    Position, m: `(1 + (n t)^2 / 6) (|b_a| t^2 / 2 + 3 sigma_a sqrt(dt / 3) t^(3/2))`.
+    - The bias term integrates the velocity bias term; the noise term integrates the
+      accelerometer random walk, taken at 3 sigma.
+    - The factor integrates the velocity's gravity-gradient growth. It covers the
+      Clohessy-Wiltshire along-track secular growth, which reaches 3.29 times `|b_a| t^2 / 2`
+      for the worst bias-direction history; the linearized worst case is within 1.002 times
+      the factored form.
 
-    `BOUND_FACTOR` covers what the leading terms omit, chiefly the attitude error rotating the
-    accelerometer bias, which is second order and under 15% of the bias term.
+    The linearization holds to 4 orbits, where the position error stays within about 6% of the
+    orbit radius at the largest drawn bias. With every sensor error zero, velocity and position
+    errors stay under 5e-11 m/s and 4e-8 m over an orbit, so the held specific force needs no
+    term. `BOUND_FACTOR` covers what the leading terms omit, chiefly the attitude error rotating
+    the accelerometer bias, which is second order and under 15% of the bias term.
     """
     t = run.t_s
     dt = config.step_s
@@ -69,21 +75,20 @@ def error_growth(run: Run, config: Any, mu: float) -> dict[str, tuple[np.ndarray
     b_a = float(np.linalg.norm(run.draws["accel_bias_P"]))
     omega_dot = np.linalg.norm(np.diff(run.truth.omega_BN_B, axis=0), axis=1) / np.diff(t)
     n = np.sqrt(mu / float(np.linalg.norm(run.truth.r_N[0])) ** 3)
+    sigma_g, sigma_a = config.gyro_noise_std_rad_s, config.accel_noise_std_m_s2
     return {
         "attitude error [rad]": (
             np.radians(attitude_error_deg(run)),
-            b_g * t
-            + 0.5 * omega_dot.max() * dt * t
-            + 3.0 * config.gyro_noise_std_rad_s * np.sqrt(t * dt),
+            b_g * t + 0.5 * omega_dot.max() * dt * t + 3.0 * sigma_g * np.sqrt(t * dt),
         ),
         "velocity error [m/s]": (
             velocity_error_m_s(run),
-            b_a * t * (1.0 + (n * t) ** 2 / 3.0)
-            + 3.0 * config.accel_noise_std_m_s2 * np.sqrt(t * dt),
+            (1.0 + (n * t) ** 2 / 3.0) * (b_a * t + 3.0 * sigma_a * np.sqrt(t * dt)),
         ),
         "position error [m]": (
             position_error_m(run),
-            0.5 * b_a * t**2 + 3.0 * config.accel_noise_std_m_s2 * np.sqrt(dt / 3.0) * t**1.5,
+            (1.0 + (n * t) ** 2 / 6.0)
+            * (0.5 * b_a * t**2 + 3.0 * sigma_a * np.sqrt(dt / 3.0) * t**1.5),
         ),
     }
 
