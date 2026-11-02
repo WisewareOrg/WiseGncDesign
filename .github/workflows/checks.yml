@@ -1,9 +1,7 @@
 name: checks
 
-# Repo-wide invariant: algorithms/ carries no simulation or flight-framework name, so flight
-# code stays host-swappable (scripts/check-no-framework.sh). Not a required-status-check
-# context (repository-floor.yml names only check-branch, pr-title and repo-floor); this is the
-# repo's own invariant gate.
+# The commands in README.md's Development section. Not required-status-check contexts: the
+# process-gates ruleset requires only process-gates.yml's jobs.
 on:
   push:
     branches: [main]
@@ -18,60 +16,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check-no-framework:
-    name: check-no-framework
+  gates:
+    name: gates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: No simulation or flight-framework name appears under algorithms/
-        run: scripts/check-no-framework.sh
-
-  check-cdh-independent:
-    name: check-cdh-independent
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: No WiseDynamics module is imported under gnc_cdh/
-        run: scripts/check-cdh-independent.sh
-
-  check-cdh-dictionary-neutral:
-    name: check-cdh-dictionary-neutral
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: gnc_cdh/bindings.py names no transport-specific type or field
-        run: scripts/check-cdh-dictionary-neutral.sh
-
-  check-cdh-transport-generic:
-    name: check-cdh-transport-generic
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: gnc_cdh/basilisk/algorithm_module.py carries no algorithm-specific vocabulary
-        run: scripts/check-cdh-transport-generic.sh
-
-  check-analysis-independent:
-    name: check-analysis-independent
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: No gnc_cdh, Basilisk or WiseDynamics module is imported under analysis/
-        run: scripts/check-analysis-independent.sh
+      - run: scripts/check-no-framework.sh
+      - run: scripts/check-cdh-independent.sh
+      - run: scripts/check-cdh-dictionary-neutral.sh
+      - run: scripts/check-cdh-transport-generic.sh
+      - run: scripts/check-analysis-independent.sh
 
   ruff:
     name: ruff
@@ -80,11 +36,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: "0.13.6"
-
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
@@ -92,55 +46,46 @@ jobs:
   pytest:
     name: pytest
     runs-on: ubuntu-latest
-    # Both steps below run tests/sim (testpaths covers it): a missing sim/h5py here is a real
-    # failure, not something tests/sim/conftest.py should skip past.
     env:
       REQUIRE_SIM: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: "0.13.6"
+      - run: uv sync --locked --group sim
+      # Every tier, with a two-case campaign written to one directory by two workers.
+      - name: pytest -n 2 --sim-runs 2
+        shell: bash
+        run: |
+          uv run pytest -n 2 --sim-runs 2 --sim-out "$RUNNER_TEMP/campaign" | tee "$RUNNER_TEMP/pytest.log"
+          grep -q "^campaign check: 2 runs loaded from " "$RUNNER_TEMP/pytest.log"
+      - run: uv run gnc-analyze "$RUNNER_TEMP/campaign" --out "$RUNNER_TEMP/report"
 
-      # --extra sim: tests/sim/ sits under testpaths, so the bare run below collects it too,
-      # needing WiseDynamics' plant and pytest plugin installed.
-      - run: uv sync --locked --extra basilisk --extra analysis --extra sim
-      - run: uv run pytest
-      # Runs tests/sim again under pytest-xdist: a worker writing its run files into the wrong
-      # directory, or the campaign check silently no-op'ing in the controller, would only show
-      # up under -n, never in the serial run above.
-      - run: uv run pytest tests/sim -n 2 --sim-runs 2
-
-  jupytext:
-    name: jupytext
+  literate:
+    name: literate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: "0.13.6"
-
       - run: uv sync --locked
-
-      # jupytext --sync has no standalone "is it in sync" flag: --check pipes the notebook into
-      # another program and asserts a non-zero exit, which isn't this. --sync rewrites whichever
-      # side is stale, so running it and then requiring a clean working tree is the actual check.
-      # `git status --porcelain`, not `git diff --exit-code`: the latter ignores untracked
-      # files, so a sync that *creates* a file (e.g. a first-time paired notebook) would pass.
-      - name: notebooks/imu_dead_reckoning.ipynb matches algorithms/gnc_algorithms/imu_dead_reckoning.py
+      # jupytext --sync rewrites the stale half of a pair; a clean tree afterwards means every
+      # pair was in sync. Then each module runs as __main__: its checks and its figures.
+      - name: Sync and run every literate module
+        shell: bash
         run: |
-          uv run jupytext --sync algorithms/gnc_algorithms/imu_dead_reckoning.py
+          shopt -s nullglob
+          modules=()
+          for path in algorithms/gnc_algorithms/*.py; do
+            [ "$(basename "$path")" = __init__.py ] || modules+=("$path")
+          done
+          [ ${#modules[@]} -gt 0 ] || { echo "no literate module under algorithms/gnc_algorithms/"; exit 1; }
+          for path in "${modules[@]}"; do uv run jupytext --sync "$path"; done
           test -z "$(git status --porcelain)"
-
-      # Runs the literate module as __main__, so its check_* functions and the sample-run
-      # figure execute via run_checks()/plot_sample_run_with_gyro_bias(); a failed assertion
-      # raises and fails this step. Plain `python -m`, not `jupytext --execute`: no Jupyter
-      # kernel dependency.
-      - name: Checks and the sample-run figure in imu_dead_reckoning.py run clean
-        run: uv run python -m gnc_algorithms.imu_dead_reckoning
+          for path in "${modules[@]}"; do uv run python -m "gnc_algorithms.$(basename "$path" .py)"; done
