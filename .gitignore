@@ -1,7 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
-figures/
 .ipynb_checkpoints/
 /monte_carlo/
-/report/
+notebooks/*.ipynb

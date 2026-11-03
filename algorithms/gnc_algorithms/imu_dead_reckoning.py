@@ -45,16 +45,10 @@
 accelerometer, rotated by that attitude, plus point-mass gravity integrated to inertial
 velocity and position."""
 
-from pathlib import Path
-from typing import TYPE_CHECKING
-
 import numpy as np
 
 from gnc_algorithms.interfaces import DeadReckoningState, ImuSample
 from gnc_algorithms.mrp import B, dcm_NB, shadow
-
-if TYPE_CHECKING:
-    from matplotlib.figure import Figure
 
 __all__ = ["DeadReckoningState", "ImuDeadReckoner", "ImuSample"]
 
@@ -551,125 +545,11 @@ def check_invalid_construction_raises() -> None:
 
 
 # %% [markdown]
-# ## A sample run
-#
-# A worked explanation of one case, not a measure of the error: the dispersed Monte Carlo run
-# in `imu_dead_reckoning_monte_carlo.ipynb` is that. Ten minutes in a circular 500 km orbit with a
-# 0.3 rad/s tumble: truth (an ideal IMU) against an estimate fed the same motion plus a
-# representative constant gyro bias and accelerometer bias, with no correction. The two panels
-# show the growing attitude error and position error between them. matplotlib is imported
-# here, inside the function, so importing this module needs numpy alone.
-
-
-# %%
-def sample_run_figure() -> "Figure":
-    """Propagates truth and a constant-bias estimate over a 600 s orbital tumble and returns a
-    `matplotlib.figure.Figure` of attitude error (deg) and position error (m) against time."""
-    from matplotlib.figure import Figure
-
-    from gnc_algorithms.mrp import angle, subtract
-
-    mu = 3.986004418e14  # m^3/s^2, Earth
-    radius = 6_871_000.0  # m
-    r0 = np.array([radius, 0.0, 0.0])
-    v0 = np.array([0.0, np.sqrt(mu / radius), 0.0])
-    true_omega = np.array([0.0, 0.0, 0.3])  # rad/s
-    gyro_bias = np.array([1e-4, -2e-4, 5e-5])  # rad/s
-    accel_bias = np.array([1e-4, -5e-5, 2e-4])  # m/s^2
-
-    truth = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=r0, v0_N=v0, t0=0.0, mu=mu)
-    estimate = ImuDeadReckoner(sigma0_BN=_ZERO3, r0_N=r0, v0_N=v0, t0=0.0, mu=mu)
-
-    t_s = np.arange(601, dtype=float)
-    attitude_error_deg = np.zeros_like(t_s)
-    position_error_m = np.zeros_like(t_s)
-    for i, t in enumerate(t_s[1:], start=1):
-        true_state = truth.step(ImuSample(t=t, omega_B=true_omega, accel_B=_ZERO3))
-        est_state = estimate.step(
-            ImuSample(t=t, omega_B=true_omega + gyro_bias, accel_B=accel_bias)
-        )
-        attitude_error_deg[i] = np.degrees(angle(subtract(true_state.sigma_BN, est_state.sigma_BN)))
-        position_error_m[i] = np.linalg.norm(true_state.r_N - est_state.r_N)
-
-    fig = Figure(figsize=(8, 6))
-    att_ax, pos_ax = fig.subplots(2, 1, sharex=True)
-    att_ax.plot(t_s, attitude_error_deg)
-    att_ax.set_ylabel("attitude error [deg]")
-    att_ax.set_title("Dead-reckoning error from constant IMU biases")
-    pos_ax.plot(t_s, position_error_m)
-    pos_ax.set_ylabel("position error [m]")
-    pos_ax.set_xlabel("t [s]")
-    fig.tight_layout()
-    return fig
-
-
-def save_figures(out_dir: Path) -> list[Path]:
-    """Writes this module's figures as PNG files into `out_dir`, creating it if needed, and
-    returns their paths."""
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "imu_dead_reckoning_sample_run.png"
-    sample_run_figure().savefig(path)
-    return [path]
-
-
-# %% [markdown]
-# ### The sample run matches its closed forms
-#
-# Each panel of the figure is checked against a closed form, reading the plotted series back.
-#
-# Attitude: a constant body rate is a rotation about a fixed axis, so truth is $R(\hat z,
-# 0.3\,t)$ and the estimate $R(\hat e', |\omega + b_g|\,t)$ with
-# $\hat e' = (\omega + b_g)/|\omega + b_g|$; the error is the principal angle of
-# $C_{\text{truth}} C_{\text{est}}^T$, matched within $10^{-3}$ deg.
-#
-# Position: the tumble is about inertial $z$, normal to the orbit plane, so the accelerometer
-# bias's $z$ component $a_z$ stays fixed in the inertial frame and drives the out-of-plane
-# Clohessy-Wiltshire solution $z(t) = (a_z / n^2)(1 - \cos nt)$. The in-plane components turn
-# with the spin and stay within about $|b_\perp| / \omega^2 \approx 1$ mm, and the attitude
-# error tilts the bias only to second order, so the error matches $z(t)$ within 5 cm.
-
-
-# %%
-def check_sample_run_matches_closed_forms() -> None:
-    fig = sample_run_figure()
-    attitude_line, position_line = fig.axes[0].lines[0], fig.axes[1].lines[0]
-    t_s = np.asarray(attitude_line.get_xdata())
-    attitude_error_deg = np.asarray(attitude_line.get_ydata())
-    position_error_m = np.asarray(position_line.get_ydata())
-    if t_s.size != 601 or t_s[0] != 0.0:
-        raise AssertionError(
-            f"sample run has {t_s.size} samples from t = {t_s[0]}, expected 601 from 0"
-        )
-
-    true_omega = np.array([0.0, 0.0, 0.3])
-    est_omega = true_omega + np.array([1e-4, -2e-4, 5e-5])
-    est_axis = est_omega / np.linalg.norm(est_omega)
-    expected_deg = [
-        _relative_angle_deg(
-            _dcm_BN_from_axis_angle(np.array([0.0, 0.0, 1.0]), 0.3 * t),
-            _dcm_BN_from_axis_angle(est_axis, np.linalg.norm(est_omega) * t),
-        )
-        for t in t_s
-    ]
-    np.testing.assert_allclose(
-        attitude_error_deg, expected_deg, atol=1e-3, err_msg="sample-run attitude error"
-    )
-
-    n = np.sqrt(3.986004418e14 / 6_871_000.0**3)  # rad/s, mean motion
-    expected_m = 2e-4 / n**2 * (1.0 - np.cos(n * t_s))
-    np.testing.assert_allclose(
-        position_error_m, expected_m, atol=0.05, err_msg="sample-run position error"
-    )
-
-
-# %% [markdown]
 # ## Running the checks
 #
 # `run_checks` runs every `check_*` function above and prints a one-line summary. The checks
-# and the figure run only when this module executes as `__main__`: `python -m
-# gnc_algorithms.imu_dead_reckoning`, or this notebook's cells run top to bottom in a kernel.
-# The figure lands in `figures/` under the working directory.
+# run only when this module executes as `__main__`, as `python -m
+# gnc_algorithms.imu_dead_reckoning` or top to bottom in a kernel, and under pytest.
 
 
 # %%
@@ -683,12 +563,10 @@ def run_checks() -> None:
 
 if __name__ == "__main__":
     run_checks()
-    save_figures(Path("figures"))
 
 # %% [markdown]
 # ## Across a Monte Carlo run
 #
-# One case shows how the error arises. `imu_dead_reckoning_monte_carlo.ipynb`, beside this
-# notebook, flies the dead reckoner on a simulated tumbling spacecraft over a dispersed Monte
-# Carlo run and shows how large the error is across its cases, against the bound each case's
-# IMU biases imply.
+# `notebooks/imu_dead_reckoning_monte_carlo.py` flies the dead reckoner on a simulated tumbling
+# spacecraft over a dispersed Monte Carlo run and shows how large the error is across its cases,
+# against the bound each case's IMU biases imply.

@@ -1,4 +1,0 @@
-# Pairs each literate module under algorithms/gnc_algorithms/ (percent-format .py, the
-# importable source of truth) with notebooks/<module>.ipynb. A notebook document
-# notebooks/<name>.py pairs with notebooks/<name>.ipynb through its own jupytext header.
-formats = "algorithms/gnc_algorithms///py:percent,notebooks///ipynb"

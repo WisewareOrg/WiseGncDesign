@@ -43,56 +43,8 @@ jobs:
         with:
           version: "0.13.6"
       - run: uv sync --locked --group sim
-      # Every tier, with two scenario cases written to one run directory by two workers.
-      - name: pytest -n 2 --sim-runs 2
-        shell: bash
-        run: |
-          status=0
-          uv run pytest -n 2 --sim-runs 2 --sim-out "$RUNNER_TEMP/monte_carlo" > "$RUNNER_TEMP/pytest.log" 2>&1 || status=$?
-          cat "$RUNNER_TEMP/pytest.log"
-          [ "$status" -eq 0 ] || exit "$status"
-          [ "$(grep -c '^session check: 2 run files loaded from ' "$RUNNER_TEMP/pytest.log")" -eq 1 ]
-      - run: uv run gnc-analyze "$RUNNER_TEMP/monte_carlo" --out "$RUNNER_TEMP/report"
-
-  literate:
-    name: literate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        with:
-          version: "0.13.6"
-      - run: uv sync --locked --group sim
-      # Literate documents, by the rule in tests/literate_documents.py that the literate
-      # collector also uses. jupytext --sync rewrites the stale half of each pair, so a clean tree
-      # afterwards means every pair was in sync.
-      - name: Sync every literate document; committed notebooks carry no outputs
-        shell: bash
-        run: |
-          sources=$(uv run python tests/literate_documents.py sources)
-          [ -n "$sources" ] || { echo "no literate document"; exit 1; }
-          for path in $sources; do uv run jupytext --sync "$path"; done
-          test -z "$(git status --porcelain)"
-          uv run python tests/literate_documents.py outputs
-      - name: Run every literate module as a script
-        shell: bash
-        run: |
-          modules=$(uv run python tests/literate_documents.py modules)
-          [ -n "$modules" ] || { echo "no literate module"; exit 1; }
-          for module in $modules; do uv run python -m "$module"; done
-      - name: Run every notebook document with GNC_MONTE_CARLO_RUNS=2
-        shell: bash
+      - run: uv run pytest -n 2 --sim-runs 2
+      - name: The Monte Carlo notebook with GNC_MONTE_CARLO_RUNS=2
         env:
           GNC_MONTE_CARLO_RUNS: "2"
-        run: |
-          documents=$(uv run python tests/literate_documents.py documents)
-          [ -n "$documents" ] || { echo "no notebook document"; exit 1; }
-          for path in $documents; do
-            status=0
-            uv run python "$path" > "$RUNNER_TEMP/document.log" 2>&1 || status=$?
-            cat "$RUNNER_TEMP/document.log"
-            [ "$status" -eq 0 ] || exit "$status"
-            [ "$(grep -c '^monte carlo: 2 runs, ' "$RUNNER_TEMP/document.log")" -eq 1 ]
-          done
+        run: uv run python notebooks/imu_dead_reckoning_monte_carlo.py

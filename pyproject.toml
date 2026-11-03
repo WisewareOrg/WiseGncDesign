@@ -1,7 +1,7 @@
 [project]
 name = "wise-gnc-design"
 version = "0.1.0"
-description = "Wiseware GNC flight software: framework-free algorithms, the C&DH partition that hosts them, and the analysis that grades their runs"
+description = "Wiseware GNC flight software: the IMU dead reckoner, its Basilisk host, and its accuracy bound"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -12,9 +12,6 @@ dependencies = [
 [project.optional-dependencies]
 basilisk = ["bsk[all]"]
 analysis = ["h5py>=3.11", "matplotlib>=3.9"]
-
-[project.scripts]
-gnc-analyze = "gnc_analysis.cli:main"
 
 [dependency-groups]
 dev = [
