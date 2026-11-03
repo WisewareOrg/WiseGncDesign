@@ -3,4 +3,4 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 /monte_carlo/
-notebooks/*.ipynb
+*.ipynb

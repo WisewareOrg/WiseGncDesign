@@ -42,7 +42,7 @@ addopts = ["--import-mode=importlib"]
 [tool.ruff]
 line-length = 100
 src = ["algorithms", "cdh", "analysis"]
-extend-exclude = ["notebooks/*.ipynb"]
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
