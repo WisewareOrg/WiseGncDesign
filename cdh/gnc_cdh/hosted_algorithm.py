@@ -18,6 +18,11 @@ class HostedAlgorithm(Protocol):
     to `sample.t` and returning the new state."""
 
     @property
-    def state(self) -> HostedState: ...
+    def state(self) -> HostedState:
+        """The algorithm's current state, at the time of the latest sample stepped, or `t0`."""
+        ...
 
-    def step(self, sample: Any) -> HostedState: ...
+    def step(self, sample: Any) -> HostedState:
+        """Advances the state to `sample.t` (s) with `sample`'s input fields and returns the new
+        state."""
+        ...

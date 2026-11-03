@@ -9,4 +9,6 @@ class HostedState(Protocol):
     """A hosted algorithm's state at one instant: `t` in s, plus one attribute per output."""
 
     @property
-    def t(self) -> float: ...
+    def t(self) -> float:
+        """The instant this state applies at, in s."""
+        ...
