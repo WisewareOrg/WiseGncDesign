@@ -87,8 +87,8 @@ passed as `np.eye(3)`. It is never assumed.
 **The host module.** `AlgorithmModule` is a Basilisk `SysModel`. Its lifecycle:
 - `Reset` builds the algorithm at the reset time from `init_from()` and writes the initial state to
   every output message.
-- Each later `UpdateState` reads every input once. It applies each input map's transform, builds
-  one sample with `t` in s, steps the algorithm, and writes the new state.
+- Each `UpdateState` after the reset time reads every input once. It applies each input map's
+  transform, builds one sample with `t` in s, steps the algorithm, and writes the new state.
 - The `UpdateState` call at the reset time itself leaves the state as built.
 
 It refuses five things:
