@@ -1,8 +1,9 @@
 # Algorithms
 
 `gnc_algorithms` holds the GNC algorithms. Each algorithm is a literate module: its derivation,
-its code, the checks that verify it, and its figures, all in one file. Every module imports numpy
-and the standard library. Nothing under `algorithms/` imports a simulation or flight framework,
+its code, the checks that verify it, and its figures, all in one file. Its sample and state types
+live in `interfaces/`, one class per module. Every module imports numpy and the standard
+library. Nothing under `algorithms/` imports a simulation or flight framework,
 so any host can run an algorithm unmodified.
 
 ## Module map
@@ -10,7 +11,11 @@ so any host can run an algorithm unmodified.
 | Module | Public surface |
 | --- | --- |
 | `mrp.py` | MRP math for `sigma_BN`: `B` (kinematics matrix), `dcm_NB`, `shadow`, `compose`, `subtract`, `angle` |
-| `imu_dead_reckoning.py` | strapdown dead reckoning: `ImuSample`, `DeadReckoningState`, `ImuDeadReckoner` |
+| `imu_dead_reckoning.py` | strapdown dead reckoning: `ImuDeadReckoner`, re-exporting its sample and state types |
+| `interfaces/` | every algorithm's sample and state types, one module each: `imu_sample.py` (`ImuSample`), `dead_reckoning_state.py` (`DeadReckoningState`) |
+
+The literate modules are the top-level modules other than `__init__.py`. `interfaces/` sits a
+level below, so its type modules are never mistaken for literate documents.
 
 ## Conventions
 
@@ -25,7 +30,7 @@ so any host can run an algorithm unmodified.
   - it advances with `step(sample)`;
   - its sample type is a dataclass with field `t`.
 
-  `gnc_cdh.hosted` states this as protocols.
+  `gnc_cdh.HostedAlgorithm` and `gnc_cdh.HostedState` state this as protocols.
 
 ## Literate modules
 
@@ -44,10 +49,10 @@ A module reads top to bottom as a document:
 Importing a module runs none of its checks. Three things do run them:
 - `uv run python -m gnc_algorithms.<module>`, or running the notebook top to bottom in a kernel
   started as the root README's Development section shows. Either runs `run_checks` and writes
-  the figures under `figures/` in the working directory. The dead reckoner's campaign notebook,
-  `notebooks/imu_dead_reckoning_campaign.ipynb`, reads its run count from `GNC_CAMPAIGN_RUNS`
-  (default 852) and its worker count from `GNC_CAMPAIGN_WORKERS` (default the CPU count),
-  prints both, and runs in CI with 2 runs.
+  the figures under `figures/` in the working directory. The dead reckoner's Monte Carlo
+  notebook, `notebooks/imu_dead_reckoning_monte_carlo.ipynb`, reads its run count from
+  `GNC_MONTE_CARLO_RUNS` (default 852) and its worker count from `GNC_MONTE_CARLO_WORKERS`
+  (default the CPU count), prints both, and runs in CI with 2 runs.
 - `tests/algorithms/test_literate_checks.py`. It runs every `check_*` of every paired module as
   its own pytest case, and renders every module's figures.
 - CI. It syncs every pair, requires a clean tree, and runs every module.
@@ -93,10 +98,12 @@ True
 
 ## Adding an algorithm
 
-1. Write `algorithms/gnc_algorithms/<name>.py` as a literate module, with at least one
-   `check_*`.
-2. Run `uv run jupytext --sync algorithms/gnc_algorithms/<name>.py` to create
+1. Put its sample and state types in `algorithms/gnc_algorithms/interfaces/`, one module per
+   class, and re-export them from `interfaces/__init__.py`.
+2. Write `algorithms/gnc_algorithms/<name>.py` as a literate module, with at least one
+   `check_*`. Its Interface cell lists each field of those types with its unit and frame.
+3. Run `uv run jupytext --sync algorithms/gnc_algorithms/<name>.py` to create
    `notebooks/<name>.ipynb`, and commit both halves.
-3. To host it in a simulator, register a binding and resolve its signals for the transport
+4. To host it in a simulator, register a binding and resolve its signals for the transport
    ([`cdh/README.md`](../cdh/README.md#adding-an-algorithm)).
-4. Add a scenario test under `tests/sim/` ([`tests/README.md`](../tests/README.md)).
+5. Add a scenario test under `tests/sim/` ([`tests/README.md`](../tests/README.md)).

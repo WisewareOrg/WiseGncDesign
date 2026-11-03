@@ -42,12 +42,12 @@
 accelerometer, rotated by that attitude, plus point-mass gravity integrated to inertial
 velocity and position."""
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
+from gnc_algorithms.interfaces import DeadReckoningState, ImuSample
 from gnc_algorithms.mrp import B, dcm_NB, shadow
 
 if TYPE_CHECKING:
@@ -58,42 +58,21 @@ __all__ = ["DeadReckoningState", "ImuDeadReckoner", "ImuSample"]
 # %% [markdown]
 # ## Interface
 #
-# `ImuSample` is one timestamped, raw body-frame reading. `DeadReckoningState` is the
-# estimator's state at one instant. Both are immutable values.
-
-
-# %%
-@dataclass(frozen=True, slots=True)
-class ImuSample:
-    """One raw IMU reading, already rotated into the body frame by the host.
-
-    Attributes:
-        t: s, the time the reading applies at.
-        omega_B: (3,) rad/s, angular rate of B with respect to N, in B.
-        accel_B: (3,) m/s^2, non-gravitational acceleration, in B.
-    """
-
-    t: float
-    omega_B: np.ndarray
-    accel_B: np.ndarray
-
-
-@dataclass(frozen=True, slots=True)
-class DeadReckoningState:
-    """The estimator's state at one instant. Its arrays are read-only.
-
-    Attributes:
-        t: s, the time the state applies at.
-        sigma_BN: (3,) MRP of B with respect to N, with |sigma_BN| <= 1.
-        r_N: (3,) m, inertial position.
-        v_N: (3,) m/s, inertial velocity.
-    """
-
-    t: float
-    sigma_BN: np.ndarray
-    r_N: np.ndarray
-    v_N: np.ndarray
-
+# The estimator takes one `ImuSample` per step and returns a `DeadReckoningState`, both
+# immutable values defined in `gnc_algorithms.interfaces`:
+#
+# | Type | Field | Units | Frame |
+# | --- | --- | --- | --- |
+# | `ImuSample` | `t` | s | |
+# | | `omega_B` | rad/s, (3,) | angular rate of B with respect to N, in B |
+# | | `accel_B` | m/s², (3,) | non-gravitational acceleration, in B |
+# | `DeadReckoningState` | `t` | s | |
+# | | `sigma_BN` | MRP, (3,), \|σ\| ≤ 1 | B with respect to N |
+# | | `r_N` | m, (3,) | inertial position |
+# | | `v_N` | m/s, (3,) | inertial velocity |
+#
+# The host rotates the IMU's readings into the body frame before they reach the sample, and the
+# state's arrays are read-only.
 
 # %% [markdown]
 # ## Gravity
@@ -571,8 +550,8 @@ def check_invalid_construction_raises() -> None:
 # %% [markdown]
 # ## A sample run
 #
-# A worked explanation of one case, not a measure of the error: the dispersed campaign in
-# `imu_dead_reckoning_campaign.ipynb` is that. Ten minutes in a circular 500 km orbit with a
+# A worked explanation of one case, not a measure of the error: the dispersed Monte Carlo run
+# in `imu_dead_reckoning_monte_carlo.ipynb` is that. Ten minutes in a circular 500 km orbit with a
 # 0.3 rad/s tumble: truth (an ideal IMU) against an estimate fed the same motion plus a
 # representative constant gyro bias and accelerometer bias, with no correction. The two panels
 # show the growing attitude error and position error between them. matplotlib is imported
@@ -704,9 +683,9 @@ if __name__ == "__main__":
     save_figures(Path("figures"))
 
 # %% [markdown]
-# ## Across a campaign
+# ## Across a Monte Carlo run
 #
-# One case shows how the error arises. `imu_dead_reckoning_campaign.ipynb`, beside this
+# One case shows how the error arises. `imu_dead_reckoning_monte_carlo.ipynb`, beside this
 # notebook, flies the dead reckoner on a simulated tumbling spacecraft over a dispersed Monte
-# Carlo campaign and shows how large the error is across it, against the bound each case's IMU
-# biases imply.
+# Carlo run and shows how large the error is across its cases, against the bound each case's
+# IMU biases imply.
