@@ -87,9 +87,11 @@ passed as `np.eye(3)`. It is never assumed.
 **The host module.** `AlgorithmModule` is a Basilisk `SysModel`. Its lifecycle:
 - `Reset` builds the algorithm at the reset time from `init_from()` and writes the initial state to
   every output message.
-- Each `UpdateState` after the reset time reads every input once. It applies each input map's
-  transform, builds one sample with `t` in s, steps the algorithm, and writes the new state.
-- The `UpdateState` call at the reset time itself leaves the state as built.
+- An `UpdateState` at least `PERIOD_S` (1 s) after the last compute reads every input once. It
+  applies each input map's transform, builds one sample with `t` in s, steps the algorithm, and
+  writes the new state. A reset counts as a compute.
+- Every other `UpdateState` returns without writing. A task calling the module every 0.02 s gets
+  a compute at t = 0 and at each whole second, and the simulation is never told the period.
 
 It refuses five things:
 - maps naming an unknown input, output, payload field or sample field, at construction;
@@ -120,20 +122,22 @@ The function refuses these, each by name:
 - an unknown parameter;
 - a key supplied by both `initial_state()` and `params`.
 
-## Example: boot the dead reckoner against a plant
+## Example: boot the dead reckoner against a simulated spacecraft
 
 This example runs in a notebook or at a prompt, with the `sim` group installed
-(`uv sync --group sim`). It adds WiseDynamics' IMU spacecraft at its nominal configuration to the
-`Leo500` scenario and boots the dead reckoner on it. It then runs one minute, and compares the
-estimate with the vehicle's truth:
+(`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
+at its nominal configuration, and boots the dead reckoner on that vehicle. It then runs one minute,
+the dynamics at 50 Hz and the dead reckoner at 1 Hz, and compares the estimate with the vehicle's
+truth:
 
 ```python
 >>> import numpy as np
 >>> from wise_dynamics.basilisk import ImuSpacecraft, Leo500
 >>> from gnc_cdh.basilisk import make_fsw
->>> vehicle = ImuSpacecraft()
 >>> scenario = Leo500()
->>> scenario.add(vehicle)
+>>> vehicle = scenario.vehicle
+>>> isinstance(vehicle, ImuSpacecraft)
+True
 >>> fsw = make_fsw(
 ...     "imu_dead_reckoning",
 ...     inputs=vehicle.readers(),
@@ -141,7 +145,7 @@ estimate with the vehicle's truth:
 ...     mountings={"imu": np.eye(3)},
 ...     mu=Leo500.mu_m3_s2["earth"],
 ... )
->>> datasets = scenario.run(fsw, fsw_fields={}, duration_s=60.0)
+>>> datasets = scenario.run(fsw, {}, duration_s=60.0)
 >>> sorted(fsw.output_messages)
 ['nav_att', 'nav_trans']
 >>> estimate = fsw.algorithm.state

@@ -7,7 +7,7 @@
 | `algorithms/` | every `check_*` of every literate module passes; every module, subpackages included, has a notebook and checks, except the `interfaces/` type modules, which have neither, and every notebook belongs to a module or to a notebook document, by the rule in `literate_documents.py` that CI's literate job also uses; every module's figures render; and `algorithms/README.md`'s example runs |
 | `cdh/` | `AlgorithmModule`, `make_fsw` and every binding, against standalone Basilisk messages |
 | `analysis/` | the grader's MRP math against an axis-angle oracle; every rule of the run-file loader; each term of the accuracy bound against its hand-computed value; the summary statistics and `gnc-analyze` against synthetic runs with closed-form errors |
-| `sim/` | the dead reckoner, hosted by `gnc_cdh.basilisk` on a WiseDynamics plant, stays within bounds derived from each case's drawn IMU biases, and writes a run file the loader accepts |
+| `sim/` | the dead reckoner, hosted by `gnc_cdh.basilisk` at 1 Hz on a WiseDynamics scenario stepping at 50 Hz, stays within bounds derived from each case's drawn IMU biases, and writes a run file the loader accepts |
 | `notebooks/` | each Monte Carlo document imports without running, reads its counts through `MonteCarloSettings` from its two environment variables, finds the repository root, and refuses a run directory holding other than the requested run count |
 | `session/` | the session check below, run under `pytest -n 2` in a temporary tree |
 
@@ -24,10 +24,8 @@ enough, and this repository declares nothing to load it. The plugin's options:
 | --- | --- |
 | `--sim-runs N` | number of cases; the scenario test is parametrized over `sim_case_index` in `range(N)` |
 | `--sim-out DIR` | run directory receiving `run_<NNNN>.h5` (default: a fresh temporary directory) |
-| `--sim-seed S` | session seed; each case draws from its own child stream of it |
 | `--sim-duration-s T` | simulated duration of each case, in s |
-| `--sim-scenario NAME` | the scenario to run |
-| `--sim-vehicle NAME` | the vehicle to add to it |
+| `--sim-scenario NAME` | the scenario to run, which builds its own vehicle |
 
 Its fixtures, used by `tests/sim/test_imu_dead_reckoning.py`:
 
@@ -35,9 +33,7 @@ Its fixtures, used by `tests/sim/test_imu_dead_reckoning.py`:
 | --- | --- |
 | `sim_case_index` | this case's index |
 | `sim_duration_s` | the case's simulated duration, in s, from `--sim-duration-s` |
-| `sim_draws` | this case's draws, the scenario's then the vehicle's |
-| `sim_vehicle` | the vehicle built with its draws and its own noise seed |
-| `sim_scenario` | the scenario dispersed with its draws, holding `sim_vehicle` |
+| `sim_scenario` | the case's dispersed scenario; its vehicle is `sim_scenario.vehicle` and its draws `sim_scenario.draws` |
 | `sim_run_file(datasets, attrs=None)` | writes this case's run file and returns its path |
 
 WiseDynamics documents them in full in its `wise_dynamics/basilisk/README.md`.
@@ -45,7 +41,7 @@ WiseDynamics documents them in full in its `wise_dynamics/basilisk/README.md`.
 One case reruns alone, with the draws and noise it had in its session:
 
 ```sh
-uv run pytest --sim-seed S --sim-runs N "tests/sim/test_imu_dead_reckoning.py::test_imu_dead_reckoning_case[k]"
+uv run pytest --sim-runs N "tests/sim/test_imu_dead_reckoning.py::test_imu_dead_reckoning_case[k]"
 ```
 
 ## The session check

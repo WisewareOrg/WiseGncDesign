@@ -36,6 +36,9 @@
 # accelerations, not pre-integrated angles. All three states share the same four stages, so an
 # attitude error at any stage biases that stage's rotated acceleration — the coupling between
 # attitude and navigation error this module demonstrates.
+#
+# In the flight software, `gnc_cdh.basilisk` calls `step()` at 1 Hz on the simulation's 50 Hz
+# dynamics step, so `dt` is 1 s and each step holds one 50 Hz IMU sample across the whole second.
 
 # %%
 """Strapdown inertial dead reckoning: gyro rates integrated to an MRP attitude, and the

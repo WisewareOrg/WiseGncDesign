@@ -20,8 +20,8 @@ def error_growth(
 ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """Each error of `run` at every sample, beside its growth derived from the run's drawn IMU
     biases `b_g`, `b_a` (`draw_gyro_bias_P_rad_s`, `draw_accel_bias_P_m_s2`), the per-sample noise
-    `sigma_g`, `sigma_a` and IMU step `dt` of the plant that produced it, and the run's own mean
-    motion `n = sqrt(mu / |r0|^3)`.
+    `sigma_g`, `sigma_a` of the IMU that produced it, the flight software's step `dt`, and the
+    run's own mean motion `n = sqrt(mu / |r0|^3)`.
 
     Attitude, rad: `|b_g| t + 1/2 max|omega_dot| dt t + 3 sigma_g sqrt(t dt)`.
     - A constant gyro bias turns the estimate at most `|b_g|` faster than truth.
@@ -58,7 +58,7 @@ def error_growth(
         run: the run, carrying `draw_gyro_bias_P_rad_s` and `draw_accel_bias_P_m_s2`.
         gyro_noise_std_rad_s: per-sample 1-sigma gyro noise, rad/s.
         accel_noise_std_m_s2: per-sample 1-sigma accelerometer noise, m/s^2.
-        step_s: IMU sample interval `dt`, s.
+        step_s: the flight software's step `dt`, the interval between the samples it reads, s.
         mu: gravitational parameter of the central body, m^3/s^2.
 
     Returns:

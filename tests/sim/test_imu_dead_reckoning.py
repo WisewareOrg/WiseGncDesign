@@ -1,6 +1,6 @@
-"""The dead reckoner, hosted by `gnc_cdh.basilisk` on WiseDynamics' IMU spacecraft in its LEO
-scenario. Each case runs one dispersed spacecraft, writes its run file, and holds its estimate
-within bounds derived from its own drawn IMU biases."""
+"""The dead reckoner, hosted by `gnc_cdh.basilisk` at 1 Hz on WiseDynamics' IMU spacecraft in its
+LEO scenario, whose dynamics step at 50 Hz. Each case runs one dispersed spacecraft, writes its run
+file, and holds its estimate within bounds derived from its own drawn IMU biases."""
 
 from importlib.metadata import version
 from typing import Any
@@ -10,7 +10,7 @@ from wise_dynamics.basilisk import ImuSpacecraft, Leo500
 
 from gnc_analysis.error_bounds import violations
 from gnc_analysis.runs import DATASETS, load_run
-from gnc_cdh.basilisk import AlgorithmModule, make_fsw
+from gnc_cdh.basilisk import PERIOD_S, AlgorithmModule, make_fsw
 
 IMU_DCM_PB = np.eye(3)
 """The flight software's mounting [PB] of the IMU: identity on this spacecraft."""
@@ -30,39 +30,38 @@ def estimate_fields(fsw: AlgorithmModule) -> dict[str, tuple[Any, str, str]]:
 
 
 def bound_inputs() -> dict[str, float]:
-    """The plant inputs of the accuracy bound, for this scenario and the Monte Carlo notebook
+    """The simulation inputs of the accuracy bound, for this scenario and the Monte Carlo notebook
     alike: per-sample gyro and accelerometer noise from the `ImuSpacecraft` class attributes, the
-    IMU step from `Leo500.step_s`, and Earth's gravitational parameter (m^3/s^2) from
+    flight software's step from `PERIOD_S`, and Earth's gravitational parameter (m^3/s^2) from
     `Leo500.mu_m3_s2`, all read without building anything. A Monte Carlo run disperses initial
     attitude, body rate and biases only, so these are every case's values."""
     return {
         "gyro_noise_std_rad_s": ImuSpacecraft.gyro_noise_std_rad_s,
         "accel_noise_std_m_s2": ImuSpacecraft.accel_noise_std_m_s2,
-        "step_s": Leo500.step_s,
+        "step_s": PERIOD_S,
         "mu": Leo500.mu_m3_s2["earth"],
     }
 
 
-def test_imu_dead_reckoning_case(
-    sim_vehicle, sim_scenario, sim_duration_s, sim_run_file, record_property
-):
+def test_imu_dead_reckoning_case(sim_scenario, sim_duration_s, sim_run_file, record_property):
+    vehicle = sim_scenario.vehicle
     inputs = bound_inputs()
     case_inputs = {
-        "gyro_noise_std_rad_s": sim_vehicle.gyro_noise_std_rad_s,
-        "accel_noise_std_m_s2": sim_vehicle.accel_noise_std_m_s2,
-        "step_s": sim_scenario.step_s,
+        "gyro_noise_std_rad_s": vehicle.gyro_noise_std_rad_s,
+        "accel_noise_std_m_s2": vehicle.accel_noise_std_m_s2,
+        "step_s": PERIOD_S,
         "mu": sim_scenario.mu_m3_s2["earth"],
     }
     assert case_inputs == inputs, "the case's vehicle or scenario differs from the bound's inputs"
 
     fsw = make_fsw(
         "imu_dead_reckoning",
-        inputs=sim_vehicle.readers(),
+        inputs=vehicle.readers(),
         initial_state=sim_scenario.initial_state,
         mountings={"imu": IMU_DCM_PB},
         mu=sim_scenario.mu_m3_s2["earth"],
     )
-    datasets = sim_scenario.run(fsw, fsw_fields=estimate_fields(fsw), duration_s=sim_duration_s)
+    datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
     distribution_version = version("wise-gnc-design")
 
     path = sim_run_file(datasets, {"versions_wise_gnc_design": distribution_version})

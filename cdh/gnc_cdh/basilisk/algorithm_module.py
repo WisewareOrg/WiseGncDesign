@@ -14,20 +14,26 @@ from gnc_cdh.basilisk.output_map import OutputMap
 from gnc_cdh.hosted_algorithm import HostedAlgorithm
 from gnc_cdh.hosted_state import HostedState
 
-__all__ = ["AlgorithmModule", "InputMap", "OutputMap"]
+__all__ = ["PERIOD_S", "AlgorithmModule", "InputMap", "OutputMap"]
 
 _NANOSECONDS_PER_SECOND = 1e9
+
+PERIOD_S = 1.0
+"""The flight software's compute period, in s: 1 Hz, whatever the period of the task calling
+`UpdateState`."""
+
+_PERIOD_NS = round(PERIOD_S * _NANOSECONDS_PER_SECOND)
 
 
 class AlgorithmModule(sysModel.SysModel):
     """Hosts one algorithm inside a Basilisk task.
 
     `Reset` builds the algorithm as `make_algorithm(t0, init_from())`, `t0` being the reset
-    time in s, and writes its initial state to every output. Each `UpdateState` at a time
-    after the algorithm's state time reads every input once, builds one `sample_type` instance
-    from the input maps with `t` in s, calls `algorithm.step(sample)`, and writes the returned
-    state through the output maps. The call Basilisk makes at the reset time itself leaves the
-    state as built.
+    time in s, and writes its initial state to every output; a reset counts as a compute. An
+    `UpdateState` at least `PERIOD_S` after the last compute reads every input once, builds one
+    `sample_type` instance from the input maps with `t` in s, calls `algorithm.step(sample)`, and
+    writes the returned state through the output maps. Every other `UpdateState` returns without
+    writing, so a task calling it every 0.02 s computes at t = 0 and at each whole second.
 
     Args:
         inputs: reader by input name, each subscribed by the caller.
@@ -63,6 +69,7 @@ class AlgorithmModule(sysModel.SysModel):
         self._make_algorithm = make_algorithm
         self._init_from = init_from
         self._algorithm: HostedAlgorithm | None = None
+        self._computed_ns = 0
         self._validate_maps()
 
     @property
@@ -144,18 +151,20 @@ class AlgorithmModule(sysModel.SysModel):
         if missing:
             raise ValueError(f"the algorithm's state has no field for {missing}")
         self._algorithm = algorithm
+        self._computed_ns = CurrentSimNanos
         self._write_outputs(algorithm.state, CurrentSimNanos)
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
-        """Steps the algorithm to the current time when it lies after the state's time.
+        """Steps the algorithm to the current time when at least `PERIOD_S` has passed since the
+        last compute.
 
         Raises:
             RuntimeError: before the first `Reset`, or naming any input never written.
         """
         algorithm = self.algorithm
-        t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
-        if not t > algorithm.state.t:
+        if CurrentSimNanos - self._computed_ns < _PERIOD_NS:
             return
+        t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
 
         unwritten = sorted(name for name, reader in self._inputs.items() if not reader.isWritten())
         if unwritten:
@@ -167,6 +176,7 @@ class AlgorithmModule(sysModel.SysModel):
             fields[m.sample_field] = value if m.transform is None else m.transform(value)
 
         state = algorithm.step(self._sample_type(t=t, **fields))
+        self._computed_ns = CurrentSimNanos
         self._write_outputs(state, CurrentSimNanos)
 
     def _write_outputs(self, state: HostedState, CurrentSimNanos: int) -> None:

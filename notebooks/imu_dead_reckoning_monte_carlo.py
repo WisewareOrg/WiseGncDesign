@@ -11,8 +11,9 @@
 # One case shows how the dead reckoner's error arises: `imu_dead_reckoning.ipynb`, beside this
 # notebook, walks through a single case. A Monte Carlo run shows how large the error is. This
 # document flies the dead reckoner, hosted by `gnc_cdh.basilisk`, on WiseDynamics' tumbling IMU
-# spacecraft over many dispersed cases. Each case draws its own initial attitude, body rate,
-# gyro bias and accelerometer bias. The document then loads the run files through
+# spacecraft over many dispersed cases. The flight software runs at 1 Hz on the scenario's 50 Hz
+# dynamics step. Each case draws its own initial attitude, body rate, gyro bias and
+# accelerometer bias. The document then loads the run files through
 # `gnc_analysis` and shows the ensemble's attitude, position and velocity error, and each
 # error against the accuracy bound its case's biases imply.
 #
@@ -55,8 +56,9 @@ from gnc_analysis.runs import Run, load_run_directory
 # ## Settings
 #
 # `MonteCarloSettings`, from `notebook_support/monte_carlo_settings.py` beside this notebook, holds
-# what the run runs. The session seed and the duration are fixed: seed 0 and one orbit, 5700 s
-# per case. The run and worker counts come from the environment. `show`, from
+# what the run runs. The session seed and the duration are fixed: seed 0, which WiseDynamics'
+# plugin draws every session from, and one orbit, 5700 s per case. The run and worker counts come
+# from the environment. `show`, from
 # `notebook_support/figure_display.py`, displays a figure inline in a kernel; a script shows
 # nothing, and every figure is also saved to the report directory.
 
@@ -122,7 +124,7 @@ def run_cases(settings: MonteCarloSettings, root: Path, run_dir: Path) -> None:
     command = [
         sys.executable, "-m", "pytest", SCENARIO, "-q", "-p", "no:cacheprovider",
         "--sim-runs", str(settings.runs), "-n", str(settings.workers),
-        "--sim-seed", str(settings.seed), "--sim-duration-s", str(settings.duration_s),
+        "--sim-duration-s", str(settings.duration_s),
         "--sim-out", str(run_dir),
     ]  # fmt: skip
     log = run_dir / "pytest.log"
@@ -174,15 +176,15 @@ if __name__ == "__main__":
 # ## Each error against its bound
 #
 # Each case's errors stay under `BOUND_FACTOR` (3) times their growth derived from the case's
-# drawn IMU biases, the IMU noise and the orbit (`gnc_analysis.error_bounds`). The bound's
-# plant inputs come from the scenario test's own `bound_inputs()`, the one function that
-# supplies them to the scenario and to this document.
+# drawn IMU biases, the IMU noise, the flight software's 1 s step and the orbit
+# (`gnc_analysis.error_bounds`). The bound's simulation inputs come from the scenario test's own
+# `bound_inputs()`, the one function that supplies them to the scenario and to this document.
 
 
 # %%
 def scenario_bound_inputs(root: Path) -> dict[str, float]:
-    """The scenario test's `bound_inputs()`: per-sample gyro and accelerometer noise, the IMU
-    step in s, and the gravitational parameter in m^3/s^2."""
+    """The scenario test's `bound_inputs()`: per-sample gyro and accelerometer noise, the flight
+    software's step in s, and the gravitational parameter in m^3/s^2."""
     spec = importlib.util.spec_from_file_location("imu_dead_reckoning_scenario", root / SCENARIO)
     scenario = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(scenario)
