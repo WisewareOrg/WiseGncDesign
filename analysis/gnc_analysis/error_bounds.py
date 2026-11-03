@@ -19,7 +19,7 @@ def error_growth(
     run: Run, gyro_noise_std_rad_s: float, accel_noise_std_m_s2: float, step_s: float, mu: float
 ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """Each error of `run` at every sample, beside its growth derived from the run's drawn IMU
-    biases `b_g`, `b_a` (`draw_gyro_bias_P`, `draw_accel_bias_P`), the per-sample noise
+    biases `b_g`, `b_a` (`draw_gyro_bias_P_rad_s`, `draw_accel_bias_P_m_s2`), the per-sample noise
     `sigma_g`, `sigma_a` and IMU step `dt` of the plant that produced it, and the run's own mean
     motion `n = sqrt(mu / |r0|^3)`.
 
@@ -55,7 +55,7 @@ def error_growth(
     the accelerometer bias, which is second order and under 15% of the bias term.
 
     Args:
-        run: the run, carrying `draw_gyro_bias_P` and `draw_accel_bias_P`.
+        run: the run, carrying `draw_gyro_bias_P_rad_s` and `draw_accel_bias_P_m_s2`.
         gyro_noise_std_rad_s: per-sample 1-sigma gyro noise, rad/s.
         accel_noise_std_m_s2: per-sample 1-sigma accelerometer noise, m/s^2.
         step_s: IMU sample interval `dt`, s.
@@ -67,8 +67,8 @@ def error_growth(
     """
     t = run.t_s
     dt = step_s
-    b_g = float(np.linalg.norm(run.draws["gyro_bias_P"]))
-    b_a = float(np.linalg.norm(run.draws["accel_bias_P"]))
+    b_g = float(np.linalg.norm(run.draws["gyro_bias_P_rad_s"]))
+    b_a = float(np.linalg.norm(run.draws["accel_bias_P_m_s2"]))
     omega_dot = np.linalg.norm(np.diff(run.truth.omega_BN_B, axis=0), axis=1) / np.diff(t)
     n = np.sqrt(mu / float(np.linalg.norm(run.truth.r_N[0])) ** 3)
     sigma_g, sigma_a = gyro_noise_std_rad_s, accel_noise_std_m_s2

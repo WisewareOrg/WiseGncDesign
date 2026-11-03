@@ -32,7 +32,7 @@ def _run(b_g=(0.0, 0.0, 0.0), b_a=(0.0, 0.0, 0.0), omega_z=None, position_error=
         path=Path("synthetic.h5"),
         case=0,
         seed=0,
-        draws={"gyro_bias_P": np.asarray(b_g), "accel_bias_P": np.asarray(b_a)},
+        draws={"gyro_bias_P_rad_s": np.asarray(b_g), "accel_bias_P_m_s2": np.asarray(b_a)},
         versions={},
         t_s=T_S,
         truth=Truth(sigma_BN=zeros, omega_BN_B=omega, r_N=truth_r, v_N=zeros),
