@@ -156,23 +156,6 @@ def test_the_call_at_the_reset_time_does_not_step():
     assert len(module.algorithm.samples) == 1
 
 
-def test_called_every_step_the_output_changes_only_at_whole_seconds():
-    module = _module()
-    _messages = _subscribed(module)
-    written = messaging.NavAttMsgReader()
-    written.subscribeTo(module.output_messages["att"])
-    step_ns = 20_000_000
-
-    module.Reset(0)
-    write_times = {written.timeWritten()}
-    for k in range(1, 3 * ONE_SECOND_NS // step_ns + 1):
-        module.UpdateState(k * step_ns)
-        write_times.add(written.timeWritten())
-
-    assert sorted(write_times) == [0, ONE_SECOND_NS, 2 * ONE_SECOND_NS, 3 * ONE_SECOND_NS]
-    assert [sample.t for sample in module.algorithm.samples] == [1.0, 2.0, 3.0]
-
-
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [

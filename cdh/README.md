@@ -87,11 +87,11 @@ passed as `np.eye(3)`. It is never assumed.
 **The host module.** `AlgorithmModule` is a Basilisk `SysModel`. Its lifecycle:
 - `Reset` builds the algorithm at the reset time from `init_from()` and writes the initial state to
   every output message.
-- An `UpdateState` at least `PERIOD_S` (1 s) after the last compute reads every input once. It
-  applies each input map's transform, builds one sample with `t` in s, steps the algorithm, and
-  writes the new state. A reset counts as a compute.
-- Every other `UpdateState` returns without writing. A task calling the module every 0.02 s gets
-  a compute at t = 0 and at each whole second, and the simulation is never told the period.
+- Each `UpdateState` after the reset time reads every input once. It applies each input map's
+  transform, builds one sample with `t` in s, steps the algorithm, and writes the new state.
+- The `UpdateState` call at the reset time itself leaves the state as built.
+- `period_s` (1 s) is the period of the task the simulation runs the module in, so the flight
+  software runs at 1 Hz on the simulation's 50 Hz dynamics step.
 
 It refuses five things:
 - maps naming an unknown input, output, payload field or sample field, at construction;
