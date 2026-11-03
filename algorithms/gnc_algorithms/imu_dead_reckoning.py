@@ -10,13 +10,15 @@
 # ## Attitude kinematics
 #
 # Attitude is the modified Rodrigues parameter (MRP) set $\sigma_{BN}$, body frame $B$ with
-# respect to inertial frame $N$ (Schaub & Junkins; see `mrp.py`). Its kinematic differential
-# equation, given the body-frame angular rate $\omega = \omega_{BN}$ expressed in $B$:
+# respect to inertial frame $N$ (Schaub & Junkins). With $[\tilde\sigma]$ the cross-product
+# matrix of $\sigma$ and $s^2 = |\sigma|^2$, its kinematic differential equation, given the
+# body-frame angular rate $\omega = \omega_{BN}$ expressed in $B$, is
 #
-# $$\dot\sigma = \tfrac{1}{4} B(\sigma)\,\omega$$
+# $$\dot\sigma = \tfrac{1}{4} B(\sigma)\,\omega \qquad
+# B(\sigma) = (1 - s^2) I + 2[\tilde\sigma] + 2\sigma\sigma^T$$
 #
-# where $B(\sigma)$ is `mrp.B`. $\sigma$ switches to its shadow set (`mrp.shadow`) whenever
-# $|\sigma| > 1$, so it stays bounded.
+# $\sigma$ switches to its shadow set $-\sigma/s^2$, the same attitude with the reciprocal norm,
+# whenever $|\sigma| > 1$, so it stays bounded.
 #
 # ## Translational kinematics
 #
@@ -25,7 +27,8 @@
 #
 # $$\dot r = v \qquad \dot v = C_{NB}(\sigma)\,a_B - \mu \frac{r}{|r|^3}$$
 #
-# where $C_{NB}(\sigma)$ (`mrp.dcm_NB`) rotates a body-frame vector into the inertial frame,
+# where $C_{NB}(\sigma) = I + \frac{8[\tilde\sigma]^2 + 4(1 - s^2)[\tilde\sigma]}{(1 + s^2)^2}$
+# rotates a body-frame vector into the inertial frame,
 # $a_B$ is the accelerometer's body-frame reading of non-gravitational acceleration, and $\mu$
 # is the gravitational parameter, supplied by the host so truth and estimate share one constant.
 #
@@ -45,10 +48,11 @@
 accelerometer, rotated by that attitude, plus point-mass gravity integrated to inertial
 velocity and position."""
 
+import math
+
 import numpy as np
 
 from gnc_algorithms.interfaces import DeadReckoningState, ImuSample
-from gnc_algorithms.mrp import B, dcm_NB, shadow
 
 __all__ = ["DeadReckoningState", "ImuDeadReckoner", "ImuSample"]
 
@@ -79,11 +83,6 @@ __all__ = ["DeadReckoningState", "ImuDeadReckoner", "ImuSample"]
 
 
 # %%
-def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
-    r_norm = float(np.linalg.norm(r))
-    return mu * r / r_norm**3
-
-
 def _frozen(value: np.ndarray) -> np.ndarray:
     value.setflags(write=False)
     return value
@@ -94,6 +93,20 @@ def _vector3(name: str, value: np.ndarray) -> np.ndarray:
     if array.shape != (3,) or not np.isfinite(array).all():
         raise ValueError(f"{name} must be a finite 3-vector, got {value!r}")
     return _frozen(array)
+
+
+def _components(name: str, value: np.ndarray) -> tuple[float, float, float]:
+    """`value`'s three components as floats.
+
+    Raises:
+        ValueError: when `value` is not a finite 3-vector.
+    """
+    if np.shape(value) != (3,):
+        raise ValueError(f"{name} must be a finite 3-vector, got {value!r}")
+    x, y, z = float(value[0]), float(value[1]), float(value[2])
+    if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(z)):
+        raise ValueError(f"{name} must be a finite 3-vector, got {value!r}")
+    return x, y, z
 
 
 # %% [markdown]
@@ -156,31 +169,48 @@ class ImuDeadReckoner:
         if not dt > 0.0:
             raise ValueError(f"dt must be > 0, got {dt}")
 
-        omega = _vector3("omega_B", sample.omega_B)
-        accel = _vector3("accel_B", sample.accel_B)
+        wx, wy, wz = _components("omega_B", sample.omega_B)
+        ax, ay, az = _components("accel_B", sample.accel_B)
         mu = self._mu
 
-        def derivs(
-            sigma: np.ndarray, r: np.ndarray, v: np.ndarray
-        ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-            sigma_dot = 0.25 * B(sigma) @ omega
-            r_dot = v
-            v_dot = dcm_NB(sigma) @ accel - _gravity(r, mu)
-            return sigma_dot, r_dot, v_dot
+        def derivs(s1, s2, s3, r1, r2, r3, v1, v2, v3):
+            # dsigma/dt = 1/4 B(sigma) omega, B = (1 - s^2) I + 2 [~sigma] + 2 sigma sigma^T.
+            ss = s1 * s1 + s2 * s2 + s3 * s3
+            c = 1.0 - ss
+            sw = s1 * wx + s2 * wy + s3 * wz
+            sigma_dot = (
+                0.25 * (c * wx + 2.0 * (s2 * wz - s3 * wy) + 2.0 * s1 * sw),
+                0.25 * (c * wy + 2.0 * (s3 * wx - s1 * wz) + 2.0 * s2 * sw),
+                0.25 * (c * wz + 2.0 * (s1 * wy - s2 * wx) + 2.0 * s3 * sw),
+            )
+            # C_NB a = a + (8 [~sigma]^2 a + 4 (1 - s^2) [~sigma] a) / (1 + s^2)^2.
+            x1, x2, x3 = s2 * az - s3 * ay, s3 * ax - s1 * az, s1 * ay - s2 * ax
+            xx1, xx2, xx3 = s2 * x3 - s3 * x2, s3 * x1 - s1 * x3, s1 * x2 - s2 * x1
+            d = (1.0 + ss) ** 2
+            g = mu / math.sqrt(r1 * r1 + r2 * r2 + r3 * r3) ** 3
+            v_dot = (
+                ax + (8.0 * xx1 + 4.0 * c * x1) / d - g * r1,
+                ay + (8.0 * xx2 + 4.0 * c * x2) / d - g * r2,
+                az + (8.0 * xx3 + 4.0 * c * x3) / d - g * r3,
+            )
+            return (*sigma_dot, v1, v2, v3, *v_dot)
 
-        sigma, r, v = self._state.sigma_BN, self._state.r_N, self._state.v_N
+        x = (*self._state.sigma_BN.tolist(), *self._state.r_N.tolist(), *self._state.v_N.tolist())
+        h = 0.5 * dt
+        k1 = derivs(*x)
+        k2 = derivs(*(xi + h * ki for xi, ki in zip(x, k1, strict=True)))
+        k3 = derivs(*(xi + h * ki for xi, ki in zip(x, k2, strict=True)))
+        k4 = derivs(*(xi + dt * ki for xi, ki in zip(x, k3, strict=True)))
+        sixth = dt / 6.0
+        new = [
+            xi + sixth * (a + 2.0 * b + 2.0 * c + d)
+            for xi, a, b, c, d in zip(x, k1, k2, k3, k4, strict=True)
+        ]
+        sigma_new, r_new, v_new = np.array(new[:3]), np.array(new[3:6]), np.array(new[6:])
 
-        k1 = derivs(sigma, r, v)
-        k2 = derivs(sigma + 0.5 * dt * k1[0], r + 0.5 * dt * k1[1], v + 0.5 * dt * k1[2])
-        k3 = derivs(sigma + 0.5 * dt * k2[0], r + 0.5 * dt * k2[1], v + 0.5 * dt * k2[2])
-        k4 = derivs(sigma + dt * k3[0], r + dt * k3[1], v + dt * k3[2])
-
-        sigma_new = sigma + (dt / 6.0) * (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0])
-        r_new = r + (dt / 6.0) * (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1])
-        v_new = v + (dt / 6.0) * (k1[2] + 2.0 * k2[2] + 2.0 * k3[2] + k4[2])
-
-        if np.linalg.norm(sigma_new) > 1.0:
-            sigma_new = shadow(sigma_new)
+        ss_new = float(sigma_new @ sigma_new)
+        if math.sqrt(ss_new) > 1.0:
+            sigma_new = -sigma_new / ss_new
 
         self._state = DeadReckoningState(
             t=sample.t, sigma_BN=_frozen(sigma_new), r_N=_frozen(r_new), v_N=_frozen(v_new)

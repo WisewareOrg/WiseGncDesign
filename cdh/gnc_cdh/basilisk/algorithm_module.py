@@ -70,6 +70,18 @@ class AlgorithmModule(sysModel.SysModel):
         self._init_from = init_from
         self._algorithm: HostedAlgorithm | None = None
         self._validate_maps()
+        self._readers = tuple(self._inputs.items())
+        self._reads = tuple(
+            (m.input, m.payload_field, m.sample_field, m.transform) for m in self._input_maps
+        )
+        payloads: dict[str, Any] = {}
+        for m in self._output_maps:
+            payloads.setdefault(m.output, type(self._outputs[m.output].zeroMsgPayload)())
+        self._writes = tuple(
+            (payloads[m.output], m.state_field, m.payload_field) for m in self._output_maps
+        )
+        self._sends = tuple((self._outputs[name].write, p) for name, p in payloads.items())
+        self._inputs_written = False
 
     @property
     def inputs(self) -> Mapping[str, Any]:
@@ -163,28 +175,26 @@ class AlgorithmModule(sysModel.SysModel):
         if not t > algorithm.state.t:
             return
 
-        unwritten = sorted(name for name, reader in self._inputs.items() if not reader.isWritten())
-        if unwritten:
-            raise RuntimeError(f"inputs {unwritten} have not been written at t = {t} s")
-        payloads = {name: reader() for name, reader in self._inputs.items()}
+        if not self._inputs_written:
+            unwritten = sorted(name for name, reader in self._readers if not reader.isWritten())
+            if unwritten:
+                raise RuntimeError(f"inputs {unwritten} have not been written at t = {t} s")
+            self._inputs_written = True
+        payloads = {name: reader() for name, reader in self._readers}
         fields: dict[str, np.ndarray] = {}
-        for m in self._input_maps:
-            value = np.array(getattr(payloads[m.input], m.payload_field), dtype=float)
-            fields[m.sample_field] = value if m.transform is None else m.transform(value)
+        for input_name, payload_field, sample_field, transform in self._reads:
+            value = np.array(getattr(payloads[input_name], payload_field), dtype=float)
+            fields[sample_field] = value if transform is None else transform(value)
 
         state = algorithm.step(self._sample_type(t=t, **fields))
         self._write_outputs(state, CurrentSimNanos)
 
     def _write_outputs(self, state: HostedState, CurrentSimNanos: int) -> None:
-        payloads: dict[str, Any] = {}
-        for m in self._output_maps:
-            if m.output not in payloads:
-                payloads[m.output] = type(self._outputs[m.output].zeroMsgPayload)()
-            value = getattr(state, m.state_field)
+        for payload, state_field, payload_field in self._writes:
+            value = getattr(state, state_field)
             setattr(
-                payloads[m.output],
-                m.payload_field,
-                value.tolist() if isinstance(value, np.ndarray) else value,
+                payload, payload_field, value.tolist() if isinstance(value, np.ndarray) else value
             )
-        for name, payload in payloads.items():
-            self._outputs[name].write(payload, CurrentSimNanos, self.moduleID)
+        module_id = self.moduleID
+        for write, payload in self._sends:
+            write(payload, CurrentSimNanos, module_id)
