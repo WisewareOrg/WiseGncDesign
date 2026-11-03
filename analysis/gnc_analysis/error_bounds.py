@@ -3,7 +3,7 @@ a run's drawn IMU biases, its sensor noise and its orbit, and the ratio of each 
 
 import numpy as np
 
-from gnc_analysis.navigation_error import attitude_error_deg, position_error_m, velocity_error_m_s
+from gnc_analysis.error_metrics import attitude_error_deg, position_error_m, velocity_error_m_s
 from gnc_analysis.runs import Run
 
 __all__ = ["BOUND_FACTOR", "ERROR_AT_START", "bound_ratios", "error_growth", "violations"]

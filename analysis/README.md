@@ -11,15 +11,18 @@ It grades independently of what it measures. It computes attitude error with its
 
 | Module | Public surface |
 | --- | --- |
-| `runs.py` | `load_run`, `load_campaign`, `Run` (with `Truth`, `Estimate`, `ImuReadings`), `DATASETS`, `RunDataError` |
-| `navigation_error.py` | per-run metrics `attitude_error_deg`, `position_error_m`, `velocity_error_m_s`; `summarize`, `metric_figure`, `write_report`, `analyze`; `main`, the `gnc-analyze` command |
+| `runs/` | the run-file loader, one class per module, all re-exported from `gnc_analysis.runs`: `load.py` (`DATASETS`; `load_run(path)` reads one run file; `load_run_directory(directory)` reads every `run_*.h5` in a directory, requiring one shared `t_s`), `run.py` (`Run`), `truth.py` (`Truth`), `estimate.py` (`Estimate`), `imu_readings.py` (`ImuReadings`), `dataset.py` (`Dataset`), `run_data_error.py` (`RunDataError`) |
+| `error_metrics.py` | per-run metrics `attitude_error_deg`, `position_error_m`, `velocity_error_m_s`; `growth_rate`, `METRICS`, `summarize` |
+| `metric.py`, `metric_summary.py`, `summary.py` | `Metric`, `MetricSummary`, `Summary`: one metric, one metric across runs, every metric across runs |
+| `report.py` | `metric_figure`, `write_report`, and `analyze(path, out_dir)`, which reads one run file or a run directory |
+| `cli.py` | `main`, the `gnc-analyze` command |
 | `error_bounds.py` | the IMU dead-reckoning accuracy bound: `error_growth`, `bound_ratios`, `violations`, `BOUND_FACTOR`, `ERROR_AT_START` |
 | `mrp.py` | `subtract`, `angle`, `to_quaternion`, `from_quaternion` for `sigma_BN`, batched over a leading dimension |
 
 ## What a run file must contain
 
-A run is one HDF5 file, `run_<NNNN>.h5`, with the case number zero-padded to 4 digits. A campaign
-is a directory of run files sharing one `t_s`. `gnc_analysis.runs` is the single statement of this
+A run is one HDF5 file, `run_<NNNN>.h5`, with the case number zero-padded to 4 digits. A run
+directory holds one pytest session's run files, sharing one `t_s`. `gnc_analysis.runs` is the single statement of this
 layout. The table below states the same layout for readers, and
 `tests/analysis/test_runs.py` holds the two equal.
 
@@ -48,8 +51,8 @@ The root attributes are:
 - every `versions_<name>`, collected into `Run.versions["<name>"]`.
 
 Other datasets and attributes are ignored. `load_run` raises `RunDataError` naming the file and the
-dataset, attribute or rule at fault. `load_campaign` raises it naming the first run whose `t_s`
-differs.
+dataset, attribute or rule at fault. `load_run_directory` raises it naming the first run whose
+`t_s` differs.
 
 ## Metrics
 
@@ -59,7 +62,7 @@ Each metric is computed per run at every sample:
 - **position error, m:** `|r_truth − r_est|`;
 - **velocity error, m/s:** `|v_truth − v_est|`.
 
-Across a campaign, `summarize` reports for each metric:
+Across the runs of a directory, `summarize` reports for each metric:
 - the mean, standard deviation, 3σ and maximum of each run's final value;
 - a growth rate, the slope of a linear fit of the ensemble RMS against time.
 
@@ -69,27 +72,27 @@ Across a campaign, `summarize` reports for each metric:
 `wise-gnc-design[analysis]`. In this repository `uv sync` installs it.
 
 ```sh
-uv run gnc-analyze campaign --out report
+uv run gnc-analyze monte_carlo --out report
 ```
 
-The argument is one run file or a campaign directory. The command writes three things into
+The argument is one run file or a run directory. The command writes three things into
 `report/`:
 - `summary.md`, holding the run count, the duration and the statistics above;
 - `attitude_error.png`, `position_error.png` and `velocity_error.png`, each drawing every run
   faintly and the ensemble mean and ±3σ in bold.
 
 It returns 0 on success. It returns 1 when the loader rejects the input, printing the loader's
-message on stderr. A usage error returns 2. CI runs this command on the campaign its scenario tests
-write.
+message on stderr. A usage error returns 2. CI runs this command on the run directory its
+scenario tests write.
 
 From Python, `analyze(path, out_dir)` does the same and returns the `Summary`. `summarize(runs)`
 computes the `Summary` without writing anything:
 
 ```python
-from gnc_analysis.navigation_error import summarize
-from gnc_analysis.runs import load_campaign
+from gnc_analysis.error_metrics import summarize
+from gnc_analysis.runs import load_run_directory
 
-summary = summarize(load_campaign("campaign"))
+summary = summarize(load_run_directory("monte_carlo"))
 attitude = summary.metrics[0]
 print(attitude.metric.label, attitude.final_max, attitude.metric.unit)
 ```

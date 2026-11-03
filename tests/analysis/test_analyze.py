@@ -1,10 +1,13 @@
-"""`gnc_analysis.navigation_error` over synthetic runs whose injected errors have closed forms."""
+"""`gnc_analysis`'s error metrics, report and `gnc-analyze` over synthetic runs whose injected
+errors have closed forms."""
 
 import numpy as np
 import pytest
 
-from gnc_analysis.navigation_error import METRICS, analyze, main, summarize
-from gnc_analysis.runs import load_campaign
+from gnc_analysis.cli import main
+from gnc_analysis.error_metrics import METRICS, summarize
+from gnc_analysis.report import analyze
+from gnc_analysis.runs import load_run_directory
 
 ATTITUDE_RATES_DEG_S = np.array([0.5, 1.0, 1.5, 2.0, 2.5])  # below 180 deg over the 59 s run
 POSITION_RATES_M_S = np.array([0.1, 0.3, 0.2, 0.5, 0.4])
@@ -13,16 +16,16 @@ FIGURES = {metric.figure_name for metric in METRICS}
 
 
 @pytest.fixture
-def campaign(campaign_dir):
-    return campaign_dir(ATTITUDE_RATES_DEG_S, POSITION_RATES_M_S)
+def runs_dir(run_directory):
+    return run_directory(ATTITUDE_RATES_DEG_S, POSITION_RATES_M_S)
 
 
 def _stats(final: np.ndarray) -> tuple[float, float, float, float]:
     return final.mean(), final.std(), 3.0 * final.std(), final.max()
 
 
-def test_summary_matches_the_injected_errors(campaign):
-    summary = summarize(load_campaign(campaign))
+def test_summary_matches_the_injected_errors(runs_dir):
+    summary = summarize(load_run_directory(runs_dir))
     attitude, position, velocity = summary.metrics
 
     assert summary.n_runs == 5
@@ -55,10 +58,10 @@ def test_summary_matches_the_injected_errors(campaign):
     assert velocity.growth_rate == pytest.approx(0.0, abs=1e-12)
 
 
-def test_analyze_writes_the_summary_and_one_figure_per_metric(campaign, tmp_path):
+def test_analyze_writes_the_summary_and_one_figure_per_metric(runs_dir, tmp_path):
     out_dir = tmp_path / "report"
 
-    summary = analyze(campaign, out_dir)
+    summary = analyze(runs_dir, out_dir)
 
     assert {p.name for p in out_dir.iterdir()} == FIGURES | {"summary.md"}
     text = (out_dir / "summary.md").read_text()
@@ -74,8 +77,8 @@ def test_analyze_accepts_one_run_file(run_file, tmp_path):
     assert summary.metrics[0].final_mean == pytest.approx(2.0 * FINAL_T_S, rel=1e-3)
 
 
-def test_the_command_returns_zero_on_success(campaign, tmp_path):
-    assert main([str(campaign), "--out", str(tmp_path / "report")]) == 0
+def test_the_command_returns_zero_on_success(runs_dir, tmp_path):
+    assert main([str(runs_dir), "--out", str(tmp_path / "report")]) == 0
     assert (tmp_path / "report" / "summary.md").is_file()
 
 

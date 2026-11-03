@@ -14,7 +14,7 @@ basilisk = ["bsk[all]"]
 analysis = ["h5py>=3.11", "matplotlib>=3.9"]
 
 [project.scripts]
-gnc-analyze = "gnc_analysis.navigation_error:main"
+gnc-analyze = "gnc_analysis.cli:main"
 
 [dependency-groups]
 dev = [

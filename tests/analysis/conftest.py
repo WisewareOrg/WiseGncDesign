@@ -113,16 +113,16 @@ def run_file(tmp_path: Path) -> Callable[..., Path]:
 
 
 @pytest.fixture
-def campaign_dir(tmp_path: Path) -> Callable[..., Path]:
-    """`campaign_dir(attitude_drift_rates_deg_s, position_drift_rates_m_s, **kwargs)` writes one
-    run file per pair of rates, cases 0 upward, into `tmp_path/campaign` and returns it."""
+def run_directory(tmp_path: Path) -> Callable[..., Path]:
+    """`run_directory(attitude_drift_rates_deg_s, position_drift_rates_m_s, **kwargs)` writes
+    one run file per pair of rates, cases 0 upward, into `tmp_path/runs` and returns it."""
 
     def make(
         attitude_drift_rates_deg_s: Sequence[float] = (2.0,) * 5,
         position_drift_rates_m_s: Sequence[float] = (0.5,) * 5,
         **kwargs,
     ) -> Path:
-        directory = tmp_path / "campaign"
+        directory = tmp_path / "runs"
         rates = zip(attitude_drift_rates_deg_s, position_drift_rates_m_s, strict=True)
         for case, (attitude_rate, position_rate) in enumerate(rates):
             write_run_file(

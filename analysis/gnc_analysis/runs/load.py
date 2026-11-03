@@ -1,4 +1,4 @@
-"""Loads recorded runs: one HDF5 file per run, a campaign being a directory of them.
+"""Loads run files: one HDF5 file per run, a run directory holding one session's files.
 
 This loader is the single statement of what a run file must contain; `analysis/README.md`
 ("What a run file must contain") renders the same table for readers. Every rejection raises
@@ -7,89 +7,21 @@ This loader is the single statement of what a run file must contain; `analysis/R
 
 import dataclasses
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, NamedTuple
+from typing import Any
 
 import h5py
 import numpy as np
 
-__all__ = [
-    "DATASETS",
-    "Dataset",
-    "Estimate",
-    "ImuReadings",
-    "Run",
-    "RunDataError",
-    "Truth",
-    "load_campaign",
-    "load_run",
-]
+from gnc_analysis.runs.dataset import Dataset
+from gnc_analysis.runs.estimate import Estimate
+from gnc_analysis.runs.imu_readings import ImuReadings
+from gnc_analysis.runs.run import Run
+from gnc_analysis.runs.run_data_error import RunDataError
+from gnc_analysis.runs.truth import Truth
 
-
-class RunDataError(Exception):
-    """A run file, or a campaign directory, differs from what `load_run` and `load_campaign`
-    read. The message names the file and the dataset, attribute or rule at fault."""
-
-
-class Dataset(NamedTuple):
-    """What one dataset must be: float64, carrying a string attr `units` equal to `units`, of
-    shape `(N,)` when `width` is `None` and `(N, width)` otherwise, `N` being `len(t_s)`."""
-
-    units: str
-    width: int | None
-
-
-def _channel(units: str, width: int | None = 3) -> Any:
-    return field(metadata={"units": units, "width": width})
-
-
-@dataclass(frozen=True)
-class Truth:
-    """Plant truth, one row per sample of `Run.t_s`. Read from group `truth/`.
-
-    Attributes:
-        sigma_BN: (N, 3) MRP of the body frame B with respect to the inertial frame N.
-        omega_BN_B: (N, 3) rad/s, angular rate of B with respect to N, in B.
-        r_N: (N, 3) m, inertial position.
-        v_N: (N, 3) m/s, inertial velocity.
-    """
-
-    sigma_BN: np.ndarray = _channel("MRP")
-    omega_BN_B: np.ndarray = _channel("rad/s")
-    r_N: np.ndarray = _channel("m")
-    v_N: np.ndarray = _channel("m/s")
-
-
-@dataclass(frozen=True)
-class Estimate:
-    """The flight software's estimate, one row per sample of `Run.t_s`. Read from group `est/`.
-
-    Attributes:
-        sigma_BN: (N, 3) MRP of B with respect to N.
-        r_N: (N, 3) m, inertial position.
-        v_N: (N, 3) m/s, inertial velocity.
-    """
-
-    sigma_BN: np.ndarray = _channel("MRP")
-    r_N: np.ndarray = _channel("m")
-    v_N: np.ndarray = _channel("m/s")
-
-
-@dataclass(frozen=True)
-class ImuReadings:
-    """The IMU's own output, in its sensor (platform) frame P, one row per sample of
-    `Run.t_s`. Read from group `imu/`.
-
-    Attributes:
-        gyro_P: (N, 3) rad/s, angular rate in P.
-        accel_P: (N, 3) m/s^2, non-gravitational acceleration in P.
-    """
-
-    gyro_P: np.ndarray = _channel("rad/s")
-    accel_P: np.ndarray = _channel("m/s^2")
-
+__all__ = ["DATASETS", "load_run", "load_run_directory"]
 
 _GROUPS: dict[str, type] = {"truth": Truth, "est": Estimate, "imu": ImuReadings}
 
@@ -104,33 +36,6 @@ DATASETS: Mapping[str, Dataset] = MappingProxyType(
     }
 )
 """Every dataset a run file must contain, by its path in the file."""
-
-
-@dataclass(frozen=True)
-class Run:
-    """One loaded run.
-
-    Attributes:
-        path: the file it was read from.
-        case: root attr `case`, the run's index in its campaign.
-        seed: root attr `seed`, the campaign seed it was drawn from.
-        draws: every root attr `draw_<name>`, keyed by `<name>`.
-        versions: every root attr `versions_<name>`, keyed by `<name>`.
-        t_s: (N,) s, sample times, strictly increasing from 0.
-        truth: plant truth at `t_s`.
-        est: the flight software's estimate at `t_s`.
-        imu: the IMU's output at `t_s`.
-    """
-
-    path: Path
-    case: int
-    seed: int
-    draws: Mapping[str, np.ndarray]
-    versions: Mapping[str, str]
-    t_s: np.ndarray
-    truth: Truth
-    est: Estimate
-    imu: ImuReadings
 
 
 def _read_dataset(f: h5py.File, path: Path, name: str, spec: Dataset, rows: int | None) -> Any:
@@ -234,9 +139,10 @@ def load_run(path: str | Path) -> Run:
     )
 
 
-def load_campaign(directory: str | Path) -> list[Run]:
-    """Loads every `run_*.h5` in `directory`, sorted by file name, through `load_run`, and
-    requires every run to share the first run's `t_s` (equal within 1e-9 s).
+def load_run_directory(directory: str | Path) -> list[Run]:
+    """Loads every `run_*.h5` in `directory`, one session's run files, sorted by file name,
+    through `load_run`, and requires every run to share the first run's `t_s` (equal within
+    1e-9 s).
 
     Raises:
         RunDataError: when the directory holds no run file, when any run fails `load_run`, or

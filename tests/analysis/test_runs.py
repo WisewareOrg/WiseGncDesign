@@ -1,4 +1,4 @@
-"""`load_run` and `load_campaign`: every rule rejects with a message naming the file and the
+"""`load_run` and `load_run_directory`: every rule rejects with a message naming the file and the
 dataset or attribute, and a good file loads with every value intact."""
 
 import re
@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 import pytest
 
-from gnc_analysis.runs import DATASETS, RunDataError, load_campaign, load_run
+from gnc_analysis.runs import DATASETS, RunDataError, load_run, load_run_directory
 
 README = Path(__file__).resolve().parents[2] / "analysis" / "README.md"
 
@@ -145,24 +145,24 @@ def test_a_non_integer_case_is_rejected(run_file, value):
     _rejects(path, "root attr 'case'", "expected an integer")
 
 
-def test_a_good_campaign_loads_in_file_order(campaign_dir):
-    runs = load_campaign(campaign_dir())
+def test_a_good_run_directory_loads_in_file_order(run_directory):
+    runs = load_run_directory(run_directory())
 
     assert [run.case for run in runs] == [0, 1, 2, 3, 4]
 
 
-def test_a_campaign_with_a_different_t_s_names_the_run(campaign_dir):
-    directory = campaign_dir()
+def test_a_run_directory_with_a_different_t_s_names_the_run(run_directory):
+    directory = run_directory()
     bad = directory / "run_0003.h5"
     _rewrite(bad, "t_s", _values(bad, "t_s") * 1.1)  # still from 0, still increasing
 
     with pytest.raises(RunDataError, match=re.escape(f"{bad}: t_s differs")):
-        load_campaign(directory)
+        load_run_directory(directory)
 
 
-def test_an_empty_campaign_directory_is_rejected(tmp_path):
+def test_an_empty_run_directory_is_rejected(tmp_path):
     with pytest.raises(RunDataError, match=re.escape(f"{tmp_path}: no run_*.h5 files found")):
-        load_campaign(tmp_path)
+        load_run_directory(tmp_path)
 
 
 def test_the_readme_table_states_exactly_the_datasets_the_loader_reads():
