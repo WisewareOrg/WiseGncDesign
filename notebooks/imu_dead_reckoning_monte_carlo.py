@@ -37,6 +37,7 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from gnc_algorithms.imu_dead_reckoning import DeadReckoningState, ImuDeadReckoner, ImuSample
+from gnc_algorithms.mrp import dcm_NB
 from gnc_analysis.error_bounds import BOUND_FACTOR, bound_ratios, error_growth, read_run
 
 RUNS = int(os.environ.get("GNC_MONTE_CARLO_RUNS", "852"))
@@ -65,14 +66,6 @@ _AWAY_FROM_ORIGIN = np.array([7.0e6, 0.0, 0.0])
 def _skew(v: np.ndarray) -> np.ndarray:
     """The cross-product matrix [~v]."""
     return np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
-
-
-def dcm_NB(sigma: np.ndarray) -> np.ndarray:
-    """[NB] of the MRP `sigma` = sigma_BN, with s^2 = |sigma|^2:
-    I + (8 [~sigma]^2 + 4 (1 - s^2) [~sigma]) / (1 + s^2)^2."""
-    s2 = float(sigma @ sigma)
-    sk = _skew(sigma)
-    return np.eye(3) + (8.0 * (sk @ sk) + 4.0 * (1.0 - s2) * sk) / (1.0 + s2) ** 2
 
 
 def _dcm_BN_from_axis_angle(axis: np.ndarray, theta: float) -> np.ndarray:
