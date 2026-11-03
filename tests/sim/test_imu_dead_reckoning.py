@@ -1,6 +1,7 @@
 """The dead reckoner, hosted by `gnc_cdh.basilisk` at 1 Hz on WiseDynamics' IMU spacecraft in
-Leo500, whose dynamics step at 50 Hz. Each case runs one dispersed spacecraft, writes its run file,
-and holds its estimate within bounds derived from its own drawn IMU biases."""
+Leo500, whose dynamics step at `--sim-fidelity`'s rate. Each case runs one dispersed spacecraft,
+writes its run file, and holds its estimate within bounds derived from its own drawn IMU
+biases."""
 
 from importlib.metadata import version
 from typing import Any

@@ -91,7 +91,8 @@ passed as `np.eye(3)`. It is never assumed.
   transform, builds one sample with `t` in s, steps the algorithm, and writes the new state.
 - The `UpdateState` call at the reset time itself leaves the state as built.
 - `period_s` (1 s) is the period of the task the simulation runs the module in, so the flight
-  software runs at 1 Hz on the simulation's 50 Hz dynamics step.
+  software runs at 1 Hz on the simulation's dynamics step, 50 Hz at its `hi` fidelity and 20 Hz
+  at `med` and `lo`.
 
 It refuses five things:
 - maps naming an unknown input, output, payload field or sample field, at construction;
@@ -127,8 +128,8 @@ The function refuses these, each by name:
 This example runs in a notebook or at a prompt, with the `sim` group installed
 (`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
 at its nominal configuration, and boots the dead reckoner on that vehicle. It then runs one minute,
-the dynamics at 50 Hz and the dead reckoner at 1 Hz, and compares the estimate with the vehicle's
-truth:
+the dynamics at the default fidelity's 20 Hz and the dead reckoner at 1 Hz, and compares the
+estimate with the vehicle's truth:
 
 ```python
 >>> import numpy as np

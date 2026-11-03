@@ -2,8 +2,8 @@
 
 WiseGncDesign holds Wiseware's GNC flight software in Python, flown against simulated spacecraft
 from [WiseDynamics](https://github.com/WisewareOrg/WiseDynamics), which `pyproject.toml` pins
-under `[tool.uv.sources]`. The flight software runs at 1 Hz on the simulation's 50 Hz dynamics
-step.
+under `[tool.uv.sources]`. The flight software runs at 1 Hz on the simulation's dynamics step,
+50 Hz at its `hi` fidelity and 20 Hz at `med` and `lo`.
 
 ## Layout
 
@@ -33,7 +33,8 @@ WiseDynamics' `Leo500` scenario, writes one HDF5 run file per case, and holds ea
 bound its drawn IMU biases imply. Its `--sim-*` options come from WiseDynamics' pytest plugin.
 
 The notebook runs the dead reckoner's smoke checks, then that test over `GNC_MONTE_CARLO_RUNS`
-cases (default 852) on `GNC_MONTE_CARLO_WORKERS` workers (default the CPU count), then shows each
+cases (default 852) on `GNC_MONTE_CARLO_WORKERS` workers (default the CPU count) at `GNC_MONTE_CARLO_FIDELITY` (default
+`lo`), then shows each
 error against its bound and the final errors. To open either file in Jupyter, generate the
 notebook from its source; generated notebooks are ignored by git:
 

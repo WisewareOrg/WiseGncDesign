@@ -9,8 +9,9 @@
 # # IMU dead reckoning across a Monte Carlo run
 #
 # This notebook flies the dead reckoner on WiseDynamics' tumbling IMU spacecraft in Leo500 over
-# many dispersed cases. The flight software runs at 1 Hz on a 50 Hz dynamics step. Each case
-# draws its own initial attitude, body rate, gyro bias and accelerometer bias.
+# many dispersed cases. The flight software runs at 1 Hz on the dynamics step: 50 Hz at `hi`
+# fidelity, 20 Hz at `med` and `lo`. Each case draws its own initial attitude, body rate, gyro
+# bias and accelerometer bias.
 #
 # The dead reckoner itself, its derivation and its code, is `gnc_algorithms.imu_dead_reckoning`.
 # This notebook runs four smoke checks of it, then the Monte Carlo run: one pytest session of
@@ -19,8 +20,10 @@
 # each run file with h5py and shows each error against the bound its case's biases imply, and
 # the final errors.
 #
-# `GNC_MONTE_CARLO_RUNS` sets the number of cases (default 852) and `GNC_MONTE_CARLO_WORKERS`
-# the number of pytest-xdist workers (default the CPU count).
+# `GNC_MONTE_CARLO_RUNS` sets the number of cases (default 852), `GNC_MONTE_CARLO_WORKERS` the
+# number of pytest-xdist workers (default the CPU count), and `GNC_MONTE_CARLO_FIDELITY` the
+# simulation's `--sim-fidelity` (default `lo`: RK2 at 0.05 s; `med` is RK4 at 0.05 s, `hi` RK4 at
+# 0.02 s).
 
 # %%
 import importlib.util
@@ -38,10 +41,11 @@ from gnc_analysis.error_bounds import BOUND_FACTOR, bound_ratios, error_growth, 
 
 RUNS = int(os.environ.get("GNC_MONTE_CARLO_RUNS", "852"))
 WORKERS = int(os.environ.get("GNC_MONTE_CARLO_WORKERS", str(os.cpu_count() or 1)))
+FIDELITY = os.environ.get("GNC_MONTE_CARLO_FIDELITY", "lo")
 ROOT = next(d for d in (Path.cwd(), *Path.cwd().parents) if (d / "tests" / "sim").is_dir())
 SCENARIO = ROOT / "tests" / "sim" / "test_imu_dead_reckoning.py"
 RUN_DIR = ROOT / "monte_carlo" / f"imu_dead_reckoning-{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
-print(f"monte carlo: {RUNS} runs, {WORKERS} workers, run files in {RUN_DIR}")
+print(f"monte carlo: {RUNS} runs, {WORKERS} workers, fidelity {FIDELITY}, run files in {RUN_DIR}")
 
 # %% [markdown]
 # ## Smoke checks
@@ -225,7 +229,8 @@ log = RUN_DIR / "pytest.log"
 with log.open("w") as stream:
     status = subprocess.run(
         [sys.executable, "-m", "pytest", str(SCENARIO), "-q", "-p", "no:cacheprovider",
-         "--sim-runs", str(RUNS), "-n", str(WORKERS), "--sim-out", str(RUN_DIR)],
+         "--sim-runs", str(RUNS), "-n", str(WORKERS), "--sim-fidelity", FIDELITY,
+         "--sim-out", str(RUN_DIR)],
         cwd=ROOT, env={**os.environ, "REQUIRE_SIM": "1"}, stdout=stream, stderr=subprocess.STDOUT,
     ).returncode  # fmt: skip
 print("\n".join(log.read_text().splitlines()[-3:]))
