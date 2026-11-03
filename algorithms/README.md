@@ -14,10 +14,10 @@ so any host can run an algorithm unmodified.
 | `imu_dead_reckoning.py` | strapdown dead reckoning: `ImuDeadReckoner`, re-exporting its sample and state types |
 | `interfaces/` | every algorithm's sample and state types, one module each: `imu_sample.py` (`ImuSample`), `dead_reckoning_state.py` (`DeadReckoningState`) |
 
-A literate module is any module under `gnc_algorithms/`, subpackages included, that has a
-notebook `notebooks/<its path>.ipynb`; it defines at least one `check_*`, and a module without a
-notebook defines none. `interfaces/` holds type modules, so it holds no notebooks and no checks.
-`tests/literate_documents.py` states this rule for the literate collector and CI alike.
+Every module under `gnc_algorithms/`, subpackages included, is a literate module: it has a
+notebook `notebooks/<its path>.ipynb` and defines at least one `check_*`. The one exception is
+`interfaces/`, whose type modules have neither. `tests/literate_documents.py` states this rule
+for the literate collector and CI alike.
 
 ## Conventions
 

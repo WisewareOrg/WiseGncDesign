@@ -16,8 +16,6 @@ The parts stay apart:
 
 ## Module map
 
-| Module | Public surface |
-| --- | --- |
 Each class has its own module, named for it. `gnc_cdh` re-exports the neutral layer's public
 names, and `gnc_cdh.basilisk` re-exports `AlgorithmModule`, `InputMap`, `OutputMap` and
 `make_fsw`.

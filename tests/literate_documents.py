@@ -1,8 +1,10 @@
 """The repository's literate documents, by the one rule the literate collector
 (`tests/algorithms/test_literate_checks.py`) and CI's literate job both use.
 
-- A literate module is a module under `algorithms/gnc_algorithms/`, subpackages included,
-  that has a notebook `notebooks/<its path>.ipynb`.
+- Every module under `algorithms/gnc_algorithms/`, subpackages included, is an algorithm module,
+  except the type modules under `interfaces/`.
+- A literate module is a module there that has a notebook `notebooks/<its path>.ipynb`. Every
+  algorithm module is literate, and no `interfaces/` module is.
 - A notebook document is a top-level `notebooks/<name>.py`, paired with `notebooks/<name>.ipynb`.
 - Every notebook is `notebooks/**/*.ipynb`, Jupyter checkpoints excluded.
 
@@ -19,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "algorithms" / "gnc_algorithms"
 NOTEBOOKS = ROOT / "notebooks"
+INTERFACES = "interfaces"
 
 
 def module_paths() -> list[str]:
@@ -28,6 +31,11 @@ def module_paths() -> list[str]:
         for p in SOURCES.rglob("*.py")
         if p.name != "__init__.py"
     )
+
+
+def algorithm_modules() -> list[str]:
+    """The modules under `gnc_algorithms` outside `interfaces/`, as paths without `.py`."""
+    return [path for path in module_paths() if path.split("/")[0] != INTERFACES]
 
 
 def literate_modules() -> list[str]:

@@ -1,9 +1,9 @@
 """Runs every `check_*` of every literate algorithm module and holds the pairing of literate
 modules to notebooks, by the rule in `tests/literate_documents.py` that CI's literate job also
-uses: over every module under `algorithms/gnc_algorithms/`, subpackages included, the modules
-with a notebook are exactly the modules defining a `check_*`, there is at least one, and every
-notebook belongs to such a module or to a notebook document. Notebook documents are never
-imported or run here."""
+uses: every module under `algorithms/gnc_algorithms/`, subpackages included, is an algorithm
+module with a notebook and at least one `check_*`, except the `interfaces/` type modules, which
+have neither; there is at least one; and every notebook belongs to an algorithm module or to a
+notebook document. Notebook documents are never imported or run here."""
 
 import importlib
 import importlib.util
@@ -38,13 +38,14 @@ WITH_CHECKS = sorted(path for path in literate.module_paths() if _checks(_module
 CHECKS = [(path, name, check) for path in WITH_CHECKS for name, check in _checks(_module(path))]
 
 
-def test_literate_modules_are_exactly_the_modules_with_checks_and_every_notebook_is_owned():
-    with_notebook = literate.literate_modules()
-    owned = [f"{p}.ipynb" for p in with_notebook]
+def test_every_algorithm_module_is_literate_and_every_notebook_is_owned():
+    algorithms = literate.algorithm_modules()
+    owned = [f"{p}.ipynb" for p in algorithms]
     owned += [p.with_suffix(".ipynb").name for p in literate.notebook_documents()]
 
-    assert with_notebook, f"no literate module under {literate.SOURCES}"
-    assert with_notebook == WITH_CHECKS
+    assert algorithms, f"no algorithm module under {literate.SOURCES}"
+    assert literate.literate_modules() == algorithms, "modules with a notebook"
+    assert algorithms == WITH_CHECKS, "modules defining a check_*"
     assert sorted(
         "/".join(p.relative_to(literate.NOTEBOOKS).parts) for p in literate.notebooks()
     ) == sorted(owned)
@@ -94,7 +95,11 @@ def test_the_literate_sets_reach_a_subpackage_module_with_a_notebook(monkeypatch
         (sources / f"{module}.py").touch()
     _notebook(notebooks / "pkg" / "sub.ipynb", [], None)
 
-    assert literate.module_paths() == ["pkg/plain", "pkg/sub", "top"]
+    (sources / "interfaces").mkdir()
+    (sources / "interfaces" / "sample.py").touch()
+
+    assert literate.module_paths() == ["interfaces/sample", "pkg/plain", "pkg/sub", "top"]
+    assert literate.algorithm_modules() == ["pkg/plain", "pkg/sub", "top"]
     assert literate.literate_modules() == ["pkg/sub"]
     assert literate.main(["modules"]) == 0
     assert literate.main(["sources"]) == 0
