@@ -43,8 +43,8 @@ from pathlib import Path
 
 import numpy as np
 from matplotlib.figure import Figure
-from monte_carlo.figure_display import show
-from monte_carlo.monte_carlo_settings import MonteCarloSettings
+from notebook_support.figure_display import show
+from notebook_support.monte_carlo_settings import MonteCarloSettings
 
 from gnc_analysis.error_bounds import BOUND_FACTOR, bound_ratios
 from gnc_analysis.error_metrics import summarize
@@ -54,11 +54,11 @@ from gnc_analysis.runs import Run, load_run_directory
 # %% [markdown]
 # ## Settings
 #
-# `MonteCarloSettings`, from `monte_carlo/monte_carlo_settings.py` beside this notebook, holds
+# `MonteCarloSettings`, from `notebook_support/monte_carlo_settings.py` beside this notebook, holds
 # what the run runs. The session seed and the duration are fixed: seed 0 and one orbit, 5700 s
 # per case. The run and worker counts come from the environment. `show`, from
-# `monte_carlo/figure_display.py`, displays a figure inline in a kernel; a script shows nothing,
-# and every figure is also saved to the report directory.
+# `notebook_support/figure_display.py`, displays a figure inline in a kernel; a script shows
+# nothing, and every figure is also saved to the report directory.
 
 # %%
 SEED = 0

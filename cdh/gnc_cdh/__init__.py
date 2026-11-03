@@ -1,8 +1,8 @@
 """The C&DH (command and data handling) partition: a data dictionary of each algorithm's inputs
-and outputs in neutral role and signal names (`bindings`), the structural types a hosted
-algorithm satisfies (`hosted_algorithm`, `hosted_state`), the frame transforms a host applies
-(`frames`), and one subpackage per transport that resolves the dictionary against its own
-messages."""
+and outputs in neutral role and signal names (`bindings`, whose entries are `algorithm_binding`
+records of `input_signal` and `output_signal` rows), the structural types a hosted algorithm
+satisfies (`hosted_algorithm`, `hosted_state`), the frame transforms a host applies (`frames`),
+and one subpackage per transport that resolves the dictionary against its own messages."""
 
 from gnc_cdh.algorithm_binding import AlgorithmBinding
 from gnc_cdh.bindings import BINDINGS, binding

@@ -5,14 +5,14 @@ import numpy as np
 import pytest
 
 from gnc_analysis.cli import main
-from gnc_analysis.error_metrics import METRICS, summarize
+from gnc_analysis.error_metrics import summarize
 from gnc_analysis.report import analyze
 from gnc_analysis.runs import load_run_directory
 
 ATTITUDE_RATES_DEG_S = np.array([0.5, 1.0, 1.5, 2.0, 2.5])  # below 180 deg over the 59 s run
 POSITION_RATES_M_S = np.array([0.1, 0.3, 0.2, 0.5, 0.4])
 FINAL_T_S = 59.0  # 60 samples at 1 s
-FIGURES = {metric.figure_name for metric in METRICS}
+FIGURES = {"attitude_error.png", "position_error.png", "velocity_error.png"}
 
 
 @pytest.fixture

@@ -49,9 +49,9 @@ def growth_rate(t_s: np.ndarray, values: np.ndarray) -> float:
 
 
 METRICS: tuple[Metric, ...] = (
-    Metric("attitude error", "deg", "deg/s", attitude_error_deg, "attitude_error.png"),
-    Metric("position error", "m", "m/s", position_error_m, "position_error.png"),
-    Metric("velocity error", "m/s", "m/s^2", velocity_error_m_s, "velocity_error.png"),
+    Metric("attitude error", "deg", "deg/s", attitude_error_deg),
+    Metric("position error", "m", "m/s", position_error_m),
+    Metric("velocity error", "m/s", "m/s^2", velocity_error_m_s),
 )
 
 

@@ -6,11 +6,18 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from gnc_analysis.error_metrics import summarize
+from gnc_analysis.metric import Metric
 from gnc_analysis.metric_summary import MetricSummary
 from gnc_analysis.runs import load_run, load_run_directory
 from gnc_analysis.summary import Summary
 
-__all__ = ["analyze", "metric_figure", "write_report"]
+__all__ = ["analyze", "figure_name", "metric_figure", "write_report"]
+
+
+def figure_name(metric: Metric) -> str:
+    """The file name of `metric`'s figure: its label in snake case, as PNG, such as
+    `attitude_error.png`."""
+    return metric.label.replace(" ", "_") + ".png"
 
 
 def _summary_markdown(summary: Summary) -> str:
@@ -56,14 +63,14 @@ def metric_figure(summary: Summary, s: MetricSummary) -> Figure:
 
 
 def write_report(summary: Summary, out_dir: Path) -> None:
-    """Writes `summary.md` and one figure per metric (`Metric.figure_name`, PNG) into
+    """Writes `summary.md` and one figure per metric (`figure_name`, PNG) into
     `out_dir`, creating it if needed. Each figure draws every run faintly and the ensemble
     mean and ±3σ in bold."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "summary.md").write_text(_summary_markdown(summary))
     for s in summary.metrics:
-        metric_figure(summary, s).savefig(out_dir / s.metric.figure_name, dpi=150)
+        metric_figure(summary, s).savefig(out_dir / figure_name(s.metric), dpi=150)
 
 
 def analyze(path: Path, out_dir: Path) -> Summary:

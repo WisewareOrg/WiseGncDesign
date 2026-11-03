@@ -4,7 +4,7 @@
 
 | Tier | What it proves |
 | --- | --- |
-| `algorithms/` | every `check_*` of every literate module passes; the modules with a notebook are exactly the modules defining checks, subpackages included, and every notebook belongs to one or to a notebook document; every module's figures render; and `algorithms/README.md`'s example runs |
+| `algorithms/` | every `check_*` of every literate module passes; the modules with a notebook are exactly the modules defining checks, subpackages included, and every notebook belongs to one or to a notebook document, by the rule in `literate_documents.py` that CI's literate job also uses; every module's figures render; and `algorithms/README.md`'s example runs |
 | `cdh/` | `AlgorithmModule`, `make_fsw` and every binding, against standalone Basilisk messages |
 | `analysis/` | the grader's MRP math against an axis-angle oracle; every rule of the run-file loader; each term of the accuracy bound against its hand-computed value; the summary statistics and `gnc-analyze` against synthetic runs with closed-form errors |
 | `sim/` | the dead reckoner, hosted by `gnc_cdh.basilisk` on a WiseDynamics plant, stays within bounds derived from each case's drawn IMU biases, and writes a run file the loader accepts |
