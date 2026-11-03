@@ -4,27 +4,13 @@ output (role, signal)."""
 
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import NamedTuple
 
 from Basilisk.architecture import messaging
 
-__all__ = ["INPUT_SIGNALS", "OUTPUT_SIGNALS", "InputField", "OutputField"]
+from gnc_cdh.basilisk.input_field import InputField
+from gnc_cdh.basilisk.output_field import OutputField
 
-
-class InputField(NamedTuple):
-    """Where an input signal is read: a reader of type `reader_type`, field `payload_field`."""
-
-    reader_type: type
-    payload_field: str
-
-
-class OutputField(NamedTuple):
-    """Where an output signal is written: field `payload_field` of the output message named
-    `message`, of type `message_type`."""
-
-    message: str
-    message_type: type
-    payload_field: str
+__all__ = ["INPUT_SIGNALS", "OUTPUT_SIGNALS"]
 
 
 INPUT_SIGNALS: Mapping[tuple[str, str], InputField] = MappingProxyType(

@@ -1,21 +1,16 @@
-"""The structural types an algorithm and its state satisfy to be hosted.
+"""The structural type an algorithm satisfies to be hosted.
 
 A hosted algorithm is built as `Algorithm(t0=..., **init)`, `t0` in s being the time its
 initial state applies at; it exposes its current state as `state` and advances one sample at a
 time with `step(sample)`. Its sample type is a dataclass with a field `t` (s) plus one field per
-input signal; its state carries `t` (s) plus one attribute per output signal.
+input signal; its state carries `t` (s) plus one attribute per output signal (`HostedState`).
 """
 
 from typing import Any, Protocol
 
-__all__ = ["HostedAlgorithm", "HostedState"]
+from gnc_cdh.hosted_state import HostedState
 
-
-class HostedState(Protocol):
-    """A hosted algorithm's state at one instant: `t` in s, plus one attribute per output."""
-
-    @property
-    def t(self) -> float: ...
+__all__ = ["HostedAlgorithm"]
 
 
 class HostedAlgorithm(Protocol):

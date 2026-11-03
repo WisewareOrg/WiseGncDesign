@@ -9,20 +9,35 @@
 
 The parts stay apart:
 - The data dictionary and the other modules directly under `gnc_cdh/` name no transport.
-- A transport's generic modules (`__init__.py`, `algorithm_module.py`, `fsw.py`) name no
-  algorithm or sensor. A transport's `signals.py` is its one algorithm-specific table.
+- A transport's generic modules (`__init__.py`, `algorithm_module.py`, `input_map.py`,
+  `output_map.py`, `flight_software.py`) name no algorithm or sensor. A transport's `signals.py`
+  is its one algorithm-specific table.
 - Nothing under `cdh/` imports the simulation repository.
 
 ## Module map
 
 | Module | Public surface |
 | --- | --- |
-| `hosted.py` | `HostedAlgorithm`, `HostedState`: the protocols a hosted algorithm and its state satisfy |
+Each class has its own module, named for it. `gnc_cdh` re-exports the neutral layer's public
+names, and `gnc_cdh.basilisk` re-exports `AlgorithmModule`, `InputMap`, `OutputMap` and
+`make_fsw`.
+
+| Module | Public surface |
+| --- | --- |
+| `hosted_algorithm.py` | `HostedAlgorithm`: the protocol a hosted algorithm satisfies, and the hosting convention |
+| `hosted_state.py` | `HostedState`: the protocol a hosted algorithm's state satisfies |
 | `frames.py` | `platform_to_body`, `TRANSFORMS`: frame transforms by neutral name, and the mounting convention |
-| `bindings.py` | `InputSignal`, `OutputSignal`, `AlgorithmBinding`, `BINDINGS`, `binding(name)`: the data dictionary |
+| `input_signal.py` | `InputSignal`: one sample field fed from one input role and signal |
+| `output_signal.py` | `OutputSignal`: one state field published as one output role and signal |
+| `algorithm_binding.py` | `AlgorithmBinding`: everything transport-neutral about hosting one algorithm |
+| `data_dictionary.py` | `BINDINGS`, `binding(name)`: the dictionary's entries |
+| `basilisk/input_field.py` | `InputField`: where a Basilisk reader carries one input signal |
+| `basilisk/output_field.py` | `OutputField`: where a Basilisk message carries one output signal |
 | `basilisk/signals.py` | `INPUT_SIGNALS`, `OUTPUT_SIGNALS`: each (role, signal) resolved to a Basilisk message and payload field |
-| `basilisk/algorithm_module.py` | `AlgorithmModule`, `InputMap`, `OutputMap`: the generic Basilisk host module |
-| `basilisk/fsw.py` | `make_fsw`: builds a named algorithm's `AlgorithmModule` from the dictionary |
+| `basilisk/input_map.py` | `InputMap`: one payload field read into one sample field |
+| `basilisk/output_map.py` | `OutputMap`: one state field written to one payload field |
+| `basilisk/algorithm_module.py` | `AlgorithmModule`: the generic Basilisk host module |
+| `basilisk/flight_software.py` | `make_fsw`: builds a named algorithm's `AlgorithmModule` from the dictionary |
 
 ## The data dictionary
 
@@ -142,8 +157,8 @@ True
 
 ## Adding an algorithm
 
-1. Add an `AlgorithmBinding` to `BINDINGS` in `bindings.py`, with one `InputSignal` per sample
-   field and one `OutputSignal` per published state field.
+1. Add an `AlgorithmBinding` to `BINDINGS` in `data_dictionary.py`, with one `InputSignal` per
+   sample field and one `OutputSignal` per published state field.
 2. Reuse a signal where the quantity is the same. A new signal gets a row in the dictionary table
    above.
 3. Give every new (role, signal) a row in `basilisk/signals.py`.
@@ -157,4 +172,5 @@ A transport is a sibling of `basilisk/` holding three modules:
 - a generic host module;
 - a `make_fsw`.
 
-Its `__init__.py`, generic host module and `fsw.py` name no algorithm or sensor.
+Its `__init__.py`, generic host module, map modules and `make_fsw` module name no algorithm or
+sensor.

@@ -1,53 +1,22 @@
 """A Basilisk Python `SysModel` hosting one framework-free algorithm, wired by declarative
-input and output maps."""
+input and output maps (`InputMap`, `OutputMap`)."""
 
 import dataclasses
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
 import numpy as np
 from Basilisk.architecture import sysModel
 
-from gnc_cdh.hosted import HostedAlgorithm, HostedState
+from gnc_cdh.basilisk.input_map import InputMap
+from gnc_cdh.basilisk.output_map import OutputMap
+from gnc_cdh.hosted_algorithm import HostedAlgorithm
+from gnc_cdh.hosted_state import HostedState
 
 __all__ = ["AlgorithmModule", "InputMap", "OutputMap"]
 
 _NANOSECONDS_PER_SECOND = 1e9
-
-
-@dataclass(frozen=True)
-class InputMap:
-    """One sample field, read from one payload field of one input.
-
-    Attributes:
-        input: the name of the input reader in `AlgorithmModule.inputs`.
-        payload_field: the field of that reader's payload.
-        sample_field: the field of the sample type that receives the value.
-        transform: applied to the value, as a float array, before it reaches the sample; `None`
-            passes it as read.
-    """
-
-    input: str
-    payload_field: str
-    sample_field: str
-    transform: Callable[[np.ndarray], np.ndarray] | None = None
-
-
-@dataclass(frozen=True)
-class OutputMap:
-    """One payload field of one output message, written from one state field.
-
-    Attributes:
-        state_field: the attribute of the algorithm's state that supplies the value.
-        output: the name of the output message in `AlgorithmModule.output_messages`.
-        payload_field: the field of that message's payload.
-    """
-
-    state_field: str
-    output: str
-    payload_field: str
 
 
 class AlgorithmModule(sysModel.SysModel):

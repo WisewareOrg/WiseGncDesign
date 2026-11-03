@@ -6,9 +6,9 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
+from gnc_cdh import BINDINGS, AlgorithmBinding, InputSignal
 from gnc_cdh.basilisk import make_fsw
 from gnc_cdh.basilisk.signals import INPUT_SIGNALS
-from gnc_cdh.bindings import BINDINGS, AlgorithmBinding, InputSignal
 
 
 @pytest.mark.parametrize("name", sorted(BINDINGS))
