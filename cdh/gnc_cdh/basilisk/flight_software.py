@@ -11,7 +11,7 @@ from gnc_cdh.basilisk.algorithm_module import AlgorithmModule
 from gnc_cdh.basilisk.input_map import InputMap
 from gnc_cdh.basilisk.output_map import OutputMap
 from gnc_cdh.basilisk.signals import INPUT_SIGNALS, OUTPUT_SIGNALS
-from gnc_cdh.data_dictionary import binding
+from gnc_cdh.bindings import binding
 from gnc_cdh.frames import TRANSFORMS
 
 __all__ = ["make_fsw"]
@@ -39,7 +39,7 @@ def make_fsw(
     """Builds the `AlgorithmModule` hosting the algorithm registered as `name`.
 
     Args:
-        name: a key of `gnc_cdh.data_dictionary.BINDINGS`.
+        name: a key of `gnc_cdh.bindings.BINDINGS`.
         inputs: reader by input role, each subscribed by the caller; roles the algorithm reads
             no signal from are left out of the module.
         initial_state: returns the algorithm's initial state by constructor parameter name,

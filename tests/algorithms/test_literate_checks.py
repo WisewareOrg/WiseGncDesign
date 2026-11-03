@@ -1,13 +1,14 @@
-"""Runs every `check_*` of every literate algorithm module, `algorithms/gnc_algorithms/<name>.py`
-imported as `gnc_algorithms.<name>`, and checks that every literate document has its notebook:
-each algorithm module and each notebook document `notebooks/<name>.py`, such as a Monte Carlo
-document, pairs with `notebooks/<name>.ipynb`. Notebook documents are never imported or run
-here."""
+"""Runs every `check_*` of every literate algorithm module and holds the pairing of literate
+modules to notebooks, over every module under `algorithms/gnc_algorithms/`, subpackages
+included: the modules with a notebook `notebooks/<path>.ipynb` are exactly the modules defining
+a `check_*`, there is at least one, and every notebook belongs to such a module or to a notebook
+document `notebooks/<name>.py`. Notebook documents are never imported or run here."""
 
 import importlib
 import inspect
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -16,47 +17,57 @@ SOURCES = ROOT / "algorithms" / "gnc_algorithms"
 NOTEBOOKS = ROOT / "notebooks"
 
 
-def _module_names() -> list[str]:
-    return sorted(p.stem for p in SOURCES.glob("*.py") if p.name != "__init__.py")
+def _module_paths() -> list[str]:
+    """Every module under `gnc_algorithms`, as its path below the package without `.py`."""
+    return sorted(
+        "/".join(p.relative_to(SOURCES).with_suffix("").parts)
+        for p in SOURCES.rglob("*.py")
+        if p.name != "__init__.py"
+    )
 
 
-def _checks() -> list[tuple[str, str, Callable[[], None]]]:
-    found = []
-    for name in _module_names():
-        module = importlib.import_module(f"gnc_algorithms.{name}")
-        for check_name, check in inspect.getmembers(module, inspect.isfunction):
-            if check_name.startswith("check_") and check.__module__ == module.__name__:
-                found.append((name, check_name, check))
-    return found
+def _module(path: str) -> ModuleType:
+    return importlib.import_module("gnc_algorithms." + path.replace("/", "."))
 
 
-CHECKS = _checks()
+def _checks(module: ModuleType) -> list[tuple[str, Callable[[], None]]]:
+    return [
+        (name, function)
+        for name, function in inspect.getmembers(module, inspect.isfunction)
+        if name.startswith("check_") and function.__module__ == module.__name__
+    ]
 
 
-def test_every_literate_document_is_paired_with_a_notebook_and_modules_define_checks():
-    names = _module_names()
+MODULES = _module_paths()
+WITH_CHECKS = sorted(path for path in MODULES if _checks(_module(path)))
+CHECKS = [(path, name, check) for path in WITH_CHECKS for name, check in _checks(_module(path))]
+
+
+def test_literate_modules_are_exactly_the_modules_with_checks_and_every_notebook_is_owned():
+    with_notebook = sorted(p for p in MODULES if (NOTEBOOKS / f"{p}.ipynb").is_file())
     documents = sorted(p.stem for p in NOTEBOOKS.glob("*.py"))
+    notebooks = sorted(
+        "/".join(p.relative_to(NOTEBOOKS).with_suffix("").parts)
+        for p in NOTEBOOKS.rglob("*.ipynb")
+        if ".ipynb_checkpoints" not in p.parts
+    )
 
-    assert names, f"no literate module under {SOURCES}"
-    assert sorted(names + documents) == sorted(p.stem for p in NOTEBOOKS.glob("*.ipynb"))
-    assert sorted({module for module, _, _ in CHECKS}) == names
+    assert with_notebook, f"no literate module under {SOURCES}"
+    assert with_notebook == WITH_CHECKS
+    assert notebooks == sorted(with_notebook + documents)
 
 
-@pytest.mark.parametrize("check", [c for _, _, c in CHECKS], ids=[f"{m}.{n}" for m, n, _ in CHECKS])
+@pytest.mark.parametrize("check", [c for _, _, c in CHECKS], ids=[f"{p}.{n}" for p, n, _ in CHECKS])
 def test_check(check):
     check()
 
 
 def _figure_modules() -> list[str]:
-    return [
-        name
-        for name in _module_names()
-        if hasattr(importlib.import_module(f"gnc_algorithms.{name}"), "save_figures")
-    ]
+    return [path for path in WITH_CHECKS if hasattr(_module(path), "save_figures")]
 
 
-@pytest.mark.parametrize("name", _figure_modules())
-def test_figures_render(name, tmp_path):
-    paths = importlib.import_module(f"gnc_algorithms.{name}").save_figures(tmp_path)
+@pytest.mark.parametrize("path", _figure_modules())
+def test_figures_render(path, tmp_path):
+    paths = _module(path).save_figures(tmp_path)
 
     assert paths and all(p.is_file() and p.stat().st_size > 0 for p in paths)

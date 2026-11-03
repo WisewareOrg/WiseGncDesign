@@ -35,7 +35,6 @@
 ensemble error and bound ratios."""
 
 import importlib.util
-import io
 import os
 import subprocess
 import sys
@@ -44,6 +43,8 @@ from pathlib import Path
 
 import numpy as np
 from matplotlib.figure import Figure
+from monte_carlo.figure_display import show
+from monte_carlo.monte_carlo_settings import MonteCarloSettings
 
 from gnc_analysis.error_bounds import BOUND_FACTOR, bound_ratios
 from gnc_analysis.error_metrics import summarize
@@ -51,79 +52,22 @@ from gnc_analysis.report import metric_figure, write_report
 from gnc_analysis.runs import Run, load_run_directory
 
 # %% [markdown]
-# A notebook shows a figure through `show`, which displays it as a PNG image; a script shows
-# nothing, and every figure is also saved to the report directory.
-
-
-# %%
-def show(figure: Figure) -> None:
-    """Displays `figure` inline when running in an IPython kernel."""
-    if "IPython" not in sys.modules:
-        return
-    from IPython import get_ipython
-    from IPython.display import Image, display
-
-    if get_ipython() is not None:
-        buffer = io.BytesIO()
-        figure.savefig(buffer, format="png", dpi=100)
-        display(Image(data=buffer.getvalue()))
-
-
-# %% [markdown]
 # ## Settings
 #
-# The session seed and the duration are fixed: seed 0 and one orbit, 5700 s per case. The run
-# and worker counts come from the environment.
+# `MonteCarloSettings`, from `monte_carlo/monte_carlo_settings.py` beside this notebook, holds
+# what the run runs. The session seed and the duration are fixed: seed 0 and one orbit, 5700 s
+# per case. The run and worker counts come from the environment. `show`, from
+# `monte_carlo/figure_display.py`, displays a figure inline in a kernel; a script shows nothing,
+# and every figure is also saved to the report directory.
 
 # %%
-RUNS_VARIABLE = "GNC_MONTE_CARLO_RUNS"
-WORKERS_VARIABLE = "GNC_MONTE_CARLO_WORKERS"
 SEED = 0
 DURATION_S = 5700.0  # s, one orbit
 SCENARIO = "tests/sim/test_imu_dead_reckoning.py"
 
-
-def _positive_int(variable: str, default: int) -> int:
-    text = os.environ.get(variable)
-    if text is None:
-        return default
-    try:
-        value = int(text)
-    except ValueError:
-        value = 0
-    if value < 1:
-        raise ValueError(f"{variable} must be a positive integer, got {text!r}")
-    return value
-
-
-def monte_carlo_runs() -> int:
-    """The number of cases: `GNC_MONTE_CARLO_RUNS`, default 852.
-
-    Raises:
-        ValueError: naming the variable when it is set to anything but a positive integer.
-    """
-    return _positive_int(RUNS_VARIABLE, 852)
-
-
-def monte_carlo_workers() -> int:
-    """The number of pytest-xdist workers: `GNC_MONTE_CARLO_WORKERS`, default the CPU count.
-
-    Raises:
-        ValueError: naming the variable when it is set to anything but a positive integer.
-    """
-    return _positive_int(WORKERS_VARIABLE, os.cpu_count() or 1)
-
-
-def settings_line(runs: int, workers: int) -> str:
-    """The one line printed before the cases run: their count, the workers, the session seed
-    and the duration of each case."""
-    return f"monte carlo: {runs} runs, {workers} workers, seed {SEED}, {DURATION_S:g} s per case"
-
-
 if __name__ == "__main__":
-    runs_requested = monte_carlo_runs()
-    workers = monte_carlo_workers()
-    print(settings_line(runs_requested, workers))
+    settings = MonteCarloSettings.from_environment(seed=SEED, duration_s=DURATION_S)
+    print(settings.line())
 
 # %% [markdown]
 # ## Where the cases run
@@ -167,9 +111,9 @@ if __name__ == "__main__":
 
 
 # %%
-def run_cases(runs: int, workers: int, root: Path, run_dir: Path) -> None:
-    """Runs the scenario test's `runs` cases on `workers` workers into `run_dir`, streaming
-    pytest's output to `run_dir/pytest.log`, and prints its last lines.
+def run_cases(settings: MonteCarloSettings, root: Path, run_dir: Path) -> None:
+    """Runs the scenario test's cases as `settings` describes into `run_dir`, streaming pytest's
+    output to `run_dir/pytest.log`, and prints its last lines.
 
     Raises:
         RuntimeError: carrying those last lines when pytest exits nonzero.
@@ -177,8 +121,8 @@ def run_cases(runs: int, workers: int, root: Path, run_dir: Path) -> None:
     run_dir.mkdir(parents=True)
     command = [
         sys.executable, "-m", "pytest", SCENARIO, "-q", "-p", "no:cacheprovider",
-        "--sim-runs", str(runs), "-n", str(workers),
-        "--sim-seed", str(SEED), "--sim-duration-s", str(DURATION_S),
+        "--sim-runs", str(settings.runs), "-n", str(settings.workers),
+        "--sim-seed", str(settings.seed), "--sim-duration-s", str(settings.duration_s),
         "--sim-out", str(run_dir),
     ]  # fmt: skip
     log = run_dir / "pytest.log"
@@ -209,8 +153,8 @@ def load_requested(requested: int, run_dir: Path) -> list[Run]:
 
 
 if __name__ == "__main__":
-    run_cases(runs_requested, workers, root, run_dir)
-    runs = load_requested(runs_requested, run_dir)
+    run_cases(settings, root, run_dir)
+    runs = load_requested(settings.runs, run_dir)
     print(f"loaded {len(runs)} runs from {run_dir}")
 
 # %% [markdown]
@@ -297,6 +241,6 @@ if __name__ == "__main__":
 
 # %%
 if __name__ == "__main__":
-    print(f"summary: {len(runs)} of {runs_requested} requested runs loaded; report in {report_dir}")
+    print(f"summary: {len(runs)} of {settings.runs} requested runs loaded; report in {report_dir}")
     for name, r in ratios.items():
         print(f"{name}: worst ratio {r.max():.2f} against a bound factor of {BOUND_FACTOR:g}")

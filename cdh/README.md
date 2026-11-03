@@ -30,7 +30,7 @@ names, and `gnc_cdh.basilisk` re-exports `AlgorithmModule`, `InputMap`, `OutputM
 | `input_signal.py` | `InputSignal`: one sample field fed from one input role and signal |
 | `output_signal.py` | `OutputSignal`: one state field published as one output role and signal |
 | `algorithm_binding.py` | `AlgorithmBinding`: everything transport-neutral about hosting one algorithm |
-| `data_dictionary.py` | `BINDINGS`, `binding(name)`: the dictionary's entries |
+| `bindings.py` | `BINDINGS`, `binding(name)`: the dictionary's entries |
 | `basilisk/input_field.py` | `InputField`: where a Basilisk reader carries one input signal |
 | `basilisk/output_field.py` | `OutputField`: where a Basilisk message carries one output signal |
 | `basilisk/signals.py` | `INPUT_SIGNALS`, `OUTPUT_SIGNALS`: each (role, signal) resolved to a Basilisk message and payload field |
@@ -157,7 +157,7 @@ True
 
 ## Adding an algorithm
 
-1. Add an `AlgorithmBinding` to `BINDINGS` in `data_dictionary.py`, with one `InputSignal` per
+1. Add an `AlgorithmBinding` to `BINDINGS` in `bindings.py`, with one `InputSignal` per
    sample field and one `OutputSignal` per published state field.
 2. Reuse a signal where the quantity is the same. A new signal gets a row in the dictionary table
    above.
