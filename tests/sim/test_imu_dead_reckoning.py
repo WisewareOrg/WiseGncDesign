@@ -27,11 +27,11 @@ def estimate_fields(fsw: AlgorithmModule) -> dict[str, RecordedField]:
 
 
 def bound_inputs() -> dict[str, float]:
-    """The plant inputs of the accuracy bound, for this scenario and the campaign notebook
+    """The plant inputs of the accuracy bound, for this scenario and the Monte Carlo notebook
     alike: per-sample gyro and accelerometer noise and the IMU step from the nominal
     `ImuSpacecraftConfig`, and the central body's gravitational parameter (m^3/s^2) from
-    `ImuSpacecraft.mu`, all read without building a plant. The campaign disperses initial state
-    and biases only, so these are every case's values."""
+    `ImuSpacecraft.mu`, all read without building a plant. A Monte Carlo run disperses initial
+    state and biases only, so these are every case's values."""
     config = ImuSpacecraftConfig()
     return {
         "gyro_noise_std_rad_s": config.gyro_noise_std_rad_s,

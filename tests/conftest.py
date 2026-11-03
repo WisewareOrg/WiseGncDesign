@@ -1,7 +1,7 @@
-"""The campaign check: at the end of a session that ran scenario cases, the run files those
-cases recorded share one directory, which is `--sim-out` when that option was given; they are
-exactly the `run_*.h5` files in it; and that directory loads through
-`gnc_analysis.runs.load_campaign`.
+"""The session check: at the end of a session that ran scenario cases, the run files those
+cases recorded share one directory, the run directory, which is `--sim-out` when that option
+was given; they are exactly the `run_*.h5` files in it; and that directory loads through
+`gnc_analysis.runs.load_run_directory`.
 
 Each scenario case records its run file with `record_property("run_file", path)`. These hooks
 live in this file because the pytest-xdist controller loads it for every session under
@@ -26,11 +26,11 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """On the controller, checks the campaign directory against the recorded run files."""
+    """On the controller, checks the run directory against the recorded run files."""
     global _failed
     if hasattr(session.config, "workerinput") or not _recorded:
         return
-    from gnc_analysis.runs import RunDataError, load_campaign
+    from gnc_analysis.runs import RunDataError, load_run_directory
 
     recorded = {p.resolve() for p in _recorded}
     directories = sorted({p.parent for p in recorded})
@@ -49,7 +49,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         ]
     if not problems:
         try:
-            load_campaign(out_dir)
+            load_run_directory(out_dir)
         except RunDataError as exc:
             problems.append(str(exc))
 
@@ -58,12 +58,12 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
         _report.extend(f"FAILED: {problem}" for problem in problems)
     else:
-        _report.append(f"campaign check: {len(recorded)} runs loaded from {out_dir}")
+        _report.append(f"session check: {len(recorded)} run files loaded from {out_dir}")
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus: int, config: pytest.Config) -> None:
-    """Reports the campaign check's outcome in its own summary section."""
+    """Reports the session check's outcome in its own summary section."""
     if _report:
-        terminalreporter.section("campaign check", red=_failed, green=not _failed)
+        terminalreporter.section("session check", red=_failed, green=not _failed)
         for line in _report:
             terminalreporter.write_line(line)

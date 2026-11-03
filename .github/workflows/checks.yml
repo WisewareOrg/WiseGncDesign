@@ -43,16 +43,16 @@ jobs:
         with:
           version: "0.13.6"
       - run: uv sync --locked --group sim
-      # Every tier, with a two-case campaign written to one directory by two workers.
+      # Every tier, with two scenario cases written to one run directory by two workers.
       - name: pytest -n 2 --sim-runs 2
         shell: bash
         run: |
           status=0
-          uv run pytest -n 2 --sim-runs 2 --sim-out "$RUNNER_TEMP/campaign" > "$RUNNER_TEMP/pytest.log" 2>&1 || status=$?
+          uv run pytest -n 2 --sim-runs 2 --sim-out "$RUNNER_TEMP/monte_carlo" > "$RUNNER_TEMP/pytest.log" 2>&1 || status=$?
           cat "$RUNNER_TEMP/pytest.log"
           [ "$status" -eq 0 ] || exit "$status"
-          [ "$(grep -c '^campaign check: 2 runs loaded from ' "$RUNNER_TEMP/pytest.log")" -eq 1 ]
-      - run: uv run gnc-analyze "$RUNNER_TEMP/campaign" --out "$RUNNER_TEMP/report"
+          [ "$(grep -c '^session check: 2 run files loaded from ' "$RUNNER_TEMP/pytest.log")" -eq 1 ]
+      - run: uv run gnc-analyze "$RUNNER_TEMP/monte_carlo" --out "$RUNNER_TEMP/report"
 
   literate:
     name: literate
@@ -66,7 +66,7 @@ jobs:
           version: "0.13.6"
       - run: uv sync --locked --group sim
       # Literate documents: every algorithm module under algorithms/gnc_algorithms/ and every
-      # campaign document notebooks/*.py. jupytext --sync rewrites the stale half of each pair, so
+      # notebook document notebooks/*.py. jupytext --sync rewrites the stale half of each pair, so
       # a clean tree afterwards means every pair was in sync.
       - name: Sync every literate document; committed notebooks carry no outputs
         shell: bash
@@ -87,16 +87,16 @@ jobs:
             module=$(basename "$path" .py)
             [ "$module" = __init__ ] || uv run python -m "gnc_algorithms.$module"
           done
-      - name: Run every campaign document with GNC_CAMPAIGN_RUNS=2
+      - name: Run every notebook document with GNC_MONTE_CARLO_RUNS=2
         shell: bash
         env:
-          GNC_CAMPAIGN_RUNS: "2"
+          GNC_MONTE_CARLO_RUNS: "2"
         run: |
           shopt -s nullglob
           for path in notebooks/*.py; do
             status=0
-            uv run python "$path" > "$RUNNER_TEMP/campaign.log" 2>&1 || status=$?
-            cat "$RUNNER_TEMP/campaign.log"
+            uv run python "$path" > "$RUNNER_TEMP/document.log" 2>&1 || status=$?
+            cat "$RUNNER_TEMP/document.log"
             [ "$status" -eq 0 ] || exit "$status"
-            [ "$(grep -c '^campaign: 2 runs, ' "$RUNNER_TEMP/campaign.log")" -eq 1 ]
+            [ "$(grep -c '^monte carlo: 2 runs, ' "$RUNNER_TEMP/document.log")" -eq 1 ]
           done

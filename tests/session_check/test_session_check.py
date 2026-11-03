@@ -1,7 +1,7 @@
-"""The campaign check in `tests/conftest.py`, run by pytester in a tree laid out like this
-repository's, with its pytest options, under a bare `pytest -n 2`: it reports a loaded campaign,
-and fails naming a stale file, run files scattered over two directories, run files outside the
-requested `--sim-out`, or a run the loader rejects."""
+"""The session check in `tests/conftest.py`, run by pytester in a tree laid out like this
+repository's, with its pytest options, under a bare `pytest -n 2`: it reports a loaded run
+directory, and fails naming a stale file, run files scattered over two directories, run files
+outside the requested `--sim-out`, or a run the loader rejects."""
 
 import json
 import textwrap
@@ -12,10 +12,10 @@ import pytest
 
 pytest_plugins = ["pytester"]
 
-CONFTEST = Path(__file__).with_name("conftest.py")
-PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
+CONFTEST = Path(__file__).resolve().parents[1] / "conftest.py"
+PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 
-# Two scenario cases writing run files into $CAMPAIGN; $SCATTER sends case 1 to a sibling
+# Two scenario cases writing run files into $RUN_DIRECTORY; $SCATTER sends case 1 to a sibling
 # directory, and $BAD_T_S gives case 1 a longer t_s.
 STUB_SCENARIO = """
     import os
@@ -29,7 +29,7 @@ STUB_SCENARIO = """
 
     @pytest.mark.parametrize("case", [0, 1])
     def test_case(case, record_property):
-        directory = Path(os.environ["CAMPAIGN"])
+        directory = Path(os.environ["RUN_DIRECTORY"])
         if case == 1 and os.environ.get("SCATTER"):
             directory = directory.with_name("elsewhere")
         directory.mkdir(exist_ok=True)
@@ -53,7 +53,7 @@ SIM_OUT_PLUGIN = """
 
 
 @pytest.fixture
-def campaign(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> Path:
+def run_directory(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> Path:
     options = tomllib.loads(PYPROJECT.read_text())["tool"]["pytest"]["ini_options"]
     pytester.makepyprojecttoml(
         "[tool.pytest.ini_options]\n"
@@ -65,10 +65,10 @@ def campaign(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> Path
         textwrap.dedent(STUB_SCENARIO)
     )
     (pytester.path / "sim_out_plugin.py").write_text(textwrap.dedent(SIM_OUT_PLUGIN))
-    directory = pytester.path / "campaign"
+    directory = pytester.path / "runs"
     monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
     monkeypatch.setenv("PYTHONPATH", str(pytester.path))
-    monkeypatch.setenv("CAMPAIGN", str(directory))
+    monkeypatch.setenv("RUN_DIRECTORY", str(directory))
     return directory
 
 
@@ -78,16 +78,16 @@ def _run(pytester: pytest.Pytester, *args: str) -> pytest.RunResult:
     )
 
 
-def test_a_good_campaign_reports_its_runs(pytester, campaign):
+def test_a_good_run_directory_reports_its_runs(pytester, run_directory):
     result = _run(pytester)
 
     assert result.ret == 0
-    result.stdout.fnmatch_lines([f"campaign check: 2 runs loaded from {campaign}"])
+    result.stdout.fnmatch_lines([f"session check: 2 run files loaded from {run_directory}"])
 
 
-def test_a_stale_run_file_fails_the_session_by_name(pytester, campaign):
-    campaign.mkdir()
-    (campaign / "run_0099.h5").write_bytes(b"")
+def test_a_stale_run_file_fails_the_session_by_name(pytester, run_directory):
+    run_directory.mkdir()
+    (run_directory / "run_0099.h5").write_bytes(b"")
 
     result = _run(pytester)
 
@@ -95,7 +95,7 @@ def test_a_stale_run_file_fails_the_session_by_name(pytester, campaign):
     result.stdout.fnmatch_lines(["FAILED: present in * but written by no case: *run_0099.h5"])
 
 
-def test_run_files_in_two_directories_fail_the_session(pytester, campaign, monkeypatch):
+def test_run_files_in_two_directories_fail_the_session(pytester, run_directory, monkeypatch):
     monkeypatch.setenv("SCATTER", "1")
 
     result = _run(pytester)
@@ -104,23 +104,25 @@ def test_run_files_in_two_directories_fail_the_session(pytester, campaign, monke
     result.stdout.fnmatch_lines(["FAILED: run files written to 2 directories: *"])
 
 
-def test_run_files_outside_the_requested_sim_out_fail_the_session(pytester, campaign):
-    requested = campaign.with_name("requested")
+def test_run_files_outside_the_requested_sim_out_fail_the_session(pytester, run_directory):
+    requested = run_directory.with_name("requested")
 
     result = _run(pytester, f"--sim-out={requested}")
 
     assert result.ret == pytest.ExitCode.TESTS_FAILED
-    result.stdout.fnmatch_lines([f"FAILED: run files written to {campaign}, not to --sim-out *"])
+    result.stdout.fnmatch_lines(
+        [f"FAILED: run files written to {run_directory}, not to --sim-out *"]
+    )
 
 
-def test_the_requested_sim_out_passes_when_the_cases_wrote_there(pytester, campaign):
-    result = _run(pytester, f"--sim-out={campaign}")
+def test_the_requested_sim_out_passes_when_the_cases_wrote_there(pytester, run_directory):
+    result = _run(pytester, f"--sim-out={run_directory}")
 
     assert result.ret == 0
-    result.stdout.fnmatch_lines([f"campaign check: 2 runs loaded from {campaign}"])
+    result.stdout.fnmatch_lines([f"session check: 2 run files loaded from {run_directory}"])
 
 
-def test_a_campaign_the_loader_rejects_fails_the_session(pytester, campaign, monkeypatch):
+def test_a_run_directory_the_loader_rejects_fails_the_session(pytester, run_directory, monkeypatch):
     monkeypatch.setenv("BAD_T_S", "1")
 
     result = _run(pytester)

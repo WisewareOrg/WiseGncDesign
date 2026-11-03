@@ -1,6 +1,6 @@
-"""The campaign document `notebooks/imu_dead_reckoning_campaign.py`, imported without running:
-importing it runs nothing, its settings come from the two environment variables, it finds the
-repository root, and it refuses a campaign holding other than the requested run count."""
+"""The Monte Carlo document `notebooks/imu_dead_reckoning_monte_carlo.py`, imported without
+running: importing it runs nothing, its counts come from its two environment variables, it finds
+the repository root, and it refuses a run directory holding other than the requested run count."""
 
 import importlib.util
 import subprocess
@@ -10,7 +10,8 @@ from types import ModuleType
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-DOCUMENT = ROOT / "notebooks" / "imu_dead_reckoning_campaign.py"
+DOCUMENT = ROOT / "notebooks" / "imu_dead_reckoning_monte_carlo.py"
+VARIABLES = ["GNC_MONTE_CARLO_RUNS", "GNC_MONTE_CARLO_WORKERS"]
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ def document(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ModuleType:
 
     monkeypatch.setattr(subprocess, "run", refuse)
     monkeypatch.chdir(tmp_path)
-    spec = importlib.util.spec_from_file_location("campaign_document", DOCUMENT)
+    spec = importlib.util.spec_from_file_location("monte_carlo_document", DOCUMENT)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -35,36 +36,40 @@ def test_importing_the_document_runs_nothing(document, tmp_path):
 
 
 def test_the_counts_default_to_852_runs_and_the_cpu_count(document, monkeypatch):
-    monkeypatch.delenv("GNC_CAMPAIGN_RUNS", raising=False)
-    monkeypatch.delenv("GNC_CAMPAIGN_WORKERS", raising=False)
+    for variable in VARIABLES:
+        monkeypatch.delenv(variable, raising=False)
     monkeypatch.setattr(document.os, "cpu_count", lambda: 6)
 
-    settings = document.campaign_settings()
+    runs, workers = document.monte_carlo_runs(), document.monte_carlo_workers()
 
-    assert (settings.runs, settings.workers, settings.seed, settings.duration_s) == (
-        852, 6, 0, 5700.0
-    )  # fmt: skip
-    assert settings.line() == "campaign: 852 runs, 6 workers, seed 0, 5700 s per case"
-
-
-def test_the_environment_sets_both_counts(document, monkeypatch):
-    monkeypatch.setenv("GNC_CAMPAIGN_RUNS", "2")
-    monkeypatch.setenv("GNC_CAMPAIGN_WORKERS", "3")
-
-    assert document.campaign_settings().line() == (
-        "campaign: 2 runs, 3 workers, seed 0, 5700 s per case"
+    assert (runs, workers) == (852, 6)
+    assert document.settings_line(runs, workers) == (
+        "monte carlo: 852 runs, 6 workers, seed 0, 5700 s per case"
     )
 
 
-@pytest.mark.parametrize("variable", ["GNC_CAMPAIGN_RUNS", "GNC_CAMPAIGN_WORKERS"])
+def test_the_environment_sets_both_counts(document, monkeypatch):
+    monkeypatch.setenv("GNC_MONTE_CARLO_RUNS", "2")
+    monkeypatch.setenv("GNC_MONTE_CARLO_WORKERS", "3")
+
+    assert (document.monte_carlo_runs(), document.monte_carlo_workers()) == (2, 3)
+
+
+@pytest.mark.parametrize(
+    ("variable", "reader"),
+    [
+        ("GNC_MONTE_CARLO_RUNS", "monte_carlo_runs"),
+        ("GNC_MONTE_CARLO_WORKERS", "monte_carlo_workers"),
+    ],
+)
 @pytest.mark.parametrize("value", ["0", "-1", "two", ""])
 def test_a_count_that_is_not_a_positive_integer_is_refused_by_name(
-    document, monkeypatch, variable, value
+    document, monkeypatch, variable, reader, value
 ):
     monkeypatch.setenv(variable, value)
 
     with pytest.raises(ValueError, match=variable):
-        document.campaign_settings()
+        getattr(document, reader)()
 
 
 def test_the_repository_root_is_found_from_the_notebooks_directory(document):
@@ -76,9 +81,10 @@ def test_a_directory_outside_a_checkout_is_refused(document, tmp_path):
         document.repository_root(tmp_path)
 
 
-def test_a_campaign_holding_fewer_runs_than_requested_is_refused(document, monkeypatch, tmp_path):
-    monkeypatch.setattr(document, "load_campaign", lambda directory: ["one run"])
-    settings = document.CampaignSettings(runs=2, workers=1, seed=0, duration_s=5700.0)
+def test_a_run_directory_holding_fewer_runs_than_requested_is_refused(
+    document, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(document, "load_run_directory", lambda directory: ["one run"])
 
     with pytest.raises(RuntimeError, match="holds 1 runs; 2 were requested"):
-        document.load_requested(settings, tmp_path)
+        document.load_requested(2, tmp_path)
