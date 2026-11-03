@@ -123,30 +123,32 @@ The function refuses these, each by name:
 ## Example: boot the dead reckoner against a plant
 
 This example runs in a notebook or at a prompt, with the `sim` group installed
-(`uv sync --group sim`). It builds WiseDynamics' IMU spacecraft at its nominal configuration and
-boots the dead reckoner on it. It then runs one minute, and compares the estimate with the plant's
-truth:
+(`uv sync --group sim`). It adds WiseDynamics' IMU spacecraft at its nominal configuration to the
+`Leo500` scenario and boots the dead reckoner on it. It then runs one minute, and compares the
+estimate with the vehicle's truth:
 
 ```python
 >>> import numpy as np
->>> from wise_dynamics.basilisk import ImuSpacecraft, run_case
+>>> from wise_dynamics.basilisk import ImuSpacecraft, Leo500
 >>> from gnc_cdh.basilisk import make_fsw
->>> plant = ImuSpacecraft()
+>>> vehicle = ImuSpacecraft()
+>>> scenario = Leo500()
+>>> scenario.add(vehicle)
 >>> fsw = make_fsw(
 ...     "imu_dead_reckoning",
-...     inputs=plant.readers(),
-...     initial_state=plant.initial_state,
+...     inputs=vehicle.readers(),
+...     initial_state=scenario.initial_state,
 ...     mountings={"imu": np.eye(3)},
-...     mu=plant.mu,
+...     mu=Leo500.mu_m3_s2["earth"],
 ... )
->>> recording = run_case(plant, fsw, fsw_outputs=fsw.output_messages, duration_s=60.0)
+>>> datasets = scenario.run(fsw, fsw_fields={}, duration_s=60.0)
 >>> sorted(fsw.output_messages)
 ['nav_att', 'nav_trans']
 >>> estimate = fsw.algorithm.state
 >>> estimate.t
 60.0
->>> truth_r_N = np.array(recording["truth"].r_BN_N[-1])
->>> bool(np.linalg.norm(estimate.r_N - truth_r_N) < 1.0)
+>>> truth_r_N, _ = datasets["truth/r_N"]
+>>> bool(np.linalg.norm(estimate.r_N - truth_r_N[-1]) < 1.0)
 True
 
 ```

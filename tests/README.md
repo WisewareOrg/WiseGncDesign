@@ -26,7 +26,8 @@ enough, and this repository declares nothing to load it. The plugin's options:
 | `--sim-out DIR` | run directory receiving `run_<NNNN>.h5` (default: a fresh temporary directory) |
 | `--sim-seed S` | session seed; each case draws from its own child stream of it |
 | `--sim-duration-s T` | simulated duration of each case, in s |
-| `--sim-spacecraft NAME` | the plant to build |
+| `--sim-scenario NAME` | the scenario to run |
+| `--sim-vehicle NAME` | the vehicle to add to it |
 
 Its fixtures, used by `tests/sim/test_imu_dead_reckoning.py`:
 
@@ -34,9 +35,10 @@ Its fixtures, used by `tests/sim/test_imu_dead_reckoning.py`:
 | --- | --- |
 | `sim_case_index` | this case's index |
 | `sim_duration_s` | the case's simulated duration, in s, from `--sim-duration-s` |
-| `sim_draws` | this case's dispersed plant configuration values |
-| `sim_plant` | the plant built with those draws and its own noise seed |
-| `sim_run_writer(datasets, extra_attrs=None)` | writes this case's run file and returns its path |
+| `sim_draws` | this case's draws, the scenario's then the vehicle's |
+| `sim_vehicle` | the vehicle built with its draws and its own noise seed |
+| `sim_scenario` | the scenario dispersed with its draws, holding `sim_vehicle` |
+| `sim_run_file(datasets, attrs=None)` | writes this case's run file and returns its path |
 
 WiseDynamics documents them in full in its `wise_dynamics/basilisk/README.md`.
 

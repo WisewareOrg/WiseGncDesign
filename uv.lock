@@ -1945,7 +1945,7 @@ wheels = [
 [[package]]
 name = "wise-dynamics"
 version = "0.1.0"
-source = { git = "https://github.com/WisewareOrg/WiseDynamics?rev=0b28a4213a199f476cd91de5914f75332ee6a4e8#0b28a4213a199f476cd91de5914f75332ee6a4e8" }
+source = { git = "https://github.com/WisewareOrg/WiseDynamics?rev=7d34596a13430f93c5a21ebfb3656ed5864b96ae#7d34596a13430f93c5a21ebfb3656ed5864b96ae" }
 dependencies = [
     { name = "bsk", extra = ["all"] },
     { name = "h5py" },
@@ -2001,7 +2001,7 @@ dev = [
     { name = "ruff", specifier = ">=0.17.0" },
     { name = "wise-gnc-design", extras = ["analysis", "basilisk"] },
 ]
-sim = [{ name = "wise-dynamics", git = "https://github.com/WisewareOrg/WiseDynamics?rev=0b28a4213a199f476cd91de5914f75332ee6a4e8" }]
+sim = [{ name = "wise-dynamics", git = "https://github.com/WisewareOrg/WiseDynamics?rev=7d34596a13430f93c5a21ebfb3656ed5864b96ae" }]
 
 [[package]]
 name = "xyzservices"

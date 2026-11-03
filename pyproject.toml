@@ -29,7 +29,7 @@ sim = ["wise-dynamics"]
 
 [tool.uv.sources]
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "0b28a4213a199f476cd91de5914f75332ee6a4e8" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "7d34596a13430f93c5a21ebfb3656ed5864b96ae" }
 
 [build-system]
 requires = ["hatchling"]
