@@ -27,6 +27,7 @@ dev = [
     "pydoclint>=0.12.0",
 ]
 sim = ["wise-dynamics"]
+notebooks = ["ipykernel>=6.29", "jupyterlab>=4.4", "jupytext>=1.17"]
 
 [tool.uv.sources]
 # The WiseDynamics commit this repository's scenario tests verify against.

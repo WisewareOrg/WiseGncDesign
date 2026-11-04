@@ -3,6 +3,10 @@
 #   jupytext:
 #     formats: ipynb,py:percent
 #     notebook_metadata_filter: -jupytext.text_representation
+#   kernelspec:
+#     display_name: Python 3 (ipykernel)
+#     language: python
+#     name: python3
 # ---
 
 # %% [markdown]
