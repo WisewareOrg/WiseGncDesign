@@ -53,6 +53,12 @@ def make_fsw(
     required = [n for n, p in parameters.items() if p.default is inspect.Parameter.empty]
 
     def init_from() -> dict[str, Any]:
+        """The constructor arguments other than `t0`: `initial_state()` and `params` merged, cut to
+        the constructor's parameters.
+
+        Raises:
+            ValueError: when they share a key or together miss a required parameter.
+        """
         state = dict(initial_state())
         shared = sorted(set(state) & set(params))
         if shared:

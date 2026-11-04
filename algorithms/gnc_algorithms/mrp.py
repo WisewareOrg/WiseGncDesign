@@ -16,6 +16,7 @@ __all__ = ["B", "dcm_NB", "shadow"]
 
 @njit(cache=True)
 def _skew(v: np.ndarray) -> np.ndarray:
+    """The (3, 3) cross-product matrix [~v] of a (3,) array `v`, so that [~v] u = v x u."""
     return np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
 
 

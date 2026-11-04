@@ -35,6 +35,7 @@ from pathlib import Path
 
 import numpy as np
 from matplotlib.figure import Figure
+from scipy.spatial.transform import Rotation
 
 from gnc_algorithms.imu_dead_reckoning import ImuDeadReckoner
 from gnc_algorithms.mrp import dcm_NB
@@ -65,17 +66,6 @@ _AWAY_FROM_ORIGIN = np.array([7.0e6, 0.0, 0.0])
 _IDENTITY_MOUNTING = np.eye(3)
 
 
-def _skew(v: np.ndarray) -> np.ndarray:
-    """The cross-product matrix [~v]."""
-    return np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
-
-
-def _dcm_BN_from_axis_angle(axis: np.ndarray, theta: float) -> np.ndarray:
-    """[BN] for B rotated from N by `theta` about unit `axis` (Schaub & Junkins eq. 3.62)."""
-    cos_t, sin_t = np.cos(theta), np.sin(theta)
-    return cos_t * np.eye(3) + (1.0 - cos_t) * np.outer(axis, axis) - sin_t * _skew(axis)
-
-
 def _propagate(
     omega_P: np.ndarray,
     accel_P: np.ndarray,
@@ -86,6 +76,21 @@ def _propagate(
     r0: np.ndarray = _AWAY_FROM_ORIGIN,
     v0: np.ndarray = _ZERO3,
 ) -> ImuDeadReckoner:
+    """A dead reckoner, mounted at identity, stepped `n_steps` equal steps to `total_t`.
+
+    Args:
+        omega_P: (3,) rad/s, the gyro reading held across every step, in the IMU platform frame.
+        accel_P: (3,) m/s^2, the accelerometer reading held across every step, in that frame.
+        total_t: s, the time it is stepped to from t = 0.
+        n_steps: the number of equal steps.
+        sigma0: (3,) MRP, the initial attitude of the body frame with respect to N.
+        mu: m^3/s^2, the gravitational parameter.
+        r0: (3,) m, the initial inertial position in N.
+        v0: (3,) m/s, the initial inertial velocity in N.
+
+    Returns:
+        The stepped `ImuDeadReckoner`, holding `t`, `sigma_BN`, `r_N` and `v_N`.
+    """
     reckoner = ImuDeadReckoner(sigma0, r0, v0, t0=0.0, mu=mu, dcm_PB=_IDENTITY_MOUNTING)
     dt = total_t / n_steps
     for i in range(1, n_steps + 1):
@@ -103,6 +108,7 @@ def _propagate(
 
 # %%
 def check_constant_rate_matches_analytic_mrp() -> None:
+    """A 0.5 rad/s rate about body x for 1 s lands within 1e-6 of sigma = tan(theta/4) x."""
     omega = 0.5  # rad/s
     axis = np.array([1.0, 0.0, 0.0])
     total_t = 1.0
@@ -120,11 +126,13 @@ def check_constant_rate_matches_analytic_mrp() -> None:
 #
 # $\tan(\theta/4)$ exceeds unit magnitude once $\theta > 180°$; the estimator switches to the
 # shadow set $-\\sigma/|\\sigma|^2$ there, keeping $|\sigma| \le 1$ while representing
-# the same attitude — checked against the DCM of an independent axis-angle formula.
+# the same attitude — checked against SciPy's DCM for that axis and angle, independent of `mrp`.
 
 
 # %%
 def check_rotation_past_180_degrees_switches_to_shadow_set() -> None:
+    """A 1 rad/s rate about body x for 1.2 pi s keeps |sigma| <= 1, and its DCM matches SciPy's
+    for that rotation within 1e-5."""
     omega = 1.0  # rad/s
     axis = np.array([1.0, 0.0, 0.0])
     total_t = np.pi * 1.2  # theta = 1.2 pi > pi
@@ -136,7 +144,7 @@ def check_rotation_past_180_degrees_switches_to_shadow_set() -> None:
         raise AssertionError(f"sigma_BN has norm {norm} > 1: no switch to the shadow set")
     np.testing.assert_allclose(
         dcm_NB(state.sigma_BN).T,
-        _dcm_BN_from_axis_angle(axis, omega * total_t),
+        Rotation.from_rotvec(omega * total_t * axis).as_matrix().T,
         atol=1e-5,
         err_msg="shadow-set DCM differs from the axis-angle DCM",
     )
@@ -152,6 +160,8 @@ def check_rotation_past_180_degrees_switches_to_shadow_set() -> None:
 
 # %%
 def check_circular_orbit_matches_analytic_two_body_position() -> None:
+    """Gravity alone, at 1 s steps over a quarter of a 500 km circular orbit, lands within 1 m of
+    the analytic position in N."""
     mu = 3.986004418e14  # m^3/s^2, Earth
     radius = 6_871_000.0  # m, about 500 km altitude
     n = np.sqrt(mu / radius**3)  # rad/s, mean motion
@@ -185,6 +195,8 @@ def check_circular_orbit_matches_analytic_two_body_position() -> None:
 
 # %%
 def check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
+    """One 1e-5 s step at a 0.3 rad/s rate about z from sigma = (0.1, 0, 0) matches
+    dC_BN/dt = -[omega x] C_BN within 1e-3 per entry."""
     sigma0 = np.array([0.1, 0.0, 0.0])
     omega = np.array([0.0, 0.0, 0.3])
     reckoner = ImuDeadReckoner(
@@ -198,7 +210,7 @@ def check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
     c1 = dcm_NB(state["sigma_BN"]).T
     np.testing.assert_allclose(
         (c1 - c0) / dt,
-        -_skew(omega) @ c0,
+        -np.cross(omega[:, None], c0, axis=0),
         atol=1e-3,
         err_msg="MRP kinematics differ from the DCM derivative identity",
     )

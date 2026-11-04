@@ -19,12 +19,15 @@ class StubAlgorithm:
     STEPPED = np.array([1.0, 2.0, 3.0])
 
     def __init__(self, t0: float, value0: np.ndarray) -> None:
+        """Starts at `t0` (s) with `value` = `value0` ((3,)) and `other` = -`value0`."""
         self.steps: list[dict] = []
         self.t = t0
         self.value = np.asarray(value0)
         self.other = -np.asarray(value0)
 
     def step(self, t: float, a: np.ndarray, b: np.ndarray) -> dict[str, np.ndarray]:
+        """Records `t` (s), `a` and `b` ((3,) each), steps to `STEPPED`, and returns `value` and
+        `other` as named arrays."""
         self.steps.append({"t": t, "a": a, "b": b})
         self.t, self.value, self.other = t, self.STEPPED, -self.STEPPED
         return {"value": self.value, "other": self.other}
@@ -39,6 +42,7 @@ BINDING = Binding(
 
 
 def _imu_message(angvel=(0.0, 0.0, 0.0)) -> messaging.IMUSensorMsg:
+    """A written `IMUSensorMsg` whose `AngVelPlatform` is `angvel` (rad/s, (3,))."""
     msg = messaging.IMUSensorMsg()
     payload = messaging.IMUSensorMsgPayload()
     payload.AngVelPlatform = list(angvel)
@@ -47,6 +51,7 @@ def _imu_message(angvel=(0.0, 0.0, 0.0)) -> messaging.IMUSensorMsg:
 
 
 def _nav_message(sigma=(0.0, 0.0, 0.0)) -> messaging.NavAttMsg:
+    """A written `NavAttMsg` whose `sigma_BN` is `sigma` (MRP, (3,))."""
     msg = messaging.NavAttMsg()
     payload = messaging.NavAttMsgPayload()
     payload.sigma_BN = list(sigma)
@@ -64,6 +69,8 @@ def _module(**overrides) -> AlgorithmModule:
 
 
 def _subscribed(module: AlgorithmModule, angvel=(1.0, 2.0, 3.0), sigma=(0.4, 0.5, 0.6)):
+    """Subscribes `module`'s `imu` and `nav` readers to messages carrying `angvel` (rad/s,
+    (3,)) and `sigma` (MRP, (3,)), and returns the messages so they outlive the call."""
     imu, nav = _imu_message(angvel), _nav_message(sigma)
     module.inputs["imu"].subscribeTo(imu)
     module.inputs["nav"].subscribeTo(nav)
@@ -71,6 +78,7 @@ def _subscribed(module: AlgorithmModule, angvel=(1.0, 2.0, 3.0), sigma=(0.4, 0.5
 
 
 def test_each_message_field_reaches_its_step_keyword():
+    """A step receives `t` in s and each message field under the keyword the binding names."""
     module = _module()
     _messages = _subscribed(module)
 
@@ -84,6 +92,7 @@ def test_each_message_field_reaches_its_step_keyword():
 
 
 def test_reset_writes_the_initial_state_to_every_output():
+    """`Reset` writes the algorithm's initial `value` and `other` to their messages."""
     module = _module()
     _messages = _subscribed(module)
 
@@ -94,6 +103,7 @@ def test_reset_writes_the_initial_state_to_every_output():
 
 
 def test_a_step_writes_the_new_state_to_every_output():
+    """A step writes the arrays `step` returns to their messages."""
     module = _module()
     _messages = _subscribed(module)
 
@@ -109,6 +119,7 @@ def test_a_step_writes_the_new_state_to_every_output():
 
 
 def test_the_call_at_the_reset_time_does_not_step():
+    """The `UpdateState` Basilisk makes at the reset time leaves the state as built."""
     module = _module()
     _messages = _subscribed(module)
 
@@ -138,11 +149,14 @@ def test_the_call_at_the_reset_time_does_not_step():
     ],
 )
 def test_construction_names_what_the_binding_gets_wrong(overrides, message):
+    """Construction refuses a binding that names the wrong keywords, role, message or field, with
+    `message` matching the error."""
     with pytest.raises(ValueError, match=message):
         _module(**overrides)
 
 
 def test_the_message_tables_are_read_only():
+    """Neither the input readers nor the output messages can be replaced."""
     module = _module()
 
     with pytest.raises(TypeError):
@@ -152,6 +166,7 @@ def test_the_message_tables_are_read_only():
 
 
 def test_the_algorithm_is_unavailable_before_reset():
+    """Before `Reset`, the algorithm and a step both raise."""
     module = _module()
 
     with pytest.raises(RuntimeError, match="not been Reset"):
@@ -161,6 +176,7 @@ def test_the_algorithm_is_unavailable_before_reset():
 
 
 def test_reset_names_an_unsubscribed_input():
+    """`Reset` names the input reader that is not subscribed."""
     module = _module()
     imu = _imu_message()
     module.inputs["imu"].subscribeTo(imu)
@@ -170,6 +186,7 @@ def test_reset_names_an_unsubscribed_input():
 
 
 def test_a_step_names_an_input_never_written():
+    """A step names the subscribed input that has never been written."""
     module = _module()
     imu, nav = _imu_message(), messaging.NavAttMsg()  # nav subscribed, never written
     module.inputs["imu"].subscribeTo(imu)
@@ -181,6 +198,7 @@ def test_a_step_names_an_input_never_written():
 
 
 def test_reset_names_an_output_the_algorithm_holds_no_attribute_for():
+    """`Reset` names an output the built algorithm holds no attribute for."""
     module = _module(outputs={"velocity": ("att", "sigma_BN")})
     _messages = _subscribed(module)
 

@@ -53,6 +53,8 @@ def dead_reckoner(scenario: Leo500) -> AlgorithmModule:
 
 
 def test_the_estimate_is_written_at_whole_seconds():
+    """Run 3.5 s in Leo500, the estimate is last written at 3 s: the module runs at its 1 s
+    `period_s`, not at the dynamics step."""
     scenario = Leo500()
     fsw = dead_reckoner(scenario)
     estimate = messaging.NavAttMsgReader()
@@ -65,6 +67,8 @@ def test_the_estimate_is_written_at_whole_seconds():
 
 
 def test_imu_dead_reckoning_case(sim_scenario, sim_duration_s, sim_run_file):
+    """One Monte Carlo case: the dead reckoner on `sim_scenario` for `sim_duration_s` (s), its run
+    file written by `sim_run_file`, every error within its bound."""
     fsw = dead_reckoner(sim_scenario)
     datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
     path = sim_run_file(datasets, {"versions_wise_gnc_design": version("wise-gnc-design")})

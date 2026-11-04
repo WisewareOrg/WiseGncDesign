@@ -82,6 +82,15 @@ __all__ = ["ImuDeadReckoner"]
 # %%
 @njit(cache=True)
 def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
+    """Point-mass gravity's magnitude term, `mu r / |r|^3`, compiled with numba.
+
+    Args:
+        r: (3,) m, position in the inertial frame N.
+        mu: m^3/s^2, the central body's gravitational parameter.
+
+    Returns:
+        (3,) m/s^2 in N, the acceleration's negative: the caller subtracts it.
+    """
     r_norm = float(np.linalg.norm(r))
     return mu * r / r_norm**3
 
@@ -97,15 +106,33 @@ def _step(
     dt: float,
     mu: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """One RK4 step of (sigma, r, v) over `dt`, the readings rotated into B by `dcm_BP` = [PB]^T
-    and held across it, with sigma switched to its shadow set when |sigma| > 1. Compiled with
-    numba on its first call and cached on disk."""
+    """One RK4 step of the state over `dt`, compiled with numba on its first call and cached.
+
+    The readings are rotated into the body frame B and held across the step; sigma switches to its
+    shadow set when |sigma| > 1 after it.
+
+    Args:
+        sigma: (3,) MRP of B with respect to the inertial frame N.
+        r: (3,) m, inertial position in N.
+        v: (3,) m/s, inertial velocity in N.
+        omega_P: (3,) rad/s, the gyro reading, rate of B with respect to N in the IMU platform
+            frame P.
+        accel_P: (3,) m/s^2, the accelerometer reading, non-gravitational acceleration in P.
+        dcm_BP: (3, 3) [BP] = [PB]^T, rotating a P-frame vector into B.
+        dt: s, the step.
+        mu: m^3/s^2, the central body's gravitational parameter.
+
+    Returns:
+        The stepped sigma (MRP, |sigma| <= 1), r (m, in N) and v (m/s, in N), each (3,).
+    """
     omega = dcm_BP @ omega_P
     accel = dcm_BP @ accel_P
 
     def derivs(
         sigma: np.ndarray, r: np.ndarray, v: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The state's time derivative at sigma (MRP), r (m, in N) and v (m/s, in N), the
+        readings held: dsigma/dt (1/s), dr/dt (m/s, in N) and dv/dt (m/s^2, in N)."""
         sigma_dot = 0.25 * B(sigma) @ omega
         r_dot = v
         v_dot = dcm_NB(sigma) @ accel - _gravity(r, mu)
@@ -122,29 +149,6 @@ def _step(
     if np.linalg.norm(sigma_new) > 1.0:
         sigma_new = shadow(sigma_new)
     return sigma_new, r_new, v_new
-
-
-def _frozen(value: np.ndarray) -> np.ndarray:
-    value.setflags(write=False)
-    return value
-
-
-def _vector3(name: str, value: np.ndarray) -> np.ndarray:
-    array = np.array(value, dtype=float)
-    if array.shape != (3,) or not np.isfinite(array).all():
-        raise ValueError(f"{name} must be a finite 3-vector, got {value!r}")
-    return _frozen(array)
-
-
-def _rotation(name: str, value: np.ndarray) -> np.ndarray:
-    array = np.array(value, dtype=float)
-    if (
-        array.shape != (3, 3)
-        or not np.allclose(array @ array.T, np.eye(3), atol=1e-9)
-        or not np.isclose(np.linalg.det(array), 1.0, atol=1e-9)
-    ):
-        raise ValueError(f"{name} is not a proper rotation (3, 3) DCM: {value!r}")
-    return array
 
 
 # %% [markdown]
@@ -175,7 +179,7 @@ class ImuDeadReckoner:
         v_N: (3,) m/s, inertial velocity, read-only.
 
     Raises:
-        ValueError: when a vector is not a finite 3-vector, `t0` is not finite, `mu` is not
+        ValueError: when a vector is not a finite (3,) array, `t0` is not finite, `mu` is not
             finite and >= 0, or `dcm_PB` is not a proper rotation.
     """
 
@@ -188,16 +192,36 @@ class ImuDeadReckoner:
         mu: float,
         dcm_PB: np.ndarray,
     ) -> None:
+        """Checks and holds the initial state, `mu` and the mounting; the class docstring gives
+        each argument's units and frame.
+
+        Raises:
+            ValueError: as the class docstring states.
+        """
         if not np.isfinite(t0):
             raise ValueError(f"t0 must be finite, got {t0!r}")
         if not (np.isfinite(mu) and mu >= 0.0):
             raise ValueError(f"mu must be finite and >= 0, got {mu!r}")
+        initial = {
+            "sigma0_BN": np.array(sigma0_BN, dtype=float),
+            "r0_N": np.array(r0_N, dtype=float),
+            "v0_N": np.array(v0_N, dtype=float),
+        }
+        for name, value in initial.items():
+            if value.shape != (3,) or not np.isfinite(value).all():
+                raise ValueError(f"{name} must be a finite (3,) array, got {value!r}")
+            value.setflags(write=False)
+        mounting = np.array(dcm_PB, dtype=float)
+        if (
+            mounting.shape != (3, 3)
+            or not np.allclose(mounting @ mounting.T, np.eye(3), atol=1e-9)
+            or not np.isclose(np.linalg.det(mounting), 1.0, atol=1e-9)
+        ):
+            raise ValueError(f"dcm_PB is not a proper rotation (3, 3) DCM: {dcm_PB!r}")
         self._mu = float(mu)
-        self._dcm_BP = np.ascontiguousarray(_rotation("dcm_PB", dcm_PB).T)
+        self._dcm_BP = np.ascontiguousarray(mounting.T)
         self.t = float(t0)
-        self.sigma_BN = _vector3("sigma0_BN", sigma0_BN)
-        self.r_N = _vector3("r0_N", r0_N)
-        self.v_N = _vector3("v0_N", v0_N)
+        self.sigma_BN, self.r_N, self.v_N = initial.values()
 
     def step(self, t: float, omega_P: np.ndarray, accel_P: np.ndarray) -> dict[str, np.ndarray]:
         """Advances the state to `t` by one RK4 step and returns it as `sigma_BN`, `r_N` and `v_N`.
@@ -205,19 +229,43 @@ class ImuDeadReckoner:
         Over `dt = t - self.t`, with the readings rotated into B and held constant:
         dsigma/dt = 1/4 B(sigma) omega_B; dr/dt = v; dv/dt = dcm_NB(sigma) accel_B - mu r/|r|^3.
 
+        Args:
+            t: s, the reading's time, after `self.t`.
+            omega_P: (3,) rad/s, the gyro reading, rate of B with respect to N in the IMU
+                platform frame P.
+            accel_P: (3,) m/s^2, the accelerometer reading, non-gravitational acceleration in P.
+
+        Returns:
+            `sigma_BN` (MRP, |sigma| <= 1), `r_N` (m, in N) and `v_N` (m/s, in N), each a
+            read-only (3,) array, the same arrays the estimator holds.
+
         Raises:
             ValueError: when `dt` is not > 0 (including NaN), or `omega_P` or `accel_P` is not a
-                finite 3-vector; the state is left unchanged.
+                finite (3,) array; the state is left unchanged.
         """
         dt = t - self.t
         if not dt > 0.0:
             raise ValueError(f"dt must be > 0, got {dt}")
-        omega = _vector3("omega_P", omega_P)
-        accel = _vector3("accel_P", accel_P)
+        readings = {
+            "omega_P": np.array(omega_P, dtype=float),
+            "accel_P": np.array(accel_P, dtype=float),
+        }
+        for name, value in readings.items():
+            if value.shape != (3,) or not np.isfinite(value).all():
+                raise ValueError(f"{name} must be a finite (3,) array, got {value!r}")
 
-        sigma_new, r_new, v_new = _step(
-            self.sigma_BN, self.r_N, self.v_N, omega, accel, self._dcm_BP, dt, self._mu
+        stepped = _step(
+            self.sigma_BN,
+            self.r_N,
+            self.v_N,
+            readings["omega_P"],
+            readings["accel_P"],
+            self._dcm_BP,
+            dt,
+            self._mu,
         )
+        for value in stepped:
+            value.setflags(write=False)
         self.t = float(t)
-        self.sigma_BN, self.r_N, self.v_N = _frozen(sigma_new), _frozen(r_new), _frozen(v_new)
+        self.sigma_BN, self.r_N, self.v_N = stepped
         return {"sigma_BN": self.sigma_BN, "r_N": self.r_N, "v_N": self.v_N}

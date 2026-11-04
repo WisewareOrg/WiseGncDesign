@@ -49,6 +49,12 @@ class AlgorithmModule(sysModel.SysModel):
         inputs: Mapping[str, Any],
         init_from: Callable[[], Mapping[str, Any]],
     ) -> None:
+        """Checks the binding against `inputs` and builds the output messages and the copy plan;
+        the class docstring gives each argument.
+
+        Raises:
+            ValueError: as the class docstring states.
+        """
         super().__init__()
         self._binding = binding
         self._inputs = MappingProxyType(dict(inputs))
@@ -91,6 +97,13 @@ class AlgorithmModule(sysModel.SysModel):
         return self._algorithm
 
     def _validate(self) -> None:
+        """Checks that the binding's inputs name exactly `step`'s keywords, that each reads a role
+        present in `inputs` and a field its message has, and that each output writes a field of a
+        message the binding declares.
+
+        Raises:
+            ValueError: naming the keyword, role, message or message field at fault.
+        """
         algorithm = self._binding.algorithm
         keywords = set(inspect.signature(algorithm.step).parameters) - {"self", "t"}
         named = sorted(self._binding.inputs)
@@ -160,6 +173,12 @@ class AlgorithmModule(sysModel.SysModel):
         self._write_outputs(algorithm.step(t=t, **arrays), CurrentSimNanos)
 
     def _write_outputs(self, values: Mapping[str, Any], CurrentSimNanos: int) -> None:
+        """Copies each output's array into its message field and writes every output message.
+
+        Args:
+            values: output name to its array, as the binding's `outputs` name them.
+            CurrentSimNanos: ns, the time the messages are written at.
+        """
         for payload, name, message_field in self._writes:
             value = values[name]
             setattr(
