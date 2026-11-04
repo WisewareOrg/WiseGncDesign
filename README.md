@@ -36,12 +36,14 @@ pytest plugin.
 
 The notebook runs that module through pytest over `GNC_MONTE_CARLO_RUNS` cases (default 852) on
 `GNC_MONTE_CARLO_WORKERS` workers (default the CPU count) at `GNC_MONTE_CARLO_FIDELITY` (default
-`lo`), then shows each error against its bound and the final errors. It holds no test logic. To
-open either file in Jupyter, generate the notebook from its source; generated notebooks are
-ignored by git:
+`lo`), then shows each error against its bound and the final errors. It holds no test logic.
+
+`jupytext.toml` pairs each `notebooks/<name>.py` with `notebooks/<name>.ipynb`, which git ignores.
+To open the Monte Carlo notebook in Jupyter:
 
 ```sh
-uv run jupytext --to ipynb algorithms/gnc_algorithms/imu_dead_reckoning.py
-uv run jupytext --to ipynb notebooks/imu_dead_reckoning_monte_carlo.py
-uv run --with jupyterlab jupyter lab
+uv run jupytext --sync notebooks/imu_dead_reckoning_monte_carlo.py && uv run --with jupyterlab jupyter lab notebooks/
 ```
+
+The dead reckoner's own module opens the same way after
+`uv run jupytext --to ipynb algorithms/gnc_algorithms/imu_dead_reckoning.py`.
