@@ -7,7 +7,9 @@ under `[tool.uv.sources]`. The flight software runs at 1 Hz on the simulation's 
 
 It has three parts:
 - `gnc_algorithms`, each algorithm and its derivation as a literate module that imports as plain
-  Python, with its math compiled by numba;
+  Python, with its math compiled by numba. The algorithms depend on numpy and numba only, with
+  SciPy for numba's matrix products, and name their inputs and outputs by the simulation's standard
+  field names, so a host resolves them by name;
 - `gnc_cdh`, which hosts an algorithm in the simulator ([`cdh/README.md`](cdh/README.md));
 - `gnc_analysis.error_bounds`, which reads a run file with h5py and holds the dead reckoner's
   error to its accuracy bound.

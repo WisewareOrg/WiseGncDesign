@@ -1,4 +1,4 @@
-"""A Basilisk Python `SysModel` hosting one framework-free algorithm, wired by its names."""
+"""A Basilisk Python `SysModel` hosting one algorithm, wired by its names."""
 
 import inspect
 from collections.abc import Mapping
