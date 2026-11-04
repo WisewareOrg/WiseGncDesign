@@ -112,6 +112,9 @@ class AlgorithmModule(sysModel.SysModel):
     def Reset(self, CurrentSimNanos: int) -> None:
         """Builds the algorithm at the reset time and writes its initial state.
 
+        Args:
+            CurrentSimNanos: ns, the reset time, as Basilisk passes it.
+
         Raises:
             RuntimeError: naming any input whose reader is not subscribed.
             ValueError: naming any output the built algorithm holds no attribute for.
@@ -132,6 +135,9 @@ class AlgorithmModule(sysModel.SysModel):
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
         """Steps the algorithm to the current time when it lies after the algorithm's `t`.
+
+        Args:
+            CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
             RuntimeError: before the first `Reset`, or naming any input never written.
