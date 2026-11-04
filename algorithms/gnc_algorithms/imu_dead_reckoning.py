@@ -42,11 +42,9 @@
 # one IMU sample across the whole second.
 
 # %%
-"""Strapdown inertial dead reckoning from one IMU.
-
-Gyro rates integrate to an MRP attitude; the accelerometer, rotated by that attitude, plus
-point-mass gravity integrate to inertial velocity and position.
-"""
+"""Strapdown inertial dead reckoning: gyro rates integrated to an MRP attitude, and the
+accelerometer, rotated by that attitude, plus point-mass gravity integrated to inertial
+velocity and position."""
 
 import numpy as np
 from numba import njit
@@ -133,11 +131,8 @@ def _step(
     def derivs(
         sigma: np.ndarray, r: np.ndarray, v: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """The state's time derivative, the readings held.
-
-        Takes sigma (MRP), r (m, in N) and v (m/s, in N); returns dsigma/dt (1/s), dr/dt (m/s,
-        in N) and dv/dt (m/s^2, in N).
-        """
+        """The state's time derivative at sigma (MRP), r (m, in N) and v (m/s, in N), the
+        readings held: dsigma/dt (1/s), dr/dt (m/s, in N) and dv/dt (m/s^2, in N)."""
         sigma_dot = 0.25 * B(sigma) @ omega
         r_dot = v
         v_dot = dcm_NB(sigma) @ accel - _gravity(r, mu)
@@ -166,9 +161,8 @@ def _step(
 
 # %%
 class ImuDeadReckoner:
-    """Propagates attitude, inertial position and inertial velocity from raw IMU readings.
-
-    The readings arrive in the IMU's platform frame; gravity is a point mass of parameter `mu`.
+    """Propagates attitude (MRP), inertial position and inertial velocity from raw IMU readings in
+    the IMU's platform frame, with point-mass gravity of parameter `mu`.
 
     Args:
         sigma0_BN: (3,) MRP of B with respect to N at `t0`.
@@ -198,9 +192,8 @@ class ImuDeadReckoner:
         mu: float,
         dcm_PB: np.ndarray,
     ) -> None:
-        """Checks and holds the initial state, `mu` and the mounting.
-
-        The class docstring gives each argument's units and frame.
+        """Checks and holds the initial state, `mu` and the mounting; the class docstring gives
+        each argument's units and frame.
 
         Raises:
             ValueError: as the class docstring states.

@@ -174,8 +174,7 @@ def position_bound_m(
     step_s: float,
     mean_motion_rad_s: float,
 ) -> np.ndarray:
-    """The position error's growth bound.
-
+    """The position error's growth bound,
     `(1 + (n t)^2 / 6) (b_a t^2 / 2 + 3 sigma_a sqrt(dt / 3) t^(3/2))`.
 
     - A constant accelerometer bias gives `b_a t^2 / 2`; the accelerometer's random walk
@@ -257,9 +256,8 @@ def bound_ratios(
     step_s: float,
     mu: float,
 ) -> dict[str, np.ndarray]:
-    """Each of a run's errors divided by its growth bound, at every sample after t = 0.
-
-    The run passes where every ratio is at most `BOUND_FACTOR`.
+    """Each of a run's errors divided by its growth bound, at every sample after t = 0. The run
+    passes where every ratio is at most `BOUND_FACTOR`.
 
     Args:
         run: one run, as `read_run` returns it.

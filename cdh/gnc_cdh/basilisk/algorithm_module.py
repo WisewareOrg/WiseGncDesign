@@ -16,10 +16,9 @@ _NANOSECONDS_PER_SECOND = 1e9
 
 
 class AlgorithmModule(sysModel.SysModel):
-    """Hosts one algorithm inside a Basilisk task, by the names its `Binding` gives.
-
-    It passes message fields to the algorithm's `step` as plain arrays and writes the arrays it
-    returns into messages, and nothing more.
+    """Hosts one algorithm inside a Basilisk task, passing message fields to its `step` as plain
+    arrays and writing the arrays it returns into messages, by the names its `Binding` gives, and
+    nothing more.
 
     `Reset` builds the algorithm as `binding.algorithm(t0=..., **init_from())`, `t0` being the
     reset time in s, and writes each output from the algorithm's attribute of that name. Each
@@ -50,9 +49,8 @@ class AlgorithmModule(sysModel.SysModel):
         inputs: Mapping[str, Any],
         init_from: Callable[[], Mapping[str, Any]],
     ) -> None:
-        """Checks the binding against `inputs` and builds the output messages and the copy plan.
-
-        The class docstring gives each argument.
+        """Checks the binding against `inputs` and builds the output messages and the copy plan;
+        the class docstring gives each argument.
 
         Raises:
             ValueError: as the class docstring states.
@@ -99,11 +97,9 @@ class AlgorithmModule(sysModel.SysModel):
         return self._algorithm
 
     def _validate(self) -> None:
-        """Checks the binding against `step`, `inputs` and the output messages.
-
-        The inputs must name exactly `step`'s keywords, each reading a role present in `inputs`
-        and a field its message has; each output must write a field of a message the binding
-        declares.
+        """Checks that the binding's inputs name exactly `step`'s keywords, that each reads a role
+        present in `inputs` and a field its message has, and that each output writes a field of a
+        message the binding declares.
 
         Raises:
             ValueError: naming the keyword, role, message or message field at fault.
