@@ -291,8 +291,8 @@ def violations(
 
     Returns:
         A message for each metric whose error is above `ERROR_AT_START` at t = 0, or above
-        `BOUND_FACTOR` times its bound at a later sample, naming the earliest such sample. Empty
-        when the run passes.
+        `BOUND_FACTOR` times its bound at a subsequent sample, naming the earliest such sample.
+        Empty when the run passes.
     """
     t = run["t_s"]
     found = []

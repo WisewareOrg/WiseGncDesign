@@ -84,7 +84,7 @@ class AlgorithmModule(sysModel.SysModel):
         """The hosted instance, built by the latest `Reset`, for inspection.
 
         Raises:
-            RuntimeError: before the first `Reset`.
+            RuntimeError: before any `Reset`.
         """
         if self._algorithm is None:
             raise RuntimeError("AlgorithmModule has not been Reset")
@@ -140,7 +140,7 @@ class AlgorithmModule(sysModel.SysModel):
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
-            RuntimeError: before the first `Reset`, or naming any input never written.
+            RuntimeError: before any `Reset`, or naming any input never written.
         """
         algorithm = self.algorithm
         t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
