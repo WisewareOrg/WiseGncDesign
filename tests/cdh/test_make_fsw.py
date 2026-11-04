@@ -8,7 +8,7 @@ from gnc_cdh.basilisk import make_fsw
 
 ONE_SECOND_NS = 1_000_000_000
 R0_N = np.array([7.0e6, 0.0, 0.0])
-IDENTITY = {"imu": np.eye(3)}
+IDENTITY = np.eye(3)
 
 
 def _initial_state() -> dict[str, np.ndarray]:
@@ -33,7 +33,7 @@ def _fsw(imu_reader, **overrides):
     arguments = {
         "inputs": {"imu": imu_reader},
         "initial_state": _initial_state,
-        "mountings": IDENTITY,
+        "dcm_PB": IDENTITY,
         "mu": 0.0,
     }
     return make_fsw("imu_dead_reckoning", **{**arguments, **overrides})
@@ -55,17 +55,6 @@ def test_builds_and_steps_the_dead_reckoner_and_publishes_its_state(imu_reader):
     np.testing.assert_array_equal(module.output_messages["nav_trans"].read().v_BN_N, state.v_N)
 
 
-def test_a_mounting_rotates_platform_readings_into_the_body_frame(imu_reader):
-    # [PB] for P rotated +90 deg about z from B: platform x is body -y.
-    dcm_PB = np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-    module = _fsw(imu_reader, mountings={"imu": dcm_PB})
-
-    module.Reset(0)
-    module.UpdateState(ONE_SECOND_NS)
-
-    np.testing.assert_allclose(module.algorithm.state.v_N, [0.0, 1.0, 0.0], atol=1e-12)
-
-
 def test_initial_state_keys_naming_no_parameter_are_left_out(imu_reader):
     module = _fsw(imu_reader, initial_state=lambda: {**_initial_state(), "omega0_BN_B": [1, 2, 3]})
 
@@ -77,15 +66,8 @@ def test_initial_state_keys_naming_no_parameter_are_left_out(imu_reader):
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
-        ({"mountings": None}, r"roles \['imu'\] need a mounting"),
-        ({"mountings": {"imu": np.eye(3), "gps": np.eye(3)}}, r"mountings for \['gps'\]"),
-        ({"mountings": {"imu": np.eye(2)}}, "mounting for 'imu' is not a proper rotation"),
-        ({"mountings": {"imu": 2.0 * np.eye(3)}}, "mounting for 'imu' is not a proper rotation"),
-        # Orthonormal with determinant -1: a mirrored z axis, and swapped x and y.
-        ({"mountings": {"imu": np.diag([1.0, 1.0, -1.0])}}, "mounting for 'imu' is not a proper"),
-        ({"mountings": {"imu": np.eye(3)[[1, 0, 2]]}}, "mounting for 'imu' is not a proper"),
-        ({"inputs": {}}, "inputs has no role 'imu'"),
-        ({"inputs": {"imu": messaging.NavAttMsgReader()}}, "expected IMUSensorMsgReader"),
+        ({"inputs": {}}, r"inputs has no role \['imu'\]"),
+        ({"inputs": {"imu": messaging.NavAttMsgReader()}}, "has no field 'AngVelPlatform'"),
         ({"muu": 0.0}, r"params \['muu'\]"),
     ],
 )
@@ -111,7 +93,7 @@ def test_reset_names_a_missing_mu(imu_reader):
         "imu_dead_reckoning",
         inputs={"imu": imu_reader},
         initial_state=_initial_state,
-        mountings=IDENTITY,
+        dcm_PB=IDENTITY,
     )
 
     with pytest.raises(ValueError, match=r"\['mu'\]"):

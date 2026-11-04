@@ -46,10 +46,11 @@
 accelerometer, rotated by that attitude, plus point-mass gravity integrated to inertial
 velocity and position."""
 
+from dataclasses import dataclass
+
 import numpy as np
 from numba import njit
 
-from gnc_algorithms.interfaces import DeadReckoningState, ImuSample
 from gnc_algorithms.mrp import B, dcm_NB, shadow
 
 __all__ = ["DeadReckoningState", "ImuDeadReckoner", "ImuSample"]
@@ -57,21 +58,44 @@ __all__ = ["DeadReckoningState", "ImuDeadReckoner", "ImuSample"]
 # %% [markdown]
 # ## Interface
 #
-# The estimator takes one `ImuSample` per step and returns a `DeadReckoningState`, both
-# immutable values defined in `gnc_algorithms.interfaces`:
+# The estimator takes one `ImuSample` per step and returns a `DeadReckoningState`:
 #
 # | Type | Field | Units | Frame |
 # | --- | --- | --- | --- |
 # | `ImuSample` | `t` | s | |
-# | | `omega_B` | rad/s, (3,) | angular rate of B with respect to N, in B |
-# | | `accel_B` | m/s², (3,) | non-gravitational acceleration, in B |
+# | | `omega_P` | rad/s, (3,) | angular rate of B with respect to N, in the IMU platform frame P |
+# | | `accel_P` | m/s², (3,) | non-gravitational acceleration, in P |
 # | `DeadReckoningState` | `t` | s | |
 # | | `sigma_BN` | MRP, (3,), \|σ\| ≤ 1 | B with respect to N |
 # | | `r_N` | m, (3,) | inertial position |
 # | | `v_N` | m/s, (3,) | inertial velocity |
 #
-# The host rotates the IMU's readings into the body frame before they reach the sample, and the
-# state's arrays are read-only.
+# The estimator owns the IMU's mounting, the DCM $[PB]$ with $v_P = [PB]\,v_B$, and rotates
+# each reading into the body frame, $v_B = [PB]^T v_P$, before it integrates. The state's arrays
+# are read-only.
+
+
+# %%
+@dataclass(frozen=True, slots=True)
+class ImuSample:
+    """One raw IMU reading in its platform frame P: `t` (s), `omega_P` (rad/s) and `accel_P`
+    (m/s^2)."""
+
+    t: float
+    omega_P: np.ndarray
+    accel_P: np.ndarray
+
+
+@dataclass(frozen=True, slots=True)
+class DeadReckoningState:
+    """The estimate at `t` (s): `sigma_BN` (MRP, |sigma| <= 1), `r_N` (m) and `v_N` (m/s), each
+    a read-only (3,) array."""
+
+    t: float
+    sigma_BN: np.ndarray
+    r_N: np.ndarray
+    v_N: np.ndarray
+
 
 # %% [markdown]
 # ## Gravity
@@ -87,30 +111,22 @@ def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
     return mu * r / r_norm**3
 
 
-def _frozen(value: np.ndarray) -> np.ndarray:
-    value.setflags(write=False)
-    return value
-
-
-def _vector3(name: str, value: np.ndarray) -> np.ndarray:
-    array = np.array(value, dtype=float)
-    if array.shape != (3,) or not np.isfinite(array).all():
-        raise ValueError(f"{name} must be a finite 3-vector, got {value!r}")
-    return _frozen(array)
-
-
 @njit(cache=True)
-def _rk4_step(
+def _step(
     sigma: np.ndarray,
     r: np.ndarray,
     v: np.ndarray,
-    omega: np.ndarray,
-    accel: np.ndarray,
+    omega_P: np.ndarray,
+    accel_P: np.ndarray,
+    dcm_BP: np.ndarray,
     dt: float,
     mu: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """One RK4 step of (sigma, r, v) over `dt`, `omega` and `accel` held across it. Compiled with
+    """One RK4 step of (sigma, r, v) over `dt`, the readings rotated into B by `dcm_BP` = [PB]^T
+    and held across it, with sigma switched to its shadow set when |sigma| > 1. Compiled with
     numba on its first call and cached on disk."""
+    omega = dcm_BP @ omega_P
+    accel = dcm_BP @ accel_P
 
     def derivs(
         sigma: np.ndarray, r: np.ndarray, v: np.ndarray
@@ -128,7 +144,32 @@ def _rk4_step(
     sigma_new = sigma + (dt / 6.0) * (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0])
     r_new = r + (dt / 6.0) * (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1])
     v_new = v + (dt / 6.0) * (k1[2] + 2.0 * k2[2] + 2.0 * k3[2] + k4[2])
+    if np.linalg.norm(sigma_new) > 1.0:
+        sigma_new = shadow(sigma_new)
     return sigma_new, r_new, v_new
+
+
+def _frozen(value: np.ndarray) -> np.ndarray:
+    value.setflags(write=False)
+    return value
+
+
+def _vector3(name: str, value: np.ndarray) -> np.ndarray:
+    array = np.array(value, dtype=float)
+    if array.shape != (3,) or not np.isfinite(array).all():
+        raise ValueError(f"{name} must be a finite 3-vector, got {value!r}")
+    return _frozen(array)
+
+
+def _rotation(name: str, value: np.ndarray) -> np.ndarray:
+    array = np.array(value, dtype=float)
+    if (
+        array.shape != (3, 3)
+        or not np.allclose(array @ array.T, np.eye(3), atol=1e-9)
+        or not np.isclose(np.linalg.det(array), 1.0, atol=1e-9)
+    ):
+        raise ValueError(f"{name} is not a proper rotation (3, 3) DCM: {value!r}")
+    return array
 
 
 # %% [markdown]
@@ -141,8 +182,8 @@ def _rk4_step(
 
 # %%
 class ImuDeadReckoner:
-    """Propagates attitude (MRP), inertial position and inertial velocity from raw body-frame
-    IMU samples, with point-mass gravity of parameter `mu`.
+    """Propagates attitude (MRP), inertial position and inertial velocity from raw IMU samples in
+    the IMU's platform frame, with point-mass gravity of parameter `mu`.
 
     Args:
         sigma0_BN: (3,) MRP of B with respect to N at `t0`.
@@ -150,20 +191,28 @@ class ImuDeadReckoner:
         v0_N: (3,) m/s, inertial velocity at `t0`.
         t0: s, the time the initial state applies at.
         mu: m^3/s^2, gravitational parameter of the central body, >= 0.
+        dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B, a proper rotation.
 
     Raises:
-        ValueError: when a vector is not a finite 3-vector, `t0` is not finite, or `mu` is not
-            finite and >= 0.
+        ValueError: when a vector is not a finite 3-vector, `t0` is not finite, `mu` is not
+            finite and >= 0, or `dcm_PB` is not a proper rotation.
     """
 
     def __init__(
-        self, sigma0_BN: np.ndarray, r0_N: np.ndarray, v0_N: np.ndarray, t0: float, mu: float
+        self,
+        sigma0_BN: np.ndarray,
+        r0_N: np.ndarray,
+        v0_N: np.ndarray,
+        t0: float,
+        mu: float,
+        dcm_PB: np.ndarray,
     ) -> None:
         if not np.isfinite(t0):
             raise ValueError(f"t0 must be finite, got {t0!r}")
         if not (np.isfinite(mu) and mu >= 0.0):
             raise ValueError(f"mu must be finite and >= 0, got {mu!r}")
         self._mu = float(mu)
+        self._dcm_BP = np.ascontiguousarray(_rotation("dcm_PB", dcm_PB).T)
         self._state = DeadReckoningState(
             t=float(t0),
             sigma_BN=_vector3("sigma0_BN", sigma0_BN),
@@ -179,29 +228,29 @@ class ImuDeadReckoner:
     def step(self, sample: ImuSample) -> DeadReckoningState:
         """Advances the state to `sample.t` by one RK4 step and returns the new state.
 
-        Over `dt = sample.t - state.t`, with `omega_B` and `accel_B` held constant:
+        Over `dt = sample.t - state.t`, with the readings rotated into B and held constant:
         dsigma/dt = 1/4 B(sigma) omega_B; dr/dt = v; dv/dt = dcm_NB(sigma) accel_B - mu r/|r|^3.
-        Switches sigma to its shadow set when |sigma| > 1 after the step.
 
         Raises:
-            ValueError: when `dt` is not > 0 (including NaN), or `omega_B` or `accel_B` is not a
+            ValueError: when `dt` is not > 0 (including NaN), or `omega_P` or `accel_P` is not a
                 finite 3-vector; the state is left unchanged.
         """
         dt = sample.t - self._state.t
         if not dt > 0.0:
             raise ValueError(f"dt must be > 0, got {dt}")
+        omega_P = _vector3("omega_P", sample.omega_P)
+        accel_P = _vector3("accel_P", sample.accel_P)
 
-        omega = _vector3("omega_B", sample.omega_B)
-        accel = _vector3("accel_B", sample.accel_B)
-        mu = self._mu
-
-        sigma_new, r_new, v_new = _rk4_step(
-            self._state.sigma_BN, self._state.r_N, self._state.v_N, omega, accel, dt, mu
+        sigma_new, r_new, v_new = _step(
+            self._state.sigma_BN,
+            self._state.r_N,
+            self._state.v_N,
+            omega_P,
+            accel_P,
+            self._dcm_BP,
+            dt,
+            self._mu,
         )
-
-        if np.linalg.norm(sigma_new) > 1.0:
-            sigma_new = shadow(sigma_new)
-
         self._state = DeadReckoningState(
             t=sample.t, sigma_BN=_frozen(sigma_new), r_N=_frozen(r_new), v_N=_frozen(v_new)
         )

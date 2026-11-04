@@ -11,7 +11,7 @@ from Basilisk.architecture import messaging
 from wise_dynamics.basilisk import ImuSpacecraft, Leo500
 
 from gnc_analysis.error_bounds import read_run, violations
-from gnc_cdh.basilisk import AlgorithmModule, make_fsw
+from gnc_cdh.basilisk import BINDINGS, AlgorithmModule, make_fsw
 
 IMU_DCM_PB = np.eye(3)
 """The flight software's mounting [PB] of the IMU: identity on this spacecraft."""
@@ -21,15 +21,11 @@ UNITS = {"sigma_BN": "MRP", "r_N": "m", "v_N": "m/s"}
 
 
 def estimate_fields(fsw: AlgorithmModule) -> dict[str, tuple[Any, str, str]]:
-    """The estimate's run-file datasets, `est/<state field>`, as `(message, field, units)` read
-    from the module's output maps."""
+    """The estimate's run-file datasets, `est/<state field>`, as `(message, field, units)`, by the
+    dead reckoner's binding."""
     return {
-        f"est/{m.state_field}": (
-            fsw.output_messages[m.output],
-            m.payload_field,
-            UNITS[m.state_field],
-        )
-        for m in fsw.output_maps
+        f"est/{state_field}": (fsw.output_messages[message], message_field, UNITS[state_field])
+        for state_field, (message, message_field) in BINDINGS["imu_dead_reckoning"].outputs.items()
     }
 
 
@@ -51,7 +47,7 @@ def dead_reckoner(scenario: Leo500) -> AlgorithmModule:
         "imu_dead_reckoning",
         inputs=scenario.vehicle.readers(),
         initial_state=scenario.initial_state,
-        mountings={"imu": IMU_DCM_PB},
+        dcm_PB=IMU_DCM_PB,
         mu=Leo500.mu_m3_s2["earth"],
     )
 

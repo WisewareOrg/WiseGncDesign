@@ -1,4 +1,5 @@
-"""`AlgorithmModule` driven directly, with a stub algorithm and standalone Basilisk messages."""
+"""`AlgorithmModule` driven directly, with a stub algorithm, a stub binding and standalone
+Basilisk messages."""
 
 import dataclasses
 from dataclasses import dataclass, field
@@ -7,7 +8,7 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
-from gnc_cdh.basilisk import AlgorithmModule, InputMap, OutputMap
+from gnc_cdh.basilisk import AlgorithmModule, Binding
 
 ONE_SECOND_NS = 1_000_000_000
 
@@ -23,20 +24,21 @@ class StubSample:
 
 @dataclass(frozen=True)
 class StubState:
-    """A state carrying one vector, `value`."""
+    """A state carrying two vectors, `value` and `other`."""
 
     t: float
     value: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    other: np.ndarray = field(default_factory=lambda: np.zeros(3))
 
 
 class StubAlgorithm:
-    """Records every sample and steps to `STEPPED_VALUE`, so a test sees what reached it."""
+    """Records every sample and steps to `STEPPED`, so a test sees what reached it."""
 
-    STEPPED_VALUE = np.array([1.0, 2.0, 3.0])
+    STEPPED = np.array([1.0, 2.0, 3.0])
 
-    def __init__(self, t0: float, init: dict) -> None:
+    def __init__(self, t0: float, value0: np.ndarray) -> None:
         self.samples: list[StubSample] = []
-        self._state = StubState(t=t0, value=np.asarray(init.get("value0", np.zeros(3))))
+        self._state = StubState(t=t0, value=np.asarray(value0), other=-np.asarray(value0))
 
     @property
     def state(self) -> StubState:
@@ -44,15 +46,23 @@ class StubAlgorithm:
 
     def step(self, sample: StubSample) -> StubState:
         self.samples.append(sample)
-        self._state = StubState(t=sample.t, value=self.STEPPED_VALUE)
+        self._state = StubState(t=sample.t, value=self.STEPPED, other=-self.STEPPED)
         return self._state
 
 
-def _imu_message(angvel=(0.0, 0.0, 0.0), accel=(0.0, 0.0, 0.0)) -> messaging.IMUSensorMsg:
+BINDING = Binding(
+    algorithm=StubAlgorithm,
+    sample=StubSample,
+    inputs={"a": ("imu", "AngVelPlatform"), "b": ("nav", "sigma_BN")},
+    outputs={"value": ("att", "sigma_BN"), "other": ("trans", "r_BN_N")},
+    messages={"att": messaging.NavAttMsg, "trans": messaging.NavTransMsg},
+)
+
+
+def _imu_message(angvel=(0.0, 0.0, 0.0)) -> messaging.IMUSensorMsg:
     msg = messaging.IMUSensorMsg()
     payload = messaging.IMUSensorMsgPayload()
     payload.AngVelPlatform = list(angvel)
-    payload.AccelPlatform = list(accel)
     msg.write(payload, 0, 0)
     return msg
 
@@ -65,25 +75,13 @@ def _nav_message(sigma=(0.0, 0.0, 0.0)) -> messaging.NavAttMsg:
     return msg
 
 
-IMU_TO_A = InputMap("imu", "AngVelPlatform", "a")
-NAV_TO_B = InputMap("nav", "sigma_BN", "b")
-
-
 def _module(**overrides) -> AlgorithmModule:
-    """Two inputs (`imu`, `nav`) into `a` and `b`; `value` out to two messages."""
-    arguments = {
-        "inputs": {"imu": messaging.IMUSensorMsgReader(), "nav": messaging.NavAttMsgReader()},
-        "outputs": {"att": messaging.NavAttMsg(), "trans": messaging.NavTransMsg()},
-        "input_maps": [InputMap("imu", "AngVelPlatform", "a"), InputMap("nav", "sigma_BN", "b")],
-        "output_maps": [
-            OutputMap("value", "att", "sigma_BN"),
-            OutputMap("value", "trans", "r_BN_N"),
-        ],
-        "sample_type": StubSample,
-        "make_algorithm": StubAlgorithm,
-        "init_from": lambda: {"value0": np.array([0.5, 0.5, 0.5])},
-    }
-    return AlgorithmModule(**{**arguments, **overrides})
+    """`BINDING` with `overrides` replacing its fields, on an `imu` and a `nav` reader."""
+    return AlgorithmModule(
+        dataclasses.replace(BINDING, **overrides),
+        inputs={"imu": messaging.IMUSensorMsgReader(), "nav": messaging.NavAttMsgReader()},
+        init_from=lambda: {"value0": np.array([0.5, 0.5, 0.5])},
+    )
 
 
 def _subscribed(module: AlgorithmModule, angvel=(1.0, 2.0, 3.0), sigma=(0.4, 0.5, 0.6)):
@@ -93,7 +91,7 @@ def _subscribed(module: AlgorithmModule, angvel=(1.0, 2.0, 3.0), sigma=(0.4, 0.5
     return imu, nav
 
 
-def test_each_payload_field_lands_in_its_sample_field():
+def test_each_message_field_lands_in_its_sample_field():
     module = _module()
     _messages = _subscribed(module)
 
@@ -106,22 +104,6 @@ def test_each_payload_field_lands_in_its_sample_field():
     np.testing.assert_array_equal(sample.b, [0.4, 0.5, 0.6])
 
 
-def test_a_transform_is_applied_before_the_value_reaches_the_sample():
-    rotate_z_90 = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-    module = _module(
-        input_maps=[
-            InputMap("imu", "AngVelPlatform", "a", transform=lambda v: rotate_z_90 @ v),
-            NAV_TO_B,
-        ]
-    )
-    _messages = _subscribed(module, angvel=(1.0, 0.0, 0.0))
-
-    module.Reset(0)
-    module.UpdateState(ONE_SECOND_NS)
-
-    np.testing.assert_allclose(module.algorithm.samples[-1].a, [0.0, 1.0, 0.0], atol=1e-15)
-
-
 def test_reset_writes_the_initial_state_to_every_output():
     module = _module()
     _messages = _subscribed(module)
@@ -129,7 +111,7 @@ def test_reset_writes_the_initial_state_to_every_output():
     module.Reset(0)
 
     np.testing.assert_array_equal(module.output_messages["att"].read().sigma_BN, [0.5, 0.5, 0.5])
-    np.testing.assert_array_equal(module.output_messages["trans"].read().r_BN_N, [0.5, 0.5, 0.5])
+    np.testing.assert_array_equal(module.output_messages["trans"].read().r_BN_N, [-0.5, -0.5, -0.5])
 
 
 def test_a_step_writes_the_new_state_to_every_output():
@@ -139,9 +121,12 @@ def test_a_step_writes_the_new_state_to_every_output():
     module.Reset(0)
     module.UpdateState(ONE_SECOND_NS)
 
-    stepped = StubAlgorithm.STEPPED_VALUE
-    np.testing.assert_array_equal(module.output_messages["att"].read().sigma_BN, stepped)
-    np.testing.assert_array_equal(module.output_messages["trans"].read().r_BN_N, stepped)
+    np.testing.assert_array_equal(
+        module.output_messages["att"].read().sigma_BN, StubAlgorithm.STEPPED
+    )
+    np.testing.assert_array_equal(
+        module.output_messages["trans"].read().r_BN_N, -StubAlgorithm.STEPPED
+    )
 
 
 def test_the_call_at_the_reset_time_does_not_step():
@@ -159,64 +144,33 @@ def test_the_call_at_the_reset_time_does_not_step():
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
-        ({"input_maps": [InputMap("gps", "AngVelPlatform", "a")]}, "unknown input 'gps'"),
+        ({"sample": dict}, "is not a dataclass with field 't'"),
+        ({"inputs": {"a": ("imu", "AngVelPlatform")}}, r"inputs name \['a'\]; StubSample has"),
         (
-            {
-                "input_maps": [
-                    InputMap("imu", "AngVelPltaform", "a"),
-                    InputMap("nav", "sigma_BN", "b"),
-                ]
-            },
-            "unknown payload field 'AngVelPltaform'",
+            {"inputs": {**BINDING.inputs, "c": ("nav", "sigma_BN")}},
+            r"inputs name \['a', 'b', 'c'\]",
         ),
+        ({"inputs": {"a": ("gps", "AngVelPlatform"), "b": BINDING.inputs["b"]}}, "role 'gps'"),
         (
-            {
-                "input_maps": [
-                    InputMap("imu", "AngVelPlatform", "c"),
-                    InputMap("nav", "sigma_BN", "b"),
-                ]
-            },
-            "unknown field 'c'",
+            {"inputs": {"a": ("imu", "AngVelPltaform"), "b": BINDING.inputs["b"]}},
+            "no field 'AngVelPltaform'",
         ),
-        (
-            {
-                "input_maps": [
-                    InputMap("imu", "AngVelPlatform", "a"),
-                    InputMap("nav", "sigma_BN", "a"),
-                ]
-            },
-            r"feed \['a'\] more than once",
-        ),
-        ({"input_maps": [InputMap("imu", "AngVelPlatform", "a")]}, r"leave \['b'\]"),
-        ({"output_maps": [OutputMap("value", "pos", "r_BN_N")]}, "unknown output 'pos'"),
-        (
-            {"output_maps": [OutputMap("value", "att", "sigma_NB")]},
-            "unknown payload field 'sigma_NB'",
-        ),
-        ({"sample_type": dict}, "not a dataclass"),
+        ({"outputs": {"value": ("pos", "r_BN_N")}}, "message 'pos', absent from messages"),
+        ({"outputs": {"value": ("att", "sigma_NB")}}, "'att' has no field 'sigma_NB'"),
     ],
 )
-def test_construction_names_the_first_invalid_map(overrides, message):
+def test_construction_names_what_the_binding_gets_wrong(overrides, message):
     with pytest.raises(ValueError, match=message):
         _module(**overrides)
 
 
-def test_an_output_map_carries_no_transform():
-    with pytest.raises(TypeError):
-        OutputMap("value", "att", "sigma_BN", transform=lambda v: v)
-
-
-def test_maps_and_message_tables_are_read_only():
+def test_the_message_tables_are_read_only():
     module = _module()
 
-    assert isinstance(module.input_maps, tuple)
-    assert isinstance(module.output_maps, tuple)
     with pytest.raises(TypeError):
         module.output_messages["extra"] = messaging.NavAttMsg()
-    with pytest.raises(AttributeError):
-        module.input_maps = ()
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        module.input_maps[0].sample_field = "b"
+    with pytest.raises(TypeError):
+        module.inputs["extra"] = messaging.NavAttMsgReader()
 
 
 def test_the_algorithm_is_unavailable_before_reset():
@@ -248,8 +202,8 @@ def test_a_step_names_an_input_never_written():
         module.UpdateState(ONE_SECOND_NS)
 
 
-def test_reset_names_an_output_map_whose_state_field_is_missing():
-    module = _module(output_maps=[OutputMap("velocity", "att", "sigma_BN")])
+def test_reset_names_an_output_state_field_the_state_lacks():
+    module = _module(outputs={"velocity": ("att", "sigma_BN")})
     _messages = _subscribed(module)
 
     with pytest.raises(ValueError, match="'velocity'"):

@@ -61,6 +61,8 @@ _ZERO3 = np.zeros(3)
 # A position away from the origin for the attitude checks, which hold mu = 0 because gravity
 # plays no part in attitude.
 _AWAY_FROM_ORIGIN = np.array([7.0e6, 0.0, 0.0])
+# The IMU mounted at identity, so its platform frame is the body frame.
+_IDENTITY_MOUNTING = np.eye(3)
 
 
 def _skew(v: np.ndarray) -> np.ndarray:
@@ -75,8 +77,8 @@ def _dcm_BN_from_axis_angle(axis: np.ndarray, theta: float) -> np.ndarray:
 
 
 def _propagate(
-    omega_B: np.ndarray,
-    accel_B: np.ndarray,
+    omega_P: np.ndarray,
+    accel_P: np.ndarray,
     total_t: float,
     n_steps: int,
     sigma0: np.ndarray = _ZERO3,
@@ -84,11 +86,11 @@ def _propagate(
     r0: np.ndarray = _AWAY_FROM_ORIGIN,
     v0: np.ndarray = _ZERO3,
 ) -> DeadReckoningState:
-    reckoner = ImuDeadReckoner(sigma0_BN=sigma0, r0_N=r0, v0_N=v0, t0=0.0, mu=mu)
+    reckoner = ImuDeadReckoner(sigma0, r0, v0, t0=0.0, mu=mu, dcm_PB=_IDENTITY_MOUNTING)
     dt = total_t / n_steps
     state = reckoner.state
     for i in range(1, n_steps + 1):
-        state = reckoner.step(ImuSample(t=i * dt, omega_B=omega_B, accel_B=accel_B))
+        state = reckoner.step(ImuSample(t=i * dt, omega_P=omega_P, accel_P=accel_P))
     return state
 
 
@@ -187,11 +189,11 @@ def check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
     sigma0 = np.array([0.1, 0.0, 0.0])
     omega = np.array([0.0, 0.0, 0.3])
     reckoner = ImuDeadReckoner(
-        sigma0_BN=sigma0, r0_N=_AWAY_FROM_ORIGIN, v0_N=_ZERO3, t0=0.0, mu=0.0
+        sigma0, _AWAY_FROM_ORIGIN, _ZERO3, t0=0.0, mu=0.0, dcm_PB=_IDENTITY_MOUNTING
     )
     dt = 1e-5
 
-    state = reckoner.step(ImuSample(t=dt, omega_B=omega, accel_B=_ZERO3))
+    state = reckoner.step(ImuSample(t=dt, omega_P=omega, accel_P=_ZERO3))
 
     c0 = dcm_NB(sigma0).T
     c1 = dcm_NB(state.sigma_BN).T

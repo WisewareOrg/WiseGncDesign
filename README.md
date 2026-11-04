@@ -5,16 +5,12 @@ from [WiseDynamics](https://github.com/WisewareOrg/WiseDynamics), which `pyproje
 under `[tool.uv.sources]`. The flight software runs at 1 Hz on the simulation's dynamics step,
 50 Hz at its `hi` fidelity and 20 Hz at `med` and `lo`.
 
-## Layout
-
-| Path | What it holds |
-| --- | --- |
-| `algorithms/` | `gnc_algorithms`: each algorithm and its derivation as a literate module (percent-format `.py`), importable |
-| [`cdh/`](cdh/README.md) | `gnc_cdh`: the data dictionary, and the Basilisk host module that computes an algorithm at 1 Hz |
-| `analysis/` | `gnc_analysis.error_bounds`: a run file read with h5py, and the dead reckoner's error against its accuracy bound |
-| `notebooks/` | the Monte Carlo notebook, as its `.py` source: the dead reckoner's smoke checks, the Monte Carlo run through pytest, and its results |
-| `tests/` | `cdh/` the host module and the data dictionary; `sim/` the scenario test and the estimate's 1 Hz cadence, which skip without the `sim` group and fail instead with `REQUIRE_SIM=1` |
-| `docs/decisions/` | this repository's architecture decision records |
+It has three parts:
+- `gnc_algorithms`, each algorithm and its derivation as a literate module that imports as plain
+  Python, with its math compiled by numba;
+- `gnc_cdh`, which hosts an algorithm in the simulator ([`cdh/README.md`](cdh/README.md));
+- `gnc_analysis.error_bounds`, which reads a run file with h5py and holds the dead reckoner's
+  error to its accuracy bound.
 
 ## Development
 
@@ -33,10 +29,10 @@ WiseDynamics' `Leo500` scenario, writes one HDF5 run file per case, and holds ea
 bound its drawn IMU biases imply. Its `--sim-*` options come from WiseDynamics' pytest plugin.
 
 The notebook runs the dead reckoner's smoke checks, then that test over `GNC_MONTE_CARLO_RUNS`
-cases (default 852) on `GNC_MONTE_CARLO_WORKERS` workers (default the CPU count) at `GNC_MONTE_CARLO_FIDELITY` (default
-`lo`), then shows each
-error against its bound and the final errors. To open either file in Jupyter, generate the
-notebook from its source; generated notebooks are ignored by git:
+cases (default 852) on `GNC_MONTE_CARLO_WORKERS` workers (default the CPU count) at
+`GNC_MONTE_CARLO_FIDELITY` (default `lo`), then shows each error against its bound and the final
+errors. To open either file in Jupyter, generate the notebook from its source; generated notebooks
+are ignored by git:
 
 ```sh
 uv run jupytext --to ipynb algorithms/gnc_algorithms/imu_dead_reckoning.py
