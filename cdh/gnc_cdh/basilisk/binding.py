@@ -1,5 +1,7 @@
-"""`Binding`: one algorithm's declaration of what it reads and writes, as Basilisk message
-fields."""
+"""`Binding`: one algorithm's declaration of what it reads and writes.
+
+Both are named as Basilisk message fields.
+"""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

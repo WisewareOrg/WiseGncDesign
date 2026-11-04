@@ -1,5 +1,7 @@
-"""The worked example in `cdh/README.md`, booting the dead reckoner on a WiseDynamics
-spacecraft, run as a doctest."""
+"""The worked example in `cdh/README.md`, run as a doctest.
+
+It boots the dead reckoner on a WiseDynamics spacecraft.
+"""
 
 import doctest
 from pathlib import Path

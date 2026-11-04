@@ -48,7 +48,7 @@ src = ["algorithms", "cdh", "analysis"]
 extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "D1", "D417"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "D", "D417"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
