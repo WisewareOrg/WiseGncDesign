@@ -1,12 +1,8 @@
 """The Basilisk host of the C&DH partition.
 
-`make_fsw` builds a named algorithm's `AlgorithmModule` from its `Binding` against Basilisk
-messages.
+`AlgorithmModule` hosts an algorithm against Basilisk messages, wired by the names it uses.
 """
 
-from gnc_cdh.basilisk.algorithm_module import AlgorithmModule
-from gnc_cdh.basilisk.binding import Binding
-from gnc_cdh.basilisk.bindings import BINDINGS
-from gnc_cdh.basilisk.flight_software import make_fsw
+from gnc_cdh.basilisk.algorithm_module import STANDARD_MESSAGES, AlgorithmModule
 
-__all__ = ["BINDINGS", "AlgorithmModule", "Binding", "make_fsw"]
+__all__ = ["STANDARD_MESSAGES", "AlgorithmModule"]

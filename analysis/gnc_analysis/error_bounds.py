@@ -240,11 +240,11 @@ def error_growth(
             ),
         ),
         "velocity error [m/s]": (
-            velocity_error_m_s(run["truth/v_N"], run["est/v_N"]),
+            velocity_error_m_s(run["truth/v_N"], run["est/v_BN_N"]),
             velocity_bound_m_s(t, accel_bias, accel_noise_std_m_s2, step_s, n),
         ),
         "position error [m]": (
-            position_error_m(run["truth/r_N"], run["est/r_N"]),
+            position_error_m(run["truth/r_N"], run["est/r_BN_N"]),
             position_bound_m(t, accel_bias, accel_noise_std_m_s2, step_s, n),
         ),
     }

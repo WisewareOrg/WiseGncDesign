@@ -1,50 +1,60 @@
 """`AlgorithmModule` driven directly.
 
-It runs a stub algorithm through a stub binding on standalone Basilisk messages.
+It hosts stub algorithms, wired by their names, on standalone Basilisk messages.
 """
-
-import dataclasses
 
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
-from gnc_cdh.basilisk import AlgorithmModule, Binding
+from gnc_cdh.basilisk import AlgorithmModule
 
 ONE_SECOND_NS = 1_000_000_000
+
+STEPPED = np.array([1.0, 2.0, 3.0])
+"""The arrays the stub steps its outputs to."""
 
 
 class StubAlgorithm:
     """A stub algorithm that records what reaches it.
 
-    It holds `t`, `value` and `other`, records every step's inputs, and steps to `STEPPED`.
+    It reads `AngVelPlatform` from an IMU message and `sigma_BN` from a navigation message, holds
+    `t`, `r_BN_N` and `v_BN_N`, and steps its outputs to `STEPPED` and `-STEPPED`.
     """
 
-    STEPPED = np.array([1.0, 2.0, 3.0])
-
-    def __init__(self, t0: float, value0: np.ndarray) -> None:
-        """Starts at `t0` (s) with `value` = `value0` ((3,)) and `other` = -`value0`."""
-        self.steps: list[dict] = []
+    def __init__(self, t0: float = 0.0, r0: np.ndarray = (0.5, 0.5, 0.5)) -> None:
+        """Starts at `t0` (s) with `r_BN_N` = `r0` ((3,), m) and `v_BN_N` = -`r0` (m/s)."""
+        self._steps: list[dict] = []
         self.t = t0
-        self.value = np.asarray(value0)
-        self.other = -np.asarray(value0)
+        self.r_BN_N = np.asarray(r0, dtype=float)
+        self.v_BN_N = -np.asarray(r0, dtype=float)
 
-    def step(self, t: float, a: np.ndarray, b: np.ndarray) -> dict[str, np.ndarray]:
-        """Records the step's inputs and steps to `STEPPED`.
+    def step(self, t: float, AngVelPlatform: np.ndarray, sigma_BN: np.ndarray) -> dict:
+        """Records the step's inputs and steps the outputs.
 
-        Takes `t` (s), `a` and `b` ((3,) each); returns `value` and `other` as named arrays.
+        Takes `t` (s), `AngVelPlatform` (rad/s, (3,)) and `sigma_BN` (MRP, (3,)); returns `r_BN_N`
+        and `v_BN_N` as named arrays.
         """
-        self.steps.append({"t": t, "a": a, "b": b})
-        self.t, self.value, self.other = t, self.STEPPED, -self.STEPPED
-        return {"value": self.value, "other": self.other}
+        self._steps.append({"t": t, "AngVelPlatform": AngVelPlatform, "sigma_BN": sigma_BN})
+        self.t, self.r_BN_N, self.v_BN_N = t, STEPPED, -STEPPED
+        return {"r_BN_N": self.r_BN_N, "v_BN_N": self.v_BN_N}
 
 
-BINDING = Binding(
-    algorithm=StubAlgorithm,
-    inputs={"a": ("imu", "AngVelPlatform"), "b": ("nav", "sigma_BN")},
-    outputs={"value": ("att", "sigma_BN"), "other": ("trans", "r_BN_N")},
-    messages={"att": messaging.NavAttMsg, "trans": messaging.NavTransMsg},
-)
+class UnreadKeyword(StubAlgorithm):
+    """A stub whose `step` asks for a field no input's message carries."""
+
+    def step(self, t: float, AngVelPlatfrom: np.ndarray) -> dict:
+        """Takes `t` (s) and a misspelled `AngVelPlatfrom`; returns nothing it is given."""
+        return {}
+
+
+class UnknownOutput(StubAlgorithm):
+    """A stub holding an output, `value`, that no standard message carries."""
+
+    def __init__(self) -> None:
+        """Starts as `StubAlgorithm` does, plus `value` ((3,))."""
+        super().__init__()
+        self.value = np.zeros(3)
 
 
 def _imu_message(angvel=(0.0, 0.0, 0.0)) -> messaging.IMUSensorMsg:
@@ -65,13 +75,14 @@ def _nav_message(sigma=(0.0, 0.0, 0.0)) -> messaging.NavAttMsg:
     return msg
 
 
-def _module(**overrides) -> AlgorithmModule:
-    """`BINDING` with `overrides` replacing its fields, on an `imu` and a `nav` reader."""
-    return AlgorithmModule(
-        dataclasses.replace(BINDING, **overrides),
-        inputs={"imu": messaging.IMUSensorMsgReader(), "nav": messaging.NavAttMsgReader()},
-        init_from=lambda: {"value0": np.array([0.5, 0.5, 0.5])},
-    )
+def _readers() -> dict:
+    """An unsubscribed `imu` and `nav` reader, by role."""
+    return {"imu": messaging.IMUSensorMsgReader(), "nav": messaging.NavAttMsgReader()}
+
+
+def _module(algorithm=None) -> AlgorithmModule:
+    """`algorithm` (default a fresh `StubAlgorithm`) hosted on `_readers()`."""
+    return AlgorithmModule(StubAlgorithm() if algorithm is None else algorithm, _readers())
 
 
 def _subscribed(module: AlgorithmModule, angvel=(1.0, 2.0, 3.0), sigma=(0.4, 0.5, 0.6)):
@@ -86,45 +97,51 @@ def _subscribed(module: AlgorithmModule, angvel=(1.0, 2.0, 3.0), sigma=(0.4, 0.5
     return imu, nav
 
 
-def test_each_message_field_reaches_its_step_keyword():
-    """A step receives `t` in s and each message field under the keyword the binding names."""
+def test_each_step_keyword_is_read_from_the_message_carrying_that_field():
+    """A step receives `t` in s and each keyword from the input whose message has that field."""
     module = _module()
     _messages = _subscribed(module)
 
     module.Reset(0)
     module.UpdateState(ONE_SECOND_NS)
 
-    step = module.algorithm.steps[-1]
+    step = module.algorithm._steps[-1]
     assert step["t"] == 1.0
-    np.testing.assert_array_equal(step["a"], [1.0, 2.0, 3.0])
-    np.testing.assert_array_equal(step["b"], [0.4, 0.5, 0.6])
+    np.testing.assert_array_equal(step["AngVelPlatform"], [1.0, 2.0, 3.0])
+    np.testing.assert_array_equal(step["sigma_BN"], [0.4, 0.5, 0.6])
+
+
+def test_each_output_goes_to_the_standard_message_carrying_its_name():
+    """`r_BN_N` and `v_BN_N` go to `nav_trans`, the only message created."""
+    module = _module()
+
+    assert sorted(module.output_messages) == ["nav_trans"]
+    assert set(module.outputs) == {"r_BN_N", "v_BN_N"}
 
 
 def test_reset_writes_the_initial_state_to_every_output():
-    """`Reset` writes the algorithm's initial `value` and `other` to their messages."""
+    """`Reset` writes the algorithm's `r_BN_N` and `v_BN_N` as it holds them."""
     module = _module()
     _messages = _subscribed(module)
 
     module.Reset(0)
 
-    np.testing.assert_array_equal(module.output_messages["att"].read().sigma_BN, [0.5, 0.5, 0.5])
-    np.testing.assert_array_equal(module.output_messages["trans"].read().r_BN_N, [-0.5, -0.5, -0.5])
+    payload = module.output_messages["nav_trans"].read()
+    np.testing.assert_array_equal(payload.r_BN_N, [0.5, 0.5, 0.5])
+    np.testing.assert_array_equal(payload.v_BN_N, [-0.5, -0.5, -0.5])
 
 
-def test_a_step_writes_the_new_state_to_every_output():
-    """A step writes the arrays `step` returns to their messages."""
+def test_a_step_writes_the_returned_arrays_to_every_output():
+    """A step writes the arrays `step` returns to their message fields."""
     module = _module()
     _messages = _subscribed(module)
 
     module.Reset(0)
     module.UpdateState(ONE_SECOND_NS)
 
-    np.testing.assert_array_equal(
-        module.output_messages["att"].read().sigma_BN, StubAlgorithm.STEPPED
-    )
-    np.testing.assert_array_equal(
-        module.output_messages["trans"].read().r_BN_N, -StubAlgorithm.STEPPED
-    )
+    payload = module.output_messages["nav_trans"].read()
+    np.testing.assert_array_equal(payload.r_BN_N, STEPPED)
+    np.testing.assert_array_equal(payload.v_BN_N, -STEPPED)
 
 
 def test_the_call_at_the_reset_time_does_not_step():
@@ -134,36 +151,33 @@ def test_the_call_at_the_reset_time_does_not_step():
 
     module.Reset(0)
     module.UpdateState(0)
-    assert module.algorithm.steps == []
+    assert module.algorithm._steps == []
 
     module.UpdateState(ONE_SECOND_NS)
-    assert len(module.algorithm.steps) == 1
+    assert len(module.algorithm._steps) == 1
 
 
-@pytest.mark.parametrize(
-    ("overrides", "message"),
-    [
-        ({"inputs": {"a": ("imu", "AngVelPlatform")}}, r"inputs name \['a'\]; StubAlgorithm.step"),
-        (
-            {"inputs": {**BINDING.inputs, "c": ("nav", "sigma_BN")}},
-            r"inputs name \['a', 'b', 'c'\]",
-        ),
-        ({"inputs": {"a": ("gps", "AngVelPlatform"), "b": BINDING.inputs["b"]}}, "role 'gps'"),
-        (
-            {"inputs": {"a": ("imu", "AngVelPltaform"), "b": BINDING.inputs["b"]}},
-            "no field 'AngVelPltaform'",
-        ),
-        ({"outputs": {"value": ("pos", "r_BN_N")}}, "message 'pos', absent from messages"),
-        ({"outputs": {"value": ("att", "sigma_NB")}}, "'att' has no field 'sigma_NB'"),
-    ],
-)
-def test_construction_names_what_the_binding_gets_wrong(overrides, message):
-    """Construction refuses a binding that names the wrong keywords, role, message or field.
+def test_construction_names_a_keyword_no_input_carries():
+    """A `step` keyword that no input's message has as a field is refused by name."""
+    with pytest.raises(ValueError, match=r"'AngVelPlatfrom' is carried by 0 inputs"):
+        _module(UnreadKeyword())
 
-    `overrides` replace the binding's fields, and `message` matches the error.
-    """
-    with pytest.raises(ValueError, match=message):
-        _module(**overrides)
+
+def test_construction_names_a_keyword_two_inputs_carry():
+    """A `step` keyword that two inputs' messages both carry is refused by name."""
+    readers = {
+        "imu_a": messaging.IMUSensorMsgReader(),
+        "imu_b": messaging.IMUSensorMsgReader(),
+        "nav": messaging.NavAttMsgReader(),
+    }
+    with pytest.raises(ValueError, match=r"'AngVelPlatform' is carried by 2 inputs"):
+        AlgorithmModule(StubAlgorithm(), readers)
+
+
+def test_construction_names_an_output_no_standard_message_carries():
+    """An output name that no standard message has as a field is refused by name."""
+    with pytest.raises(ValueError, match=r"carries the outputs \['value'\]"):
+        _module(UnknownOutput())
 
 
 def test_the_message_tables_are_read_only():
@@ -174,16 +188,6 @@ def test_the_message_tables_are_read_only():
         module.output_messages["extra"] = messaging.NavAttMsg()
     with pytest.raises(TypeError):
         module.inputs["extra"] = messaging.NavAttMsgReader()
-
-
-def test_the_algorithm_is_unavailable_before_reset():
-    """Before `Reset`, the algorithm and a step both raise."""
-    module = _module()
-
-    with pytest.raises(RuntimeError, match="not been Reset"):
-        _ = module.algorithm
-    with pytest.raises(RuntimeError, match="not been Reset"):
-        module.UpdateState(ONE_SECOND_NS)
 
 
 def test_reset_names_an_unsubscribed_input():
@@ -206,12 +210,3 @@ def test_a_step_names_an_input_never_written():
 
     with pytest.raises(RuntimeError, match=r"\['nav'\] have not been written"):
         module.UpdateState(ONE_SECOND_NS)
-
-
-def test_reset_names_an_output_the_algorithm_holds_no_attribute_for():
-    """`Reset` names an output the built algorithm holds no attribute for."""
-    module = _module(outputs={"velocity": ("att", "sigma_BN")})
-    _messages = _subscribed(module)
-
-    with pytest.raises(ValueError, match="'velocity'"):
-        module.Reset(0)

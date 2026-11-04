@@ -69,8 +69,8 @@ _IDENTITY_MOUNTING = np.eye(3)
 
 
 def _propagate(
-    omega_P: np.ndarray,
-    accel_P: np.ndarray,
+    AngVelPlatform: np.ndarray,
+    AccelPlatform: np.ndarray,
     total_t: float,
     n_steps: int,
     sigma0: np.ndarray = _ZERO3,
@@ -81,8 +81,10 @@ def _propagate(
     """A dead reckoner, mounted at identity, stepped `n_steps` equal steps to `total_t`.
 
     Args:
-        omega_P: (3,) rad/s, the gyro reading held across every step, in the IMU platform frame.
-        accel_P: (3,) m/s^2, the accelerometer reading held across every step, in that frame.
+        AngVelPlatform: (3,) rad/s, the gyro reading held across every step, in the IMU
+            platform frame.
+        AccelPlatform: (3,) m/s^2, the accelerometer reading held across every step, in that
+            frame.
         total_t: s, the time it is stepped to from t = 0.
         n_steps: the number of equal steps.
         sigma0: (3,) MRP, the initial attitude of the body frame with respect to N.
@@ -91,12 +93,12 @@ def _propagate(
         v0: (3,) m/s, the initial inertial velocity in N.
 
     Returns:
-        The stepped `ImuDeadReckoner`, holding `t`, `sigma_BN`, `r_N` and `v_N`.
+        The stepped `ImuDeadReckoner`, holding `t`, `sigma_BN`, `r_BN_N` and `v_BN_N`.
     """
     reckoner = ImuDeadReckoner(sigma0, r0, v0, t0=0.0, mu=mu, dcm_PB=_IDENTITY_MOUNTING)
     dt = total_t / n_steps
     for i in range(1, n_steps + 1):
-        reckoner.step(t=i * dt, omega_P=omega_P, accel_P=accel_P)
+        reckoner.step(t=i * dt, AngVelPlatform=AngVelPlatform, AccelPlatform=AccelPlatform)
     return reckoner
 
 
@@ -188,7 +190,7 @@ def check_circular_orbit_matches_analytic_two_body_position() -> None:
     theta = n * state.t
     expected_r = radius * np.array([np.cos(theta), np.sin(theta), 0.0])
     np.testing.assert_allclose(
-        state.r_N, expected_r, atol=1.0, err_msg="quarter-orbit position error exceeds 1 m"
+        state.r_BN_N, expected_r, atol=1.0, err_msg="quarter-orbit position error exceeds 1 m"
     )
 
 
@@ -215,7 +217,7 @@ def check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
     )
     dt = 1e-5
 
-    state = reckoner.step(t=dt, omega_P=omega, accel_P=_ZERO3)
+    state = reckoner.step(t=dt, AngVelPlatform=omega, AccelPlatform=_ZERO3)
 
     c0 = dcm_NB(sigma0).T
     c1 = dcm_NB(state["sigma_BN"]).T

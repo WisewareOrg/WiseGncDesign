@@ -58,17 +58,18 @@ __all__ = ["ImuDeadReckoner"]
 # %% [markdown]
 # ## Interface
 #
-# `step` takes one IMU reading as plain arrays by keyword and returns the new state as plain
-# named arrays; the estimator holds its state as the same arrays:
+# `step` takes one IMU reading as plain arrays by keyword, named as the IMU message's fields, and
+# returns the new state as plain arrays named in Basilisk's navigation convention; the estimator
+# holds its state as the same arrays:
 #
 # | Name | Units | Frame |
 # | --- | --- | --- |
 # | `t` (in) | s | |
-# | `omega_P` (in) | rad/s, (3,) | rate of B with respect to N, in the IMU platform frame P |
-# | `accel_P` (in) | m/s², (3,) | non-gravitational acceleration, in P |
+# | `AngVelPlatform` (in) | rad/s, (3,) | rate of B with respect to N, in the IMU platform frame P |
+# | `AccelPlatform` (in) | m/s², (3,) | non-gravitational acceleration, in P |
 # | `sigma_BN` (out) | MRP, (3,), \|σ\| ≤ 1 | B with respect to N |
-# | `r_N` (out) | m, (3,) | inertial position |
-# | `v_N` (out) | m/s, (3,) | inertial velocity |
+# | `r_BN_N` (out) | m, (3,) | inertial position, in N |
+# | `v_BN_N` (out) | m/s, (3,) | inertial velocity, in N |
 #
 # The estimator owns the IMU's mounting, the DCM $[PB]$ with $v_P = [PB]\,v_B$, and rotates
 # each reading into the body frame, $v_B = [PB]^T v_P$, before it integrates. The state's arrays
@@ -159,9 +160,9 @@ def _step(
 # %% [markdown]
 # ## The estimator
 #
-# `ImuDeadReckoner` holds its state as `t`, `sigma_BN`, `r_N` and `v_N` and advances it one IMU
-# reading at a time. `step` switches $\sigma$ to the shadow set after the RK4 update, so the held
-# state always has $|\sigma| \le 1$.
+# `ImuDeadReckoner` holds its state as `t`, `sigma_BN`, `r_BN_N` and `v_BN_N` and advances it
+# one IMU reading at a time. `step` switches $\sigma$ to the shadow set after the RK4 update, so
+# the held state always has $|\sigma| \le 1$.
 
 
 # %%
@@ -181,8 +182,8 @@ class ImuDeadReckoner:
     Attributes:
         t: s, the time the state applies at.
         sigma_BN: (3,) MRP of B with respect to N, |sigma_BN| <= 1, read-only.
-        r_N: (3,) m, inertial position, read-only.
-        v_N: (3,) m/s, inertial velocity, read-only.
+        r_BN_N: (3,) m, inertial position in N, read-only.
+        v_BN_N: (3,) m/s, inertial velocity in N, read-only.
 
     Raises:
         ValueError: when a vector is not a finite (3,) array, `t0` is not finite, `mu` is not
@@ -228,34 +229,37 @@ class ImuDeadReckoner:
         self._mu = float(mu)
         self._dcm_BP = np.ascontiguousarray(mounting.T)
         self.t = float(t0)
-        self.sigma_BN, self.r_N, self.v_N = initial.values()
+        self.sigma_BN, self.r_BN_N, self.v_BN_N = initial.values()
 
-    def step(self, t: float, omega_P: np.ndarray, accel_P: np.ndarray) -> dict[str, np.ndarray]:
-        """Advances the state to `t` by one RK4 step and returns it as `sigma_BN`, `r_N` and `v_N`.
+    def step(
+        self, t: float, AngVelPlatform: np.ndarray, AccelPlatform: np.ndarray
+    ) -> dict[str, np.ndarray]:
+        """Advances the state to `t` by one RK4 step and returns it.
 
         Over `dt = t - self.t`, with the readings rotated into B and held constant:
         dsigma/dt = 1/4 B(sigma) omega_B; dr/dt = v; dv/dt = dcm_NB(sigma) accel_B - mu r/|r|^3.
 
         Args:
             t: s, the reading's time, after `self.t`.
-            omega_P: (3,) rad/s, the gyro reading, rate of B with respect to N in the IMU
+            AngVelPlatform: (3,) rad/s, the gyro reading, rate of B with respect to N in the IMU
                 platform frame P.
-            accel_P: (3,) m/s^2, the accelerometer reading, non-gravitational acceleration in P.
+            AccelPlatform: (3,) m/s^2, the accelerometer reading, non-gravitational acceleration
+                in P.
 
         Returns:
-            `sigma_BN` (MRP, |sigma| <= 1), `r_N` (m, in N) and `v_N` (m/s, in N), each a
+            `sigma_BN` (MRP, |sigma| <= 1), `r_BN_N` (m, in N) and `v_BN_N` (m/s, in N), each a
             read-only (3,) array, the same arrays the estimator holds.
 
         Raises:
-            ValueError: when `dt` is not > 0 (including NaN), or `omega_P` or `accel_P` is not a
-                finite (3,) array; the state is left unchanged.
+            ValueError: when `dt` is not > 0 (including NaN), or `AngVelPlatform` or
+                `AccelPlatform` is not a finite (3,) array; the state is left unchanged.
         """
         dt = t - self.t
         if not dt > 0.0:
             raise ValueError(f"dt must be > 0, got {dt}")
         readings = {
-            "omega_P": np.array(omega_P, dtype=float),
-            "accel_P": np.array(accel_P, dtype=float),
+            "AngVelPlatform": np.array(AngVelPlatform, dtype=float),
+            "AccelPlatform": np.array(AccelPlatform, dtype=float),
         }
         for name, value in readings.items():
             if value.shape != (3,) or not np.isfinite(value).all():
@@ -263,10 +267,10 @@ class ImuDeadReckoner:
 
         stepped = _step(
             self.sigma_BN,
-            self.r_N,
-            self.v_N,
-            readings["omega_P"],
-            readings["accel_P"],
+            self.r_BN_N,
+            self.v_BN_N,
+            readings["AngVelPlatform"],
+            readings["AccelPlatform"],
             self._dcm_BP,
             dt,
             self._mu,
@@ -274,5 +278,5 @@ class ImuDeadReckoner:
         for value in stepped:
             value.setflags(write=False)
         self.t = float(t)
-        self.sigma_BN, self.r_N, self.v_N = stepped
-        return {"sigma_BN": self.sigma_BN, "r_N": self.r_N, "v_N": self.v_N}
+        self.sigma_BN, self.r_BN_N, self.v_BN_N = stepped
+        return {"sigma_BN": self.sigma_BN, "r_BN_N": self.r_BN_N, "v_BN_N": self.v_BN_N}

@@ -12,25 +12,23 @@ import numpy as np
 from Basilisk.architecture import messaging
 from wise_dynamics.basilisk import ImuSpacecraft, Leo500
 
+from gnc_algorithms.imu_dead_reckoning import ImuDeadReckoner
 from gnc_analysis.error_bounds import read_run, violations
-from gnc_cdh.basilisk import BINDINGS, AlgorithmModule, make_fsw
+from gnc_cdh.basilisk import AlgorithmModule
 
 IMU_DCM_PB = np.eye(3)
 """The flight software's mounting [PB] of the IMU: identity on this spacecraft."""
 
-UNITS = {"sigma_BN": "MRP", "r_N": "m", "v_N": "m/s"}
-"""The units of each estimate field in the run file."""
+UNITS = {"sigma_BN": "MRP", "r_BN_N": "m", "v_BN_N": "m/s"}
+"""The units of each output in the run file, by its name."""
 
 
 def estimate_fields(fsw: AlgorithmModule) -> dict[str, tuple[Any, str, str]]:
-    """The estimate's run-file datasets, `est/<state field>`, by the dead reckoner's binding.
+    """The estimate's run-file datasets, `est/<output name>`, one per output of the host module.
 
     Takes the host module `fsw`; returns each dataset path to `(message, field, units)`.
     """
-    return {
-        f"est/{state_field}": (fsw.output_messages[message], message_field, UNITS[state_field])
-        for state_field, (message, message_field) in BINDINGS["imu_dead_reckoning"].outputs.items()
-    }
+    return {f"est/{name}": (message, name, UNITS[name]) for name, message in fsw.outputs.items()}
 
 
 def bound_inputs() -> dict[str, float]:
@@ -48,14 +46,17 @@ def bound_inputs() -> dict[str, float]:
 
 
 def dead_reckoner(scenario: Leo500) -> AlgorithmModule:
-    """The dead reckoner's host module on `scenario`'s vehicle."""
-    return make_fsw(
-        "imu_dead_reckoning",
-        inputs=scenario.vehicle.readers(),
-        initial_state=scenario.initial_state,
-        dcm_PB=IMU_DCM_PB,
+    """The dead reckoner, built at t = 0 from `scenario`'s initial state, hosted on its vehicle."""
+    initial = scenario.initial_state()
+    algorithm = ImuDeadReckoner(
+        initial["sigma0_BN"],
+        initial["r0_N"],
+        initial["v0_N"],
+        t0=0.0,
         mu=Leo500.mu_m3_s2["earth"],
+        dcm_PB=IMU_DCM_PB,
     )
+    return AlgorithmModule(algorithm, scenario.vehicle.readers())
 
 
 def test_the_estimate_is_written_at_whole_seconds():
