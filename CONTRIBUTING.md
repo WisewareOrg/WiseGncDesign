@@ -19,5 +19,5 @@ A PR whose base is not the default branch needs the Development-field link writt
 WiseKiosk's [`link-pr` skill](https://github.com/WisewareOrg/WiseKiosk/blob/main/.claude/skills/link-pr/SKILL.md)
 for the GraphQL mutation; `Closes #N` in the body only writes that record on a default-base PR.
 
-`checks.yml` additionally runs `check-no-framework`: `scripts/check-no-framework.sh` fails the
-build if anything under `algorithms/` imports or includes a simulation or flight-framework name.
+`checks.yml` runs the lint, test and notebook commands listed in the
+[README's Development section](README.md#development).

@@ -1,9 +1,7 @@
 name: checks
 
-# Repo-wide invariant: algorithms/ carries no simulation or flight-framework name, so flight
-# code stays host-swappable (scripts/check-no-framework.sh). Not a required-status-check
-# context (repository-floor.yml names only check-branch, pr-title and repo-floor); this is the
-# repo's own invariant gate.
+# The commands in README.md's Development section: the repository's test-suite checks on pull
+# requests.
 on:
   push:
     branches: [main]
@@ -18,13 +16,37 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check-no-framework:
-    name: check-no-framework
+  ruff:
+    name: ruff
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.13.6"
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run interrogate -v --fail-under 100 algorithms cdh analysis notebooks tests
+      - run: uv run pydoclint algorithms cdh analysis notebooks tests
 
-      - name: No simulation or flight-framework name appears under algorithms/
-        run: scripts/check-no-framework.sh
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_SIM: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.13.6"
+      - run: uv sync --locked --group sim
+      - run: uv run pytest -n 2 --sim-runs 2
+      - name: The Monte Carlo notebook with GNC_MONTE_CARLO_RUNS=2
+        env:
+          GNC_MONTE_CARLO_RUNS: "2"
+        run: uv run python notebooks/imu_dead_reckoning_monte_carlo.py
