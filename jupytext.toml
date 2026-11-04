@@ -1,4 +1,4 @@
-# Pairs each notebook notebooks/<name>.py, the percent-format source of truth, with
-# notebooks/<name>.ipynb, which git ignores.
-formats = "notebooks///ipynb,notebooks///py:percent"
+# Pairs each notebook source, notebooks/<name>.py and each literate algorithm module, the
+# percent-format source of truth, with the <name>.ipynb beside it, which git ignores.
+formats = "ipynb,py:percent"
 notebook_metadata_filter = "-jupytext.text_representation"

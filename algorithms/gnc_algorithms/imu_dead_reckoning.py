@@ -1,3 +1,10 @@
+# ---
+# jupyter:
+#   jupytext:
+#     cell_metadata_filter: -all
+#     notebook_metadata_filter: -jupytext.text_representation
+# ---
+
 # %% [markdown]
 # # Strapdown inertial dead reckoning
 #
