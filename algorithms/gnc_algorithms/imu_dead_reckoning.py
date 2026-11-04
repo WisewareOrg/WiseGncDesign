@@ -13,7 +13,8 @@
 # inertial frame by that attitude and combined with a point-mass gravity model to integrate to
 # velocity and position. No measurement corrects the estimate, so an attitude error feeds the
 # navigation error directly through the frame rotation.
-#
+
+# %% [markdown]
 # ## Attitude kinematics
 #
 # Attitude is the modified Rodrigues parameter (MRP) set $\sigma_{BN}$, body frame $B$ with
@@ -24,7 +25,8 @@
 #
 # where $B(\sigma)$ is `mrp.B`. $\sigma$ switches to its shadow set (`mrp.shadow`) whenever
 # $|\sigma| > 1$, so it stays bounded.
-#
+
+# %% [markdown]
 # ## Translational kinematics
 #
 # Position and velocity, in the inertial frame, integrate the rotated specific-force reading
@@ -35,7 +37,8 @@
 # where $C_{NB}(\sigma)$ (`mrp.dcm_NB`) rotates a body-frame vector into the inertial frame,
 # $a_B$ is the accelerometer's body-frame reading of non-gravitational acceleration, and $\mu$
 # is the gravitational parameter, supplied by the host so truth and estimate share one constant.
-#
+
+# %% [markdown]
 # ## Integration
 #
 # One `step()` call advances $(\sigma, r, v)$ by one RK4 step over `dt = sample.t - state.t`,
