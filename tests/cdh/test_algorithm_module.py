@@ -1,5 +1,7 @@
-"""`AlgorithmModule` driven directly, with a stub algorithm, a stub binding and standalone
-Basilisk messages."""
+"""`AlgorithmModule` driven directly.
+
+It runs a stub algorithm through a stub binding on standalone Basilisk messages.
+"""
 
 import dataclasses
 
@@ -13,8 +15,10 @@ ONE_SECOND_NS = 1_000_000_000
 
 
 class StubAlgorithm:
-    """Holds `t`, `value` and `other`, records every step's inputs, and steps to `STEPPED`, so a
-    test sees what reached it."""
+    """A stub algorithm that records what reaches it.
+
+    It holds `t`, `value` and `other`, records every step's inputs, and steps to `STEPPED`.
+    """
 
     STEPPED = np.array([1.0, 2.0, 3.0])
 
@@ -26,8 +30,10 @@ class StubAlgorithm:
         self.other = -np.asarray(value0)
 
     def step(self, t: float, a: np.ndarray, b: np.ndarray) -> dict[str, np.ndarray]:
-        """Records `t` (s), `a` and `b` ((3,) each), steps to `STEPPED`, and returns `value` and
-        `other` as named arrays."""
+        """Records the step's inputs and steps to `STEPPED`.
+
+        Takes `t` (s), `a` and `b` ((3,) each); returns `value` and `other` as named arrays.
+        """
         self.steps.append({"t": t, "a": a, "b": b})
         self.t, self.value, self.other = t, self.STEPPED, -self.STEPPED
         return {"value": self.value, "other": self.other}
@@ -69,8 +75,11 @@ def _module(**overrides) -> AlgorithmModule:
 
 
 def _subscribed(module: AlgorithmModule, angvel=(1.0, 2.0, 3.0), sigma=(0.4, 0.5, 0.6)):
-    """Subscribes `module`'s `imu` and `nav` readers to messages carrying `angvel` (rad/s,
-    (3,)) and `sigma` (MRP, (3,)), and returns the messages so they outlive the call."""
+    """Subscribes `module`'s `imu` and `nav` readers to written messages.
+
+    The messages carry `angvel` (rad/s, (3,)) and `sigma` (MRP, (3,)), and are returned so they
+    outlive the call.
+    """
     imu, nav = _imu_message(angvel), _nav_message(sigma)
     module.inputs["imu"].subscribeTo(imu)
     module.inputs["nav"].subscribeTo(nav)
@@ -149,8 +158,10 @@ def test_the_call_at_the_reset_time_does_not_step():
     ],
 )
 def test_construction_names_what_the_binding_gets_wrong(overrides, message):
-    """Construction refuses a binding that names the wrong keywords, role, message or field, with
-    `message` matching the error."""
+    """Construction refuses a binding that names the wrong keywords, role, message or field.
+
+    `overrides` replace the binding's fields, and `message` matches the error.
+    """
     with pytest.raises(ValueError, match=message):
         _module(**overrides)
 

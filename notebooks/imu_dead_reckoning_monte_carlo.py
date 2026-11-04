@@ -26,6 +26,8 @@
 # 0.02 s).
 
 # %%
+"""Runs the dead reckoner's smoke checks and Monte Carlo run, and shows each error's bound ratio."""
+
 import importlib.util
 import os
 import subprocess
@@ -131,8 +133,11 @@ def check_constant_rate_matches_analytic_mrp() -> None:
 
 # %%
 def check_rotation_past_180_degrees_switches_to_shadow_set() -> None:
-    """A 1 rad/s rate about body x for 1.2 pi s keeps |sigma| <= 1, and its DCM matches SciPy's
-    for that rotation within 1e-5."""
+    """A rotation past 180 degrees switches to the shadow set.
+
+    A 1 rad/s rate about body x for 1.2 pi s keeps |sigma| <= 1, and its DCM matches SciPy's for
+    that rotation within 1e-5.
+    """
     omega = 1.0  # rad/s
     axis = np.array([1.0, 0.0, 0.0])
     total_t = np.pi * 1.2  # theta = 1.2 pi > pi
@@ -160,8 +165,11 @@ def check_rotation_past_180_degrees_switches_to_shadow_set() -> None:
 
 # %%
 def check_circular_orbit_matches_analytic_two_body_position() -> None:
-    """Gravity alone, at 1 s steps over a quarter of a 500 km circular orbit, lands within 1 m of
-    the analytic position in N."""
+    """Gravity alone keeps a quarter circular orbit on its analytic position.
+
+    At 1 s steps over a quarter of a 500 km circular orbit, the position lands within 1 m of the
+    analytic one in N.
+    """
     mu = 3.986004418e14  # m^3/s^2, Earth
     radius = 6_871_000.0  # m, about 500 km altitude
     n = np.sqrt(mu / radius**3)  # rad/s, mean motion
@@ -195,8 +203,11 @@ def check_circular_orbit_matches_analytic_two_body_position() -> None:
 
 # %%
 def check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
-    """One 1e-5 s step at a 0.3 rad/s rate about z from sigma = (0.1, 0, 0) matches
-    dC_BN/dt = -[omega x] C_BN within 1e-3 per entry."""
+    """The MRP kinematics match the DCM derivative for a non-aligned rate.
+
+    One 1e-5 s step at a 0.3 rad/s rate about z from sigma = (0.1, 0, 0) matches
+    dC_BN/dt = -[omega x] C_BN within 1e-3 per entry.
+    """
     sigma0 = np.array([0.1, 0.0, 0.0])
     omega = np.array([0.0, 0.0, 0.3])
     reckoner = ImuDeadReckoner(
