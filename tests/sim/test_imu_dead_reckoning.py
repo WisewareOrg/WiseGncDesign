@@ -61,7 +61,7 @@ def test_the_estimate_is_written_at_whole_seconds():
     scenario.run(fsw, {}, duration_s=3.5)
 
     assert estimate.timeWritten() == 3_000_000_000
-    assert fsw.algorithm.state.t == 3.0
+    assert fsw.algorithm.t == 3.0
 
 
 def test_imu_dead_reckoning_case(sim_scenario, sim_duration_s, sim_run_file):

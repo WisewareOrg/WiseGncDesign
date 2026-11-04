@@ -2,14 +2,14 @@
 
 `gnc_cdh` is the C&DH (command and data handling) partition. It hosts an algorithm from
 `gnc_algorithms` in a simulator, and knows nothing about what any field means: it copies message
-fields into the algorithm's sample and the algorithm's state into messages, by name. Frames,
-mountings and units belong to the algorithm.
+fields to the algorithm's `step` as plain arrays and the arrays it returns into messages, by
+name. Frames, mountings and units belong to the algorithm.
 
 `gnc_cdh.basilisk` hosts algorithms in Basilisk. Each algorithm has one `Binding` in `BINDINGS`,
 which declares:
-- `algorithm` and `sample`: the algorithm class and the dataclass its `step` takes;
-- `inputs`: each sample field and the `(input role, message field)` it is copied from;
-- `outputs`: each state field and the `(output message, message field)` it is copied to;
+- `algorithm`: the algorithm class;
+- `inputs`: each `step` keyword and the `(input role, message field)` it is copied from;
+- `outputs`: each name `step` returns and the `(output message, message field)` it is copied to;
 - `messages`: each output message's Basilisk type.
 
 `make_fsw(name, inputs, initial_state, **params)` builds the binding's `AlgorithmModule`.
@@ -51,7 +51,7 @@ True
 >>> datasets = scenario.run(fsw, {}, duration_s=60.0)
 >>> sorted(fsw.output_messages)
 ['nav_att', 'nav_trans']
->>> estimate = fsw.algorithm.state
+>>> estimate = fsw.algorithm
 >>> estimate.t
 60.0
 >>> truth_r_N, _ = datasets["truth/r_N"]
@@ -64,7 +64,7 @@ True
 
 ## Adding an algorithm
 
-1. Write the algorithm in `gnc_algorithms` with its own sample and state dataclasses. Its
-   constructor takes `t0` and its initial state, its `state` exposes the state, and `step(sample)`
-   advances it.
+1. Write the algorithm in `gnc_algorithms`. Its constructor takes `t0` and its initial state;
+   it holds `t` and each output as an attribute; and `step(t=..., **inputs)` takes plain arrays by
+   keyword and returns plain named arrays.
 2. Add one `Binding` for it to `BINDINGS` in `gnc_cdh/basilisk/bindings.py`.

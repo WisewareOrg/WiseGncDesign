@@ -46,56 +46,31 @@
 accelerometer, rotated by that attitude, plus point-mass gravity integrated to inertial
 velocity and position."""
 
-from dataclasses import dataclass
-
 import numpy as np
 from numba import njit
 
 from gnc_algorithms.mrp import B, dcm_NB, shadow
 
-__all__ = ["DeadReckoningState", "ImuDeadReckoner", "ImuSample"]
+__all__ = ["ImuDeadReckoner"]
 
 # %% [markdown]
 # ## Interface
 #
-# The estimator takes one `ImuSample` per step and returns a `DeadReckoningState`:
+# `step` takes one IMU reading as plain arrays by keyword and returns the new state as plain
+# named arrays; the estimator holds its state as the same arrays:
 #
-# | Type | Field | Units | Frame |
-# | --- | --- | --- | --- |
-# | `ImuSample` | `t` | s | |
-# | | `omega_P` | rad/s, (3,) | angular rate of B with respect to N, in the IMU platform frame P |
-# | | `accel_P` | m/s², (3,) | non-gravitational acceleration, in P |
-# | `DeadReckoningState` | `t` | s | |
-# | | `sigma_BN` | MRP, (3,), \|σ\| ≤ 1 | B with respect to N |
-# | | `r_N` | m, (3,) | inertial position |
-# | | `v_N` | m/s, (3,) | inertial velocity |
+# | Name | Units | Frame |
+# | --- | --- | --- |
+# | `t` (in) | s | |
+# | `omega_P` (in) | rad/s, (3,) | rate of B with respect to N, in the IMU platform frame P |
+# | `accel_P` (in) | m/s², (3,) | non-gravitational acceleration, in P |
+# | `sigma_BN` (out) | MRP, (3,), \|σ\| ≤ 1 | B with respect to N |
+# | `r_N` (out) | m, (3,) | inertial position |
+# | `v_N` (out) | m/s, (3,) | inertial velocity |
 #
 # The estimator owns the IMU's mounting, the DCM $[PB]$ with $v_P = [PB]\,v_B$, and rotates
 # each reading into the body frame, $v_B = [PB]^T v_P$, before it integrates. The state's arrays
 # are read-only.
-
-
-# %%
-@dataclass(frozen=True, slots=True)
-class ImuSample:
-    """One raw IMU reading in its platform frame P: `t` (s), `omega_P` (rad/s) and `accel_P`
-    (m/s^2)."""
-
-    t: float
-    omega_P: np.ndarray
-    accel_P: np.ndarray
-
-
-@dataclass(frozen=True, slots=True)
-class DeadReckoningState:
-    """The estimate at `t` (s): `sigma_BN` (MRP, |sigma| <= 1), `r_N` (m) and `v_N` (m/s), each
-    a read-only (3,) array."""
-
-    t: float
-    sigma_BN: np.ndarray
-    r_N: np.ndarray
-    v_N: np.ndarray
-
 
 # %% [markdown]
 # ## Gravity
@@ -175,14 +150,14 @@ def _rotation(name: str, value: np.ndarray) -> np.ndarray:
 # %% [markdown]
 # ## The estimator
 #
-# `ImuDeadReckoner` holds the current `DeadReckoningState` and advances it one `ImuSample` at a
-# time. `step` switches $\sigma$ to the shadow set after the RK4 update, so the stored state
-# always has $|\sigma| \le 1$.
+# `ImuDeadReckoner` holds its state as `t`, `sigma_BN`, `r_N` and `v_N` and advances it one IMU
+# reading at a time. `step` switches $\sigma$ to the shadow set after the RK4 update, so the held
+# state always has $|\sigma| \le 1$.
 
 
 # %%
 class ImuDeadReckoner:
-    """Propagates attitude (MRP), inertial position and inertial velocity from raw IMU samples in
+    """Propagates attitude (MRP), inertial position and inertial velocity from raw IMU readings in
     the IMU's platform frame, with point-mass gravity of parameter `mu`.
 
     Args:
@@ -192,6 +167,12 @@ class ImuDeadReckoner:
         t0: s, the time the initial state applies at.
         mu: m^3/s^2, gravitational parameter of the central body, >= 0.
         dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B, a proper rotation.
+
+    Attributes:
+        t: s, the time the state applies at.
+        sigma_BN: (3,) MRP of B with respect to N, |sigma_BN| <= 1, read-only.
+        r_N: (3,) m, inertial position, read-only.
+        v_N: (3,) m/s, inertial velocity, read-only.
 
     Raises:
         ValueError: when a vector is not a finite 3-vector, `t0` is not finite, `mu` is not
@@ -213,45 +194,30 @@ class ImuDeadReckoner:
             raise ValueError(f"mu must be finite and >= 0, got {mu!r}")
         self._mu = float(mu)
         self._dcm_BP = np.ascontiguousarray(_rotation("dcm_PB", dcm_PB).T)
-        self._state = DeadReckoningState(
-            t=float(t0),
-            sigma_BN=_vector3("sigma0_BN", sigma0_BN),
-            r_N=_vector3("r0_N", r0_N),
-            v_N=_vector3("v0_N", v0_N),
-        )
+        self.t = float(t0)
+        self.sigma_BN = _vector3("sigma0_BN", sigma0_BN)
+        self.r_N = _vector3("r0_N", r0_N)
+        self.v_N = _vector3("v0_N", v0_N)
 
-    @property
-    def state(self) -> DeadReckoningState:
-        """The current state."""
-        return self._state
+    def step(self, t: float, omega_P: np.ndarray, accel_P: np.ndarray) -> dict[str, np.ndarray]:
+        """Advances the state to `t` by one RK4 step and returns it as `sigma_BN`, `r_N` and `v_N`.
 
-    def step(self, sample: ImuSample) -> DeadReckoningState:
-        """Advances the state to `sample.t` by one RK4 step and returns the new state.
-
-        Over `dt = sample.t - state.t`, with the readings rotated into B and held constant:
+        Over `dt = t - self.t`, with the readings rotated into B and held constant:
         dsigma/dt = 1/4 B(sigma) omega_B; dr/dt = v; dv/dt = dcm_NB(sigma) accel_B - mu r/|r|^3.
 
         Raises:
             ValueError: when `dt` is not > 0 (including NaN), or `omega_P` or `accel_P` is not a
                 finite 3-vector; the state is left unchanged.
         """
-        dt = sample.t - self._state.t
+        dt = t - self.t
         if not dt > 0.0:
             raise ValueError(f"dt must be > 0, got {dt}")
-        omega_P = _vector3("omega_P", sample.omega_P)
-        accel_P = _vector3("accel_P", sample.accel_P)
+        omega = _vector3("omega_P", omega_P)
+        accel = _vector3("accel_P", accel_P)
 
         sigma_new, r_new, v_new = _step(
-            self._state.sigma_BN,
-            self._state.r_N,
-            self._state.v_N,
-            omega_P,
-            accel_P,
-            self._dcm_BP,
-            dt,
-            self._mu,
+            self.sigma_BN, self.r_N, self.v_N, omega, accel, self._dcm_BP, dt, self._mu
         )
-        self._state = DeadReckoningState(
-            t=sample.t, sigma_BN=_frozen(sigma_new), r_N=_frozen(r_new), v_N=_frozen(v_new)
-        )
-        return self._state
+        self.t = float(t)
+        self.sigma_BN, self.r_N, self.v_N = _frozen(sigma_new), _frozen(r_new), _frozen(v_new)
+        return {"sigma_BN": self.sigma_BN, "r_N": self.r_N, "v_N": self.v_N}

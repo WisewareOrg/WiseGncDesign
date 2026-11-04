@@ -2,7 +2,6 @@
 Basilisk messages."""
 
 import dataclasses
-from dataclasses import dataclass, field
 
 import numpy as np
 import pytest
@@ -13,46 +12,26 @@ from gnc_cdh.basilisk import AlgorithmModule, Binding
 ONE_SECOND_NS = 1_000_000_000
 
 
-@dataclass(frozen=True)
-class StubSample:
-    """A sample with two vector fields, `a` and `b`."""
-
-    t: float
-    a: np.ndarray
-    b: np.ndarray
-
-
-@dataclass(frozen=True)
-class StubState:
-    """A state carrying two vectors, `value` and `other`."""
-
-    t: float
-    value: np.ndarray = field(default_factory=lambda: np.zeros(3))
-    other: np.ndarray = field(default_factory=lambda: np.zeros(3))
-
-
 class StubAlgorithm:
-    """Records every sample and steps to `STEPPED`, so a test sees what reached it."""
+    """Holds `t`, `value` and `other`, records every step's inputs, and steps to `STEPPED`, so a
+    test sees what reached it."""
 
     STEPPED = np.array([1.0, 2.0, 3.0])
 
     def __init__(self, t0: float, value0: np.ndarray) -> None:
-        self.samples: list[StubSample] = []
-        self._state = StubState(t=t0, value=np.asarray(value0), other=-np.asarray(value0))
+        self.steps: list[dict] = []
+        self.t = t0
+        self.value = np.asarray(value0)
+        self.other = -np.asarray(value0)
 
-    @property
-    def state(self) -> StubState:
-        return self._state
-
-    def step(self, sample: StubSample) -> StubState:
-        self.samples.append(sample)
-        self._state = StubState(t=sample.t, value=self.STEPPED, other=-self.STEPPED)
-        return self._state
+    def step(self, t: float, a: np.ndarray, b: np.ndarray) -> dict[str, np.ndarray]:
+        self.steps.append({"t": t, "a": a, "b": b})
+        self.t, self.value, self.other = t, self.STEPPED, -self.STEPPED
+        return {"value": self.value, "other": self.other}
 
 
 BINDING = Binding(
     algorithm=StubAlgorithm,
-    sample=StubSample,
     inputs={"a": ("imu", "AngVelPlatform"), "b": ("nav", "sigma_BN")},
     outputs={"value": ("att", "sigma_BN"), "other": ("trans", "r_BN_N")},
     messages={"att": messaging.NavAttMsg, "trans": messaging.NavTransMsg},
@@ -91,17 +70,17 @@ def _subscribed(module: AlgorithmModule, angvel=(1.0, 2.0, 3.0), sigma=(0.4, 0.5
     return imu, nav
 
 
-def test_each_message_field_lands_in_its_sample_field():
+def test_each_message_field_reaches_its_step_keyword():
     module = _module()
     _messages = _subscribed(module)
 
     module.Reset(0)
     module.UpdateState(ONE_SECOND_NS)
 
-    sample = module.algorithm.samples[-1]
-    assert sample.t == 1.0
-    np.testing.assert_array_equal(sample.a, [1.0, 2.0, 3.0])
-    np.testing.assert_array_equal(sample.b, [0.4, 0.5, 0.6])
+    step = module.algorithm.steps[-1]
+    assert step["t"] == 1.0
+    np.testing.assert_array_equal(step["a"], [1.0, 2.0, 3.0])
+    np.testing.assert_array_equal(step["b"], [0.4, 0.5, 0.6])
 
 
 def test_reset_writes_the_initial_state_to_every_output():
@@ -135,17 +114,16 @@ def test_the_call_at_the_reset_time_does_not_step():
 
     module.Reset(0)
     module.UpdateState(0)
-    assert module.algorithm.samples == []
+    assert module.algorithm.steps == []
 
     module.UpdateState(ONE_SECOND_NS)
-    assert len(module.algorithm.samples) == 1
+    assert len(module.algorithm.steps) == 1
 
 
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
-        ({"sample": dict}, "is not a dataclass with field 't'"),
-        ({"inputs": {"a": ("imu", "AngVelPlatform")}}, r"inputs name \['a'\]; StubSample has"),
+        ({"inputs": {"a": ("imu", "AngVelPlatform")}}, r"inputs name \['a'\]; StubAlgorithm.step"),
         (
             {"inputs": {**BINDING.inputs, "c": ("nav", "sigma_BN")}},
             r"inputs name \['a', 'b', 'c'\]",
@@ -202,7 +180,7 @@ def test_a_step_names_an_input_never_written():
         module.UpdateState(ONE_SECOND_NS)
 
 
-def test_reset_names_an_output_state_field_the_state_lacks():
+def test_reset_names_an_output_the_algorithm_holds_no_attribute_for():
     module = _module(outputs={"velocity": ("att", "sigma_BN")})
     _messages = _subscribed(module)
 

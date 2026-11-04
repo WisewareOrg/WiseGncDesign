@@ -45,7 +45,7 @@ def test_builds_and_steps_the_dead_reckoner_and_publishes_its_state(imu_reader):
     module.Reset(0)
     module.UpdateState(ONE_SECOND_NS)
 
-    state = module.algorithm.state
+    state = module.algorithm
     assert state.t == 1.0
     # mu = 0, zero rate, identity attitude: 1 m/s^2 along x for 1 s.
     np.testing.assert_allclose(state.v_N, [1.0, 0.0, 0.0], atol=1e-12)
@@ -60,7 +60,7 @@ def test_initial_state_keys_naming_no_parameter_are_left_out(imu_reader):
 
     module.Reset(0)
 
-    np.testing.assert_array_equal(module.algorithm.state.r_N, R0_N)
+    np.testing.assert_array_equal(module.algorithm.r_N, R0_N)
 
 
 @pytest.mark.parametrize(

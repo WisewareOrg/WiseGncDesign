@@ -36,7 +36,7 @@ from pathlib import Path
 import numpy as np
 from matplotlib.figure import Figure
 
-from gnc_algorithms.imu_dead_reckoning import DeadReckoningState, ImuDeadReckoner, ImuSample
+from gnc_algorithms.imu_dead_reckoning import ImuDeadReckoner
 from gnc_algorithms.mrp import dcm_NB
 from gnc_analysis.error_bounds import BOUND_FACTOR, bound_ratios, error_growth, read_run
 
@@ -85,13 +85,12 @@ def _propagate(
     mu: float = 0.0,
     r0: np.ndarray = _AWAY_FROM_ORIGIN,
     v0: np.ndarray = _ZERO3,
-) -> DeadReckoningState:
+) -> ImuDeadReckoner:
     reckoner = ImuDeadReckoner(sigma0, r0, v0, t0=0.0, mu=mu, dcm_PB=_IDENTITY_MOUNTING)
     dt = total_t / n_steps
-    state = reckoner.state
     for i in range(1, n_steps + 1):
-        state = reckoner.step(ImuSample(t=i * dt, omega_P=omega_P, accel_P=accel_P))
-    return state
+        reckoner.step(t=i * dt, omega_P=omega_P, accel_P=accel_P)
+    return reckoner
 
 
 # %% [markdown]
@@ -193,10 +192,10 @@ def check_kinematics_match_dcm_derivative_for_nonaligned_rate() -> None:
     )
     dt = 1e-5
 
-    state = reckoner.step(ImuSample(t=dt, omega_P=omega, accel_P=_ZERO3))
+    state = reckoner.step(t=dt, omega_P=omega, accel_P=_ZERO3)
 
     c0 = dcm_NB(sigma0).T
-    c1 = dcm_NB(state.sigma_BN).T
+    c1 = dcm_NB(state["sigma_BN"]).T
     np.testing.assert_allclose(
         (c1 - c0) / dt,
         -_skew(omega) @ c0,
