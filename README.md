@@ -27,15 +27,17 @@ uv run pytest -n 2 --sim-runs 2
 uv run python notebooks/imu_dead_reckoning_monte_carlo.py
 ```
 
-The scenario test, `tests/sim/test_imu_dead_reckoning.py`, flies the dead reckoner in
-WiseDynamics' `Leo500` scenario, writes one HDF5 run file per case, and holds each case within the
-bound its drawn IMU biases imply. Its `--sim-*` options come from WiseDynamics' pytest plugin.
+All of the dead reckoner's tests are in `tests/sim/test_imu_dead_reckoning.py`: four smoke tests
+of flight conditions with closed forms, its 1 Hz cadence, and the Monte Carlo case, which flies the
+dead reckoner in WiseDynamics' `Leo500` scenario, writes one HDF5 run file per case, and holds each
+case within the bound its drawn IMU biases imply. Its `--sim-*` options come from WiseDynamics'
+pytest plugin.
 
-The notebook runs the dead reckoner's smoke checks, then that test over `GNC_MONTE_CARLO_RUNS`
-cases (default 852) on `GNC_MONTE_CARLO_WORKERS` workers (default the CPU count) at
-`GNC_MONTE_CARLO_FIDELITY` (default `lo`), then shows each error against its bound and the final
-errors. To open either file in Jupyter, generate the notebook from its source; generated notebooks
-are ignored by git:
+The notebook runs that module through pytest over `GNC_MONTE_CARLO_RUNS` cases (default 852) on
+`GNC_MONTE_CARLO_WORKERS` workers (default the CPU count) at `GNC_MONTE_CARLO_FIDELITY` (default
+`lo`), then shows each error against its bound and the final errors. It holds no test logic. To
+open either file in Jupyter, generate the notebook from its source; generated notebooks are
+ignored by git:
 
 ```sh
 uv run jupytext --to ipynb algorithms/gnc_algorithms/imu_dead_reckoning.py
