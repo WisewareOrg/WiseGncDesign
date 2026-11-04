@@ -36,8 +36,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.figure import Figure
 
 from gnc_analysis.error_bounds import BOUND_FACTOR, bound_ratios, error_growth, read_run
 
@@ -97,8 +97,7 @@ for name, r in ratios.items():
         f"| {np.percentile(r.max(axis=1), 99.9):.2f} |"
     )
 
-fig = Figure(figsize=(8, 7))
-axes = fig.subplots(len(ratios), 1, sharex=True)
+fig, axes = plt.subplots(len(ratios), 1, sharex=True, figsize=(8, 7))
 for ax, (name, r) in zip(axes, ratios.items(), strict=True):
     ax.plot(t, r.max(axis=0), label="worst across cases")
     ax.axhline(BOUND_FACTOR, color="C3", linestyle="--", label="bound factor")
@@ -107,7 +106,7 @@ axes[0].set_title(f"Error over its derived growth, {len(runs)} cases")
 axes[0].legend()
 axes[-1].set_xlabel("t [s]")
 fig.savefig(RUN_DIR / "bound_ratios.png", dpi=150)
-fig  # noqa: B018  (a notebook shows the cell's last value)
+plt.show()
 
 # %% [markdown]
 # ## Final errors
