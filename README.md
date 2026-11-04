@@ -39,15 +39,21 @@ The notebook runs that module through pytest over `GNC_MONTE_CARLO_RUNS` cases (
 `lo`), then shows each error against its bound and the final errors. It holds no test logic.
 
 `jupytext.toml` pairs each `notebooks/<name>.py` with `notebooks/<name>.ipynb`, which git ignores.
-The `notebooks` group adds JupyterLab, jupytext and its lab extension, and the `python3` kernel of
-this environment. To work in the notebooks:
+To open the notebooks in any JupyterLab, regenerate the `.ipynb` files from their sources, then
+open them on a kernel that runs this environment's Python:
+
+```sh
+uv run jupytext --sync notebooks/*.py
+```
+
+Or run JupyterLab from this environment: the `notebooks` group adds JupyterLab, jupytext with its
+lab extension, and ipykernel.
 
 ```sh
 uv sync --locked --group sim --group notebooks
 uv run jupyter lab notebooks/
 ```
 
-In JupyterLab, open a `.py` notebook with right-click, Open With, Jupytext Notebook. It runs on
-the environment's Python 3 (ipykernel) kernel, which the notebook's header names. The dead
-reckoner's own module opens the same way after
+There, open a `.py` notebook with right-click, Open With, Jupytext Notebook, on the environment's
+Python 3 (ipykernel) kernel. The dead reckoner's own module opens the same way after
 `uv run jupytext --to ipynb algorithms/gnc_algorithms/imu_dead_reckoning.py`.
