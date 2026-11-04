@@ -136,8 +136,13 @@ def _step(
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """The state's time derivative, the readings held.
 
-        Takes sigma (MRP), r (m, in N) and v (m/s, in N); returns dsigma/dt (1/s), dr/dt (m/s,
-        in N) and dv/dt (m/s^2, in N).
+        Args:
+            sigma: (3,) MRP of the body frame B with respect to the inertial frame N.
+            r: (3,) m, inertial position in N.
+            v: (3,) m/s, inertial velocity in N.
+
+        Returns:
+            dsigma/dt ((3,), 1/s), dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
         """
         sigma_dot = 0.25 * B(sigma) @ omega
         r_dot = v
@@ -170,24 +175,9 @@ class ImuDeadReckoner:
     """Propagates attitude, inertial position and inertial velocity from raw IMU readings.
 
     The readings arrive in the IMU's platform frame; gravity is a point mass of parameter `mu`.
-
-    Args:
-        sigma0_BN: (3,) MRP of B with respect to N at `t0`.
-        r0_N: (3,) m, inertial position at `t0`.
-        v0_N: (3,) m/s, inertial velocity at `t0`.
-        t0: s, the time the initial state applies at.
-        mu: m^3/s^2, gravitational parameter of the central body, >= 0.
-        dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B, a proper rotation.
-
-    Attributes:
-        t: s, the time the state applies at.
-        sigma_BN: (3,) MRP of B with respect to N, |sigma_BN| <= 1, read-only.
-        r_BN_N: (3,) m, inertial position in N, read-only.
-        v_BN_N: (3,) m/s, inertial velocity in N, read-only.
-
-    Raises:
-        ValueError: when a vector is not a finite (3,) array, `t0` is not finite, `mu` is not
-            finite and >= 0, or `dcm_PB` is not a proper rotation.
+    The estimator holds its state as `t` (s, the time the state applies at), `sigma_BN` ((3,) MRP
+    of B with respect to N, |sigma_BN| <= 1), `r_BN_N` ((3,) m, inertial position in N) and
+    `v_BN_N` ((3,) m/s, inertial velocity in N), each array read-only.
     """
 
     def __init__(
@@ -201,10 +191,17 @@ class ImuDeadReckoner:
     ) -> None:
         """Checks and holds the initial state, `mu` and the mounting.
 
-        The class docstring gives each argument's units and frame.
+        Args:
+            sigma0_BN: (3,) MRP of B with respect to N at `t0`.
+            r0_N: (3,) m, inertial position in N at `t0`.
+            v0_N: (3,) m/s, inertial velocity in N at `t0`.
+            t0: s, the time the initial state applies at.
+            mu: m^3/s^2, gravitational parameter of the central body, >= 0.
+            dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B, a proper rotation.
 
         Raises:
-            ValueError: as the class docstring states.
+            ValueError: when a vector is not a finite (3,) array, `t0` is not finite, `mu` is
+                not finite and >= 0, or `dcm_PB` is not a proper rotation.
         """
         if not np.isfinite(t0):
             raise ValueError(f"t0 must be finite, got {t0!r}")

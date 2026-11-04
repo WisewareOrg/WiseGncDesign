@@ -33,18 +33,9 @@ class AlgorithmModule(sysModel.SysModel):
     the arrays it returns. The call Basilisk makes at the reset time itself leaves the state as
     built.
 
-    Args:
-        algorithm: the algorithm, built at the simulation's start time, holding `t` (s) and its
-            outputs as attributes.
-        inputs: reader by input role, each subscribed by the caller.
-
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in: the flight
             software runs at 1 Hz.
-
-    Raises:
-        ValueError: at construction, naming a `step` keyword that no input's message carries or
-            more than one does, or an output that no standard message carries.
     """
 
     period_s = 1.0
@@ -52,10 +43,14 @@ class AlgorithmModule(sysModel.SysModel):
     def __init__(self, algorithm: Any, inputs: Mapping[str, Any]) -> None:
         """Resolves the algorithm's keywords against `inputs` and its outputs against messages.
 
-        The outputs resolve against `STANDARD_MESSAGES`; the class docstring gives each argument.
+        Args:
+            algorithm: the algorithm, built at the simulation's start time, holding `t` (s) and
+                its outputs as attributes.
+            inputs: reader by input role, each subscribed by the caller.
 
         Raises:
-            ValueError: as the class docstring states.
+            ValueError: naming a `step` keyword that no input's message carries or more than one
+                does, or an output that no entry of `STANDARD_MESSAGES` carries.
         """
         super().__init__()
         self._algorithm = algorithm

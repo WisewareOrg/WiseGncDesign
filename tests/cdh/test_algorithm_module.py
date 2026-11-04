@@ -22,8 +22,13 @@ class StubAlgorithm:
     `t`, `r_BN_N` and `v_BN_N`, and steps its outputs to `STEPPED` and `-STEPPED`.
     """
 
-    def __init__(self, t0: float = 0.0, r0: np.ndarray = (0.5, 0.5, 0.5)) -> None:
-        """Starts at `t0` (s) with `r_BN_N` = `r0` ((3,), m) and `v_BN_N` = -`r0` (m/s)."""
+    def __init__(self, t0: float = 0.0, r0: tuple[float, float, float] = (0.5, 0.5, 0.5)) -> None:
+        """Starts the stub's state.
+
+        Args:
+            t0: s, the time the state applies at.
+            r0: (3,) m, the initial `r_BN_N`, in N; `v_BN_N` starts at -`r0`, in m/s.
+        """
         self._steps: list[dict] = []
         self.t = t0
         self.r_BN_N = np.asarray(r0, dtype=float)
@@ -32,8 +37,13 @@ class StubAlgorithm:
     def step(self, t: float, AngVelPlatform: np.ndarray, sigma_BN: np.ndarray) -> dict:
         """Records the step's inputs and steps the outputs.
 
-        Takes `t` (s), `AngVelPlatform` (rad/s, (3,)) and `sigma_BN` (MRP, (3,)); returns `r_BN_N`
-        and `v_BN_N` as named arrays.
+        Args:
+            t: s, the step's time.
+            AngVelPlatform: (3,) rad/s, read from the IMU message.
+            sigma_BN: (3,) MRP, read from the navigation message.
+
+        Returns:
+            `r_BN_N` ((3,) m, in N) and `v_BN_N` ((3,) m/s, in N) as named arrays.
         """
         self._steps.append({"t": t, "AngVelPlatform": AngVelPlatform, "sigma_BN": sigma_BN})
         self.t, self.r_BN_N, self.v_BN_N = t, STEPPED, -STEPPED
@@ -44,7 +54,15 @@ class UnreadKeyword(StubAlgorithm):
     """A stub whose `step` asks for a field no input's message carries."""
 
     def step(self, t: float, AngVelPlatfrom: np.ndarray) -> dict:
-        """Takes `t` (s) and a misspelled `AngVelPlatfrom`; returns nothing it is given."""
+        """Asks for a misspelled field, which construction refuses before any step.
+
+        Args:
+            t: s, the step's time.
+            AngVelPlatfrom: (3,) rad/s, a field no input's message carries.
+
+        Returns:
+            No outputs.
+        """
         return {}
 
 
@@ -57,8 +75,15 @@ class UnknownOutput(StubAlgorithm):
         self.value = np.zeros(3)
 
 
-def _imu_message(angvel=(0.0, 0.0, 0.0)) -> messaging.IMUSensorMsg:
-    """A written `IMUSensorMsg` whose `AngVelPlatform` is `angvel` (rad/s, (3,))."""
+def _imu_message(angvel: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> messaging.IMUSensorMsg:
+    """A written IMU message.
+
+    Args:
+        angvel: (3,) rad/s, its `AngVelPlatform`.
+
+    Returns:
+        The `IMUSensorMsg`, written at t = 0.
+    """
     msg = messaging.IMUSensorMsg()
     payload = messaging.IMUSensorMsgPayload()
     payload.AngVelPlatform = list(angvel)
@@ -66,8 +91,15 @@ def _imu_message(angvel=(0.0, 0.0, 0.0)) -> messaging.IMUSensorMsg:
     return msg
 
 
-def _nav_message(sigma=(0.0, 0.0, 0.0)) -> messaging.NavAttMsg:
-    """A written `NavAttMsg` whose `sigma_BN` is `sigma` (MRP, (3,))."""
+def _nav_message(sigma: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> messaging.NavAttMsg:
+    """A written navigation attitude message.
+
+    Args:
+        sigma: (3,) MRP, its `sigma_BN`.
+
+    Returns:
+        The `NavAttMsg`, written at t = 0.
+    """
     msg = messaging.NavAttMsg()
     payload = messaging.NavAttMsgPayload()
     payload.sigma_BN = list(sigma)
@@ -76,20 +108,40 @@ def _nav_message(sigma=(0.0, 0.0, 0.0)) -> messaging.NavAttMsg:
 
 
 def _readers() -> dict:
-    """An unsubscribed `imu` and `nav` reader, by role."""
+    """An unsubscribed IMU and navigation reader.
+
+    Returns:
+        `imu`, an `IMUSensorMsgReader`, and `nav`, a `NavAttMsgReader`, by role.
+    """
     return {"imu": messaging.IMUSensorMsgReader(), "nav": messaging.NavAttMsgReader()}
 
 
-def _module(algorithm=None) -> AlgorithmModule:
-    """`algorithm` (default a fresh `StubAlgorithm`) hosted on `_readers()`."""
+def _module(algorithm: StubAlgorithm | None = None) -> AlgorithmModule:
+    """A stub algorithm hosted on `_readers()`.
+
+    Args:
+        algorithm: the algorithm to host; a fresh `StubAlgorithm` when `None`.
+
+    Returns:
+        The `AlgorithmModule`.
+    """
     return AlgorithmModule(StubAlgorithm() if algorithm is None else algorithm, _readers())
 
 
-def _subscribed(module: AlgorithmModule, angvel=(1.0, 2.0, 3.0), sigma=(0.4, 0.5, 0.6)):
+def _subscribed(
+    module: AlgorithmModule,
+    angvel: tuple[float, float, float] = (1.0, 2.0, 3.0),
+    sigma: tuple[float, float, float] = (0.4, 0.5, 0.6),
+) -> tuple[messaging.IMUSensorMsg, messaging.NavAttMsg]:
     """Subscribes `module`'s `imu` and `nav` readers to written messages.
 
-    The messages carry `angvel` (rad/s, (3,)) and `sigma` (MRP, (3,)), and are returned so they
-    outlive the call.
+    Args:
+        module: the host module whose readers subscribe.
+        angvel: (3,) rad/s, the IMU message's `AngVelPlatform`.
+        sigma: (3,) MRP, the navigation message's `sigma_BN`.
+
+    Returns:
+        The two messages, returned so they outlive the call.
     """
     imu, nav = _imu_message(angvel), _nav_message(sigma)
     module.inputs["imu"].subscribeTo(imu)

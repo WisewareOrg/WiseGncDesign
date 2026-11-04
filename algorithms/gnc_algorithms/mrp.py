@@ -17,15 +17,26 @@ __all__ = ["B", "dcm_NB", "shadow"]
 
 @njit(cache=True)
 def _skew(v: np.ndarray) -> np.ndarray:
-    """The (3, 3) cross-product matrix [~v] of a (3,) array `v`, so that [~v] u = v x u."""
+    """The cross-product matrix [~v], so that [~v] u = v x u.
+
+    Args:
+        v: (3,) the vector, in any frame.
+
+    Returns:
+        (3, 3) [~v], in the same frame as `v`.
+    """
     return np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
 
 
 @njit(cache=True)
 def B(sigma: np.ndarray) -> np.ndarray:
-    """The (3, 3) MRP kinematics matrix of the (3,) MRP `sigma`.
+    """The MRP kinematics matrix, so that dsigma/dt is a quarter of it times omega_BN_B.
 
-    dsigma/dt = 1/4 B @ omega, with omega the angular rate of B with respect to N, in B (rad/s).
+    Args:
+        sigma: (3,) MRP of the body frame B with respect to the inertial frame N.
+
+    Returns:
+        (3, 3) B(sigma), dimensionless, taking omega_BN_B (rad/s, in B) to 4 dsigma/dt (1/s).
     """
     s2 = float(sigma @ sigma)
     return (1.0 - s2) * np.eye(3) + 2.0 * _skew(sigma) + 2.0 * np.outer(sigma, sigma)
@@ -33,9 +44,13 @@ def B(sigma: np.ndarray) -> np.ndarray:
 
 @njit(cache=True)
 def dcm_NB(sigma: np.ndarray) -> np.ndarray:
-    """The (3, 3) DCM [NB] of the (3,) MRP `sigma` = sigma_BN.
+    """The DCM [NB] of an MRP, rotating a body-frame vector into the inertial frame.
 
-    It rotates a B-frame vector into N: v_N = [NB] v_B.
+    Args:
+        sigma: (3,) MRP of the body frame B with respect to the inertial frame N.
+
+    Returns:
+        (3, 3) [NB], dimensionless, so that v_N = [NB] v_B.
     """
     s2 = float(sigma @ sigma)
     sk = _skew(sigma)
@@ -46,7 +61,11 @@ def dcm_NB(sigma: np.ndarray) -> np.ndarray:
 def shadow(sigma: np.ndarray) -> np.ndarray:
     """The shadow set -sigma / |sigma|^2: the same attitude with the reciprocal norm.
 
-    `sigma` is a nonzero (3,) MRP.
+    Args:
+        sigma: (3,) nonzero MRP of the body frame B with respect to the inertial frame N.
+
+    Returns:
+        (3,) the shadow MRP of B with respect to N, of norm 1 / |sigma|.
     """
     s2 = float(sigma @ sigma)
     return -sigma / s2

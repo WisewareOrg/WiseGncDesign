@@ -24,6 +24,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-xdist>=3.6",
     "ruff>=0.17.0",
+    "pydoclint>=0.12.0",
 ]
 sim = ["wise-dynamics"]
 
@@ -52,3 +53,11 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "D", "D417"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.pydoclint]
+style = "google"
+arg-type-hints-in-signature = true
+arg-type-hints-in-docstring = false
+check-return-types = false
+skip-checking-short-docstrings = false
+allow-init-docstring = true

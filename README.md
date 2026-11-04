@@ -23,6 +23,7 @@ Every command runs from the repository root, and CI runs each of them
 uv sync --locked --group sim
 uv run ruff check . && uv run ruff format --check .
 uv run interrogate -v --fail-under 100 algorithms cdh analysis notebooks tests
+uv run pydoclint algorithms cdh analysis notebooks tests
 uv run pytest -n 2 --sim-runs 2
 uv run python notebooks/imu_dead_reckoning_monte_carlo.py
 ```

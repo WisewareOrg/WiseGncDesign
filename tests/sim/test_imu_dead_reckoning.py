@@ -7,7 +7,9 @@ spacecraft, writes its run file, and holds its estimate within bounds derived fr
 IMU biases.
 """
 
+from collections.abc import Callable
 from importlib.metadata import version
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -155,7 +157,11 @@ def test_the_kinematics_match_the_dcm_derivative_for_a_nonaligned_rate():
 def estimate_fields(fsw: AlgorithmModule) -> dict[str, tuple[Any, str, str]]:
     """The estimate's run-file datasets, `est/<output name>`, one per output of the host module.
 
-    Takes the host module `fsw`; returns each dataset path to `(message, field, units)`.
+    Args:
+        fsw: the host module.
+
+    Returns:
+        Each dataset path to the `(message, field, units)` it is recorded from.
     """
     return {f"est/{name}": (message, name, UNITS[name]) for name, message in fsw.outputs.items()}
 
@@ -163,8 +169,10 @@ def estimate_fields(fsw: AlgorithmModule) -> dict[str, tuple[Any, str, str]]:
 def bound_inputs() -> dict[str, float]:
     """The bound's inputs, for this test and the Monte Carlo notebook alike.
 
-    Returns the IMU noise from `ImuSpacecraft` (rad/s and m/s^2), the flight software's step
-    `AlgorithmModule.period_s` (s), and Earth's mu from `Leo500` (m^3/s^2).
+    Returns:
+        `gyro_noise_std_rad_s` (rad/s) and `accel_noise_std_m_s2` (m/s^2) from `ImuSpacecraft`,
+        `step_s`, the flight software's step `AlgorithmModule.period_s` (s), and `mu`, Earth's
+        gravitational parameter from `Leo500` (m^3/s^2).
     """
     return {
         "gyro_noise_std_rad_s": ImuSpacecraft.gyro_noise_std_rad_s,
@@ -175,7 +183,14 @@ def bound_inputs() -> dict[str, float]:
 
 
 def dead_reckoner(scenario: Leo500) -> AlgorithmModule:
-    """The dead reckoner, built at t = 0 from `scenario`'s initial state, hosted on its vehicle."""
+    """The dead reckoner, built at t = 0 from a scenario's initial state, hosted on its vehicle.
+
+    Args:
+        scenario: the scenario whose vehicle and initial state the dead reckoner takes.
+
+    Returns:
+        The `AlgorithmModule` hosting it.
+    """
     initial = scenario.initial_state()
     algorithm = ImuDeadReckoner(
         initial["sigma0_BN"],
@@ -204,11 +219,15 @@ def test_the_estimate_is_written_at_whole_seconds():
     assert fsw.algorithm.t == 3.0
 
 
-def test_imu_dead_reckoning_case(sim_scenario, sim_duration_s, sim_run_file):
+def test_imu_dead_reckoning_case(
+    sim_scenario: Leo500, sim_duration_s: float, sim_run_file: Callable[..., Path]
+) -> None:
     """One Monte Carlo case holds every error within its bound.
 
-    The dead reckoner flies `sim_scenario` for `sim_duration_s` (s), and `sim_run_file` writes the
-    run file the bound reads.
+    Args:
+        sim_scenario: the case's dispersed scenario, from WiseDynamics' plugin.
+        sim_duration_s: s, the case's simulated duration.
+        sim_run_file: writes the case's run file and returns its path.
     """
     fsw = dead_reckoner(sim_scenario)
     datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
