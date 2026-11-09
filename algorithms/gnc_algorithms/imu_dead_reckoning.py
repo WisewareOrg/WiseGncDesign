@@ -4,9 +4,9 @@
 #     cell_metadata_filter: active,-all
 #     notebook_metadata_filter: -jupytext.text_representation
 #   kernelspec:
-#     display_name: Python (uv)
+#     display_name: wise-gnc-design (3.14.7)
 #     language: python
-#     name: uv-project
+#     name: python3
 # ---
 
 # %%
@@ -242,8 +242,7 @@ def _step(
 # | `v_BN_N` (out) | m/s, (3,) | inertial velocity, in N |
 #
 # The estimator owns the IMU's mounting, the DCM $[PB]$ with $v_P = [PB]\,v_B$, and rotates
-# each reading into the body frame, $v_B = [PB]^T v_P$, before it integrates. The state's arrays
-# are read-only.
+# each reading into the body frame, $v_B = [PB]^T v_P$, before it integrates.
 
 
 # %% [markdown]
@@ -261,7 +260,7 @@ class ImuDeadReckoner:
     The readings arrive in the IMU's platform frame; gravity is a point mass of parameter `mu`.
     The estimator holds its state as `t` (s, the time the state applies at), `sigma_BN` ((3,) MRP
     of B with respect to N, |sigma_BN| <= 1), `r_BN_N` ((3,) m, inertial position in N) and
-    `v_BN_N` ((3,) m/s, inertial velocity in N), each array read-only.
+    `v_BN_N` ((3,) m/s, inertial velocity in N).
     """
 
     def __init__(
@@ -273,44 +272,22 @@ class ImuDeadReckoner:
         mu: float,
         dcm_PB: np.ndarray,
     ) -> None:
-        """Checks and holds the initial state, `mu` and the mounting.
+        """Holds the initial state, `mu` and the mounting.
 
         Args:
             sigma0_BN: (3,) MRP of B with respect to N at `t0`.
             r0_N: (3,) m, inertial position in N at `t0`.
             v0_N: (3,) m/s, inertial velocity in N at `t0`.
             t0: s, the time the initial state applies at.
-            mu: m^3/s^2, gravitational parameter of the central body, >= 0.
-            dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B, a proper rotation.
-
-        Raises:
-            ValueError: when a vector is not a finite (3,) array, `t0` is not finite, `mu` is
-                not finite and >= 0, or `dcm_PB` is not a proper rotation.
+            mu: m^3/s^2, gravitational parameter of the central body.
+            dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B.
         """
-        if not np.isfinite(t0):
-            raise ValueError(f"t0 must be finite, got {t0!r}")
-        if not (np.isfinite(mu) and mu >= 0.0):
-            raise ValueError(f"mu must be finite and >= 0, got {mu!r}")
-        initial = {
-            "sigma0_BN": np.array(sigma0_BN, dtype=float),
-            "r0_N": np.array(r0_N, dtype=float),
-            "v0_N": np.array(v0_N, dtype=float),
-        }
-        for name, value in initial.items():
-            if value.shape != (3,) or not np.isfinite(value).all():
-                raise ValueError(f"{name} must be a finite (3,) array, got {value!r}")
-            value.setflags(write=False)
-        mounting = np.array(dcm_PB, dtype=float)
-        if (
-            mounting.shape != (3, 3)
-            or not np.allclose(mounting @ mounting.T, np.eye(3), atol=1e-9)
-            or not np.isclose(np.linalg.det(mounting), 1.0, atol=1e-9)
-        ):
-            raise ValueError(f"dcm_PB is not a proper rotation (3, 3) DCM: {dcm_PB!r}")
         self._mu = float(mu)
-        self._dcm_BP = np.ascontiguousarray(mounting.T)
+        self._dcm_BP = np.ascontiguousarray(np.asarray(dcm_PB, dtype=float).T)
         self.t = float(t0)
-        self.sigma_BN, self.r_BN_N, self.v_BN_N = initial.values()
+        self.sigma_BN = np.asarray(sigma0_BN, dtype=float)
+        self.r_BN_N = np.asarray(r0_N, dtype=float)
+        self.v_BN_N = np.asarray(v0_N, dtype=float)
 
     def step(
         self, t: float, AngVelPlatform: np.ndarray, AccelPlatform: np.ndarray
@@ -328,38 +305,20 @@ class ImuDeadReckoner:
                 in P.
 
         Returns:
-            `sigma_BN` (MRP, |sigma| <= 1), `r_BN_N` (m, in N) and `v_BN_N` (m/s, in N), each a
-            read-only (3,) array, the same arrays the estimator holds.
-
-        Raises:
-            ValueError: when `dt` is not > 0 (including NaN), or `AngVelPlatform` or
-                `AccelPlatform` is not a finite (3,) array; the state is left unchanged.
+            `sigma_BN` (MRP, |sigma| <= 1), `r_BN_N` (m, in N) and `v_BN_N` (m/s, in N), each
+            a (3,) array, the same arrays the estimator holds.
         """
-        dt = t - self.t
-        if not dt > 0.0:
-            raise ValueError(f"dt must be > 0, got {dt}")
-        readings = {
-            "AngVelPlatform": np.array(AngVelPlatform, dtype=float),
-            "AccelPlatform": np.array(AccelPlatform, dtype=float),
-        }
-        for name, value in readings.items():
-            if value.shape != (3,) or not np.isfinite(value).all():
-                raise ValueError(f"{name} must be a finite (3,) array, got {value!r}")
-
-        stepped = _step(
+        self.sigma_BN, self.r_BN_N, self.v_BN_N = _step(
             self.sigma_BN,
             self.r_BN_N,
             self.v_BN_N,
-            readings["AngVelPlatform"],
-            readings["AccelPlatform"],
+            AngVelPlatform,
+            AccelPlatform,
             self._dcm_BP,
-            dt,
+            t - self.t,
             self._mu,
         )
-        for value in stepped:
-            value.setflags(write=False)
         self.t = float(t)
-        self.sigma_BN, self.r_BN_N, self.v_BN_N = stepped
         return {"sigma_BN": self.sigma_BN, "r_BN_N": self.r_BN_N, "v_BN_N": self.v_BN_N}
 
 
