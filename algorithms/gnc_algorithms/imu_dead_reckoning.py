@@ -282,9 +282,6 @@ class ImuDeadReckoner:
     ) -> dict[str, np.ndarray]:
         """Advances the state to `t` by one RK4 step and returns it.
 
-        Over `dt = t - self.t`, with the readings rotated into B and held constant:
-        dsigma/dt = 1/4 B(sigma) omega_B; dr/dt = v; dv/dt = dcm_NB(sigma) accel_B - mu r/|r|^3.
-
         Args:
             t: s, the reading's time, after `self.t`.
             AngVelPlatform: (3,) rad/s, the gyro reading, rate of B with respect to N in the IMU

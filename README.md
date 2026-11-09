@@ -27,10 +27,9 @@ just test
 ```
 
 Setup creates an `.ipynb` beside each algorithm `.py`. To run an algorithm's proof, open the
-`.ipynb` in VS Code or JupyterLab on the `WiseGncDesign` kernel, save it, and run its `%%monte_carlo`
-cell. The cells after it, which run in the notebook
-only, plot the runs, which land in `monte_carlo/`. The IMU dead reckoner is
-`algorithms/gnc_algorithms/imu_dead_reckoning.py`.
+`.ipynb` in VS Code or JupyterLab on the `WiseGncDesign` kernel, save it, and run its
+`%%monte_carlo` cell. The cell after it, which runs in the notebook only, plots the runs, which
+land in `monte_carlo/`. The IMU dead reckoner is `algorithms/gnc_algorithms/imu_dead_reckoning.py`.
 
 CI (`.github/workflows/checks.yml`) runs, from the repository root:
 
