@@ -4,9 +4,9 @@
 #     cell_metadata_filter: active,-all
 #     notebook_metadata_filter: -jupytext.text_representation
 #   kernelspec:
-#     display_name: wise-gnc-design (3.14.7)
+#     display_name: WiseGncDesign
 #     language: python
-#     name: python3
+#     name: wise-gnc-design
 # ---
 
 # %% [markdown]

@@ -46,5 +46,5 @@ jobs:
       - run: uv run pytest --ci
       - name: The IMU dead reckoner's notebook
         run: |
-          uv run --no-sync python -m ipykernel install --user --name uv-project --display-name "Python (uv)"
+          uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
           JPY_SESSION_NAME=$PWD/algorithms/gnc_algorithms/imu_dead_reckoning.py uv run --no-sync jupytext --execute algorithms/gnc_algorithms/imu_dead_reckoning.py -o "$RUNNER_TEMP/imu_dead_reckoning.ipynb"

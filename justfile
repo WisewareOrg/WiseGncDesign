@@ -1,6 +1,7 @@
-# Sync the sim and notebook groups at the locked WiseDynamics commit.
+# Sync the sim and notebook groups at the locked WiseDynamics commit and register the kernel.
 _sync:
     uv sync --locked --group sim --group notebooks
+    uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
 
 # Install an editable WiseDynamics checkout and print the one in use.
 local: _sync
@@ -22,7 +23,3 @@ lab:
 test:
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
     uv run --no-sync pytest
-
-# Register the uv-project Jupyter kernel the algorithm notebooks name, once.
-kernel:
-    uv run --no-sync python -m ipykernel install --user --name uv-project --display-name "Python (uv)"
