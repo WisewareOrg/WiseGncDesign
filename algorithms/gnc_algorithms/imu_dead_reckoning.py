@@ -543,9 +543,9 @@ def test_imu_dead_reckoning_case(
 
 
 # %% [markdown]
-# ## Each error against its bound
+# ## Each error against its bound, and the final errors
 #
-# The cells below run in the notebook only. They read the run files back with `load_runs`.
+# The cell below runs in the notebook only. It reads the run files back with `load_runs`.
 
 
 # %% active="ipynb"
@@ -580,13 +580,7 @@ def test_imu_dead_reckoning_case(
 # axes[0].legend()
 # axes[-1].set_xlabel("t [s]")
 # plt.show()
-
-
-# %% [markdown]
-# ## Final errors
-
-
-# %% active="ipynb"
+#
 # final = {name: [] for name in ("attitude error [rad]", "position error [m]")}
 # for run in runs:
 #     growth = error_growth(run, **inputs)
