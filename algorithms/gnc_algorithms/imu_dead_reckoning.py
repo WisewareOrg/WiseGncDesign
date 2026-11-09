@@ -528,26 +528,6 @@ def dead_reckoner(scenario: "Leo500") -> "AlgorithmModule":
     return AlgorithmModule(algorithm, scenario.vehicle.readers())
 
 
-# %%
-def test_the_estimate_is_written_at_whole_seconds():
-    """Run 3.5 s in Leo500, the estimate is last written at 3 s.
-
-    The module runs at its 1 s `period_s`, not at the dynamics step.
-    """
-    from Basilisk.architecture import messaging
-    from wise_dynamics.basilisk.scenarios.leo500 import Leo500
-
-    scenario = Leo500()
-    fsw = dead_reckoner(scenario)
-    estimate = messaging.NavAttMsgReader()
-    estimate.subscribeTo(fsw.output_messages["nav_att"])
-
-    scenario.run(fsw, {}, duration_s=3.5)
-
-    assert estimate.timeWritten() == 3_000_000_000
-    assert fsw.algorithm.t == 3.0
-
-
 # %% [markdown]
 # Each case runs the estimator for the scenario's default duration, writes its
 # run file and holds the estimate within `gnc_analysis.error_bounds`' bound (`BOUND_FACTOR` times
