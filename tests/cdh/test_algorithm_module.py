@@ -13,14 +13,14 @@ from gnc_cdh.basilisk import AlgorithmModule
 ONE_SECOND_NS = 1_000_000_000
 
 STEPPED = np.array([1.0, 2.0, 3.0])
-"""The arrays the stub steps its outputs to."""
+"""The arrays the stub steps its outputs to at t = 1 s; at time t it steps them to `t * STEPPED`."""
 
 
 class StubAlgorithm:
     """A stub algorithm that records what reaches it.
 
     It reads `AngVelPlatform` from an IMU message and `sigma_BN` from a navigation message, holds
-    `t`, `r_BN_N` and `v_BN_N`, and steps its outputs to `STEPPED` and `-STEPPED`.
+    `t`, `r_BN_N` and `v_BN_N`, and steps its outputs to `t * STEPPED` and `-t * STEPPED`.
     """
 
     def __init__(self, t0: float = 0.0, r0: tuple[float, float, float] = (0.5, 0.5, 0.5)) -> None:
@@ -47,7 +47,7 @@ class StubAlgorithm:
             `r_BN_N` ((3,) m, in N) and `v_BN_N` ((3,) m/s, in N) as named arrays.
         """
         self._steps.append({"t": t, "AngVelPlatform": AngVelPlatform, "sigma_BN": sigma_BN})
-        self.t, self.r_BN_N, self.v_BN_N = t, STEPPED, -STEPPED
+        self.t, self.r_BN_N, self.v_BN_N = t, t * STEPPED, -t * STEPPED
         return {"r_BN_N": self.r_BN_N, "v_BN_N": self.v_BN_N}
 
 
@@ -282,4 +282,5 @@ def test_a_task_at_the_module_period_writes_the_outputs_at_whole_seconds():
     sim.ExecuteSimulation()
 
     assert nav_trans.timeWritten() == 3 * ONE_SECOND_NS
+    np.testing.assert_array_equal(nav_trans().r_BN_N, 3 * STEPPED)
     assert module.algorithm.t == 3.0
