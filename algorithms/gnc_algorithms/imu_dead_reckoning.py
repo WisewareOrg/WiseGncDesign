@@ -9,6 +9,8 @@
 #     name: uv-project
 # ---
 
+# %%
+
 # %% [markdown]
 # # Strapdown inertial dead reckoning
 #
@@ -18,42 +20,6 @@
 # velocity and position. No measurement corrects the estimate, so an attitude error feeds the
 # navigation error directly through the frame rotation.
 
-# %% [markdown]
-# ## Attitude kinematics
-#
-# Attitude is the modified Rodrigues parameter (MRP) set $\sigma_{BN}$, body frame $B$ with
-# respect to inertial frame $N$ (Schaub & Junkins; see `mrp.py`). Its kinematic differential
-# equation, given the body-frame angular rate $\omega = \omega_{BN}$ expressed in $B$:
-#
-# $$\dot\sigma = \tfrac{1}{4} B(\sigma)\,\omega$$
-#
-# where $B(\sigma)$ is `mrp.B`. $\sigma$ switches to its shadow set (`mrp.shadow`) whenever
-# $|\sigma| > 1$, so it stays bounded.
-
-# %% [markdown]
-# ## Translational kinematics
-#
-# Position and velocity, in the inertial frame, integrate the rotated specific-force reading
-# against a point-mass gravity term:
-#
-# $$\dot r = v \qquad \dot v = C_{NB}(\sigma)\,a_B - \mu \frac{r}{|r|^3}$$
-#
-# where $C_{NB}(\sigma)$ (`mrp.dcm_NB`) rotates a body-frame vector into the inertial frame,
-# $a_B$ is the accelerometer's body-frame reading of non-gravitational acceleration, and $\mu$
-# is the gravitational parameter, supplied by the host so truth and estimate share one constant.
-
-# %% [markdown]
-# ## Integration
-#
-# One `step()` call advances $(\sigma, r, v)$ by one RK4 step over `dt = sample.t - state.t`,
-# with $\omega$ and $a_B$ held constant across the step: the sensor delivers raw rates and
-# accelerations, not pre-integrated angles. All three states share the same four stages, so an
-# attitude error at any stage biases that stage's rotated acceleration — the coupling between
-# attitude and navigation error this module demonstrates.
-#
-# In the flight software, `gnc_cdh.basilisk` calls `step()` at 1 Hz on the simulation's dynamics
-# step (50 Hz at its `hi` fidelity, 20 Hz at `med` and `lo`), so `dt` is 1 s and each step holds
-# one IMU sample across the whole second.
 
 # %%
 """Strapdown inertial dead reckoning from one IMU.
@@ -80,25 +46,6 @@ if TYPE_CHECKING:
 
 __all__ = ["ImuDeadReckoner"]
 
-# %% [markdown]
-# ## Interface
-#
-# `step` takes one IMU reading as plain arrays by keyword, named as the IMU message's fields, and
-# returns the new state as plain arrays named in Basilisk's navigation convention; the estimator
-# holds its state as the same arrays:
-#
-# | Name | Units | Frame |
-# | --- | --- | --- |
-# | `t` (in) | s | |
-# | `AngVelPlatform` (in) | rad/s, (3,) | rate of B with respect to N, in the IMU platform frame P |
-# | `AccelPlatform` (in) | m/s², (3,) | non-gravitational acceleration, in P |
-# | `sigma_BN` (out) | MRP, (3,), \|σ\| ≤ 1 | B with respect to N |
-# | `r_BN_N` (out) | m, (3,) | inertial position, in N |
-# | `v_BN_N` (out) | m/s, (3,) | inertial velocity, in N |
-#
-# The estimator owns the IMU's mounting, the DCM $[PB]$ with $v_P = [PB]\,v_B$, and rotates
-# each reading into the body frame, $v_B = [PB]^T v_P$, before it integrates. The state's arrays
-# are read-only.
 
 # %% [markdown]
 # ## Gravity
@@ -123,6 +70,99 @@ def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
     return mu * r / r_norm**3
 
 
+# %% [markdown]
+# ## Attitude kinematics
+#
+# Attitude is the modified Rodrigues parameter (MRP) set $\sigma_{BN}$, body frame $B$ with
+# respect to inertial frame $N$ (Schaub & Junkins; see `mrp.py`). Its kinematic differential
+# equation, given the body-frame angular rate $\omega = \omega_{BN}$ expressed in $B$:
+#
+# $$\dot\sigma = \tfrac{1}{4} B(\sigma)\,\omega$$
+#
+# where $B(\sigma)$ is `mrp.B`. $\sigma$ switches to its shadow set (`mrp.shadow`) whenever
+# $|\sigma| > 1$, so it stays bounded.
+
+
+# %%
+@njit(cache=True)
+def _sigma_dot(sigma: np.ndarray, omega: np.ndarray) -> np.ndarray:
+    """The attitude kinematics, dsigma/dt = 1/4 B(sigma) omega, compiled with numba.
+
+    Args:
+        sigma: (3,) MRP of the body frame B with respect to the inertial frame N.
+        omega: (3,) rad/s, the rate of B with respect to N, in B.
+
+    Returns:
+        (3,) dsigma/dt, 1/s.
+    """
+    return 0.25 * B(sigma) @ omega
+
+
+# %% [markdown]
+# ## Translational kinematics
+#
+# Position and velocity, in the inertial frame, integrate the rotated specific-force reading
+# against a point-mass gravity term:
+#
+# $$\dot r = v \qquad \dot v = C_{NB}(\sigma)\,a_B - \mu \frac{r}{|r|^3}$$
+#
+# where $C_{NB}(\sigma)$ (`mrp.dcm_NB`) rotates a body-frame vector into the inertial frame,
+# $a_B$ is the accelerometer's body-frame reading of non-gravitational acceleration, and $\mu$
+# is the gravitational parameter, supplied by the host so truth and estimate share one constant.
+
+
+# %%
+@njit(cache=True)
+def _translational_rates(
+    sigma: np.ndarray, v: np.ndarray, r: np.ndarray, accel: np.ndarray, mu: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """The translational kinematics, dr/dt = v and dv/dt = C_NB(sigma) a_B - mu r/|r|^3.
+
+    Args:
+        sigma: (3,) MRP of the body frame B with respect to the inertial frame N.
+        v: (3,) m/s, inertial velocity in N.
+        r: (3,) m, inertial position in N.
+        accel: (3,) m/s^2, the accelerometer reading a_B, non-gravitational acceleration in B.
+        mu: m^3/s^2, the central body's gravitational parameter.
+
+    Returns:
+        dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
+    """
+    return v, dcm_NB(sigma) @ accel - _gravity(r, mu)
+
+
+# %% [markdown]
+# ## One step
+#
+# One `step()` call advances $x = (\sigma, r, v)$ by one RK4 step of size $h$ = `dt = sample.t -
+# state.t`, with the readings held constant across the step: the sensor delivers raw rates and
+# accelerations, not pre-integrated angles. The step applies, in order:
+#
+# 1. the readings rotated into the body frame, with the mounting $[PB]$ below:
+#
+#    $$\omega = [PB]^T \omega_P \qquad a_B = [PB]^T a_P$$
+#
+# 2. RK4 over all three states at once, with $f$ the right-hand sides above and $\omega$, $a_B$
+#    held:
+#
+#    $$k_1 = f(x_n) \quad k_2 = f(x_n + \tfrac{h}{2} k_1) \quad k_3 = f(x_n + \tfrac{h}{2} k_2)
+#    \quad k_4 = f(x_n + h\,k_3)$$
+#
+#    $$x_{n+1} = x_n + \tfrac{h}{6}\left(k_1 + 2 k_2 + 2 k_3 + k_4\right)$$
+#
+# 3. the shadow switch, after the update (`mrp.shadow`): if $|\sigma_{n+1}| > 1$, then
+#    $\sigma_{n+1} \leftarrow -\sigma_{n+1} / |\sigma_{n+1}|^2$.
+#
+# All three states share the same four stages, so an attitude error at any stage biases that
+# stage's rotated acceleration, the coupling between attitude and navigation error this module
+# demonstrates.
+#
+# In the flight software, `gnc_cdh.basilisk` calls `step()` at 1 Hz on the simulation's dynamics
+# step (50 Hz at its `hi` fidelity, 20 Hz at `med` and `lo`), so `dt` is 1 s and each step holds
+# one IMU sample across the whole second.
+
+
+# %%
 @njit(cache=True)
 def _step(
     sigma: np.ndarray,
@@ -169,10 +209,8 @@ def _step(
         Returns:
             dsigma/dt ((3,), 1/s), dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
         """
-        sigma_dot = 0.25 * B(sigma) @ omega
-        r_dot = v
-        v_dot = dcm_NB(sigma) @ accel - _gravity(r, mu)
-        return sigma_dot, r_dot, v_dot
+        r_dot, v_dot = _translational_rates(sigma, v, r, accel, mu)
+        return _sigma_dot(sigma, omega), r_dot, v_dot
 
     k1 = derivs(sigma, r, v)
     k2 = derivs(sigma + 0.5 * dt * k1[0], r + 0.5 * dt * k1[1], v + 0.5 * dt * k1[2])
@@ -185,6 +223,27 @@ def _step(
     if np.linalg.norm(sigma_new) > 1.0:
         sigma_new = shadow(sigma_new)
     return sigma_new, r_new, v_new
+
+
+# %% [markdown]
+# ## Interface
+#
+# `step` takes one IMU reading as plain arrays by keyword, named as the IMU message's fields, and
+# returns the new state as plain arrays named in Basilisk's navigation convention; the estimator
+# holds its state as the same arrays:
+#
+# | Name | Units | Frame |
+# | --- | --- | --- |
+# | `t` (in) | s | |
+# | `AngVelPlatform` (in) | rad/s, (3,) | rate of B with respect to N, in the IMU platform frame P |
+# | `AccelPlatform` (in) | m/s², (3,) | non-gravitational acceleration, in P |
+# | `sigma_BN` (out) | MRP, (3,), \|σ\| ≤ 1 | B with respect to N |
+# | `r_BN_N` (out) | m, (3,) | inertial position, in N |
+# | `v_BN_N` (out) | m/s, (3,) | inertial velocity, in N |
+#
+# The estimator owns the IMU's mounting, the DCM $[PB]$ with $v_P = [PB]\,v_B$, and rotates
+# each reading into the body frame, $v_B = [PB]^T v_P$, before it integrates. The state's arrays
+# are read-only.
 
 
 # %% [markdown]
@@ -307,9 +366,8 @@ class ImuDeadReckoner:
 # %% [markdown]
 # ## Smoke tests
 #
-# Flight conditions with closed forms check the algorithm alone, with no simulator: a
-# constant rate about one axis, a rotation past 180 degrees, gravity alone, and the kinematics
-# against the DCM derivative. pytest collects these from this file.
+# Flight conditions with closed forms check the algorithm alone, with no simulator. pytest
+# collects these from this file.
 
 
 # %%
@@ -359,6 +417,12 @@ def _propagate(
     return reckoner
 
 
+# %% [markdown]
+# A constant rate $\omega$ about one fixed axis $\hat e$ has the closed form
+#
+# $$\sigma(t) = \tan(\omega t / 4)\,\hat e$$
+
+
 # %%
 def test_a_constant_rate_about_one_axis_matches_the_analytic_mrp():
     """A 0.5 rad/s rate about body x for 1 s lands within 1e-6 of sigma = tan(theta/4) x."""
@@ -372,6 +436,12 @@ def test_a_constant_rate_about_one_axis_matches_the_analytic_mrp():
     np.testing.assert_allclose(
         state.sigma_BN, expected, atol=1e-6, err_msg="constant-rate MRP is not tan(theta/4)"
     )
+
+
+# %% [markdown]
+# Past a rotation of $\pi$ the shadow switch keeps $|\sigma| \le 1$, and the attitude still
+# matches the axis-angle rotation $C_{NB}(\sigma) = R(\omega t\,\hat e)$ of a constant rate
+# $\omega$ about $\hat e$, as SciPy computes it.
 
 
 # %%
@@ -396,6 +466,13 @@ def test_a_rotation_past_180_degrees_switches_to_the_shadow_set():
         atol=1e-5,
         err_msg="shadow-set DCM differs from the axis-angle DCM",
     )
+
+
+# %% [markdown]
+# With gravity alone ($a_B = 0$), a circular orbit of radius $r_0$ has the mean motion
+# $n = \sqrt{\mu / r_0^3}$ and the position
+#
+# $$r(t) = r_0\,(\cos nt,\ \sin nt,\ 0)$$
 
 
 # %%
@@ -425,6 +502,12 @@ def test_gravity_alone_keeps_a_quarter_circular_orbit_on_the_analytic_position()
     np.testing.assert_allclose(
         state.r_BN_N, expected_r, atol=1.0, err_msg="quarter-orbit position error exceeds 1 m"
     )
+
+
+# %% [markdown]
+# The MRP kinematics agree with the direction cosine matrix derivative identity
+#
+# $$\dot C_{BN} = -[\omega\times]\,C_{BN}$$
 
 
 # %%
