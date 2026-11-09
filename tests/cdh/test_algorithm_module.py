@@ -6,6 +6,7 @@ It hosts stub algorithms, wired by their names, on standalone Basilisk messages.
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
+from Basilisk.utilities import SimulationBaseClass, macros
 
 from gnc_cdh.basilisk import AlgorithmModule
 
@@ -262,3 +263,23 @@ def test_a_step_names_an_input_never_written():
 
     with pytest.raises(RuntimeError, match=r"\['nav'\] have not been written"):
         module.UpdateState(ONE_SECOND_NS)
+
+
+def test_a_task_at_the_module_period_writes_the_outputs_at_whole_seconds():
+    """Run 3.5 s in a task every `period_s`, the outputs are last written at 3 s."""
+    module = _module()
+    _messages = _subscribed(module)
+    nav_trans = messaging.NavTransMsgReader()
+    nav_trans.subscribeTo(module.output_messages["nav_trans"])
+    sim = SimulationBaseClass.SimBaseClass()
+    sim.CreateNewProcess("process").addTask(
+        sim.CreateNewTask("task", macros.sec2nano(module.period_s))
+    )
+    sim.AddModelToTask("task", module)
+
+    sim.InitializeSimulation()
+    sim.ConfigureStopTime(macros.sec2nano(3.5))
+    sim.ExecuteSimulation()
+
+    assert nav_trans.timeWritten() == 3 * ONE_SECOND_NS
+    assert module.algorithm.t == 3.0
