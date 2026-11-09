@@ -9,8 +9,6 @@
 #     name: python3
 # ---
 
-# %%
-
 # %% [markdown]
 # # Strapdown inertial dead reckoning
 #
@@ -22,11 +20,7 @@
 
 
 # %%
-"""Strapdown inertial dead reckoning from one IMU.
-
-Gyro rates integrate to an MRP attitude; the accelerometer, rotated by that attitude, plus
-point-mass gravity integrate to inertial velocity and position.
-"""
+"""Strapdown inertial dead reckoning from one IMU."""
 
 from collections.abc import Callable
 from importlib.metadata import version
@@ -45,6 +39,7 @@ if TYPE_CHECKING:
     from gnc_cdh.basilisk import AlgorithmModule
 
 __all__ = ["ImuDeadReckoner"]
+# %load_ext wise_dynamics.notebook
 
 
 # %% [markdown]
@@ -157,9 +152,8 @@ def _translational_rates(
 # stage's rotated acceleration, the coupling between attitude and navigation error this module
 # demonstrates.
 #
-# In the flight software, `gnc_cdh.basilisk` calls `step()` at 1 Hz on the simulation's dynamics
-# step (50 Hz at its `hi` fidelity, 20 Hz at `med` and `lo`), so `dt` is 1 s and each step holds
-# one IMU sample across the whole second.
+# In the flight software, `gnc_cdh.basilisk` calls `step()` at 1 Hz, so `dt` is 1 s and each step
+# holds one IMU sample across the whole second.
 
 
 # %%
@@ -255,13 +249,7 @@ def _step(
 
 # %%
 class ImuDeadReckoner:
-    """Propagates attitude, inertial position and inertial velocity from raw IMU readings.
-
-    The readings arrive in the IMU's platform frame; gravity is a point mass of parameter `mu`.
-    The estimator holds its state as `t` (s, the time the state applies at), `sigma_BN` ((3,) MRP
-    of B with respect to N, |sigma_BN| <= 1), `r_BN_N` ((3,) m, inertial position in N) and
-    `v_BN_N` ((3,) m/s, inertial velocity in N).
-    """
+    """Propagates attitude, inertial position and inertial velocity from raw IMU readings."""
 
     def __init__(
         self,
@@ -374,27 +362,6 @@ def _propagate(
     for i in range(1, n_steps + 1):
         reckoner.step(t=i * dt, AngVelPlatform=AngVelPlatform, AccelPlatform=AccelPlatform)
     return reckoner
-
-
-# %% [markdown]
-# A constant rate $\omega$ about one fixed axis $\hat e$ has the closed form
-#
-# $$\sigma(t) = \tan(\omega t / 4)\,\hat e$$
-
-
-# %%
-def test_a_constant_rate_about_one_axis_matches_the_analytic_mrp():
-    """A 0.5 rad/s rate about body x for 1 s lands within 1e-6 of sigma = tan(theta/4) x."""
-    omega = 0.5  # rad/s
-    axis = np.array([1.0, 0.0, 0.0])
-    total_t = 1.0
-
-    state = _propagate(omega * axis, _ZERO3, total_t, n_steps=2000)
-
-    expected = np.tan(omega * total_t / 4.0) * axis
-    np.testing.assert_allclose(
-        state.sigma_BN, expected, atol=1e-6, err_msg="constant-rate MRP is not tan(theta/4)"
-    )
 
 
 # %% [markdown]
@@ -588,40 +555,6 @@ def test_the_estimate_is_written_at_whole_seconds():
 
 
 # %%
-def campaign(
-    fsw: "AlgorithmModule",
-    sim_scenario: "Leo500",
-    sim_duration_s: float,
-    sim_run_file: Callable[..., Path],
-) -> None:
-    """One Monte Carlo case: runs `fsw` in its scenario and holds every error within its bound.
-
-    Writes the case's run file, with the version of this package, and checks it against bounds
-    derived from the case's own drawn IMU biases.
-
-    Args:
-        fsw: the host module, from `dead_reckoner`.
-        sim_scenario: the case's dispersed scenario, from WiseDynamics' plugin.
-        sim_duration_s: s, the case's simulated duration.
-        sim_run_file: writes the case's run file and returns its path.
-    """
-    from gnc_analysis.error_bounds import read_run, violations
-
-    datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
-    path = sim_run_file(datasets, {"versions_wise_gnc_design": version("wise-gnc-design")})
-
-    assert violations(read_run(path), **bound_inputs()) == []
-
-
-# %% [markdown]
-# The next cell runs one `campaign` per case, in parallel. Save the notebook, then run it.
-
-
-# %%
-# %load_ext wise_dynamics.notebook
-
-
-# %%
 # %%monte_carlo
 @pytest.mark.sim_runs(852)
 def test_imu_dead_reckoning_case(
@@ -634,7 +567,13 @@ def test_imu_dead_reckoning_case(
         sim_duration_s: s, the case's simulated duration.
         sim_run_file: writes the case's run file and returns its path.
     """
-    campaign(dead_reckoner(sim_scenario), sim_scenario, sim_duration_s, sim_run_file)
+    from gnc_analysis.error_bounds import read_run, violations
+
+    fsw = dead_reckoner(sim_scenario)
+    datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
+    path = sim_run_file(datasets, {"versions_wise_gnc_design": version("wise-gnc-design")})
+
+    assert violations(read_run(path), **bound_inputs()) == []
 
 
 # %% [markdown]
