@@ -22,7 +22,6 @@ dev = [
     "interrogate>=1.7.0",
     "ipykernel>=6.29",
     "jupytext>=1.17",
-    "pytest>=9.1.1",
     "pytest-xdist>=3.6",
     "ruff>=0.17.0",
     "pydoclint>=0.12.0",

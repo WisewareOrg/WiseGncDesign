@@ -307,7 +307,7 @@ class ImuDeadReckoner:
 # %% [markdown]
 # ## Smoke tests
 #
-# Four flight conditions with closed forms check the algorithm alone, with no simulator: a
+# Flight conditions with closed forms check the algorithm alone, with no simulator: a
 # constant rate about one axis, a rotation past 180 degrees, gravity alone, and the kinematics
 # against the DCM derivative. pytest collects these from this file.
 
@@ -572,7 +572,7 @@ def campaign(
 
 
 # %% [markdown]
-# The next cell runs 852 cases, one `campaign` each, in parallel. Save the notebook, then run it.
+# The next cell runs one `campaign` per case, in parallel. Save the notebook, then run it.
 
 
 # %%

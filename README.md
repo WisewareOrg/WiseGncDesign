@@ -15,27 +15,22 @@ It has three parts:
 
 ## Development
 
-Each algorithm is one notebook, `algorithms/gnc_algorithms/<name>.py`, a jupytext percent-format
-module: its derivation, its code, its tests and its Monte Carlo proof. It imports as plain Python
-and loads no simulator, and pytest collects its tests. The suite needs the simulator installed:
-`just pinned` installs the WiseDynamics commit in `uv.lock`, and `just local` installs an editable
-checkout (`$WISE_DYNAMICS_PATH`, default `../WiseDynamics`). Each recipe prints the WiseDynamics it
-runs against, and each run file records which install wrote it.
+Each algorithm is one notebook, `algorithms/gnc_algorithms/<name>.py`: a jupytext percent-format
+module that imports as plain Python and whose tests pytest collects. The suite needs the simulator
+installed, from `just pinned` (the WiseDynamics commit in `uv.lock`) or `just local` (an editable
+checkout at `$WISE_DYNAMICS_PATH`, default `../WiseDynamics`).
 
 ```sh
-just pinned   # or: just local
-just kernel   # once: registers the `uv-project` Jupyter kernel the notebooks name
-just lab      # JupyterLab in this environment
-just test     # the whole suite
+just pinned
+just kernel
+just lab
+just test
 ```
 
-To run an algorithm's proof, open its `.py` in JupyterLab as a notebook (right-click, Open With,
-Jupytext Notebook) on the `Python (uv)` kernel, save it, and run its `%%monte_carlo` cell: it runs
-every case in parallel and writes one HDF5 run file per case under `monte_carlo/`. The cells after
-it, which run in the notebook only, plot those runs. For the IMU dead reckoner that is
-`algorithms/gnc_algorithms/imu_dead_reckoning.py`: four smoke tests of flight conditions with
-closed forms, its 1 Hz cadence, and 852 cases that fly it in WiseDynamics' `Leo500` scenario and
-hold each within the bound its drawn IMU biases imply.
+To run an algorithm's proof, open its `.py` in JupyterLab as a notebook on the `Python (uv)`
+kernel, save it, and run its `%%monte_carlo` cell. The cells after it, which run in the notebook
+only, plot the runs, which land in `monte_carlo/`. The IMU dead reckoner is
+`algorithms/gnc_algorithms/imu_dead_reckoning.py`.
 
 CI (`.github/workflows/checks.yml`) runs, from the repository root:
 
