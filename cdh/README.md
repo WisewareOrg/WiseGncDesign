@@ -33,7 +33,8 @@ estimate with the vehicle's truth:
 
 ```python
 >>> import numpy as np
->>> from wise_dynamics.basilisk import ImuSpacecraft, Leo500
+>>> from wise_dynamics.basilisk import ImuSpacecraft
+>>> from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 >>> from gnc_algorithms.imu_dead_reckoning import ImuDeadReckoner
 >>> from gnc_cdh.basilisk import AlgorithmModule
 >>> scenario = Leo500()
