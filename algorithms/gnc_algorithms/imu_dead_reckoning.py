@@ -562,29 +562,46 @@ def test_imu_dead_reckoning_case(
 # per_case = [bound_ratios(run, **inputs) for run in runs]
 # ratios = {name: np.stack([case[name] for case in per_case]) for name in per_case[0]}
 # t = runs[0]["t_s"][1:]
-# print("| Bound | Worst ratio | Where | 99.9th pct of per-case worst |")
-# print("| --- | --- | --- | --- |")
-# for name, r in ratios.items():
-#     case, sample = np.unravel_index(np.argmax(r), r.shape)
-#     print(
-#         f"| {name} | {r.max():.2f} | {t[sample]:.0f} s, case {int(runs[case]['case'])} "
-#         f"| {np.percentile(r.max(axis=1), 99.9):.2f} |"
-#     )
 #
 # fig, axes = plt.subplots(len(ratios), 1, sharex=True, figsize=(8, 7))
 # for ax, (name, r) in zip(axes, ratios.items(), strict=True):
 #     ax.plot(t, r.max(axis=0), label="worst across cases")
 #     ax.axhline(BOUND_FACTOR, color="C3", linestyle="--", label="bound factor")
 #     ax.set_ylabel(f"{name.split()[0]} ratio")
+#     case, sample = np.unravel_index(np.argmax(r), r.shape)
+#     stats = [
+#         ("worst ratio", f"{r.max():.2f}"),
+#         ("at t [s]", f"{t[sample]:.0f}"),
+#         ("case", f"{int(runs[case]['case'])}"),
+#         ("99.9th pct", f"{np.percentile(r.max(axis=1), 99.9):.2f}"),
+#     ]
+#     ax.text(
+#         0.98, 0.95, "\n".join(f"{k:<12}{v:>8}" for k, v in stats),
+#         transform=ax.transAxes, ha="right", va="top", family="monospace",
+#     )  # fmt: skip
 # axes[0].set_title(f"Error over its derived growth, {len(runs)} cases")
-# axes[0].legend()
+# axes[0].legend(loc="upper left")
 # axes[-1].set_xlabel("t [s]")
 # plt.show()
 #
-# final = {name: [] for name in ("attitude error [rad]", "position error [m]")}
-# for run in runs:
-#     growth = error_growth(run, **inputs)
-#     for name in final:
-#         final[name].append(growth[name][0][-1])
-# for name, values in final.items():
-#     print(f"final {name}: mean {np.mean(values):.4g}, max {np.max(values):.4g}")
+# growths = [error_growth(run, **inputs) for run in runs]
+# fig, axes = plt.subplots(1, len(growths[0]), figsize=(12, 3.5))
+# for ax, name in zip(axes, growths[0], strict=True):
+#     final = np.array([growth[name][0][-1] for growth in growths])
+#     ax.hist(final, bins=40, rwidth=0.9, color="C0")
+#     ax.set_axisbelow(True)
+#     ax.grid(alpha=0.3)
+#     ax.set_title(f"Final {name}")
+#     stats = [
+#         ("n", f"{len(final)}"),
+#         ("mean", f"{final.mean():.4g}"),
+#         ("99.9th pct", f"{np.percentile(final, 99.9):.4g}"),
+#         ("max", f"{final.max():.4g}"),
+#         ("max case", f"{int(runs[final.argmax()]['case'])}"),
+#     ]
+#     ax.text(
+#         0.98, 0.95, "\n".join(f"{k:<11}{v:>9}" for k, v in stats),
+#         transform=ax.transAxes, ha="right", va="top", family="monospace",
+#     )  # fmt: skip
+# fig.tight_layout()
+# plt.show()
