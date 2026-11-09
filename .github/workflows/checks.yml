@@ -45,4 +45,6 @@ jobs:
       - run: uv sync --locked --group sim --group notebooks
       - run: uv run pytest --ci
       - name: The IMU dead reckoner's notebook
-        run: JPY_SESSION_NAME=$PWD/algorithms/gnc_algorithms/imu_dead_reckoning.py uv run --no-sync jupytext --set-kernel - --execute algorithms/gnc_algorithms/imu_dead_reckoning.py -o "$RUNNER_TEMP/imu_dead_reckoning.ipynb"
+        run: |
+          uv run --no-sync python -m ipykernel install --user --name uv-project --display-name "Python (uv)"
+          JPY_SESSION_NAME=$PWD/algorithms/gnc_algorithms/imu_dead_reckoning.py uv run --no-sync jupytext --execute algorithms/gnc_algorithms/imu_dead_reckoning.py -o "$RUNNER_TEMP/imu_dead_reckoning.ipynb"
