@@ -39,6 +39,7 @@ from gnc_analysis.error_bounds import read_run, violations
 from gnc_cdh.basilisk import AlgorithmModule
 
 __all__ = ["ImuDeadReckoner"]
+
 # %load_ext wise_dynamics.notebook
 
 
@@ -477,7 +478,7 @@ def estimate_fields(fsw: AlgorithmModule) -> dict[str, tuple[Any, str, str]]:
 
 
 def bound_inputs() -> dict[str, float]:
-    """The bound's inputs, for this test and the Monte Carlo notebook alike.
+    """The bound's inputs, for the Monte Carlo test and the analysis cell alike.
 
     Returns:
         `gyro_noise_std_rad_s` (rad/s) and `accel_noise_std_m_s2` (m/s^2) from `ImuSpacecraft`,

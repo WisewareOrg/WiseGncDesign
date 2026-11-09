@@ -6,9 +6,9 @@ under `[tool.uv.sources]`. The flight software runs at 1 Hz on the simulation's 
 50 Hz at its `hi` fidelity and 20 Hz at `med` and `lo`.
 
 It has three parts:
-- `gnc_algorithms`, each algorithm and its derivation as a literate module that imports as plain
-  Python, with its math compiled by numba. They name their inputs and outputs by the simulation's
-  standard field names, so a host resolves them by name;
+- `gnc_algorithms`, each algorithm and its derivation as a literate module, with its math compiled
+  by numba. Importing one loads the simulator stack and runs nothing. They name their inputs and
+  outputs by the simulation's standard field names, so a host resolves them by name;
 - `gnc_cdh`, which hosts an algorithm in the simulator ([`cdh/README.md`](cdh/README.md));
 - `gnc_analysis.error_bounds`, which reads a run file with h5py and holds the dead reckoner's
   error to its accuracy bound.
@@ -16,9 +16,9 @@ It has three parts:
 ## Development
 
 Each algorithm is one notebook, `algorithms/gnc_algorithms/<name>.py`: a jupytext percent-format
-module that imports as plain Python and whose tests pytest collects. The suite needs the simulator
-installed, from `just pinned` (the WiseDynamics commit in `uv.lock`) or `just local` (an editable
-checkout at `$WISE_DYNAMICS_PATH`, default `../WiseDynamics`).
+module whose import loads the simulator stack and runs nothing, and whose tests pytest collects.
+The suite needs the simulator installed, from `just pinned` (the WiseDynamics commit in `uv.lock`)
+or `just local` (an editable checkout at `$WISE_DYNAMICS_PATH`, default `../WiseDynamics`).
 
 ```sh
 just pinned
