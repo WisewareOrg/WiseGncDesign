@@ -1,12 +1,15 @@
+# Sync the sim and notebook groups at the locked WiseDynamics commit.
+_sync:
+    uv sync --locked --group sim --group notebooks
+
 # Install an editable WiseDynamics checkout and print the one in use.
-local:
+local: _sync
     uv pip install -e "${WISE_DYNAMICS_PATH:-../WiseDynamics}[notebook]"
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
     uv run --no-sync jupytext --sync algorithms/gnc_algorithms/*.py
 
 # Install the WiseDynamics commit in uv.lock and print the one in use.
-pinned:
-    uv sync --locked --group sim --group notebooks
+pinned: _sync
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
     uv run --no-sync jupytext --sync algorithms/gnc_algorithms/*.py
 
