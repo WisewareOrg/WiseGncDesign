@@ -590,7 +590,7 @@ def test_imu_dead_reckoning_case(
 # axes[-1].set_xlabel("t [s]")
 # plt.show()
 #
-# fig, axes = plt.subplots(1, len(finals), figsize=(12, 3.5))
+# fig, axes = plt.subplots(len(finals), 1, figsize=(8, 7))
 # for ax, (name, final) in zip(axes, finals.items(), strict=True):
 #     ax.hist(final, bins=40, rwidth=0.9, color="C0")
 #     ax.set_axisbelow(True)
