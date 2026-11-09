@@ -602,8 +602,6 @@ def test_imu_dead_reckoning_case(
 
 
 # %% active="ipynb"
-# import os
-#
 # import matplotlib.pyplot as plt
 # from wise_dynamics.notebook import load_runs
 #
@@ -634,11 +632,6 @@ def test_imu_dead_reckoning_case(
 # axes[0].set_title(f"Error over its derived growth, {len(runs)} cases")
 # axes[0].legend()
 # axes[-1].set_xlabel("t [s]")
-# run_dir = (
-#     Path(os.environ["JPY_SESSION_NAME"]).resolve().parents[2]
-#     / "monte_carlo/algorithms/gnc_algorithms/imu_dead_reckoning/test_imu_dead_reckoning_case"
-# )
-# fig.savefig(run_dir / "bound_ratios.png", dpi=150)
 # plt.show()
 
 
@@ -654,5 +647,3 @@ def test_imu_dead_reckoning_case(
 #         final[name].append(growth[name][0][-1])
 # for name, values in final.items():
 #     print(f"final {name}: mean {np.mean(values):.4g}, max {np.max(values):.4g}")
-# passed = sum(all(r.max() <= BOUND_FACTOR for r in case.values()) for case in per_case)
-# print(f"{passed} of {len(runs)} cases within every bound")
