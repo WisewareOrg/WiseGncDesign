@@ -25,18 +25,18 @@
 from collections.abc import Callable
 from importlib.metadata import version
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pytest
 from numba import njit
+from scipy.spatial.transform import Rotation
+from wise_dynamics.basilisk import ImuSpacecraft
+from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from gnc_algorithms.mrp import B, dcm_NB, shadow
-
-if TYPE_CHECKING:
-    from wise_dynamics.basilisk.scenarios.leo500 import Leo500
-
-    from gnc_cdh.basilisk import AlgorithmModule
+from gnc_analysis.error_bounds import read_run, violations
+from gnc_cdh.basilisk import AlgorithmModule
 
 __all__ = ["ImuDeadReckoner"]
 # %load_ext wise_dynamics.notebook
@@ -377,8 +377,6 @@ def test_a_rotation_past_180_degrees_switches_to_the_shadow_set():
     A 1 rad/s rate about body x for 1.2 pi s keeps |sigma| <= 1, and its DCM matches SciPy's for
     that rotation within 1e-5.
     """
-    from scipy.spatial.transform import Rotation
-
     omega = 1.0  # rad/s
     axis = np.array([1.0, 0.0, 0.0])
     total_t = np.pi * 1.2  # theta = 1.2 pi > pi
@@ -465,12 +463,11 @@ def test_the_kinematics_match_the_dcm_derivative_for_a_nonaligned_rate():
 #
 # `dead_reckoner` builds the estimator at t = 0 from a WiseDynamics scenario's initial state and
 # hosts it on the scenario's vehicle with `gnc_cdh.basilisk`, the dynamics stepping at the
-# scenario's fidelity. The imports of the simulator and the host are inside the functions that use
-# them, so importing this module loads neither.
+# scenario's fidelity.
 
 
 # %%
-def estimate_fields(fsw: "AlgorithmModule") -> dict[str, tuple[Any, str, str]]:
+def estimate_fields(fsw: AlgorithmModule) -> dict[str, tuple[Any, str, str]]:
     """The estimate's run-file datasets, `est/<output name>`, one per output of the host module.
 
     Args:
@@ -490,11 +487,6 @@ def bound_inputs() -> dict[str, float]:
         `step_s`, the flight software's step `AlgorithmModule.period_s` (s), and `mu`, Earth's
         gravitational parameter from `Leo500` (m^3/s^2).
     """
-    from wise_dynamics.basilisk import ImuSpacecraft
-    from wise_dynamics.basilisk.scenarios.leo500 import Leo500
-
-    from gnc_cdh.basilisk import AlgorithmModule
-
     return {
         "gyro_noise_std_rad_s": ImuSpacecraft.gyro_noise_std_rad_s,
         "accel_noise_std_m_s2": ImuSpacecraft.accel_noise_std_m_s2,
@@ -503,7 +495,7 @@ def bound_inputs() -> dict[str, float]:
     }
 
 
-def dead_reckoner(scenario: "Leo500") -> "AlgorithmModule":
+def dead_reckoner(scenario: Leo500) -> AlgorithmModule:
     """The dead reckoner, built at t = 0 from a scenario's initial state, hosted on its vehicle.
 
     Args:
@@ -512,10 +504,6 @@ def dead_reckoner(scenario: "Leo500") -> "AlgorithmModule":
     Returns:
         The `AlgorithmModule` hosting it.
     """
-    from wise_dynamics.basilisk.scenarios.leo500 import Leo500
-
-    from gnc_cdh.basilisk import AlgorithmModule
-
     initial = scenario.initial_state()
     algorithm = ImuDeadReckoner(
         initial["sigma0_BN"],
@@ -538,7 +526,7 @@ def dead_reckoner(scenario: "Leo500") -> "AlgorithmModule":
 # %%monte_carlo
 @pytest.mark.sim_runs(852)
 def test_imu_dead_reckoning_case(
-    sim_scenario: "Leo500", sim_duration_s: float, sim_run_file: Callable[..., Path]
+    sim_scenario: Leo500, sim_duration_s: float, sim_run_file: Callable[..., Path]
 ) -> None:
     """One Monte Carlo case holds every error within its bound.
 
@@ -547,8 +535,6 @@ def test_imu_dead_reckoning_case(
         sim_duration_s: s, the case's simulated duration.
         sim_run_file: writes the case's run file and returns its path.
     """
-    from gnc_analysis.error_bounds import read_run, violations
-
     fsw = dead_reckoner(sim_scenario)
     datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
     path = sim_run_file(datasets, {"versions_wise_gnc_design": version("wise-gnc-design")})
