@@ -38,8 +38,8 @@ A Monte Carlo test writes its runs into the active session, a named folder under
 outside `testpaths` so `just test` never judges. Each analyzer gives one requirement a verdict over
 the tests that claim it with `@pytest.mark.verifies("<ID>")`, and `report/matrix.md` and the
 requirement plots land in the session. A crash record counts as one failed case against the allowed
-failures. A case with neither a run nor a crash record leaves its test not judged. The reasoning is
-in [ADR 0001 rev 1](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
+failures. A case with neither a run nor a crash record leaves its test not judged. The analyzer also appears in the VS Code test explorer (`.vscode/settings.json`); run it after a
+campaign, or run `just judge` from the terminal. The reasoning is in [ADR 0001 rev 1](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
 
 Setup creates an `.ipynb` beside each algorithm `.py`. To run an algorithm's proof, open the
 `.ipynb` in VS Code or JupyterLab on the `WiseGncDesign` kernel, save it, and run its
