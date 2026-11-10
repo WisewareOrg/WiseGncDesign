@@ -10,16 +10,20 @@ import importlib.util
 import math
 import sys
 import warnings
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from wise_dynamics.sessions import TestResults, read_test_results, session_directory
 
 from gnc_analysis.error_bounds import read_run
 from gnc_analysis.requirements import Requirement, allowed_failures
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
 
 NOT_APPLICABLE = "—"
 HEADER = [
@@ -28,7 +32,7 @@ HEADER = [
 ]  # fmt: skip
 
 
-def _join(cases: Any) -> str:
+def _join(cases: Iterable[int]) -> str:
     """Case numbers as a comma-separated list.
 
     Args:
@@ -58,14 +62,14 @@ class MonteCarloTest:
 
     Attributes:
         directory: the test's folder in the session.
-        path: the test's file, relative to the rootdir, without the suffix.
+        file: the test's file, relative to the rootdir.
         names: the enclosing classes, then the function.
         ids: the requirement IDs its `verifies` marks claim.
         results: what the test left in `directory`.
     """
 
     directory: Path
-    path: str
+    file: Path
     names: tuple[str, ...]
     ids: frozenset[str]
     results: TestResults
@@ -73,7 +77,7 @@ class MonteCarloTest:
     @property
     def label(self) -> str:
         """The test as `<module stem>.<function>`."""
-        return f"{Path(self.path).name}.{self.names[-1]}"
+        return f"{self.file.stem}.{self.names[-1]}"
 
     def rerun(self, case: int) -> str:
         """The command that runs one case alone.
@@ -85,7 +89,7 @@ class MonteCarloTest:
             The pytest command line.
         """
         node = "::".join(self.names)
-        return f'pytest "{self.path}.py::{node}[{case}]" -n 0'
+        return f'pytest "{self.file.as_posix()}::{node}[{case}]" -n 0'
 
 
 @dataclass(frozen=True)
@@ -93,17 +97,21 @@ class Cell:
     """One test's cases judged against one requirement.
 
     Attributes:
+        requirement: the requirement.
         test: the claiming test.
         allowed: the failures the requirement allows over `test.results.planned` cases, or None.
         metrics: case number to metric value, for the cases whose metric was computed.
         failures: case number to the reason, for the failed cases.
+        crashed: the failed cases that crashed and left no run.
         missing: the planned cases with neither a run nor a crash record.
     """
 
+    requirement: Requirement
     test: MonteCarloTest
     allowed: int | None
     metrics: dict[int, float]
     failures: dict[int, str]
+    crashed: list[int]
     missing: list[int]
 
     @property
@@ -118,13 +126,14 @@ class Cell:
         if self.missing:
             return f"found {self.found} of {planned} cases, missing: {_join(self.missing)}"
         if self.allowed is None:
-            return f"{planned} cases cannot show the reliability at the confidence"
+            p, c = self.requirement.p, self.requirement.c
+            return f"{planned} cases cannot show reliability {p:g} at confidence {c:g}"
         return None
 
     @property
     def passed(self) -> bool:
         """Whether the cell is judged and its failures are within the allowance."""
-        return self.why_not_judged is None and len(self.failures) <= (self.allowed or 0)
+        return self.why_not_judged is None and len(self.failures) <= self.allowed
 
 
 def _evaluate(requirement: Requirement, test: MonteCarloTest) -> Cell:
@@ -140,6 +149,7 @@ def _evaluate(requirement: Requirement, test: MonteCarloTest) -> Cell:
     results = test.results
     metrics: dict[int, float] = {}
     failures: dict[int, str] = {}
+    crashed = []
     missing = []
     for case in range(results.planned):
         if case in results.runs:
@@ -156,10 +166,11 @@ def _evaluate(requirement: Requirement, test: MonteCarloTest) -> Cell:
                 failures[case] = f"metric {value:.4g} exceeds {requirement.threshold:g}"
         elif case in results.crashes:
             failures[case] = _one_line(f"crashed: {results.crashes[case].get('exception')}")
+            crashed.append(case)
         else:
             missing.append(case)
     allowed = allowed_failures(results.planned, requirement.p, requirement.c)
-    return Cell(test, allowed, metrics, failures, missing)
+    return Cell(requirement, test, allowed, metrics, failures, crashed, missing)
 
 
 def _verifies(chain: list[Any], where: str) -> frozenset[str]:
@@ -208,6 +219,7 @@ def _import(path: Path) -> ModuleType:
         sys.modules[name] = module
         spec.loader.exec_module(module)
     except Exception as error:
+        sys.modules.pop(name, None)
         raise ImportError(f"cannot import the Monte Carlo test file {path}: {error!r}") from error
     return module
 
@@ -255,6 +267,23 @@ class Judging:
         return self.cells[key]
 
 
+def _locate(config: pytest.Config, parts: tuple[str, ...]) -> tuple[Path, tuple[str, ...]] | None:
+    """Find the test file and the names within it that a test folder stands for.
+
+    Args:
+        config: the pytest configuration.
+        parts: the folder's path under the session.
+
+    Returns:
+        The file, then the enclosing classes and the function, or None when no file matches.
+    """
+    for split in range(len(parts) - 1, 0, -1):
+        file = config.rootpath.joinpath(*parts[: split - 1], parts[split - 1] + ".py")
+        if file.is_file():
+            return file, parts[split:]
+    return None
+
+
 def _discover(config: pytest.Config) -> Judging:
     """Find the active session's tagged Monte Carlo tests.
 
@@ -269,27 +298,26 @@ def _discover(config: pytest.Config) -> Judging:
     """
     session = session_directory(config)
     tests, vanished = [], []
+    modules: dict[Path, ModuleType] = {}
     for planned in sorted(session.rglob("planned.json")):
         directory = planned.parent
         parts = directory.relative_to(session).parts
-        found = None
-        for split in range(len(parts) - 1, 0, -1):
-            path = config.rootpath.joinpath(*parts[: split - 1], parts[split - 1] + ".py")
-            if path.is_file():
-                found = (path, parts[:split], parts[split:])
-                break
-        chain = None
-        if found:
-            path, prefix, names = found
-            chain = [_import(path)]
-            for name in names:
-                chain.append(getattr(chain[-1], name, None))
-        if not chain or chain[-1] is None:
+        located = _locate(config, parts)
+        if located is None:
+            vanished.append(str(directory.relative_to(session)))
+            continue
+        file, names = located
+        if file not in modules:
+            modules[file] = _import(file)
+        chain = [modules[file]]
+        for name in names:
+            chain.append(getattr(chain[-1], name, None))
+        if chain[-1] is None:
             vanished.append(str(directory.relative_to(session)))
             continue
         ids = _verifies(chain, "/".join(parts))
         if ids:
-            relative = path.relative_to(config.rootpath).with_suffix("").as_posix()
+            relative = file.relative_to(config.rootpath)
             tests.append(
                 MonteCarloTest(directory, relative, names, ids, read_test_results(directory))
             )
@@ -344,7 +372,8 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     judging = _judging(metafunc.config)
     judging.requirements[requirement.id] = requirement
     params, ids = [], []
-    for test in judging.claimers(requirement):
+    claimers = judging.claimers(requirement)
+    for test in claimers:
         results = test.results
         for case in sorted(set(results.runs) | set(results.crashes)):
             params.append((test, case))
@@ -352,7 +381,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     duplicates = sorted({i for i in ids if ids.count(i) > 1})
     if duplicates:
         raise ValueError(f"two Monte Carlo tests give the same item id: {duplicates}")
-    if not judging.claimers(requirement):
+    if not claimers:
         params, ids = [None], ["no-claim"]
     metafunc.parametrize("session_run", params, indirect=True, ids=ids)
 
@@ -386,17 +415,22 @@ def pytest_collection_modifyitems(
 class SessionRun:
     """One case of a cell, or the single item for a requirement no test claims."""
 
-    def __init__(self, judging: Judging, requirement: Requirement, case: tuple | None) -> None:
+    def __init__(
+        self,
+        judging: Judging,
+        requirement: Requirement,
+        claim: tuple[MonteCarloTest, int] | None,
+    ) -> None:
         """Bind the case.
 
         Args:
             judging: the run's judging state.
             requirement: the analyzer's requirement.
-            case: the (claiming test, case number), or None when no test claims the requirement.
+            claim: the (claiming test, case number), or None when no test claims the requirement.
         """
         self.judging = judging
         self.requirement = requirement
-        self.case = case
+        self.claim = claim
 
     def check(self) -> None:
         """Skip, pass, tolerate or fail this case.
@@ -404,12 +438,12 @@ class SessionRun:
         A cell that cannot be judged skips. A passing case returns. A failing case within the
         cell's allowance is an expected failure, and one beyond it fails.
         """
-        if self.case is None:
+        if self.claim is None:
             pytest.skip(
                 f"no Monte Carlo test in session {self.judging.session.name} claims "
                 f"{self.requirement.id}"
             )
-        test, case = self.case
+        test, case = self.claim
         cell = self.judging.cell(self.requirement, test)
         if cell.why_not_judged:
             pytest.skip(f"{test.label} not judged: {cell.why_not_judged}")
@@ -438,7 +472,7 @@ class RequirementVerdict:
         self.requirement = requirement
         self.cells = [judging.cell(requirement, t) for t in judging.claimers(requirement)]
 
-    def plot(self, draw: Any) -> None:
+    def plot(self, draw: Callable[[dict[str, dict[int, float]], Requirement], "Figure"]) -> None:
         """Save the figure `draw` returns as `<session>/report/<ID>.png`.
 
         Nothing is drawn when no test claims the requirement.
@@ -471,14 +505,15 @@ class RequirementVerdict:
                     for c in failed
                 )
             )
-        unjudged = [c for c in self.cells if c.why_not_judged is not None]
-        if unjudged or not self.cells:
-            session = self.judging.session.name
-            reason = "; ".join(f"{c.test.label}: {c.why_not_judged}" for c in unjudged)
+        if not self.cells:
             pytest.skip(
-                f"{self.requirement.id} verdict not judged: "
-                + (reason or f"no Monte Carlo test in session {session} claims it")
+                f"{self.requirement.id} verdict not judged: no Monte Carlo test in session "
+                f"{self.judging.session.name} claims it"
             )
+        unjudged = [c for c in self.cells if c.why_not_judged is not None]
+        if unjudged:
+            reason = "; ".join(f"{c.test.label}: {c.why_not_judged}" for c in unjudged)
+            pytest.skip(f"{self.requirement.id} verdict not judged: {reason}")
 
 
 @pytest.fixture
@@ -507,11 +542,10 @@ def requirement_verdict(request: pytest.FixtureRequest) -> RequirementVerdict:
     return RequirementVerdict(_judging(request.config), request.module.REQUIREMENT)
 
 
-def _row(requirement: Requirement, cell: Cell) -> list[str]:
+def _row(cell: Cell) -> list[str]:
     """One matrix row.
 
     Args:
-        requirement: the requirement.
         cell: the cell.
 
     Returns:
@@ -523,7 +557,7 @@ def _row(requirement: Requirement, cell: Cell) -> list[str]:
     else:
         verdict, allowed = ("PASS" if cell.passed else "FAIL"), str(cell.allowed)
     return [
-        requirement.id,
+        cell.requirement.id,
         cell.test.label,
         verdict,
         str(len(cell.failures)),
@@ -531,7 +565,7 @@ def _row(requirement: Requirement, cell: Cell) -> list[str]:
         str(results.planned),
         allowed,
         _join(cell.failures),
-        _join(c for c in cell.failures if c in results.crashes and c not in results.runs),
+        _join(cell.crashed),
     ]
 
 
@@ -550,7 +584,7 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     for id_ in ids:
         requirement = judging.requirements[id_]
         for test in judging.claimers(requirement):
-            row = _row(requirement, judging.cell(requirement, test))
+            row = _row(judging.cell(requirement, test))
             lines.append("| " + " | ".join(row) + " |")
     report = judging.session / "report"
     report.mkdir(parents=True, exist_ok=True)
