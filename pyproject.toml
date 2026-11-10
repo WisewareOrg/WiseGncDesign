@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "numba>=0.68",
     "numpy>=2.0",
+    "pytest>=9.1.1",
     "scipy>=1.16",
 ]
 
@@ -21,17 +22,16 @@ dev = [
     "interrogate>=1.7.0",
     "ipykernel>=6.29",
     "jupytext>=1.17",
-    "pytest>=9.1.1",
     "pytest-xdist>=3.6",
     "ruff>=0.17.0",
     "pydoclint>=0.12.0",
 ]
-sim = ["wise-dynamics"]
-notebooks = ["ipykernel>=6.29", "jupyterlab>=4.4", "jupytext>=1.17"]
+sim = ["wise-dynamics[notebook]"]
+notebooks = ["ipykernel>=6.29", "jupyterlab>=4.4", "jupytext>=1.17", "notebook", "pip"]
 
 [tool.uv.sources]
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "38f22088f119f3c7629de70b45b284fcfb3ff608" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "248aab34f2795767c73d09ea0c2efd48296af20f" }
 
 [build-system]
 requires = ["hatchling"]
@@ -41,8 +41,9 @@ build-backend = "hatchling.build"
 packages = ["algorithms/gnc_algorithms", "cdh/gnc_cdh", "analysis/gnc_analysis"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = ["--import-mode=importlib"]
+testpaths = ["tests", "algorithms"]
+python_files = ["test_*.py", "*/gnc_algorithms/*.py"]
+addopts = ["--import-mode=importlib", "-n", "auto"]
 
 [tool.ruff]
 line-length = 100
