@@ -224,15 +224,14 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     requirements = sorted({requirement for _, requirement in cells})
     for test in tests:
         rows = [
-            "| Requirement | Verdict | Failed/Found/Planned | Allowed | Failed cases | Plot |",
-            "|---|---|---|---|---|---|",
+            "| Requirement | Verdict | Failed/Found/Planned | Allowed | Failed cases |",
+            "|---|---|---|---|---|",
         ]
         for requirement in requirements:
             if cell := cells.get((test, requirement)):
                 rows.append(
                     f"| {requirement} | {cell['verdict']} | {cell['failed']}/{cell['found']}/"
-                    f"{cell['planned']} | {cell['allowed']} | {cell['failed_cases']} | "
-                    f'<img src="{requirement}.png" width="320"> |'
+                    f"{cell['planned']} | {cell['allowed']} | {cell['failed_cases']} |"
                 )
         (report / test / "matrix.md").write_text("\n".join(rows) + "\n")
     links = [f"[{test.rsplit('/', 1)[-1]}]({test}/matrix.md)" for test in tests]
