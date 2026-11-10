@@ -254,6 +254,26 @@ def test_an_untagged_test_is_not_judged(project: pytest.Pytester) -> None:
     assert not (directory.parents[1] / "report" / "test_mc" / "test_untagged").exists()
 
 
+def test_a_class_claims_through_its_base_when_it_has_marks_of_its_own(
+    project: pytest.Pytester,
+) -> None:
+    """A test class inherits its base class's `verifies` alongside a mark of its own.
+
+    Args:
+        project: the project.
+    """
+    (project.path / "tests" / "test_mc.py").write_text(
+        "import pytest\n\n\n"
+        '@pytest.mark.verifies("SRS001")\nclass Base:\n    pass\n\n\n'
+        '@pytest.mark.verifies("SRS999")\nclass TestSub(Base):\n'
+        "    def test_case(self):\n        pass\n"
+    )
+    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "TestSub" / "test_case"
+    write_cases(directory, test="TestSub::test_case")
+
+    judge(project).assert_outcomes(passed=1)
+
+
 def test_requirements_judged_on_separate_workers_share_the_matrix(
     project: pytest.Pytester,
 ) -> None:

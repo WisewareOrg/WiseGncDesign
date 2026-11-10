@@ -29,7 +29,8 @@ from wise_dynamics.sessions import (
 def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, CaseResults]]:
     """A lookup of the active session's results by the requirement ID a test claims.
 
-    A test claims an ID with `@pytest.mark.verifies("<ID>")` on its module, class or function.
+    A test claims an ID with `@pytest.mark.verifies("<ID>")` on its module, its function, or its
+    class or any base class of it.
 
     Args:
         request: the pytest request.
@@ -62,10 +63,13 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
             for attribute in names:
                 chain.append(getattr(chain[-1], attribute))
             for node in chain:
-                marks = getattr(node, "pytestmark", [])
-                for mark in marks if isinstance(marks, list) else [marks]:
-                    if mark.name == "verifies" and requirement_id in mark.args:
-                        found[recorded.nodeid] = read_test_results(recorded.directory)
+                owners = node.__mro__ if isinstance(node, type) else [node]
+                for owner in owners:
+                    marks = vars(owner).get("pytestmark", [])
+                    marks = marks if isinstance(marks, list) else [marks]
+                    for mark in marks:
+                        if mark.name == "verifies" and requirement_id in mark.args:
+                            found[recorded.nodeid] = read_test_results(recorded.directory)
         return found
 
     return lookup
