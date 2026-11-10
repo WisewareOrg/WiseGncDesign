@@ -1,10 +1,9 @@
 """SRS001, attitude knowledge: judges the estimate's worst attitude error."""
 
-from typing import Any
-
 import numpy as np
 from matplotlib.figure import Figure
 
+from gnc_analysis.judging import RequirementVerdict, SessionRun
 from gnc_analysis.requirements import Requirement, worst_attitude_error_rad
 
 REQUIREMENT = Requirement(
@@ -39,7 +38,7 @@ def plot_worst_attitude_error(
     return figure
 
 
-def test_attitude_knowledge(session_run: Any) -> None:
+def test_attitude_knowledge(session_run: SessionRun) -> None:
     """Judge one case of a claiming test.
 
     Args:
@@ -48,7 +47,7 @@ def test_attitude_knowledge(session_run: Any) -> None:
     session_run.check()
 
 
-def test_attitude_knowledge_verdict(requirement_verdict: Any) -> None:
+def test_attitude_knowledge_verdict(requirement_verdict: RequirementVerdict) -> None:
     """Judge the requirement across its claiming tests and plot the metrics.
 
     Args:
