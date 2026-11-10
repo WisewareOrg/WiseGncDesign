@@ -20,7 +20,7 @@ from gnc_analysis.requirements import Requirement, allowed_failures
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
-    from wise_dynamics.sessions import TestResults
+    from wise_dynamics.sessions import CaseResults
 
 NOT_APPLICABLE = "—"
 
@@ -65,7 +65,7 @@ class MonteCarloTest:
     file: Path
     names: tuple[str, ...]
     ids: frozenset[str]
-    results: TestResults
+    results: CaseResults
 
     @property
     def label(self) -> str:

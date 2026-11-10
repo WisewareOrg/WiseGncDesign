@@ -14,7 +14,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
-from wise_dynamics.sessions import read_test_results, session_directory
+from wise_dynamics.sessions import read_test_results, recorded_tests, session_directory
 
 from gnc_analysis.judging import (
     NOT_APPLICABLE,
@@ -83,23 +83,6 @@ def _import(path: Path) -> ModuleType:
     return module
 
 
-def _locate(config: pytest.Config, parts: tuple[str, ...]) -> tuple[Path, tuple[str, ...]] | None:
-    """Find the test file and the names within it that a test folder stands for.
-
-    Args:
-        config: the pytest configuration.
-        parts: the folder's path under the session.
-
-    Returns:
-        The file, then the enclosing classes and the function, or None when no file matches.
-    """
-    for split in range(len(parts) - 1, 0, -1):
-        file = config.rootpath.joinpath(*parts[: split - 1], parts[split - 1] + ".py")
-        if file.is_file():
-            return file, parts[split:]
-    return None
-
-
 def _discover(config: pytest.Config) -> Judging:
     """Find the active session's tagged Monte Carlo tests.
 
@@ -115,27 +98,30 @@ def _discover(config: pytest.Config) -> Judging:
     session = session_directory(config)
     tests, vanished = [], []
     modules: dict[Path, ModuleType] = {}
-    for planned in sorted(session.rglob("planned.json")):
-        directory = planned.parent
-        parts = directory.relative_to(session).parts
-        located = _locate(config, parts)
-        if located is None:
-            vanished.append(str(directory.relative_to(session)))
+    for folder in recorded_tests(session):
+        path, *names = folder.nodeid.split("::")
+        file = config.rootpath / path
+        if not file.is_file():
+            vanished.append(str(folder.directory.relative_to(session)))
             continue
-        file, names = located
         if file not in modules:
             modules[file] = _import(file)
         chain = [modules[file]]
         for name in names:
             chain.append(getattr(chain[-1], name, None))
         if chain[-1] is None:
-            vanished.append(str(directory.relative_to(session)))
+            vanished.append(str(folder.directory.relative_to(session)))
             continue
-        ids = _verifies(chain, "/".join(parts))
+        ids = _verifies(chain, folder.nodeid)
         if ids:
-            relative = file.relative_to(config.rootpath)
             tests.append(
-                MonteCarloTest(directory, relative, names, ids, read_test_results(directory))
+                MonteCarloTest(
+                    folder.directory,
+                    file.relative_to(config.rootpath),
+                    tuple(names),
+                    ids,
+                    read_test_results(folder.directory),
+                )
             )
     if vanished:
         warnings.warn(
