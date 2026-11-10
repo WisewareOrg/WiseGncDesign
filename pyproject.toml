@@ -44,6 +44,7 @@ packages = ["algorithms/gnc_algorithms", "cdh/gnc_cdh", "analysis/gnc_analysis"]
 testpaths = ["tests", "algorithms"]
 python_files = ["test_*.py", "*/gnc_algorithms/*.py"]
 markers = ["verifies(*ids): the requirement IDs a Monte Carlo test verifies"]
+strict_markers = true
 addopts = ["--import-mode=importlib", "-n", "auto", "-p", "pytester"]
 
 [tool.ruff]
