@@ -33,8 +33,8 @@ be written into one algorithm's test, and a test must be able to claim several r
   every claiming cell passes.
 - **A missing case leaves its cell not judged**, naming the cases found and missing, rather than
   counting as a pass or a failure.
-- **Evidence is kept in the session.** The verdict matrix and each requirement's plot are written
-  beside the runs they judge.
+- **Evidence is kept in the session.** The report is written beside the runs it judges, organised
+  by test: each claiming test's matrix and a plot per cell, and a rollup of requirement by test.
 
 Where requirements and their limits are stored is outside this decision; a later ADR decides it
 without touching this one.

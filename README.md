@@ -37,10 +37,15 @@ A Monte Carlo test writes its runs into the active session, a named folder under
 `just session <name>` makes `<name>` active, and `just session` with no name lists the sessions.
 `just judge` judges the active session: it runs the requirement analyzers in `analysis/`, which are
 outside `testpaths` so `just test` never judges. Each analyzer gives one requirement a verdict over
-the tests that claim it with `@pytest.mark.verifies("<ID>")`, and `report/matrix.md` and the
-requirement plots land in the session. A crash record counts as one failed case against the allowed
-failures. A case with neither a run nor a crash record leaves its test not judged. The analyzer also appears in the VS Code test explorer (`.vscode/settings.json`); run it after a
-campaign, or run `just judge` from the terminal. The reasoning is in [ADR 0001 rev 1](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
+the tests that claim it with `@pytest.mark.verifies("<ID>")`. A failing requirement lists each
+failing case with the command that re-simulates it. A crash record counts as one failed case against
+the allowed failures. A case with neither a run nor a crash record leaves its test not judged.
+
+The report lands in the session's `report/`, organised by test: each claiming test has a folder at
+the same path as its runs, holding its `matrix.md` and a plot per requirement it claims, and
+`report/matrix.md` rolls them up, requirement by test. The analyzers also appear in the VS Code test
+explorer (`.vscode/settings.json`); run them after a campaign, or run `just judge` from the
+terminal. The reasoning is in [ADR 0001 rev 1](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
 
 Setup creates an `.ipynb` beside each algorithm `.py`. To run an algorithm's proof, open the
 `.ipynb` in VS Code or JupyterLab on the `WiseGncDesign` kernel, save it, and run its
