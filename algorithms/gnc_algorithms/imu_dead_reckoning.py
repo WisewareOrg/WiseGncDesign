@@ -734,18 +734,18 @@ def violations(
         mu: m^3/s^2, the central body's gravitational parameter.
 
     Returns:
-        A message for each metric whose error is above `ERROR_AT_START` at t = 0, or above
-        `BOUND_FACTOR` times its bound at a subsequent sample, naming the earliest such sample.
-        Empty when the run passes.
+        A message for each metric whose error is not within `ERROR_AT_START` at t = 0, or not
+        within `BOUND_FACTOR` times its bound at a subsequent sample, NaN included, naming the
+        earliest such sample. Empty when the run passes.
     """
     t = run["t_s"]
     found = []
     growths = error_growth(run, gyro_noise_std_rad_s, accel_noise_std_m_s2, step_s, mu)
     for name, (error, bound) in growths.items():
-        if error[0] > ERROR_AT_START:
+        if not error[0] <= ERROR_AT_START:
             found.append(f"{name} at t = 0 is {error[0]}, above {ERROR_AT_START}")
             continue
-        over = np.flatnonzero(error[1:] > BOUND_FACTOR * bound[1:]) + 1
+        over = np.flatnonzero(~(error[1:] <= BOUND_FACTOR * bound[1:])) + 1
         if over.size:
             k = over[0]
             found.append(
@@ -753,6 +753,31 @@ def violations(
                 f"{error[k]} > {BOUND_FACTOR * bound[k]}"
             )
     return found
+
+
+# %%
+def test_a_nan_error_is_a_violation():
+    """A diverged estimate, whose error is NaN, fails the gross check instead of passing it."""
+    zeros = np.zeros((3, 3))
+    r_N = np.tile([7.0e6, 0.0, 0.0], (3, 1))
+    v_est_N = zeros.copy()
+    v_est_N[2, 0] = np.nan
+    run = {
+        "t_s": np.array([0.0, 1.0, 2.0]),
+        "truth/sigma_BN": zeros,
+        "est/sigma_BN": zeros,
+        "truth/omega_BN_B": zeros,
+        "truth/v_N": zeros,
+        "est/v_BN_N": v_est_N,
+        "truth/r_N": r_N,
+        "est/r_BN_N": r_N,
+        "draw_gyro_bias_P_rad_s": np.zeros(3),
+        "draw_accel_bias_P_m_s2": np.zeros(3),
+    }
+
+    found = violations(run, **bound_inputs())
+
+    assert [message.split()[0] for message in found] == ["velocity"]
 
 
 # %% [markdown]

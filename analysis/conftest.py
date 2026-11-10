@@ -111,7 +111,7 @@ def verdict(
     request: pytest.FixtureRequest,
     claimed_runs: Callable[[str], dict[str, CaseResults]],
     allowed_failures: Callable[[int, float, float], int | None],
-) -> Callable[[str, dict[str, dict[int, float]], float, float, float, dict[str, Figure]], None]:
+) -> Callable[..., None]:
     """Judge a requirement from its analyzer's number for each run, and write its report.
 
     Args:
@@ -120,7 +120,7 @@ def verdict(
         allowed_failures: the allowed-failures rule.
 
     Returns:
-        `judge(requirement_id, numbers, x, p, c, figures)`, where `numbers` holds each claiming
+        `judge(requirement_id, numbers, figures, *, x, p, c)`, where `numbers` holds each claiming
         test's number by case. A case fails when it crashed or its number is not at most `x`, NaN
         included.
     """
@@ -130,10 +130,11 @@ def verdict(
     def judge(
         requirement_id: str,
         numbers: dict[str, dict[int, float]],
+        figures: dict[str, Figure],
+        *,
         x: float,
         p: float,
         c: float,
-        figures: dict[str, Figure],
     ) -> None:
         """Give each claiming test a cell, write the report, then fail or skip unless all pass.
 
@@ -143,11 +144,11 @@ def verdict(
         Args:
             requirement_id: the requirement.
             numbers: each claiming test's number by case.
+            figures: each claiming test's plot, saved as `<ID>.png` under the report's copy
+                of the test's folder in the session.
             x: the largest number a passing run may have.
             p: the share of runs that must pass.
             c: the confidence the demonstration demands.
-            figures: each claiming test's plot, saved as `<ID>.png` under the report's copy
-                of the test's folder in the session.
         """
         claimed = claimed_runs(requirement_id)
         folders = {test.nodeid: test.directory for test in recorded_tests(session)}

@@ -56,4 +56,4 @@ def test_attitude_knowledge(
         )
         axes.legend()
         figures[nodeid] = figure
-    verdict(ID, worst, X, P, C, figures)
+    verdict(ID, worst, figures, x=X, p=P, c=C)

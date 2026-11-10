@@ -31,7 +31,7 @@ be written into one algorithm's test, and a test must be able to claim several r
   such that `k` failures still show `p` at confidence `c` under the one-sided Clopper-Pearson test
   on `n` planned cases. If no `k` exists the cell is not judged. A requirement passes only when
   every claiming cell passes.
-- **A missing case leaves its cell not judged**, naming the cases found and missing, rather than
+- **A missing case leaves its cell not judged**, naming the missing cases, rather than
   counting as a pass or a failure.
 - **Evidence is kept in the session.** The report is written beside the runs it judges, organised
   by test: each claiming test's matrix and a plot per cell, and a rollup of requirement by test.
