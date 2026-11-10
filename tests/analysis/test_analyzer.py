@@ -218,8 +218,11 @@ def test_failures_over_the_allowance_fail_and_name_the_cases(project: pytest.Pyt
     )
     report = project.path / "monte_carlo" / "s1" / "report"
     test_matrix = (report / "test_mc" / "test_tagged" / "matrix.md").read_text()
-    assert "| SRS001 | fail | 2/10/10 | 1 | 2, 7 |" in test_matrix
-    assert "| SRS001 | fail, 2 of 1 allowed | fail |" in (report / "matrix.md").read_text()
+    assert (
+        '| SRS001 | fail | 2/10/10 | 1 | 2, 7 | <img src="SRS001.png" width="320"> |' in test_matrix
+    )
+    rollup = (report / "matrix.md").read_text()
+    assert "| SRS001 | [fail, 2 of 1 allowed](test_mc/test_tagged/SRS001.png) | fail |" in rollup
 
 
 def test_a_missing_case_leaves_the_requirement_not_judged(project: pytest.Pytester) -> None:
@@ -305,4 +308,6 @@ def test_a_session_written_by_the_wise_dynamics_plugin_passes(project: pytest.Py
     assert "| SRS001 | pass | 0/4/4 | 0 |  |" in test_matrix
     rollup = (report / "matrix.md").read_text()
     assert "[test_tagged](tests/test_mc/test_tagged/matrix.md)" in rollup
-    assert "| SRS001 | pass, 0 of 0 allowed | pass |" in rollup
+    assert (
+        "| SRS001 | [pass, 0 of 0 allowed](tests/test_mc/test_tagged/SRS001.png) | pass |" in rollup
+    )

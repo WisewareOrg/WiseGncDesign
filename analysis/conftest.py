@@ -224,14 +224,15 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     requirements = sorted({requirement for _, requirement in cells})
     for test in tests:
         rows = [
-            "| Requirement | Verdict | Failed/Found/Planned | Allowed | Failed cases |",
-            "|---|---|---|---|---|",
+            "| Requirement | Verdict | Failed/Found/Planned | Allowed | Failed cases | Plot |",
+            "|---|---|---|---|---|---|",
         ]
         for requirement in requirements:
             if cell := cells.get((test, requirement)):
                 rows.append(
                     f"| {requirement} | {cell['verdict']} | {cell['failed']}/{cell['found']}/"
-                    f"{cell['planned']} | {cell['allowed']} | {cell['failed_cases']} |"
+                    f"{cell['planned']} | {cell['allowed']} | {cell['failed_cases']} | "
+                    f'<img src="{requirement}.png" width="320"> |'
                 )
         (report / test / "matrix.md").write_text("\n".join(rows) + "\n")
     links = [f"[{test.rsplit('/', 1)[-1]}]({test}/matrix.md)" for test in tests]
@@ -240,13 +241,14 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
         row = [cells.get((test, requirement)) for test in tests]
         verdicts = {cell["verdict"] for cell in row if cell}
         overall = next(v for v in ("fail", "not judged", "pass") if v in verdicts)
-        shown = [
-            "—"
-            if cell is None
-            else cell["verdict"]
-            if cell["verdict"] == "not judged"
-            else f"{cell['verdict']}, {cell['failed']} of {cell['allowed']} allowed"
-            for cell in row
-        ]
+        shown = []
+        for test, cell in zip(tests, row, strict=True):
+            if cell is None:
+                shown.append("—")
+                continue
+            text = cell["verdict"]
+            if text != "not judged":
+                text += f", {cell['failed']} of {cell['allowed']} allowed"
+            shown.append(f"[{text}]({test}/{requirement}.png)")
         rows.append(f"| {requirement} | {' | '.join(shown)} | {overall} |")
     (report / "matrix.md").write_text("\n".join(rows) + "\n")
