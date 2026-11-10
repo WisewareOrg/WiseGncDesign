@@ -121,7 +121,8 @@ def verdict(
 
     Returns:
         `judge(requirement_id, numbers, x, p, c, figures)`, where `numbers` holds each claiming
-        test's number by case. A case fails when its number is above `x` or it crashed.
+        test's number by case. A case fails when it crashed or its number is not at most `x`, NaN
+        included.
     """
     session = Path(session_directory(request.config))
     report = session / "report"
@@ -153,7 +154,7 @@ def verdict(
         failing, unjudged = [], []
         for nodeid, results in claimed.items():
             failed = sorted(
-                [case for case, number in numbers[nodeid].items() if number > x]
+                [case for case, number in numbers[nodeid].items() if not number <= x]
                 + list(results.crashes)
             )
             missing = [

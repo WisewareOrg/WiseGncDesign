@@ -1,7 +1,7 @@
-"""The attitude-knowledge requirement test: cells, verdicts and the evidence it writes.
+"""The requirement analyzers and their fixtures: cells, verdicts and the evidence they write.
 
-The fake requirement keeps the real test's code with p = 0.8, c = 0.5, X = 1e-3 rad. Of 10 planned
-cases that allows one failure, as `allowed_failures(10, 0.8, 0.5)` gives.
+Each fake requirement keeps a real analyzer's code with p = 0.8, c = 0.5, X = 1e-3 in its units.
+Of 10 planned cases that allows one failure, as `allowed_failures(10, 0.8, 0.5)` gives.
 """
 
 import json
@@ -18,8 +18,8 @@ from wise_dynamics.sessions import (
 )
 
 REPO = Path(__file__).resolve().parents[2]
-GOOD_RAD = 0.9e-3
-BAD_RAD = 1.5e-3
+GOOD = 0.9e-3
+BAD = 1.5e-3
 PLANNED = 10
 MC = """\
 import pytest
@@ -54,22 +54,25 @@ def test_tagged(sim_run_file):
 """
 
 
-def write_run(path: Path, error_rad: float) -> None:
-    """Write a run whose worst attitude error is `error_rad`, with no velocity or position error.
+def write_run(path: Path, error: float, kind: str = "attitude") -> None:
+    """Write a run whose worst `kind` error is `error`, with no error of the other kinds.
 
     Args:
         path: the run file to create.
-        error_rad: the rotation error of the estimate at one sample, in rad.
+        error: the estimate's error at one sample, in rad, m/s or m.
+        kind: "attitude", "velocity" or "position".
     """
-    est = np.zeros((5, 3))
-    est[2, 2] = np.tan(error_rad / 4.0)
+    est = {name: np.zeros((5, 3)) for name in ("sigma_BN", "v_BN_N", "r_BN_N")}
+    if kind == "attitude":
+        est["sigma_BN"][2, 2] = np.tan(error / 4.0)
+    else:
+        est["v_BN_N" if kind == "velocity" else "r_BN_N"][2, 0] = error
     with h5py.File(path, "w") as f:
         f["t_s"] = np.linspace(0.0, 1.0, 5)
-        f["truth/sigma_BN"] = np.zeros((5, 3))
-        f["est/sigma_BN"] = est
-        for truth, estimate in (("v_N", "v_BN_N"), ("r_N", "r_BN_N")):
+        for truth in ("sigma_BN", "v_N", "r_N"):
             f[f"truth/{truth}"] = np.zeros((5, 3))
-            f[f"est/{estimate}"] = np.zeros((5, 3))
+        for name, values in est.items():
+            f[f"est/{name}"] = values
 
 
 def write_cases(
@@ -78,6 +81,9 @@ def write_cases(
     crashed: tuple[int, ...] = (),
     missing: tuple[int, ...] = (),
     test: str = "test_tagged",
+    kind: str = "attitude",
+    nan: tuple[int, ...] = (),
+    planned: int = PLANNED,
 ) -> None:
     """Write a test's session folder.
 
@@ -87,15 +93,35 @@ def write_cases(
         crashed: cases with a crash record and no run file.
         missing: cases with neither file.
         test: the function the folder records.
+        kind: the error the runs carry, as `write_run` takes it.
+        nan: cases whose error is NaN.
+        planned: the planned case count.
     """
-    write_planned(directory, PLANNED, f"tests/test_mc.py::{test}")
-    for case in range(PLANNED):
+    write_planned(directory, planned, f"tests/test_mc.py::{test}")
+    for case in range(planned):
         if case in missing:
             continue
         if case in crashed:
             crash_path(directory, case).write_text(json.dumps({"exception": "boom"}))
         else:
-            write_run(run_path(directory, case), BAD_RAD if case in bad else GOOD_RAD)
+            error = np.nan if case in nan else BAD if case in bad else GOOD
+            write_run(run_path(directory, case), error, kind)
+
+
+def analyzer(name: str) -> str:
+    """A real analyzer's source with X = 1e-3, p = 0.8 and c = 0.5.
+
+    Args:
+        name: "attitude", "velocity" or "position".
+
+    Returns:
+        The source.
+    """
+    source = (REPO / "analysis" / f"test_{name}_knowledge.py").read_text()
+    for constant, value in (("X", "1e-3"), ("P", "0.8"), ("C", "0.5")):
+        source, count = re.subn(rf"^{constant} = .*$", f"{constant} = {value}", source, flags=re.M)
+        assert count == 1, constant
+    return source
 
 
 @pytest.fixture
@@ -109,15 +135,11 @@ def project(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> pytes
     Returns:
         The pytester, rooted in the project.
     """
-    source = (REPO / "analysis" / "test_attitude_knowledge.py").read_text()
-    for name, value in (("X", "1e-3"), ("P", "0.8"), ("C", "0.5")):
-        source, count = re.subn(rf"^{name} = .*$", f"{name} = {value}", source, flags=re.M)
-        assert count == 1, name
     pytester.makefile(".ini", pytest="[pytest]\nmarkers =\n    verifies(*ids): a claim\n")
     conftest = (REPO / "analysis" / "conftest.py").read_text()
     pytester.makepyfile(
         **{
-            "analysis/test_attitude_knowledge": source,
+            "analysis/test_attitude_knowledge": analyzer("attitude"),
             "analysis/conftest": conftest,
             "tests/test_mc": MC,
         }
@@ -173,9 +195,12 @@ def test_failures_within_the_allowance_pass(project: pytest.Pytester) -> None:
     Args:
         project: the project.
     """
-    write_cases(project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged", bad=(3,))
+    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged"
+    write_cases(directory, bad=(3,))
 
     judge(project).assert_outcomes(passed=1)
+    test_matrix = directory.parents[1] / "report" / "test_mc" / "test_tagged" / "matrix.md"
+    assert "| SRS001 | pass | 1/10/10 | 1 | 3 |" in test_matrix.read_text()
 
 
 def test_a_crash_counts_as_a_failed_case(project: pytest.Pytester) -> None:
@@ -254,6 +279,62 @@ def test_an_untagged_test_is_not_judged(project: pytest.Pytester) -> None:
     assert not (directory.parents[1] / "report" / "test_mc" / "test_untagged").exists()
 
 
+@pytest.mark.parametrize(("name", "requirement"), [("velocity", "SRS002"), ("position", "SRS003")])
+def test_each_analyzer_judges_its_own_error(
+    project: pytest.Pytester, name: str, requirement: str
+) -> None:
+    """The velocity and position analyzers read their own datasets and fail runs over X.
+
+    Args:
+        project: the project.
+        name: the analyzer, and the kind of error its runs carry.
+        requirement: the analyzer's requirement.
+    """
+    (project.path / "analysis" / "test_attitude_knowledge.py").unlink()
+    (project.path / "analysis" / f"test_{name}_knowledge.py").write_text(analyzer(name))
+    (project.path / "tests" / "test_mc.py").write_text(MC.replace("SRS001", requirement, 1))
+    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged"
+    write_cases(directory, bad=(2, 7), kind=name)
+
+    result = judge(project)
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["*tests/test_mc.py::test_tagged: 2 failed, 1 allowed*"])
+
+
+def test_a_nan_error_counts_as_a_failed_case(project: pytest.Pytester) -> None:
+    """A run whose error is NaN fails, so a diverged estimate cannot pass.
+
+    Args:
+        project: the project.
+    """
+    (project.path / "analysis" / "test_attitude_knowledge.py").unlink()
+    (project.path / "analysis" / "test_velocity_knowledge.py").write_text(analyzer("velocity"))
+    (project.path / "tests" / "test_mc.py").write_text(MC.replace("SRS001", "SRS002", 1))
+    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged"
+    write_cases(directory, bad=(2,), nan=(5,), kind="velocity")
+
+    result = judge(project)
+
+    result.assert_outcomes(failed=1)
+    test_matrix = directory.parents[1] / "report" / "test_mc" / "test_tagged" / "matrix.md"
+    assert "| SRS002 | fail | 2/10/10 | 1 | 2, 5 |" in test_matrix.read_text()
+
+
+def test_too_few_planned_cases_leave_the_requirement_not_judged(project: pytest.Pytester) -> None:
+    """Three cases cannot show p = 0.8 at c = 0.5 even with no failure.
+
+    Args:
+        project: the project.
+    """
+    write_cases(project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged", planned=3)
+
+    result = judge(project)
+
+    result.assert_outcomes(skipped=1)
+    result.stdout.fnmatch_lines(["*test_tagged: 3 cases cannot show p=0.8 at c=0.5*"])
+
+
 def test_a_class_claims_through_its_base_when_it_has_marks_of_its_own(
     project: pytest.Pytester,
 ) -> None:
@@ -291,7 +372,7 @@ def test_requirements_judged_on_separate_workers_share_the_matrix(
     (project.path / "tests" / "test_mc.py").write_text(claim_all)
     write_cases(project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged")
 
-    project.runpytest_subprocess("analysis", "-n", "3")
+    project.runpytest_subprocess("analysis", "-n", "3").assert_outcomes(passed=1, skipped=2)
 
     matrix = (project.path / "monte_carlo" / "s1" / "report" / "matrix.md").read_text()
     assert [row.split(" | ")[0] for row in matrix.splitlines()[2:]] == [
