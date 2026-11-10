@@ -23,3 +23,11 @@ lab:
 test:
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
     uv run --no-sync pytest
+
+# Make `name` the active Monte Carlo session; with no name, list the sessions.
+session name="":
+    uv run --no-sync pytest --sim-session {{name}}
+
+# Judge the active session against the requirement analyzers.
+judge *args:
+    uv run --no-sync pytest analysis {{args}}

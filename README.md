@@ -26,6 +26,15 @@ just lab
 just test
 ```
 
+A Monte Carlo test writes its runs into the active session, a named folder under `monte_carlo/`.
+`just session <name>` makes `<name>` active, and `just session` with no name lists the sessions.
+`just judge` judges the active session: it runs the requirement analyzers in `analysis/`, which are
+outside `testpaths` so `just test` never judges. Each analyzer gives one requirement a verdict over
+the tests that claim it with `@pytest.mark.verifies("<ID>")`, and `report/matrix.md` and the
+requirement plots land in the session. A crash record counts as one failed case against the allowed
+failures. A case with neither a run nor a crash record leaves its test not judged. The reasoning is
+in [ADR 0001 rev 1](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
+
 Setup creates an `.ipynb` beside each algorithm `.py`. To run an algorithm's proof, open the
 `.ipynb` in VS Code or JupyterLab on the `WiseGncDesign` kernel, save it, and run its
 `%%monte_carlo` cell. The cell after it, which runs in the notebook only, plots the runs, which
@@ -35,6 +44,7 @@ CI (`.github/workflows/checks.yml`) runs, from the repository root:
 
 ```sh
 uv sync --locked --group sim --group notebooks
+just session ci
 uv run ruff check . && uv run ruff format --check .
 uv run interrogate -v --fail-under 100 algorithms cdh analysis tests
 uv run pydoclint algorithms cdh analysis tests
