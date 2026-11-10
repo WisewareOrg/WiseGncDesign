@@ -476,7 +476,7 @@ class RequirementVerdict:
             session = self.judging.session.name
             reason = "; ".join(f"{c.test.label}: {c.why_not_judged}" for c in unjudged)
             pytest.skip(
-                f"requirement {self.requirement.id} not judged: "
+                f"{self.requirement.id} verdict not judged: "
                 + (reason or f"no Monte Carlo test in session {session} claims it")
             )
 
