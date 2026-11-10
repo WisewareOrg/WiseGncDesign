@@ -34,19 +34,24 @@ def test_position_knowledge(
 
     Args:
         claimed_runs: the results of the tests claiming an ID.
-        verdict: judges the requirement from each run's number.
+        verdict: judges the requirement from each run's number and saves the plots.
     """
-    figure = Figure(layout="constrained")
-    axes = figure.subplots()
-    worst = {}
+    worst, figures = {}, {}
     for nodeid, results in claimed_runs(ID).items():
         worst[nodeid] = {}
         for case, path in results.runs.items():
             run = read_run(path)
             error = position_error_m(run["truth/r_N"], run["est/r_BN_N"])
             worst[nodeid][case] = float(np.max(error))
-        axes.hist(list(worst[nodeid].values()), bins=30, alpha=0.6, label=nodeid)
-    axes.axvline(X, color="k", linestyle="--", label="X")
-    axes.set(xlabel="worst position error (m)", ylabel="runs", title=ID)
-    axes.legend()
-    verdict(ID, worst, X, P, C, figure)
+        figure = Figure(layout="constrained")
+        axes = figure.subplots()
+        axes.hist(list(worst[nodeid].values()), bins=30)
+        axes.axvline(X, color="k", linestyle="--", label="X")
+        axes.set(
+            xlabel="worst position error (m)",
+            ylabel="runs",
+            title=f"{ID}: {nodeid.rsplit('::', 1)[-1]}",
+        )
+        axes.legend()
+        figures[nodeid] = figure
+    verdict(ID, worst, X, P, C, figures)

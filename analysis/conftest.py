@@ -110,7 +110,7 @@ def verdict(
     request: pytest.FixtureRequest,
     claimed_runs: Callable[[str], dict[str, CaseResults]],
     allowed_failures: Callable[[int, float, float], int | None],
-) -> Callable[[str, dict[str, dict[int, float]], float, float, float, Figure], None]:
+) -> Callable[[str, dict[str, dict[int, float]], float, float, float, dict[str, Figure]], None]:
     """Judge a requirement from its analyzer's number for each run, and write its report.
 
     Args:
@@ -119,7 +119,7 @@ def verdict(
         allowed_failures: the allowed-failures rule.
 
     Returns:
-        `judge(requirement_id, numbers, x, p, c, figure)`, where `numbers` holds each claiming
+        `judge(requirement_id, numbers, x, p, c, figures)`, where `numbers` holds each claiming
         test's number by case. A case fails when its number is above `x` or it crashed.
     """
     report = Path(session_directory(request.config)) / "report"
@@ -130,7 +130,7 @@ def verdict(
         x: float,
         p: float,
         c: float,
-        figure: Figure,
+        figures: dict[str, Figure],
     ) -> None:
         """Give each claiming test a cell, write the report, then fail or skip unless all pass.
 
@@ -143,7 +143,7 @@ def verdict(
             x: the largest number a passing run may have.
             p: the share of runs that must pass.
             c: the confidence the demonstration demands.
-            figure: the requirement's plot.
+            figures: each claiming test's plot, saved as `<ID>/<module>.<test>.png`.
         """
         rows, failing, unjudged = list(HEADER), [], []
         for nodeid, results in claimed_runs(requirement_id).items():
@@ -181,7 +181,10 @@ def verdict(
                 f" | {allowed} | {listed} |"
             )
         report.mkdir(parents=True, exist_ok=True)
-        figure.savefig(report / f"{requirement_id}.png")
+        (report / requirement_id).mkdir(parents=True, exist_ok=True)
+        for nodeid, figure in figures.items():
+            file, *names = nodeid.split("::")
+            figure.savefig(report / requirement_id / f"{'.'.join([Path(file).stem, *names])}.png")
         (report / f"{requirement_id}.md").write_text("\n".join(rows) + "\n")
         if failing:
             pytest.fail(f"{requirement_id} failed\n" + "\n".join(failing))
