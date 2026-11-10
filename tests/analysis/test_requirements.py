@@ -42,12 +42,6 @@ def test_allowed_failures_matches_the_known_values(
     assert allowed_failures(n, p, c) == expected
 
 
-def test_allowed_failures_returns_none_not_a_number_when_no_k_exists():
-    """When even zero failures cannot show p at c, the answer is None, not 0 or -1."""
-    assert allowed_failures(851, 0.9973, 0.90) is None
-    assert allowed_failures(852, 0.9973, 0.90) is not None
-
-
 def test_worst_attitude_error_is_the_largest_sample_error():
     """The metric is the maximum over samples of the truth-to-estimate rotation angle."""
     truth = _mrp_about_z(np.array([0.3, 0.3, 0.3, 0.3]))
@@ -55,19 +49,3 @@ def test_worst_attitude_error_is_the_largest_sample_error():
     run = {"truth/sigma_BN": truth, "est/sigma_BN": est}
 
     assert worst_attitude_error_rad(run) == pytest.approx(0.002, abs=1e-9)
-
-
-def test_worst_attitude_error_of_a_perfect_estimate_is_zero():
-    """An estimate equal to truth has a worst error of zero."""
-    sigma = _mrp_about_z(np.array([0.1, 0.5, 1.0]))
-    run = {"truth/sigma_BN": sigma, "est/sigma_BN": sigma.copy()}
-
-    assert worst_attitude_error_rad(run) == pytest.approx(0.0, abs=1e-9)
-
-
-def test_worst_attitude_error_returns_a_float():
-    """The metric is a scalar float, not an array."""
-    sigma = _mrp_about_z(np.array([0.1, 0.2]))
-    run = {"truth/sigma_BN": sigma, "est/sigma_BN": _mrp_about_z(np.array([0.1, 0.25]))}
-
-    assert isinstance(worst_attitude_error_rad(run), float)

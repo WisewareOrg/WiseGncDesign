@@ -26,7 +26,7 @@ ID_RE = re.compile(r"::test_fake\[(?P<id>[^\]]+)\] (?P<word>PASSED|FAILED|XFAIL|
 
 PYTEST_INI = """\
 [pytest]
-addopts = -n auto
+addopts = -n 2
 markers =
     verifies(*ids): the requirements a Monte Carlo test verifies
 """
@@ -397,9 +397,7 @@ def test_a_missing_case_leaves_the_cell_not_judged_and_lists_the_case(project: P
     result.assert_outcomes(skipped=PLANNED)
     reasons = [ln for ln in result.stdout.lines if ln.startswith("SKIPPED")]
     assert reasons
-    assert all(
-        f"found {PLANNED - 1} of {PLANNED}" in ln and "4" in ln.split("of")[-1] for ln in reasons
-    )
+    assert all(f"found {PLANNED - 1} of {PLANNED} cases, missing: 4" in ln for ln in reasons)
     row = matrix_rows(project)["test_mc.test_func"]
     assert row["Verdict"] == "NOT JUDGED"
     assert (row["Found"], row["Planned"], row["Allowed"]) == ("9", "10", "—")
@@ -421,25 +419,10 @@ def test_an_untagged_test_is_not_judged(project: Project) -> None:
     assert "test_untagged" not in (project.session / "report" / "matrix.md").read_text()
 
 
-def test_a_class_level_mark_applies_to_the_tests_in_the_class(project: Project) -> None:
-    """A test in a `verifies`-marked class is judged, and a failing cell fails the verdict.
-
-    Args:
-        project: the throwaway project.
-    """
-    project.cases(FUNC)
-    project.cases(KLASS, bad=(0, 1))
-
-    result = project.judge()
-
-    got = outcomes(result)
-    assert {got[f"test_mc.test_func-{i}"] for i in range(PLANNED)} == {"PASSED"}
-    assert got["test_mc.test_in_class-0"] == got["test_mc.test_in_class-1"] == "FAILED"
-    assert verdict(result) == "FAILED"
-
-
 def test_a_requirement_passes_only_when_every_claiming_cell_passes(project: Project) -> None:
-    """One cell inside its allowance and one failing leave the requirement failed.
+    """A failing cell of a class-marked test fails the verdict beside a cell inside its allowance.
+
+    The class-level `verifies` mark is what makes the `TestKlass` cell judged at all.
 
     Args:
         project: the throwaway project.
@@ -475,8 +458,8 @@ def test_a_not_judged_cell_keeps_the_requirement_from_passing(project: Project) 
     assert "test_in_class" in reasons[0]
 
 
-def test_an_unknown_verifies_id_is_a_collection_error(project: Project) -> None:
-    """A test claiming an ID no analyzer declares errors, and the error names the ID.
+def test_an_unknown_verifies_id_is_a_usage_error_and_nothing_runs(project: Project) -> None:
+    """A test claiming an ID no analyzer declares stops pytest with exit code 4, naming the ID.
 
     Args:
         project: the throwaway project.
@@ -487,10 +470,135 @@ def test_an_unknown_verifies_id_is_a_collection_error(project: Project) -> None:
 
     result = project.judge()
 
+    assert result.ret == 4
+    assert "NOPE" in result.stdout.str() + result.stderr.str()
+    assert outcomes(result) == {}
+    assert not {"passed", "failed", "skipped", "xfailed"} & result.parseoutcomes().keys()
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    [("7", "verifies takes non-empty strings"), ('""', "verifies takes non-empty strings")],
+    ids=["integer", "empty-string"],
+)
+def test_a_verifies_argument_that_is_not_a_non_empty_string_is_an_error(
+    project: Project, replacement: str, message: str
+) -> None:
+    """A `verifies` argument of 7 or "" errors, naming the rule, and no case is judged.
+
+    Args:
+        project: the throwaway project.
+        replacement: the text put in place of the first mark's `"REQ1"`.
+        message: what the error must say.
+    """
+    project.cases(FUNC)
+    mc = project.root / "tests" / "test_mc.py"
+    mc.write_text(mc.read_text().replace('verifies("REQ1")\ndef', f"verifies({replacement})\ndef"))
+
+    result = project.judge()
+
     assert result.ret != 0
-    assert "NOPE" in result.stdout.str()
-    assert "error" in result.stdout.str().lower()
-    assert "PASSED" not in result.stdout.str()
+    assert message in result.stdout.str() + result.stderr.str()
+    assert outcomes(result) == {}
+
+
+def test_a_monte_carlo_test_file_that_cannot_be_imported_is_an_error(project: Project) -> None:
+    """A session folder whose test file raises on import errors, naming the file; nothing runs.
+
+    Args:
+        project: the throwaway project.
+    """
+    project.cases(FUNC)
+    mc = project.root / "tests" / "test_mc.py"
+    mc.write_text('raise RuntimeError("broken at import")\n')
+
+    result = project.judge()
+
+    out = result.stdout.str() + result.stderr.str()
+    assert result.ret != 0
+    assert "cannot import the Monte Carlo test file" in out
+    assert "broken at import" in out
+    assert outcomes(result) == {}
+
+
+def test_a_failing_cell_beats_a_not_judged_cell(project: Project) -> None:
+    """One cell over its allowance and one missing a case fail the verdict, not skip it.
+
+    Args:
+        project: the throwaway project.
+    """
+    project.cases(FUNC, bad=(3, 7))
+    project.cases(KLASS, missing=(4,))
+
+    result = project.judge()
+
+    assert verdict(result) == "FAILED"
+
+
+def test_a_cell_with_too_few_planned_cases_to_show_the_claim_is_not_judged(
+    project: Project,
+) -> None:
+    """Three planned cases cannot show p = 0.8 at c = 0.5, so the cell is skipped and says why.
+
+    Args:
+        project: the throwaway project.
+    """
+    project.cases(FUNC, planned=3)
+
+    result = project.judge()
+
+    assert set(outcomes(result).values()) == {"SKIPPED"}
+    assert verdict(result) == "SKIPPED"
+    reasons = [ln for ln in result.stdout.lines if ln.startswith("SKIPPED")]
+    assert reasons
+    assert all("3 cases cannot show reliability 0.8 at confidence 0.5" in ln for ln in reasons)
+    row = matrix_rows(project)["test_mc.test_func"]
+    assert (row["Verdict"], row["Found"], row["Planned"], row["Allowed"]) == (
+        "NOT JUDGED",
+        "3",
+        "3",
+        "—",
+    )
+
+
+def test_a_session_folder_whose_test_no_longer_exists_is_warned_about_and_not_judged(
+    project: Project,
+) -> None:
+    """A folder for a missing file or a missing function warns, naming it, and yields no item.
+
+    Args:
+        project: the throwaway project.
+    """
+    project.cases(FUNC)
+    project.cases("tests/test_gone/test_x", bad=(0, 1, 2))
+    project.cases("tests/test_mc/test_renamed_away", bad=(0, 1, 2))
+
+    result = project.judge()
+
+    out = result.stdout.str()
+    assert "Monte Carlo test does not exist, not judged" in out
+    assert "tests/test_gone/test_x" in out
+    assert "tests/test_mc/test_renamed_away" in out
+    assert set(outcomes(result)) == {f"test_mc.test_func-{i}" for i in range(PLANNED)}
+    assert verdict(result) == "PASSED"
+    assert set(matrix_rows(project)) == {"test_mc.test_func"}
+
+
+def test_judging_with_no_active_session_errors_naming_the_option(
+    project: Project,
+) -> None:
+    """With no session pointer and no `--sim-session`, pytest errors naming it and runs nothing.
+
+    Args:
+        project: the throwaway project.
+    """
+    (project.root / "monte_carlo" / "SESSION").unlink()
+
+    result = project.judge()
+
+    assert result.ret != 0
+    assert "--sim-session" in result.stdout.str() + result.stderr.str()
+    assert outcomes(result) == {}
 
 
 def test_a_requirement_no_test_claims_is_one_skipped_item(project: Project) -> None:
@@ -526,7 +634,7 @@ def test_cases_at_or_above_planned_are_ignored(project: Project) -> None:
 
 
 def test_xdist_in_addopts_still_judges_in_one_process(project: Project) -> None:
-    """With `-n auto` in addopts the analyzer module is imported once, outside any xdist worker.
+    """With `-n 2` in addopts the analyzer module is imported once, outside any xdist worker.
 
     Args:
         project: the throwaway project.
