@@ -454,6 +454,27 @@ def test_a_requirement_passes_only_when_every_claiming_cell_passes(project: Proj
     assert verdict(result) == "FAILED"
 
 
+def test_a_not_judged_cell_keeps_the_requirement_from_passing(project: Project) -> None:
+    """One cell passing and one missing a case leave the verdict skipped, naming the missing cell.
+
+    A requirement fails if any judged cell fails, otherwise is not judged if any cell is not
+    judged, otherwise passes (issue 27, design ruling D17).
+
+    Args:
+        project: the throwaway project.
+    """
+    project.cases(FUNC)
+    project.cases(KLASS, missing=(4,))
+
+    result = project.judge()
+
+    assert outcomes(result)["test_mc.test_func-0"] == "PASSED"
+    assert verdict(result) == "SKIPPED"
+    reasons = [ln for ln in result.stdout.lines if ln.startswith("SKIPPED") and "verdict" in ln]
+    assert len(reasons) == 1
+    assert "test_in_class" in reasons[0]
+
+
 def test_an_unknown_verifies_id_is_a_collection_error(project: Project) -> None:
     """A test claiming an ID no analyzer declares errors, and the error names the ID.
 
