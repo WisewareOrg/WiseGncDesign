@@ -5,6 +5,8 @@ cell and `RequirementVerdict` the requirement across its cells. The pytest hooks
 build them are in `analysis/conftest.py`.
 """
 
+from __future__ import annotations
+
 import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -12,13 +14,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from wise_dynamics.sessions import TestResults
 
 from gnc_analysis.error_bounds import read_run
 from gnc_analysis.requirements import Requirement, allowed_failures
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
+    from wise_dynamics.sessions import TestResults
 
 NOT_APPLICABLE = "—"
 
@@ -267,7 +269,7 @@ class RequirementVerdict:
         self.requirement = requirement
         self.cells = [judging.cell(requirement, t) for t in judging.claimers(requirement)]
 
-    def plot(self, draw: Callable[[dict[str, dict[int, float]], Requirement], "Figure"]) -> None:
+    def plot(self, draw: Callable[[dict[str, dict[int, float]], Requirement], Figure]) -> None:
         """Save the figure `draw` returns as `<session>/report/<ID>.png`.
 
         Nothing is drawn when no test claims the requirement.
