@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -2810,7 +2810,7 @@ wheels = [
 [[package]]
 name = "wise-dynamics"
 version = "0.1.0"
-source = { git = "https://github.com/WisewareOrg/WiseDynamics?rev=248aab34f2795767c73d09ea0c2efd48296af20f#248aab34f2795767c73d09ea0c2efd48296af20f" }
+source = { git = "https://github.com/WisewareOrg/WiseDynamics?rev=6c83ec74d8ee9dcc860c02f78d60ca46082da7cf#6c83ec74d8ee9dcc860c02f78d60ca46082da7cf" }
 dependencies = [
     { name = "bsk", extra = ["all"] },
     { name = "h5py" },
@@ -2897,7 +2897,7 @@ notebooks = [
     { name = "notebook" },
     { name = "pip" },
 ]
-sim = [{ name = "wise-dynamics", extras = ["notebook"], git = "https://github.com/WisewareOrg/WiseDynamics?rev=248aab34f2795767c73d09ea0c2efd48296af20f" }]
+sim = [{ name = "wise-dynamics", extras = ["notebook"], git = "https://github.com/WisewareOrg/WiseDynamics?rev=6c83ec74d8ee9dcc860c02f78d60ca46082da7cf" }]
 
 [[package]]
 name = "xyzservices"
