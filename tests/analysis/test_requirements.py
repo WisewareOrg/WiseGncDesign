@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+
 from gnc_analysis.requirements import allowed_failures, worst_attitude_error_rad
 
 
