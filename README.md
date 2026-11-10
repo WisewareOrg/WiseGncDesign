@@ -10,10 +10,11 @@ It has three parts:
   by numba. Importing one loads the simulator stack and runs nothing. They name their inputs and
   outputs by the simulation's standard field names, so a host resolves them by name;
 - `gnc_cdh`, which hosts an algorithm in the simulator ([`cdh/README.md`](cdh/README.md));
-- `gnc_analysis`, which holds the error bounds (it reads a run file with h5py and holds the dead
-  reckoner's error to its accuracy bound) and the support for the requirement analyzers in
-  `analysis/`: the allowed-failures rule and the metric the requirement tests judge
-  with. `just judge` runs the analyzers.
+- `analysis/`, the requirement analyzers: one pytest test per requirement, holding its limits, its
+  error math and its plot, judged through the `claimed_runs` and `verdict` fixtures in its
+  `conftest.py`; and `runs.py`, which reads a run file. `just judge` runs the analyzers. An
+  algorithm's per-case gross check lives in its own notebook and imports its error math from the
+  analyzers.
 
 ## Development
 

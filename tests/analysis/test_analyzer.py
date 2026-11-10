@@ -140,6 +140,33 @@ def judge(project: pytest.Pytester) -> pytest.RunResult:
     return project.runpytest_subprocess("analysis", "-rs", "-p", "no:xdist")
 
 
+def test_allowed_failures_matches_the_known_values(project: pytest.Pytester) -> None:
+    """The rule reproduces the proposal's table, including the no-such-k case as None.
+
+    Args:
+        project: the project.
+    """
+    project.makepyfile(
+        **{
+            "analysis/test_rule": """\
+import pytest
+
+
+@pytest.mark.parametrize(
+    ("n", "p", "c", "expected"),
+    [(852, 0.99, 0.90, 4), (852, 0.9973, 0.90, 0), (851, 0.9973, 0.90, None)],
+)
+def test_rule(allowed_failures, n, p, c, expected):
+    assert allowed_failures(n, p, c) == expected
+"""
+        }
+    )
+
+    project.runpytest_subprocess("analysis/test_rule.py", "-p", "no:xdist").assert_outcomes(
+        passed=3
+    )
+
+
 def test_failures_within_the_allowance_pass(project: pytest.Pytester) -> None:
     """One failure of ten is allowed and the requirement passes.
 

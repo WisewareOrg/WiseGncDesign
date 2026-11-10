@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from matplotlib.figure import Figure
+from scipy.stats import beta
 from wise_dynamics.sessions import (
     CaseResults,
     NoSessionError,
@@ -20,8 +21,6 @@ from wise_dynamics.sessions import (
     recorded_tests,
     session_directory,
 )
-
-from gnc_analysis.error_bounds import allowed_failures
 
 HEADER = [
     "| Requirement | Test | Verdict | Failed/Found/Planned | Allowed | Failed cases |",
@@ -76,14 +75,48 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
 
 
 @pytest.fixture
+def allowed_failures() -> Callable[[int, float, float], int | None]:
+    """The allowed-failures rule.
+
+    Returns:
+        `allowed_failures(n, p, c)`.
+    """
+
+    def allowed_failures(n: int, p: float, c: float) -> int | None:
+        """The most failed runs out of `n` that still show reliability `p` at confidence `c`.
+
+        The failure rate's one-sided Clopper-Pearson upper bound at confidence `c` must stay within
+        `1 - p`.
+
+        Args:
+            n: the number of runs.
+            p: the reliability the requirement demands, the share of runs that pass.
+            c: the confidence the demonstration demands.
+
+        Returns:
+            The largest failure count `k` whose upper bound is within `1 - p`, or None when even
+            zero failures cannot show `p` at `c` with `n` runs.
+        """
+        k = 0
+        while k < n and beta.ppf(c, k + 1, n - k) <= 1.0 - p:
+            k += 1
+        return k - 1 if k > 0 else None
+
+    return allowed_failures
+
+
+@pytest.fixture
 def verdict(
-    request: pytest.FixtureRequest, claimed_runs: Callable[[str], dict[str, CaseResults]]
+    request: pytest.FixtureRequest,
+    claimed_runs: Callable[[str], dict[str, CaseResults]],
+    allowed_failures: Callable[[int, float, float], int | None],
 ) -> Callable[[str, dict[str, dict[int, float]], float, float, float, Figure], None]:
     """Judge a requirement from its analyzer's number for each run, and write its report.
 
     Args:
         request: the pytest request.
         claimed_runs: the results of the tests claiming an ID.
+        allowed_failures: the allowed-failures rule.
 
     Returns:
         `judge(requirement_id, numbers, x, p, c, figure)`, where `numbers` holds each claiming

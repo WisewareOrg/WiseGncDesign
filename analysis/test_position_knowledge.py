@@ -6,12 +6,25 @@ import numpy as np
 from matplotlib.figure import Figure
 from wise_dynamics.sessions import CaseResults
 
-from gnc_analysis.error_bounds import position_error_m, read_run
+from runs import read_run
 
 ID = "SRS003"  # placeholder
 X = 5000  # placeholder, m
 P = 0.99  # placeholder
 C = 0.90  # placeholder
+
+
+def position_error_m(r_truth_N: np.ndarray, r_est_N: np.ndarray) -> np.ndarray:
+    """|r_truth - r_est| at each sample.
+
+    Args:
+        r_truth_N: (N, 3) m, inertial position in the inertial frame N.
+        r_est_N: (N, 3) m, the estimate of the same.
+
+    Returns:
+        (N,) m.
+    """
+    return np.linalg.norm(r_truth_N - r_est_N, axis=-1)
 
 
 def test_position_knowledge(

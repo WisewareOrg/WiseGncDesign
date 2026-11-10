@@ -4,14 +4,29 @@ from collections.abc import Callable
 
 import numpy as np
 from matplotlib.figure import Figure
+from scipy.spatial.transform import Rotation
 from wise_dynamics.sessions import CaseResults
 
-from gnc_analysis.error_bounds import attitude_error_rad, read_run
+from runs import read_run
 
 ID = "SRS001"  # placeholder
 X = 1  # placeholder, rad
 P = 0.99  # placeholder
 C = 0.90  # placeholder
+
+
+def attitude_error_rad(sigma_truth_BN: np.ndarray, sigma_est_BN: np.ndarray) -> np.ndarray:
+    """The principal angle between truth's attitude and the estimate's at each sample.
+
+    Args:
+        sigma_truth_BN: (N, 3) MRP of the body frame B with respect to the inertial frame N.
+        sigma_est_BN: (N, 3) the estimate of the same.
+
+    Returns:
+        (N,) rad, the magnitude of the rotation from the estimated attitude to the true one.
+    """
+    truth, estimate = Rotation.from_mrp(sigma_truth_BN), Rotation.from_mrp(sigma_est_BN)
+    return (truth * estimate.inv()).magnitude()
 
 
 def test_attitude_knowledge(
