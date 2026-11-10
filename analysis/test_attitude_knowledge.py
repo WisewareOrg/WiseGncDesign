@@ -1,57 +1,60 @@
-"""SRS001, attitude knowledge: judges the estimate's worst attitude error."""
+"""SRS001, attitude knowledge: the worst attitude error stays within X in a share p of runs."""
 
-import numpy as np
+import pytest
 from matplotlib.figure import Figure
+from wise_dynamics.sessions import read_test_results, recorded_tests, session_directory
 
-from gnc_analysis.judging import RequirementVerdict, SessionRun
-from gnc_analysis.requirements import Requirement, worst_attitude_error_rad
+from gnc_analysis.requirements import Cell, claimed_ids, judge_cell
 
-REQUIREMENT = Requirement(
-    id="SRS001",  # placeholder
-    statement="Attitude knowledge error shall stay <= X over the run.",
-    threshold=1e-3,  # placeholder X, rad
-    p=0.99,  # placeholder
-    c=0.90,  # placeholder
-    metric=worst_attitude_error_rad,
-)
+ID = "SRS001"  # placeholder
+X = 1e-3  # placeholder, rad
+P = 0.99  # placeholder
+C = 0.90  # placeholder
 
 
-def plot_worst_attitude_error(
-    values: dict[str, dict[int, float]], requirement: Requirement
-) -> Figure:
-    """Histogram the worst attitude error of each run, with the threshold marked.
+def write_report(report, cells: dict[str, Cell]) -> None:
+    """Write the histogram of the worst errors and the matrix of cells.
 
     Args:
-        values: each claiming test's metric by case number.
-        requirement: the requirement being judged.
-
-    Returns:
-        The figure.
+        report: the session's report directory.
+        cells: each claiming test's cell by node ID.
     """
+    report.mkdir(exist_ok=True)
     figure = Figure(layout="constrained")
     axes = figure.subplots()
-    for test, by_case in values.items():
-        axes.hist(np.fromiter(by_case.values(), float), bins=30, alpha=0.6, label=test)
-    axes.axvline(requirement.threshold, color="k", linestyle="--", label="X")
-    axes.set(xlabel="worst attitude error (rad)", ylabel="runs", title=requirement.id)
+    for nodeid, cell in cells.items():
+        axes.hist(cell.errors, bins=30, alpha=0.6, label=nodeid)
+    axes.axvline(X, color="k", linestyle="--", label="X")
+    axes.set(xlabel="worst attitude error (rad)", ylabel="runs", title=ID)
     axes.legend()
-    return figure
+    figure.savefig(report / f"{ID}.png")
+    rows = [
+        "| Requirement | Test | Verdict | Failed/Found/Planned | Allowed |",
+        "|---|---|---|---|---|",
+    ]
+    rows += [
+        f"| {ID} | {nodeid} | {c.verdict} | {len(c.failed)}/{c.found}/{c.planned} | {c.allowed} |"
+        for nodeid, c in cells.items()
+    ]
+    (report / "matrix.md").write_text("\n".join(rows) + "\n")
 
 
-def test_attitude_knowledge(session_run: SessionRun) -> None:
-    """Judge one case of a claiming test.
+def test_attitude_knowledge(request: pytest.FixtureRequest) -> None:
+    """Judge the active session's tests that claim the requirement.
 
     Args:
-        session_run: the case under test.
+        request: the pytest request.
     """
-    session_run.check()
-
-
-def test_attitude_knowledge_verdict(requirement_verdict: RequirementVerdict) -> None:
-    """Judge the requirement across its claiming tests and plot the metrics.
-
-    Args:
-        requirement_verdict: the requirement under test.
-    """
-    requirement_verdict.plot(plot_worst_attitude_error)
-    requirement_verdict.check()
+    session = session_directory(request.config)
+    cells = {
+        t.nodeid: judge_cell(read_test_results(t.directory), X, P, C)
+        for t in recorded_tests(session)
+        if ID in claimed_ids(request.config.rootpath, t.nodeid)
+    }
+    write_report(session / "report", cells)
+    failing = {n: c.failed for n, c in cells.items() if c.verdict == "fail"}
+    if failing:
+        pytest.fail(f"{ID} failed cases: {failing}")
+    unjudged = [f"{n}: {c.reason}" for n, c in cells.items() if c.verdict == "not judged"]
+    if unjudged or not cells:
+        pytest.skip(f"{ID} not judged: {unjudged or 'no test claims it'}")

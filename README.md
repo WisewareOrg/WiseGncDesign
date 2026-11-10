@@ -12,8 +12,8 @@ It has three parts:
 - `gnc_cdh`, which hosts an algorithm in the simulator ([`cdh/README.md`](cdh/README.md));
 - `gnc_analysis`, which holds the error bounds (it reads a run file with h5py and holds the dead
   reckoner's error to its accuracy bound) and the support for the requirement analyzers in
-  `analysis/`: the allowed-failures rule, the metrics and the judging classes
-  (`gnc_analysis.judging`). `just judge` runs the analyzers.
+  `analysis/`: the allowed-failures rule and the metric the requirement tests judge
+  with. `just judge` runs the analyzers.
 
 ## Development
 
