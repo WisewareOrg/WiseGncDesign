@@ -1,12 +1,14 @@
-"""The fixtures a requirement analyzer judges with, and the report's matrix.
+"""The fixtures a requirement analyzer judges with, and the report's matrices.
 
-An analyzer reads the runs `claimed_runs` names, computes its number for each and plots them, then
-hands the numbers to `verdict`. `verdict` writes its cells to `report/<ID>.md`; `matrix.md` gathers
-them once the run ends, so analyzers on separate xdist workers do not overwrite one another.
+An analyzer reads the runs `claimed_runs` names, computes its number for each and plots one figure
+per claiming test, then hands both to `verdict`. `verdict` writes each cell and its plot into the
+report, under the same path as the test's runs in the session. The matrices are written from those
+cells once the run ends, so analyzers on separate xdist workers do not overwrite one another.
 """
 
 import functools
 import importlib.util
+import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -21,11 +23,6 @@ from wise_dynamics.sessions import (
     recorded_tests,
     session_directory,
 )
-
-HEADER = [
-    "| Requirement | Test | Verdict | Failed/Found/Planned | Allowed | Failed cases |",
-    "|---|---|---|---|---|---|",
-]
 
 
 @pytest.fixture
@@ -147,13 +144,14 @@ def verdict(
             figures: each claiming test's plot, saved as `<ID>.png` under the report's copy
                 of the test's folder in the session.
         """
-        rows, failing, unjudged = list(HEADER), [], []
-        for nodeid, results in claimed_runs(requirement_id).items():
+        claimed = claimed_runs(requirement_id)
+        folders = {test.nodeid: test.directory for test in recorded_tests(session)}
+        failing, unjudged = [], []
+        for nodeid, results in claimed.items():
             failed = sorted(
                 [case for case, number in numbers[nodeid].items() if number > x]
                 + list(results.crashes)
             )
-            found = len(results.runs) + len(results.crashes)
             missing = [
                 case
                 for case in range(results.planned)
@@ -175,34 +173,37 @@ def verdict(
                 ]
             else:
                 cell = "pass"
-            listed = ", ".join(
-                f"{case} (crash)" if case in results.crashes else str(case) for case in failed
-            )
-            rows.append(
-                f"| {requirement_id} | {nodeid} | {cell} | {len(failed)}/{found}/{results.planned}"
-                f" | {allowed} | {listed} |"
-            )
-        report.mkdir(parents=True, exist_ok=True)
-        folders = {test.nodeid: test.directory for test in recorded_tests(session)}
-        for nodeid, figure in figures.items():
             folder = report / folders[nodeid].relative_to(session)
             folder.mkdir(parents=True, exist_ok=True)
-            figure.savefig(folder / f"{requirement_id}.png")
-        (report / f"{requirement_id}.md").write_text("\n".join(rows) + "\n")
+            figures[nodeid].savefig(folder / f"{requirement_id}.png")
+            record = {
+                "requirement": requirement_id,
+                "verdict": cell,
+                "failed": len(failed),
+                "found": len(results.runs) + len(results.crashes),
+                "planned": results.planned,
+                "allowed": allowed,
+                "failed_cases": ", ".join(
+                    f"{case} (crash)" if case in results.crashes else str(case) for case in failed
+                ),
+            }
+            (folder / f"{requirement_id}.json").write_text(json.dumps(record))
         if failing:
             pytest.fail(f"{requirement_id} failed\n" + "\n".join(failing))
         if unjudged:
             pytest.skip(f"{requirement_id} not judged: " + "; ".join(unjudged))
-        if len(rows) == len(HEADER):
+        if not claimed:
             pytest.skip(f"{requirement_id} not judged: no test claims it")
 
     return judge
 
 
 def pytest_sessionfinish(session: pytest.Session) -> None:
-    """Gather each requirement's table in the active session's report into `matrix.md`.
+    """Write each test's `matrix.md` and the report's rollup from the cells the analyzers wrote.
 
-    Nothing is written on an xdist worker or when no session is active.
+    A test's matrix lists each requirement it claims. The rollup is requirement by test, ending
+    with each requirement's verdict: fail if any cell fails, else not judged if any cell is not
+    judged, else pass. Nothing is written on an xdist worker or when no session is active.
 
     Args:
         session: the pytest session.
@@ -213,8 +214,39 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
         report = Path(session_directory(session.config)) / "report"
     except NoSessionError:
         return
-    tables = sorted(t for t in report.glob("*.md") if t.name != "matrix.md")
-    if tables:
-        header = tables[0].read_text().splitlines()[:2]
-        rows = header + [row for t in tables for row in t.read_text().splitlines()[2:]]
-        (report / "matrix.md").write_text("\n".join(rows) + "\n")
+    cells = {
+        (path.parent.relative_to(report).as_posix(), path.stem): json.loads(path.read_text())
+        for path in sorted(report.rglob("*.json"))
+    }
+    if not cells:
+        return
+    tests = sorted({test for test, _ in cells})
+    requirements = sorted({requirement for _, requirement in cells})
+    for test in tests:
+        rows = [
+            "| Requirement | Verdict | Failed/Found/Planned | Allowed | Failed cases |",
+            "|---|---|---|---|---|",
+        ]
+        for requirement in requirements:
+            if cell := cells.get((test, requirement)):
+                rows.append(
+                    f"| {requirement} | {cell['verdict']} | {cell['failed']}/{cell['found']}/"
+                    f"{cell['planned']} | {cell['allowed']} | {cell['failed_cases']} |"
+                )
+        (report / test / "matrix.md").write_text("\n".join(rows) + "\n")
+    links = [f"[{test.rsplit('/', 1)[-1]}]({test}/matrix.md)" for test in tests]
+    rows = [f"| Requirement | {' | '.join(links)} | Verdict |", "|---" * (len(tests) + 2) + "|"]
+    for requirement in requirements:
+        row = [cells.get((test, requirement)) for test in tests]
+        verdicts = {cell["verdict"] for cell in row if cell}
+        overall = next(v for v in ("fail", "not judged", "pass") if v in verdicts)
+        shown = [
+            "—"
+            if cell is None
+            else cell["verdict"]
+            if cell["verdict"] == "not judged"
+            else f"{cell['verdict']}, {cell['failed']} of {cell['allowed']} allowed"
+            for cell in row
+        ]
+        rows.append(f"| {requirement} | {' | '.join(shown)} | {overall} |")
+    (report / "matrix.md").write_text("\n".join(rows) + "\n")

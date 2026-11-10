@@ -192,12 +192,14 @@ def test_a_crash_counts_as_a_failed_case(project: pytest.Pytester) -> None:
 
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*tests/test_mc.py::test_tagged: 2 failed, 1 allowed*"])
-    matrix = (project.path / "monte_carlo" / "s1" / "report" / "matrix.md").read_text()
-    assert "| fail | 2/10/10 | 1 | 3, 5 (crash) |" in matrix
+    test_matrix = project.path / "monte_carlo" / "s1" / "report" / "test_mc" / "test_tagged"
+    assert (
+        "| SRS001 | fail | 2/10/10 | 1 | 3, 5 (crash) |" in (test_matrix / "matrix.md").read_text()
+    )
 
 
 def test_failures_over_the_allowance_fail_and_name_the_cases(project: pytest.Pytester) -> None:
-    """The requirement fails with a rerun command per failing case, and the matrix lists them.
+    """The requirement fails with a rerun command per failing case; both matrices record it.
 
     Args:
         project: the project.
@@ -214,8 +216,10 @@ def test_failures_over_the_allowance_fail_and_name_the_cases(project: pytest.Pyt
             '*case 7: uv run --no-sync pytest "tests/test_mc.py::test_tagged[[]7[]]" -n 0*',
         ]
     )
-    matrix = (project.path / "monte_carlo" / "s1" / "report" / "matrix.md").read_text()
-    assert "| SRS001 | tests/test_mc.py::test_tagged | fail | 2/10/10 | 1 | 2, 7 |" in matrix
+    report = project.path / "monte_carlo" / "s1" / "report"
+    test_matrix = (report / "test_mc" / "test_tagged" / "matrix.md").read_text()
+    assert "| SRS001 | fail | 2/10/10 | 1 | 2, 7 |" in test_matrix
+    assert "| SRS001 | fail, 2 of 1 allowed | fail |" in (report / "matrix.md").read_text()
 
 
 def test_a_missing_case_leaves_the_requirement_not_judged(project: pytest.Pytester) -> None:
@@ -246,7 +250,7 @@ def test_an_untagged_test_is_not_judged(project: pytest.Pytester) -> None:
 
     result.assert_outcomes(skipped=1)
     result.stdout.fnmatch_lines(["*no test claims it*"])
-    assert "test_untagged" not in (directory.parents[1] / "report" / "matrix.md").read_text()
+    assert not (directory.parents[1] / "report" / "test_mc" / "test_untagged").exists()
 
 
 def test_requirements_judged_on_separate_workers_share_the_matrix(
@@ -292,7 +296,13 @@ def test_a_session_written_by_the_wise_dynamics_plugin_passes(project: pytest.Py
     judge(project).assert_outcomes(passed=1)
 
     report = project.path / "monte_carlo" / "s1" / "report"
-    assert (report / "tests" / "test_mc" / "test_tagged" / "SRS001.png").read_bytes().startswith(
-        b"\x89PNG"
+    assert (
+        (report / "tests" / "test_mc" / "test_tagged" / "SRS001.png")
+        .read_bytes()
+        .startswith(b"\x89PNG")
     )
-    assert "| pass | 0/4/4 | 0 |" in (report / "matrix.md").read_text()
+    test_matrix = (report / "tests" / "test_mc" / "test_tagged" / "matrix.md").read_text()
+    assert "| SRS001 | pass | 0/4/4 | 0 |  |" in test_matrix
+    rollup = (report / "matrix.md").read_text()
+    assert "[test_tagged](tests/test_mc/test_tagged/matrix.md)" in rollup
+    assert "| SRS001 | pass, 0 of 0 allowed | pass |" in rollup
