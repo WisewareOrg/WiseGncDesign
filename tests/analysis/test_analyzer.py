@@ -16,6 +16,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pytest
+from wise_dynamics.sessions import crash_path, run_path, write_planned
 
 REPO = Path(__file__).resolve().parents[2]
 GOOD_RAD = 0.9e-3
@@ -177,19 +178,21 @@ class Project:
         """
         directory = self.session / folder
         directory.mkdir(parents=True)
-        (directory / "planned.json").write_text(json.dumps({"runs": planned}))
+        file, *names = folder.split("/")[1:]
+        nodeid = "::".join([f"tests/{file}.py", *names])
+        write_planned(directory, planned, nodeid)
         for case in range(planned):
             if case in missing:
                 continue
             if case in crashed:
                 record = {"exception": "RuntimeError('boom')", "traceback": "Traceback..."}
-                (directory / f"run_{case:04d}.crash.json").write_text(json.dumps(record))
+                crash_path(directory, case).write_text(json.dumps(record))
             elif case in garbage:
-                (directory / f"run_{case:04d}.h5").write_bytes(b"not hdf5")
+                run_path(directory, case).write_bytes(b"not hdf5")
             else:
-                write_run(directory / f"run_{case:04d}.h5", BAD_RAD if case in bad else GOOD_RAD)
+                write_run(run_path(directory, case), BAD_RAD if case in bad else GOOD_RAD)
         for case in stale:
-            write_run(directory / f"run_{case:04d}.h5", BAD_RAD)
+            write_run(run_path(directory, case), BAD_RAD)
         return directory
 
     def judge(self, *args: str) -> pytest.RunResult:
@@ -738,3 +741,50 @@ def test_the_verdict_plots_the_computed_metrics_and_writes_the_png(project: Proj
     assert metrics["0"] == pytest.approx(GOOD_RAD, abs=1e-9)
     png = project.session / "report" / "REQ1.png"
     assert png.read_bytes().startswith(b"\x89PNG")
+
+
+SIM_TEST = '''\
+"""A Monte Carlo test run by the WiseDynamics plugin."""
+
+import numpy as np
+import pytest
+
+
+@pytest.mark.verifies("REQ1")
+@pytest.mark.sim_runs(4)
+@pytest.mark.sim_duration_s(3)
+def test_func(sim_run_file):
+    """Four cases, each a run file with a small constant attitude error."""
+    est = np.zeros((5, 3))
+    est[2, 2] = np.tan(0.9e-3 / 4.0)
+    sim_run_file(
+        {
+            "t_s": (np.linspace(0.0, 1.0, 5), "s"),
+            "truth/sigma_BN": (np.zeros((5, 3)), "-"),
+            "est/sigma_BN": (est, "-"),
+        }
+    )
+'''
+
+
+def test_a_session_written_by_the_wise_dynamics_plugin_is_judged(project: Project) -> None:
+    """A real `sim_` test's session, run through the plugin, is found and judged by the analyzer.
+
+    This backs the hand-built sessions of the other tests with the layout the plugin writes. Four
+    planned cases are the fewest that can show p = 0.8 at c = 0.5.
+
+    Args:
+        project: the throwaway project.
+    """
+    (project.root / "tests" / "test_mc.py").write_text(SIM_TEST)
+    out = ("-o", "sim_out=monte_carlo")
+    project.pytester.runpytest_subprocess("--sim-session", "s1", *out)
+    simulated = project.pytester.runpytest_subprocess("tests/test_mc.py", *out, "-n", "0")
+    simulated.assert_outcomes(passed=4)
+
+    result = project.judge()
+
+    assert outcomes(result) == {f"test_mc.test_func-{i}": "PASSED" for i in range(4)}
+    assert verdict(result) == "PASSED"
+    assert "does not exist" not in result.stdout.str()
+    assert set(matrix_rows(project)) == {"test_mc.test_func"}
