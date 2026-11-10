@@ -1,5 +1,7 @@
 """SRS001, attitude knowledge: the worst attitude error stays within X in a share p of runs."""
 
+from pathlib import Path
+
 import pytest
 from matplotlib.figure import Figure
 from wise_dynamics.sessions import read_test_results, recorded_tests, session_directory
@@ -12,7 +14,7 @@ P = 0.99  # placeholder
 C = 0.90  # placeholder
 
 
-def write_report(report, cells: dict[str, Cell]) -> None:
+def write_report(report: Path, cells: dict[str, Cell]) -> None:
     """Write the histogram of the worst errors and the matrix of cells.
 
     Args:
