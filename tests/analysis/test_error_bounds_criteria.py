@@ -1,9 +1,9 @@
-"""The allowed-failures rule and the worst-attitude-error metric of `gnc_analysis.requirements`."""
+"""The allowed-failures rule and the worst-attitude-error metric of `gnc_analysis.error_bounds`."""
 
 import numpy as np
 import pytest
 
-from gnc_analysis.requirements import allowed_failures, worst_attitude_error_rad
+from gnc_analysis.error_bounds import allowed_failures, worst_attitude_error_rad
 
 
 def _mrp_about_z(angle_rad: np.ndarray) -> np.ndarray:

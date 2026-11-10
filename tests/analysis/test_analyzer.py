@@ -11,14 +11,10 @@ import h5py
 import numpy as np
 import pytest
 from wise_dynamics.sessions import (
-    CaseResults,
     crash_path,
-    read_test_results,
     run_path,
     write_planned,
 )
-
-from gnc_analysis.requirements import judge_cell
 
 REPO = Path(__file__).resolve().parents[2]
 GOOD_RAD = 0.9e-3
@@ -78,7 +74,7 @@ def write_cases(
     crashed: tuple[int, ...] = (),
     missing: tuple[int, ...] = (),
     test: str = "test_tagged",
-) -> CaseResults:
+) -> None:
     """Write a test's session folder.
 
     Args:
@@ -87,9 +83,6 @@ def write_cases(
         crashed: cases with a crash record and no run file.
         missing: cases with neither file.
         test: the function the folder records.
-
-    Returns:
-        What `read_test_results` reads from it.
     """
     write_planned(directory, PLANNED, f"tests/test_mc.py::{test}")
     for case in range(PLANNED):
@@ -99,7 +92,6 @@ def write_cases(
             crash_path(directory, case).write_text(json.dumps({"exception": "boom"}))
         else:
             write_run(run_path(directory, case), BAD_RAD if case in bad else GOOD_RAD)
-    return read_test_results(directory)
 
 
 @pytest.fixture
@@ -117,7 +109,14 @@ def project(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> pytes
     source = source.replace("P = 0.99", "P = 0.8").replace("C = 0.90", "C = 0.5")
     assert "P = 0.8 " in source and "C = 0.5 " in source
     pytester.makefile(".ini", pytest="[pytest]\nmarkers =\n    verifies(*ids): a claim\n")
-    pytester.makepyfile(**{"analysis/test_attitude_knowledge": source, "tests/test_mc": MC})
+    conftest = (REPO / "analysis" / "conftest.py").read_text()
+    pytester.makepyfile(
+        **{
+            "analysis/test_attitude_knowledge": source,
+            "analysis/conftest": conftest,
+            "tests/test_mc": MC,
+        }
+    )
     (pytester.path / "monte_carlo").mkdir()
     (pytester.path / "monte_carlo" / "SESSION").write_text("s1\n")
     monkeypatch.setenv("COLUMNS", "400")
@@ -136,26 +135,31 @@ def judge(project: pytest.Pytester) -> pytest.RunResult:
     return project.runpytest_subprocess("analysis", "-rs", "-p", "no:xdist")
 
 
-def test_failures_within_the_allowance_pass(tmp_path: Path) -> None:
-    """One failure of ten is allowed and the cell passes.
+def test_failures_within_the_allowance_pass(project: pytest.Pytester) -> None:
+    """One failure of ten is allowed and the requirement passes.
 
     Args:
-        tmp_path: a scratch folder.
+        project: the project.
     """
-    cell = judge_cell(write_cases(tmp_path, bad=(3,)), 1e-3, 0.8, 0.5)
+    write_cases(project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged", bad=(3,))
 
-    assert (cell.verdict, cell.failed, cell.allowed) == ("pass", [3], 1)
+    judge(project).assert_outcomes(passed=1)
 
 
-def test_a_crash_counts_as_a_failed_case(tmp_path: Path) -> None:
+def test_a_crash_counts_as_a_failed_case(project: pytest.Pytester) -> None:
     """A crash and a bad run make two failures, over the allowance of one.
 
     Args:
-        tmp_path: a scratch folder.
+        project: the project.
     """
-    cell = judge_cell(write_cases(tmp_path, bad=(3,), crashed=(5,)), 1e-3, 0.8, 0.5)
+    write_cases(
+        project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged", bad=(3,), crashed=(5,)
+    )
 
-    assert (cell.verdict, cell.failed) == ("fail", [3, 5])
+    result = judge(project)
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["*SRS001 failed cases: *[[]3, 5[]]*"])
 
 
 def test_failures_over_the_allowance_fail_and_name_the_cases(project: pytest.Pytester) -> None:
@@ -187,7 +191,7 @@ def test_a_missing_case_leaves_the_requirement_not_judged(project: pytest.Pytest
     result = judge(project)
 
     result.assert_outcomes(skipped=1)
-    result.stdout.fnmatch_lines(["*test_tagged: 1 of 10 cases have no result*"])
+    result.stdout.fnmatch_lines(["*::test_tagged: 9 of 10 cases found*"])
 
 
 def test_an_untagged_test_is_not_judged(project: pytest.Pytester) -> None:

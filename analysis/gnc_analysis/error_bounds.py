@@ -21,10 +21,12 @@ from pathlib import Path
 import h5py
 import numpy as np
 from scipy.spatial.transform import Rotation
+from scipy.stats import beta
 
 __all__ = [
     "BOUND_FACTOR",
     "ERROR_AT_START",
+    "allowed_failures",
     "attitude_bound_rad",
     "attitude_error_rad",
     "bound_ratios",
@@ -35,6 +37,7 @@ __all__ = [
     "velocity_bound_m_s",
     "velocity_error_m_s",
     "violations",
+    "worst_attitude_error_rad",
 ]
 
 ERROR_AT_START = 1e-9
@@ -311,3 +314,36 @@ def violations(
                 f"{error[k]} > {BOUND_FACTOR * bound[k]}"
             )
     return found
+
+
+def allowed_failures(n: int, p: float, c: float) -> int | None:
+    """The most failed runs out of `n` that still show reliability `p` at confidence `c`.
+
+    The failure rate's one-sided Clopper-Pearson upper bound at confidence `c` must stay within
+    `1 - p`.
+
+    Args:
+        n: the number of runs.
+        p: the reliability the requirement demands, the share of runs that pass.
+        c: the confidence the demonstration demands.
+
+    Returns:
+        The largest failure count `k` whose upper bound is within `1 - p`, or None when even zero
+        failures cannot show `p` at `c` with `n` runs.
+    """
+    k = 0
+    while k < n and beta.ppf(c, k + 1, n - k) <= 1.0 - p:
+        k += 1
+    return k - 1 if k > 0 else None
+
+
+def worst_attitude_error_rad(run: Mapping[str, np.ndarray]) -> float:
+    """The largest attitude error of the estimate against truth over a run.
+
+    Args:
+        run: one run, holding `truth/sigma_BN` and `est/sigma_BN`.
+
+    Returns:
+        The largest error over the samples, in rad.
+    """
+    return float(np.max(attitude_error_rad(run["truth/sigma_BN"], run["est/sigma_BN"])))

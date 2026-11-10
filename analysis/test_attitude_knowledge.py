@@ -1,12 +1,13 @@
 """SRS001, attitude knowledge: the worst attitude error stays within X in a share p of runs."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from matplotlib.figure import Figure
-from wise_dynamics.sessions import read_test_results, recorded_tests, session_directory
+from wise_dynamics.sessions import CaseResults, session_directory
 
-from gnc_analysis.requirements import Cell, claimed_ids, judge_cell
+from gnc_analysis.error_bounds import allowed_failures, read_run, worst_attitude_error_rad
 
 ID = "SRS001"  # placeholder
 X = 1e-3  # placeholder, rad
@@ -14,49 +15,49 @@ P = 0.99  # placeholder
 C = 0.90  # placeholder
 
 
-def write_report(report: Path, cells: dict[str, Cell]) -> None:
-    """Write the histogram of the worst errors and the matrix of cells.
+def test_attitude_knowledge(
+    request: pytest.FixtureRequest, claimed_runs: Callable[[str], dict[str, CaseResults]]
+) -> None:
+    """Judge each test that claims the requirement, then the requirement.
 
     Args:
-        report: the session's report directory.
-        cells: each claiming test's cell by node ID.
+        request: the pytest request.
+        claimed_runs: the results of the tests claiming an ID.
     """
-    report.mkdir(exist_ok=True)
-    figure = Figure(layout="constrained")
-    axes = figure.subplots()
-    for nodeid, cell in cells.items():
-        axes.hist(cell.errors, bins=30, alpha=0.6, label=nodeid)
-    axes.axvline(X, color="k", linestyle="--", label="X")
-    axes.set(xlabel="worst attitude error (rad)", ylabel="runs", title=ID)
-    axes.legend()
-    figure.savefig(report / f"{ID}.png")
     rows = [
         "| Requirement | Test | Verdict | Failed/Found/Planned | Allowed |",
         "|---|---|---|---|---|",
     ]
-    rows += [
-        f"| {ID} | {nodeid} | {c.verdict} | {len(c.failed)}/{c.found}/{c.planned} | {c.allowed} |"
-        for nodeid, c in cells.items()
-    ]
+    figure = Figure(layout="constrained")
+    axes = figure.subplots()
+    failing, unjudged = {}, []
+    for nodeid, results in claimed_runs(ID).items():
+        errors = {c: worst_attitude_error_rad(read_run(f)) for c, f in results.runs.items()}
+        failed = [c for c in range(results.planned) if errors.get(c, 0) > X or c in results.crashes]
+        found = sum(c in results.runs or c in results.crashes for c in range(results.planned))
+        allowed = allowed_failures(results.planned, P, C)
+        if found < results.planned or allowed is None:
+            verdict = "not judged"
+            unjudged.append(
+                f"{nodeid}: {found} of {results.planned} cases found, allowed {allowed}"
+            )
+        elif len(failed) > allowed:
+            verdict = "fail"
+            failing[nodeid] = failed
+        else:
+            verdict = "pass"
+        rows.append(
+            f"| {ID} | {nodeid} | {verdict} | {len(failed)}/{found}/{results.planned} | {allowed} |"
+        )
+        axes.hist(list(errors.values()), bins=30, alpha=0.6, label=nodeid)
+    axes.axvline(X, color="k", linestyle="--", label="X")
+    axes.set(xlabel="worst attitude error (rad)", ylabel="runs", title=ID)
+    axes.legend()
+    report = Path(session_directory(request.config)) / "report"
+    report.mkdir(exist_ok=True)
+    figure.savefig(report / f"{ID}.png")
     (report / "matrix.md").write_text("\n".join(rows) + "\n")
-
-
-def test_attitude_knowledge(request: pytest.FixtureRequest) -> None:
-    """Judge the active session's tests that claim the requirement.
-
-    Args:
-        request: the pytest request.
-    """
-    session = session_directory(request.config)
-    cells = {
-        t.nodeid: judge_cell(read_test_results(t.directory), X, P, C)
-        for t in recorded_tests(session)
-        if ID in claimed_ids(request.config.rootpath, t.nodeid)
-    }
-    write_report(session / "report", cells)
-    failing = {n: c.failed for n, c in cells.items() if c.verdict == "fail"}
     if failing:
         pytest.fail(f"{ID} failed cases: {failing}")
-    unjudged = [f"{n}: {c.reason}" for n, c in cells.items() if c.verdict == "not judged"]
-    if unjudged or not cells:
+    if unjudged or len(rows) == 2:
         pytest.skip(f"{ID} not judged: {unjudged or 'no test claims it'}")
