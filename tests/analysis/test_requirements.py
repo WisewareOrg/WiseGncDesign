@@ -6,7 +6,14 @@ from gnc_analysis.requirements import allowed_failures, worst_attitude_error_rad
 
 
 def _mrp_about_z(angle_rad: np.ndarray) -> np.ndarray:
-    """The MRPs of rotations by `angle_rad` about the z axis, shape (N, 3)."""
+    """The MRPs of rotations about the z axis.
+
+    Args:
+        angle_rad: the rotation angles in rad.
+
+    Returns:
+        (N, 3) MRPs.
+    """
     sigma = np.zeros((len(angle_rad), 3))
     sigma[:, 2] = np.tan(np.asarray(angle_rad) / 4.0)
     return sigma
@@ -20,8 +27,17 @@ def _mrp_about_z(angle_rad: np.ndarray) -> np.ndarray:
         (851, 0.9973, 0.90, None),
     ],
 )
-def test_allowed_failures_matches_the_known_values(n, p, c, expected):
-    """The rule reproduces the proposal's table, including the no-such-k case as None."""
+def test_allowed_failures_matches_the_known_values(
+    n: int, p: float, c: float, expected: int | None
+) -> None:
+    """The rule reproduces the proposal's table, including the no-such-k case as None.
+
+    Args:
+        n: the run count.
+        p: the reliability.
+        c: the confidence.
+        expected: the allowed failures, or None.
+    """
     assert allowed_failures(n, p, c) == expected
 
 
