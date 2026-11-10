@@ -2805,7 +2805,7 @@ wheels = [
 [[package]]
 name = "wise-dynamics"
 version = "0.1.0"
-source = { git = "https://github.com/WisewareOrg/WiseDynamics?rev=d5b0b5a5744d12781f7058757facdbf07c7e8138#d5b0b5a5744d12781f7058757facdbf07c7e8138" }
+source = { git = "https://github.com/WisewareOrg/WiseDynamics?rev=a98bd910b2e19111a10bb0e2631033089089b73d#a98bd910b2e19111a10bb0e2631033089089b73d" }
 dependencies = [
     { name = "bsk", extra = ["all"] },
     { name = "h5py" },
@@ -2892,7 +2892,7 @@ notebooks = [
     { name = "notebook" },
     { name = "pip" },
 ]
-sim = [{ name = "wise-dynamics", extras = ["notebook"], git = "https://github.com/WisewareOrg/WiseDynamics?rev=d5b0b5a5744d12781f7058757facdbf07c7e8138" }]
+sim = [{ name = "wise-dynamics", extras = ["notebook"], git = "https://github.com/WisewareOrg/WiseDynamics?rev=a98bd910b2e19111a10bb0e2631033089089b73d" }]
 
 [[package]]
 name = "xyzservices"
