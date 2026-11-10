@@ -18,15 +18,13 @@ be written into one algorithm's test, and a test must be able to claim several r
 
 ## Decision
 
-- **A requirement owns its analyzer.** One analyzer module per requirement under `analysis/` holds the
-  requirement's ID, statement and limits and calls a metric from `gnc_analysis`. Every Monte Carlo
-  test that claims the requirement reuses it, so any algorithm is judged by the same analysis.
+- **A requirement owns its analyzer.** One analyzer module per requirement judges it. Every Monte Carlo
+  test that claims the requirement reuses that analyzer, so any algorithm is judged by the same
+  analysis.
 - **Monte Carlo tests are tagged with the requirements they verify.** A `verifies` mark names
   requirement IDs, test to requirement, many-to-many. The tag is read from the test's source when
-  judging, so the simulator knows nothing of requirements. This is the opposite direction to
-  [WiseKiosk ADR 0005 rev 4](https://github.com/WisewareOrg/WiseKiosk/blob/main/docs/decisions/0005-traceability-gating.md),
-  where the requirements tree gates the work: here the work declares what it verifies. The IDs are
-  not fixed by this decision.
+  judging, so the simulator knows nothing of requirements. The work declares what it verifies, and
+  a requirement does not list the tests that verify it. The IDs are not fixed by this decision.
 - **Judging is a separate pytest run after simulation, over one session.** It reads the runs a
   session holds and never re-simulates, so tagging a test that already has runs judges them.
 - **A cell is a (requirement, test) pair.** It gets an allowed-failures verdict: the largest `k`
