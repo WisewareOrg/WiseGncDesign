@@ -459,15 +459,8 @@ class RequirementVerdict:
         plt.close(figure)
 
     def check(self) -> None:
-        """Skip when no cell is judged, fail when any judged cell fails, else pass."""
+        """Fail when any judged cell fails, else skip when any cell is not judged, else pass."""
         judged = [c for c in self.cells if c.why_not_judged is None]
-        if not judged:
-            session = self.judging.session.name
-            reason = "; ".join(f"{c.test.label}: {c.why_not_judged}" for c in self.cells)
-            pytest.skip(
-                f"requirement {self.requirement.id} not judged: "
-                + (reason or f"no Monte Carlo test in session {session} claims it")
-            )
         failed = [c for c in judged if not c.passed]
         if failed:
             pytest.fail(
@@ -477,6 +470,14 @@ class RequirementVerdict:
                     f"{c.allowed} allowed"
                     for c in failed
                 )
+            )
+        unjudged = [c for c in self.cells if c.why_not_judged is not None]
+        if unjudged or not self.cells:
+            session = self.judging.session.name
+            reason = "; ".join(f"{c.test.label}: {c.why_not_judged}" for c in unjudged)
+            pytest.skip(
+                f"requirement {self.requirement.id} not judged: "
+                + (reason or f"no Monte Carlo test in session {session} claims it")
             )
 
 
