@@ -1,4 +1,8 @@
-"""The `claimed_runs` fixture: the runs of the Monte Carlo tests that claim a requirement ID."""
+"""The `claimed_runs` fixture, and the session report's matrix of every requirement's cells.
+
+Each requirement analyzer writes its cells to `report/<ID>.md`; `matrix.md` gathers them once the
+run ends, so analyzers on separate xdist workers do not overwrite one another.
+"""
 
 import importlib.util
 import sys
@@ -8,6 +12,7 @@ from pathlib import Path
 import pytest
 from wise_dynamics.sessions import (
     CaseResults,
+    NoSessionError,
     read_test_results,
     recorded_tests,
     session_directory,
@@ -57,3 +62,24 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
         return found
 
     return lookup
+
+
+def pytest_sessionfinish(session: pytest.Session) -> None:
+    """Gather each requirement's table in the active session's report into `matrix.md`.
+
+    Nothing is written on an xdist worker or when no session is active.
+
+    Args:
+        session: the pytest session.
+    """
+    if hasattr(session.config, "workerinput"):
+        return
+    try:
+        report = Path(session_directory(session.config)) / "report"
+    except NoSessionError:
+        return
+    tables = sorted(t for t in report.glob("*.md") if t.name != "matrix.md")
+    if tables:
+        header = tables[0].read_text().splitlines()[:2]
+        rows = header + [row for t in tables for row in t.read_text().splitlines()[2:]]
+        (report / "matrix.md").write_text("\n".join(rows) + "\n")

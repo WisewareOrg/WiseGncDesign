@@ -1,9 +1,14 @@
-"""The allowed-failures rule and the worst-attitude-error metric of `gnc_analysis.error_bounds`."""
+"""The allowed-failures rule and the worst-error metrics of `gnc_analysis.error_bounds`."""
 
 import numpy as np
 import pytest
 
-from gnc_analysis.error_bounds import allowed_failures, worst_attitude_error_rad
+from gnc_analysis.error_bounds import (
+    allowed_failures,
+    worst_attitude_error_rad,
+    worst_position_error_m,
+    worst_velocity_error_m_s,
+)
 
 
 def _mrp_about_z(angle_rad: np.ndarray) -> np.ndarray:
@@ -49,3 +54,21 @@ def test_worst_attitude_error_is_the_largest_sample_error():
     run = {"truth/sigma_BN": truth, "est/sigma_BN": est}
 
     assert worst_attitude_error_rad(run) == pytest.approx(0.002, abs=1e-9)
+
+
+def test_worst_velocity_error_is_the_largest_sample_error():
+    """The metric is the maximum over samples of |v_truth - v_est|."""
+    truth = np.full((3, 3), 7600.0)
+    est = truth + np.array([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0], [1.0, 0.0, 0.0]])
+    run = {"truth/v_N": truth, "est/v_BN_N": est}
+
+    assert worst_velocity_error_m_s(run) == pytest.approx(5.0)
+
+
+def test_worst_position_error_is_the_largest_sample_error():
+    """The metric is the maximum over samples of |r_truth - r_est|."""
+    truth = np.full((3, 3), 6.9e6)
+    est = truth + np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 6.0, 8.0]])
+    run = {"truth/r_N": truth, "est/r_BN_N": est}
+
+    assert worst_position_error_m(run) == pytest.approx(10.0)

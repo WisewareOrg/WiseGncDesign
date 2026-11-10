@@ -38,6 +38,8 @@ __all__ = [
     "velocity_error_m_s",
     "violations",
     "worst_attitude_error_rad",
+    "worst_position_error_m",
+    "worst_velocity_error_m_s",
 ]
 
 ERROR_AT_START = 1e-9
@@ -347,3 +349,27 @@ def worst_attitude_error_rad(run: Mapping[str, np.ndarray]) -> float:
         The largest error over the samples, in rad.
     """
     return float(np.max(attitude_error_rad(run["truth/sigma_BN"], run["est/sigma_BN"])))
+
+
+def worst_velocity_error_m_s(run: Mapping[str, np.ndarray]) -> float:
+    """The largest velocity error of the estimate against truth over a run.
+
+    Args:
+        run: one run, holding `truth/v_N` and `est/v_BN_N`.
+
+    Returns:
+        The largest error over the samples, in m/s.
+    """
+    return float(np.max(velocity_error_m_s(run["truth/v_N"], run["est/v_BN_N"])))
+
+
+def worst_position_error_m(run: Mapping[str, np.ndarray]) -> float:
+    """The largest position error of the estimate against truth over a run.
+
+    Args:
+        run: one run, holding `truth/r_N` and `est/r_BN_N`.
+
+    Returns:
+        The largest error over the samples, in m.
+    """
+    return float(np.max(position_error_m(run["truth/r_N"], run["est/r_BN_N"])))

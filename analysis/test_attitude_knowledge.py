@@ -56,7 +56,7 @@ def test_attitude_knowledge(
     report = Path(session_directory(request.config)) / "report"
     report.mkdir(exist_ok=True)
     figure.savefig(report / f"{ID}.png")
-    (report / "matrix.md").write_text("\n".join(rows) + "\n")
+    (report / f"{ID}.md").write_text("\n".join(rows) + "\n")
     if failing:
         pytest.fail(f"{ID} failed cases: {failing}")
     if unjudged or len(rows) == 2:

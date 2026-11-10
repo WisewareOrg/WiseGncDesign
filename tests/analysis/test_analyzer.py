@@ -5,6 +5,7 @@ cases that allows one failure, as `allowed_failures(10, 0.8, 0.5)` gives.
 """
 
 import json
+import re
 from pathlib import Path
 
 import h5py
@@ -54,7 +55,7 @@ def test_tagged(sim_run_file):
 
 
 def write_run(path: Path, error_rad: float) -> None:
-    """Write a run file whose worst attitude error is `error_rad`.
+    """Write a run whose worst attitude error is `error_rad`, with no velocity or position error.
 
     Args:
         path: the run file to create.
@@ -66,6 +67,9 @@ def write_run(path: Path, error_rad: float) -> None:
         f["t_s"] = np.linspace(0.0, 1.0, 5)
         f["truth/sigma_BN"] = np.zeros((5, 3))
         f["est/sigma_BN"] = est
+        for truth, estimate in (("v_N", "v_BN_N"), ("r_N", "r_BN_N")):
+            f[f"truth/{truth}"] = np.zeros((5, 3))
+            f[f"est/{estimate}"] = np.zeros((5, 3))
 
 
 def write_cases(
@@ -106,8 +110,9 @@ def project(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> pytes
         The pytester, rooted in the project.
     """
     source = (REPO / "analysis" / "test_attitude_knowledge.py").read_text()
-    source = source.replace("P = 0.99", "P = 0.8").replace("C = 0.90", "C = 0.5")
-    assert "P = 0.8 " in source and "C = 0.5 " in source
+    for name, value in (("X", "1e-3"), ("P", "0.8"), ("C", "0.5")):
+        source, count = re.subn(rf"^{name} = .*$", f"{name} = {value}", source, flags=re.M)
+        assert count == 1, name
     pytester.makefile(".ini", pytest="[pytest]\nmarkers =\n    verifies(*ids): a claim\n")
     conftest = (REPO / "analysis" / "conftest.py").read_text()
     pytester.makepyfile(
@@ -208,6 +213,33 @@ def test_an_untagged_test_is_not_judged(project: pytest.Pytester) -> None:
     result.assert_outcomes(skipped=1)
     result.stdout.fnmatch_lines(["*no test claims it*"])
     assert "test_untagged" not in (directory.parents[1] / "report" / "matrix.md").read_text()
+
+
+def test_requirements_judged_on_separate_workers_share_the_matrix(
+    project: pytest.Pytester,
+) -> None:
+    """Each analyzer's cells reach `matrix.md` when xdist spreads the analyzers over workers.
+
+    Args:
+        project: the project.
+    """
+    for name in ("velocity", "position"):
+        analyzer = f"test_{name}_knowledge.py"
+        (project.path / "analysis" / analyzer).write_text(
+            (REPO / "analysis" / analyzer).read_text()
+        )
+    claim_all = MC.replace('"SRS001"', '"SRS001", "SRS002", "SRS003"', 1)
+    (project.path / "tests" / "test_mc.py").write_text(claim_all)
+    write_cases(project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged")
+
+    project.runpytest_subprocess("analysis", "-n", "3")
+
+    matrix = (project.path / "monte_carlo" / "s1" / "report" / "matrix.md").read_text()
+    assert [row.split(" | ")[0] for row in matrix.splitlines()[2:]] == [
+        "| SRS001",
+        "| SRS002",
+        "| SRS003",
+    ]
 
 
 def test_a_session_written_by_the_wise_dynamics_plugin_passes(project: pytest.Pytester) -> None:

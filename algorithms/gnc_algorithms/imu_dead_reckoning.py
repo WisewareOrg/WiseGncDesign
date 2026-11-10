@@ -523,7 +523,7 @@ def dead_reckoner(scenario: Leo500) -> AlgorithmModule:
 # %%
 # %%monte_carlo
 @pytest.mark.sim_runs(852)
-@pytest.mark.verifies("SRS001")
+@pytest.mark.verifies("SRS001", "SRS002", "SRS003")
 def test_imu_dead_reckoning_case(
     sim_scenario: Leo500, sim_duration_s: float, sim_run_file: Callable[..., Path]
 ) -> None:
