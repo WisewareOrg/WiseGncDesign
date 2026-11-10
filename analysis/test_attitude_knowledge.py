@@ -1,5 +1,7 @@
 """SRS001, attitude knowledge: judges the estimate's worst attitude error."""
 
+from typing import Any
+
 import numpy as np
 from matplotlib.figure import Figure
 
@@ -37,7 +39,7 @@ def plot_worst_attitude_error(
     return figure
 
 
-def test_attitude_knowledge(session_run) -> None:
+def test_attitude_knowledge(session_run: Any) -> None:
     """Judge one case of a claiming test.
 
     Args:
@@ -46,7 +48,7 @@ def test_attitude_knowledge(session_run) -> None:
     session_run.check()
 
 
-def test_attitude_knowledge_verdict(requirement_verdict) -> None:
+def test_attitude_knowledge_verdict(requirement_verdict: Any) -> None:
     """Judge the requirement across its claiming tests and plot the metrics.
 
     Args:
