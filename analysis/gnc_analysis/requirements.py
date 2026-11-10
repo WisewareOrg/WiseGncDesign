@@ -3,14 +3,38 @@
 A run is one run file as `error_bounds.read_run` returns it.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.stats import beta
 
 from gnc_analysis.error_bounds import attitude_error_rad
 
-__all__ = ["allowed_failures", "worst_attitude_error_rad"]
+__all__ = ["Requirement", "allowed_failures", "worst_attitude_error_rad"]
+
+
+@dataclass(frozen=True)
+class Requirement:
+    """A requirement a Monte Carlo session is judged against.
+
+    A run passes when `metric(run)` is at most `threshold`.
+
+    Attributes:
+        id: the requirement's identifier, which `verifies` marks name.
+        statement: the requirement's text.
+        threshold: `X`, the largest metric value a passing run may have.
+        p: the reliability the requirement demands, the share of runs that pass.
+        c: the confidence the demonstration demands.
+        metric: maps one run to the scalar compared with `threshold`.
+    """
+
+    id: str
+    statement: str
+    threshold: float
+    p: float
+    c: float
+    metric: Callable[[Mapping[str, np.ndarray]], float]
 
 
 def allowed_failures(n: int, p: float, c: float) -> int | None:
