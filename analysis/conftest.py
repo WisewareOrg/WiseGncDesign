@@ -387,15 +387,15 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 @pytest.hookimpl(tryfirst=True)
-def pytest_collection_modifyitems(
-    session: pytest.Session, config: pytest.Config, items: list[pytest.Item]
-) -> None:
-    """Report a collection error for each `verifies` ID that no collected analyzer declares.
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Stop the run when a `verifies` ID is declared by no collected analyzer.
 
     Args:
-        session: the pytest session.
         config: the pytest configuration.
         items: the collected items.
+
+    Raises:
+        pytest.UsageError: a `verifies` mark names a requirement that no analyzer declares.
     """
     if JUDGING not in config.stash:
         return
@@ -407,9 +407,9 @@ def pytest_collection_modifyitems(
     claimed = {i for test in config.stash[JUDGING].tests for i in test.ids}
     unknown = sorted(claimed - declared)
     if unknown:
-        text = f"verifies marks name requirements that no analyzer declares: {unknown}"
-        report = pytest.CollectReport(session.nodeid or "analysis", "failed", text, [])
-        config.hook.pytest_collectreport(report=report)
+        raise pytest.UsageError(
+            f"verifies marks name requirements that no analyzer declares: {unknown}"
+        )
 
 
 class SessionRun:
