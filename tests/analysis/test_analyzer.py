@@ -164,11 +164,13 @@ def test_a_crash_counts_as_a_failed_case(project: pytest.Pytester) -> None:
     result = judge(project)
 
     result.assert_outcomes(failed=1)
-    result.stdout.fnmatch_lines(["*SRS001 failed cases: *[[]3, 5[]]*"])
+    result.stdout.fnmatch_lines(["*tests/test_mc.py::test_tagged: 2 failed, 1 allowed*"])
+    matrix = (project.path / "monte_carlo" / "s1" / "report" / "matrix.md").read_text()
+    assert "| fail | 2/10/10 | 1 | 3, 5 (crash) |" in matrix
 
 
 def test_failures_over_the_allowance_fail_and_name_the_cases(project: pytest.Pytester) -> None:
-    """The requirement fails, lists the failing case numbers and the matrix records the cell.
+    """The requirement fails with a rerun command per failing case, and the matrix lists them.
 
     Args:
         project: the project.
@@ -179,13 +181,18 @@ def test_failures_over_the_allowance_fail_and_name_the_cases(project: pytest.Pyt
     result = judge(project)
 
     result.assert_outcomes(failed=1)
-    result.stdout.fnmatch_lines(["*SRS001 failed cases: *[[]2, 7[]]*"])
+    result.stdout.fnmatch_lines(
+        [
+            '*case 2: uv run --no-sync pytest "tests/test_mc.py::test_tagged[[]2[]]" -n 0*',
+            '*case 7: uv run --no-sync pytest "tests/test_mc.py::test_tagged[[]7[]]" -n 0*',
+        ]
+    )
     matrix = (project.path / "monte_carlo" / "s1" / "report" / "matrix.md").read_text()
-    assert "| SRS001 | tests/test_mc.py::test_tagged | fail | 2/10/10 | 1 |" in matrix
+    assert "| SRS001 | tests/test_mc.py::test_tagged | fail | 2/10/10 | 1 | 2, 7 |" in matrix
 
 
 def test_a_missing_case_leaves_the_requirement_not_judged(project: pytest.Pytester) -> None:
-    """A case with neither run nor crash skips the requirement and says so.
+    """A case with neither run nor crash skips the requirement, naming the missing case.
 
     Args:
         project: the project.
@@ -196,7 +203,7 @@ def test_a_missing_case_leaves_the_requirement_not_judged(project: pytest.Pytest
     result = judge(project)
 
     result.assert_outcomes(skipped=1)
-    result.stdout.fnmatch_lines(["*::test_tagged: 9 of 10 cases found*"])
+    result.stdout.fnmatch_lines(["*::test_tagged: missing cases [[]4[]]*"])
 
 
 def test_an_untagged_test_is_not_judged(project: pytest.Pytester) -> None:
