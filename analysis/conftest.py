@@ -122,7 +122,8 @@ def verdict(
         `judge(requirement_id, numbers, x, p, c, figures)`, where `numbers` holds each claiming
         test's number by case. A case fails when its number is above `x` or it crashed.
     """
-    report = Path(session_directory(request.config)) / "report"
+    session = Path(session_directory(request.config))
+    report = session / "report"
 
     def judge(
         requirement_id: str,
@@ -143,7 +144,8 @@ def verdict(
             x: the largest number a passing run may have.
             p: the share of runs that must pass.
             c: the confidence the demonstration demands.
-            figures: each claiming test's plot, saved as `<ID>/<module>.<test>.png`.
+            figures: each claiming test's plot, saved as `<ID>.png` under the report's copy
+                of the test's folder in the session.
         """
         rows, failing, unjudged = list(HEADER), [], []
         for nodeid, results in claimed_runs(requirement_id).items():
@@ -181,10 +183,11 @@ def verdict(
                 f" | {allowed} | {listed} |"
             )
         report.mkdir(parents=True, exist_ok=True)
-        (report / requirement_id).mkdir(parents=True, exist_ok=True)
+        folders = {test.nodeid: test.directory for test in recorded_tests(session)}
         for nodeid, figure in figures.items():
-            file, *names = nodeid.split("::")
-            figure.savefig(report / requirement_id / f"{'.'.join([Path(file).stem, *names])}.png")
+            folder = report / folders[nodeid].relative_to(session)
+            folder.mkdir(parents=True, exist_ok=True)
+            figure.savefig(folder / f"{requirement_id}.png")
         (report / f"{requirement_id}.md").write_text("\n".join(rows) + "\n")
         if failing:
             pytest.fail(f"{requirement_id} failed\n" + "\n".join(failing))

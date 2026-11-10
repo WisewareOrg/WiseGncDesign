@@ -292,5 +292,7 @@ def test_a_session_written_by_the_wise_dynamics_plugin_passes(project: pytest.Py
     judge(project).assert_outcomes(passed=1)
 
     report = project.path / "monte_carlo" / "s1" / "report"
-    assert (report / "SRS001" / "test_mc.test_tagged.png").read_bytes().startswith(b"\x89PNG")
+    assert (report / "tests" / "test_mc" / "test_tagged" / "SRS001.png").read_bytes().startswith(
+        b"\x89PNG"
+    )
     assert "| pass | 0/4/4 | 0 |" in (report / "matrix.md").read_text()
