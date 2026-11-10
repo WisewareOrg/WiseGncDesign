@@ -18,7 +18,7 @@ be written into one algorithm's test, and a test must be able to claim several r
 
 ## Decision
 
-- **A requirement owns its analyzer.** One pytest test per requirement under `analysis/` holds the
+- **A requirement owns its analyzer.** One analyzer module per requirement under `analysis/` holds the
   requirement's ID, statement and limits and calls a metric from `gnc_analysis`. Every Monte Carlo
   test that claims the requirement reuses it, so any algorithm is judged by the same analysis.
 - **Monte Carlo tests are tagged with the requirements they verify.** A `verifies` mark names
@@ -50,7 +50,7 @@ without touching this one.
   and a second allocation can only contradict it.
 - **Pooling runs across tests.** One verdict over the union of runs hides a test that fails alone,
   and mixes populations with different scenarios. Rejected: each test's cell is judged on its own.
-- **Tags recorded by WiseDynamics in `planned.json`.** Rejected: it gives the simulator the concept
+- **Tags recorded by WiseDynamics in the simulator's per-test record.** Rejected: it gives the simulator the concept
   of a requirement, and a tag added later would need a re-simulation.
 - **Tags copied into run files.** Rejected for the same two reasons.
 - **Hard-coding the test in the analyzer.** Rejected: the analyzer would serve one algorithm.

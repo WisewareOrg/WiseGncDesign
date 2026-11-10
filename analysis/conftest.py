@@ -258,7 +258,7 @@ class Judging:
 def _discover(config: pytest.Config) -> Judging:
     """Find the active session's tagged Monte Carlo tests.
 
-    A folder whose test no longer exists is listed in a warning and not judged. A test with no
+    A folder whose test does not exist is listed in a warning and not judged. A test with no
     `verifies` mark is not judged.
 
     Args:
@@ -295,7 +295,7 @@ def _discover(config: pytest.Config) -> Judging:
             )
     if vanished:
         warnings.warn(
-            f"session folders whose Monte Carlo test no longer exists, not judged: {vanished}",
+            f"session folders whose Monte Carlo test does not exist, not judged: {vanished}",
             UserWarning,
             stacklevel=2,
         )

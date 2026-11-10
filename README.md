@@ -10,8 +10,9 @@ It has three parts:
   by numba. Importing one loads the simulator stack and runs nothing. They name their inputs and
   outputs by the simulation's standard field names, so a host resolves them by name;
 - `gnc_cdh`, which hosts an algorithm in the simulator ([`cdh/README.md`](cdh/README.md));
-- `gnc_analysis.error_bounds`, which reads a run file with h5py and holds the dead reckoner's
-  error to its accuracy bound.
+- `gnc_analysis`, which holds the error bounds (it reads a run file with h5py and holds the dead
+  reckoner's error to its accuracy bound) and the support for the requirement analyzers in
+  `analysis/`: the allowed-failures rule and the metrics. `just judge` runs the analyzers.
 
 ## Development
 
@@ -23,8 +24,12 @@ or `just local` (an editable checkout at `$WISE_DYNAMICS_PATH`, default `../Wise
 ```sh
 just pinned
 just lab
+just session <name>
 just test
 ```
+
+Monte Carlo tests refuse to run without an active session, so pick one with `just session <name>`
+before `just test` and before running a notebook's `%%monte_carlo` cell.
 
 A Monte Carlo test writes its runs into the active session, a named folder under `monte_carlo/`.
 `just session <name>` makes `<name>` active, and `just session` with no name lists the sessions.
