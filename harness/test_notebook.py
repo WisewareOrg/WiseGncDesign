@@ -40,5 +40,5 @@ def test_an_error_in_a_notebook_only_cell_fails_the_run(tmp_path: Path) -> None:
     notebook = tmp_path / "seeded.py"
     notebook.write_text(CELLS.format(body='raise RuntimeError("seeded")'))
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(RuntimeError, match="seeded"):
         run_notebook(notebook)

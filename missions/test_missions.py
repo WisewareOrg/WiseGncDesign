@@ -7,6 +7,7 @@ import pytest
 NOTEBOOKS = sorted(
     path for path in Path(__file__).parent.glob("*.py") if not path.name.startswith("test_")
 )
+assert NOTEBOOKS, "no mission notebooks found beside this file"
 
 
 @pytest.mark.xdist_group("notebooks")

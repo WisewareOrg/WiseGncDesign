@@ -339,7 +339,10 @@ globals().update(
 """
     )
 
-    project.runpytest_inprocess("-p", "no:cacheprovider").assert_outcomes(errors=2)
+    result = project.runpytest_inprocess("-p", "no:cacheprovider")
+
+    result.assert_outcomes(errors=2)
+    result.stdout.fnmatch_lines(["*dispersion failed*"])
 
     found = {path.parent.name: path for path in project.path.rglob("flight.json")}
     assert sorted(found) == ["test_everything_alpha", "test_narrowed_alpha"]

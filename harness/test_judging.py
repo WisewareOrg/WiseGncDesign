@@ -324,6 +324,8 @@ def test_a_missing_case_is_not_counted_and_the_found_cases_are_judged(
 
     judge(project).assert_outcomes(passed=1, skipped=2)
 
+    assert "| SRS901 | pass | 0/4/5 | 0 |" in cell_matrix(project)
+
 
 @pytest.mark.parametrize("kind", ["velocity", "position"])
 def test_each_analyzer_judges_its_own_error(project: pytest.Pytester, kind: str) -> None:
