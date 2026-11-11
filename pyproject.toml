@@ -14,7 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 basilisk = ["bsk[all]"]
-analysis = ["h5py>=3.11", "matplotlib>=3.9"]
+analysis = ["h5py>=3.11", "matplotlib>=3.9", "pandas>=3.0", "pyyaml>=6.0"]
 
 [dependency-groups]
 dev = [
@@ -27,7 +27,7 @@ dev = [
     "pydoclint>=0.12.0",
 ]
 sim = ["wise-dynamics[notebook]"]
-notebooks = ["ipykernel>=6.29", "jupyterlab>=4.4", "jupytext>=1.17", "notebook", "pip"]
+notebooks = ["ipykernel>=6.29", "ipython>=9.0", "jupyterlab>=4.4", "jupytext>=1.17", "notebook", "pip"]
 
 [tool.uv.sources]
 # The WiseDynamics commit this repository's scenario tests verify against.
