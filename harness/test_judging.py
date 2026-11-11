@@ -490,12 +490,15 @@ def test_capped_runs_are_judged_in_scratch_and_leave_the_active_session_alone(
         monkeypatch: the monkeypatch fixture.
     """
     monkeypatch.setenv("WISE_DYNAMICS_CAPPED", "1")
-    write_cases(session(project, "scratch"), bad=(3,), planned=2, flight=only("SRS901"))
+    item = project.path / "docs" / "requirements" / "srs" / "SRS901.yml"
+    fields = yaml.safe_load(item.read_text()) | {"p": 0.5, "c": 0.5}
+    item.write_text(yaml.safe_dump(fields))
+    write_cases(session(project, "scratch"), bad=(1,), planned=2, flight=only("SRS901"))
     kept = session(project) / "report"
     kept.mkdir(parents=True)
     (kept / "matrix.md").write_text("the active session's rollup\n")
 
-    judge(project).assert_outcomes(passed=1, skipped=2)
+    judge(project).assert_outcomes(failed=1, skipped=2)
 
     assert "| SRS901 | " in cell_matrix(project, "scratch")
     assert (kept / "matrix.md").read_text() == "the active session's rollup\n"
