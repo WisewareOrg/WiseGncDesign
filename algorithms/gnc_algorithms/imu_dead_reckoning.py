@@ -22,19 +22,22 @@
 # %%
 """Strapdown inertial dead reckoning from one IMU."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pytest
 from numba import njit
 from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk import ImuSpacecraft, Scenario
+from wise_dynamics.basilisk.scenarios.leo400 import Leo400
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from gnc_algorithms.mrp import B, dcm_NB, shadow
 from gnc_cdh.basilisk import AlgorithmModule
-from mission import Mission, mission_tests, provides
+from mission import provides
 from runs import read_run
 from test_attitude_knowledge import attitude_error_rad
 from test_position_knowledge import position_error_m
@@ -780,37 +783,50 @@ def test_a_nan_error_is_a_violation():
 
 
 # %% [markdown]
-# The dead reckoner's Monte Carlo is a mission: the dead reckoner on the IMU spacecraft, flown
-# through the scenarios the requirements tree names (each sets its own duration and case count), and
-# judged by `just judge` on the attitude ladder and the velocity and position rungs. Each case also
-# holds the estimate within the gross check's bound (`BOUND_FACTOR` times the growth the case's
-# drawn biases, the IMU noise, the 1 s step and the orbit imply): the mission's per-case `check`.
+# Each case runs the estimator for the scenario's default duration, writes its
+# run file and holds the estimate within the gross check's bound (`BOUND_FACTOR` times
+# the growth the case's drawn biases, the IMU noise, the 1 s step and the orbit imply).
 
-
-# %%
-def gross_check(path: Path) -> list[str]:
-    """Every way one case's run file fails the gross check.
-
-    Args:
-        path: the case's run file.
-
-    Returns:
-        The messages `violations` gives, empty when the case passes.
-    """
-    return violations(read_run(path), **bound_inputs())
-
-
-MISSION = Mission(
-    vehicle="imu_spacecraft",
-    fsw=dead_reckoner,
-    rungs=("SRS001", "SRS002", "SRS003", "SRS004", "SRS005"),
-    scenarios=("TST001", "TST002"),
-    check=gross_check,
-)
 
 # %%
 # %%monte_carlo
-globals().update(mission_tests(MISSION))
+@pytest.mark.sim_runs(852)
+def test_imu_dead_reckoning_case(
+    sim_scenario: Leo500, sim_duration_s: float, sim_run_file: Callable[..., Path]
+) -> None:
+    """One Monte Carlo case holds every error within its bound.
+
+    Args:
+        sim_scenario: the case's dispersed scenario, from WiseDynamics' plugin.
+        sim_duration_s: s, the case's simulated duration.
+        sim_run_file: writes the case's run file and returns its path.
+    """
+    fsw = dead_reckoner(sim_scenario)
+    datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
+    path = sim_run_file(datasets, {"versions_wise_gnc_design": version("wise-gnc-design")})
+
+    assert violations(read_run(path), **bound_inputs()) == []
+
+
+# %%
+# %%monte_carlo
+@pytest.mark.sim_runs(852)
+@pytest.mark.sim_scenario("leo400")
+def test_imu_dead_reckoning_leo400_case(
+    sim_scenario: Leo400, sim_duration_s: float, sim_run_file: Callable[..., Path]
+) -> None:
+    """One Monte Carlo case on the 400 km orbit holds every error within its bound.
+
+    Args:
+        sim_scenario: the case's dispersed scenario, from WiseDynamics' plugin.
+        sim_duration_s: s, the case's simulated duration.
+        sim_run_file: writes the case's run file and returns its path.
+    """
+    fsw = dead_reckoner(sim_scenario)
+    datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
+    path = sim_run_file(datasets, {"versions_wise_gnc_design": version("wise-gnc-design")})
+
+    assert violations(read_run(path), **bound_inputs()) == []
 
 
 # %% [markdown]
@@ -826,7 +842,7 @@ globals().update(mission_tests(MISSION))
 #
 # runs = [
 #     {**run["attrs"], **{name: values for name, (values, _) in run["datasets"].items()}}
-#     for run in load_runs(Test_imu_spacecraft.test_dead_reckoner_leo500)
+#     for run in load_runs("test_imu_dead_reckoning_case")
 # ]
 # inputs = bound_inputs()
 # per_case = [bound_ratios(run, **inputs) for run in runs]
