@@ -63,12 +63,15 @@ class Mission:
             capabilities with `provides`.
         rungs: the SRS items to judge.
         scenarios: the TST items to fly.
+        check: optionally, every way one case's run file fails the FSW's own per-case check,
+            empty when it passes; each case's test asserts it is empty once the file is written.
     """
 
     vehicle: str
     fsw: Callable[[Any], Any]
     rungs: tuple[str, ...]
     scenarios: tuple[str, ...]
+    check: Callable[[Path], list[str]] | None = None
 
     def __post_init__(self) -> None:
         """Check every name against the requirements tree.
@@ -151,7 +154,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     def test(
         self: object, sim_scenario: Any, sim_duration_s: float, sim_run_file: Callable[..., Path]
     ) -> None:
-        """One case of the mission in the scenario writes its run file.
+        """One case of the mission in the scenario writes its run file and passes the check.
 
         Args:
             self: the vehicle's test class.
@@ -162,7 +165,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         fsw = mission.fsw(sim_scenario)
         fields = sys.modules[mission.fsw.__module__].estimate_fields(fsw)
         datasets = sim_scenario.run(fsw, fields, duration_s=sim_duration_s)
-        sim_run_file(
+        path = sim_run_file(
             datasets,
             {
                 "versions_wise_gnc_design": version("wise-gnc-design"),
@@ -171,6 +174,8 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
                 "capabilities": ",".join(mission.fsw.provides),
             },
         )
+        if mission.check is not None:
+            assert mission.check(path) == []
 
     test.pytestmark = [*test.pytestmark, *definition.pytestmark]
     test.__name__ = f"test_{mission.fsw.__name__}_{definition.__name__}"
@@ -180,8 +185,13 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
 
 
 @functools.cache
-def _definition(reference: tuple[tuple[str, str], ...] | dict[str, str]) -> Callable[..., None]:
+def _definition(reference: tuple[tuple[str, str], ...]) -> Callable[..., None]:
     """The scenario definition a TST item's reference names.
+
+    A module already loaded, or loading, from the referenced file supplies it, so a notebook can
+    define a scenario that its own missions fly: the module pytest or the judge is importing, or in
+    a kernel the notebook's own namespace. Otherwise the file is imported, registered before it
+    runs so that a reference back to itself finds it there.
 
     Args:
         reference: the reference, its `path` relative to the repository and its `keyword`, the
@@ -189,10 +199,26 @@ def _definition(reference: tuple[tuple[str, str], ...] | dict[str, str]) -> Call
 
     Returns:
         The definition, whose `pytestmark` holds its `sim_` marks.
+
+    Raises:
+        ValueError: the file references a definition it has not yet defined, because a mission
+            flying it comes first.
     """
     reference = dict(reference)
-    path = ROOT / reference["path"]
-    spec = importlib.util.spec_from_file_location(f"_scenarios_{path.stem}", path)
+    path = (ROOT / reference["path"]).resolve()
+    name = re.match(r"def (\w+)\(", reference["keyword"]).group(1)
+    for module in list(sys.modules.values()):
+        file = getattr(module, "__file__", None)
+        if file and Path(file).resolve() == path and hasattr(module, name):
+            return getattr(module, name)
+    main = sys.modules.get("__main__")
+    if getattr(main, "__file__", None) is None and hasattr(getattr(main, name, None), "pytestmark"):
+        return getattr(main, name)
+    module_name = f"_scenarios_{path.stem}"
+    if module_name in sys.modules:
+        raise ValueError(f"{reference['path']} flies {name} before it defines it")
+    spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
     spec.loader.exec_module(module)
-    return getattr(module, re.match(r"def (\w+)\(", reference["keyword"]).group(1))
+    return getattr(module, name)
