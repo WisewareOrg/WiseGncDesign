@@ -63,12 +63,15 @@ class Mission:
             capabilities with `provides`.
         rungs: the SRS items to judge.
         scenarios: the TST items to fly.
+        check: optionally, every way one case's run file fails the FSW's own per-case check,
+            empty when it passes; each case's test asserts it is empty once the file is written.
     """
 
     vehicle: str
     fsw: Callable[[Any], Any]
     rungs: tuple[str, ...]
     scenarios: tuple[str, ...]
+    check: Callable[[Path], list[str]] | None = None
 
     def __post_init__(self) -> None:
         """Check every name against the requirements tree.
@@ -151,7 +154,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     def test(
         self: object, sim_scenario: Any, sim_duration_s: float, sim_run_file: Callable[..., Path]
     ) -> None:
-        """One case of the mission in the scenario writes its run file.
+        """One case of the mission in the scenario writes its run file and passes the check.
 
         Args:
             self: the vehicle's test class.
@@ -162,7 +165,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         fsw = mission.fsw(sim_scenario)
         fields = sys.modules[mission.fsw.__module__].estimate_fields(fsw)
         datasets = sim_scenario.run(fsw, fields, duration_s=sim_duration_s)
-        sim_run_file(
+        path = sim_run_file(
             datasets,
             {
                 "versions_wise_gnc_design": version("wise-gnc-design"),
@@ -171,6 +174,8 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
                 "capabilities": ",".join(mission.fsw.provides),
             },
         )
+        if mission.check is not None:
+            assert mission.check(path) == []
 
     test.pytestmark = [*test.pytestmark, *definition.pytestmark]
     test.__name__ = f"test_{mission.fsw.__name__}_{definition.__name__}"
