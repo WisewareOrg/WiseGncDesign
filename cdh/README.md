@@ -18,8 +18,8 @@ Construction refuses a keyword that no input carries or that two do, and an outp
 message carries.
 
 The module declares `period_s` (1 s), the period of the task the simulation runs it in, so the
-flight software runs at 1 Hz on the simulation's dynamics step: 50 Hz at its `hi` fidelity and
-20 Hz at `med` and `lo`. `Reset` writes the algorithm's outputs as it holds them. Each
+flight software runs at 1 Hz on the simulation's dynamics step: 50 Hz at its `hi` fidelity,
+20 Hz at `med` and 10 Hz at `lo`. `Reset` writes the algorithm's outputs as it holds them. Each
 `UpdateState` after the algorithm's `t` reads every input once, steps the algorithm and writes what
 it returns. Each docstring gives what it refuses.
 
@@ -28,7 +28,7 @@ it returns. Each docstring gives what it refuses.
 This example runs in a notebook or at a prompt, with the `sim` group installed
 (`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
 at its nominal configuration, and boots the dead reckoner on that vehicle. It then runs one minute,
-the dynamics at the default fidelity's 20 Hz and the dead reckoner at 1 Hz, and compares the
+the dynamics at the default fidelity's 10 Hz and the dead reckoner at 1 Hz, and compares the
 estimate with the vehicle's truth:
 
 ```python

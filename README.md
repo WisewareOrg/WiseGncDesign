@@ -3,7 +3,7 @@
 WiseGncDesign holds Wiseware's GNC flight software in Python, flown against simulated spacecraft
 from [WiseDynamics](https://github.com/WisewareOrg/WiseDynamics), which `pyproject.toml` pins
 under `[tool.uv.sources]`. The flight software runs at 1 Hz on the simulation's dynamics step,
-50 Hz at its `hi` fidelity and 20 Hz at `med` and `lo`.
+50 Hz at its `hi` fidelity, 20 Hz at `med` and 10 Hz at `lo`.
 
 It has three parts:
 - `gnc_algorithms`, each algorithm and its derivation as a literate module, with its math compiled
