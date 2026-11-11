@@ -36,7 +36,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
-    """Remove the session's earlier report, so no stale cell reaches this judging's matrices.
+    """Remove the session's report directory.
 
     Args:
         session: the pytest session; nothing is removed on an xdist worker or when no session is
