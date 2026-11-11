@@ -19,10 +19,11 @@ lab:
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
     uv run --no-sync jupyter lab
 
-# Run the test suite.
-test:
+# Run the test suite in the `test` session, every Monte Carlo capped at two cases by `--ci`.
+test *args:
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
-    uv run --no-sync pytest
+    uv run --no-sync pytest --sim-session test
+    uv run --no-sync pytest --ci {{args}}
 
 # Make `name` the active Monte Carlo session; with no name, list the sessions.
 session name="":
