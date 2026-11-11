@@ -62,7 +62,7 @@ True
 
 ```
 
-`tests/sim/test_readme.py` runs this example.
+`cdh/test_readme.py` runs this example.
 
 ## Adding an algorithm
 
