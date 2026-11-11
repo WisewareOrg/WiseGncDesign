@@ -32,7 +32,9 @@ def alpha() -> None:
 """
 
 
-def _write_item(root: Path, document: str, uid: str, links: list[str], reference=None) -> None:
+def _write_item(
+    root: Path, document: str, uid: str, links: list[str], reference: tuple[str, str] | None = None
+) -> None:
     """Write one item of the tree.
 
     Args:
@@ -97,7 +99,7 @@ def claiming(*capabilities: str, name: str = "build"):
         The builder.
     """
 
-    def fsw(scenario):
+    def fsw(scenario: object) -> None:
         """Build nothing.
 
         Args:
@@ -297,7 +299,17 @@ def test_flight_json_survives_a_case_that_crashes_before_it_flies(
     """
     from wise_dynamics.basilisk.scenarios import SCENARIOS
 
-    def boom(self, *args, **kwargs):
+    def boom(self: object, *args: object, **kwargs: object) -> None:
+        """Fail as a dispersion that cannot be drawn.
+
+        Args:
+            self: the scenario.
+            *args: unused.
+            **kwargs: unused.
+
+        Raises:
+            RuntimeError: always.
+        """
         raise RuntimeError("dispersion failed")
 
     monkeypatch.setattr(SCENARIOS["leo500"], "disperse", boom)
