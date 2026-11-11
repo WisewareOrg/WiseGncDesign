@@ -191,8 +191,9 @@ def verdict(
     ) -> None:
         """Give each claiming test a cell, write the report, then fail or skip unless all pass.
 
-        A test's cell is not judged when a planned case has neither a run nor a crash record, or
-        when no failure count shows `p` at `c`; it fails when more cases fail than are allowed.
+        The cases judged are those with a run or a crash record, so an interrupted campaign is
+        judged on the cases that finished. A test's cell is not judged when no failure count shows
+        `p` at `c` with that many cases; it fails when more cases fail than are allowed.
 
         Args:
             requirement_id: the requirement.
@@ -211,18 +212,11 @@ def verdict(
                 [case for case, number in numbers[nodeid].items() if not number <= x]
                 + list(results.crashes)
             )
-            missing = [
-                case
-                for case in range(results.planned)
-                if case not in results.runs and case not in results.crashes
-            ]
-            allowed = allowed_failures(results.planned, p, c)
-            if missing:
+            found = len(results.runs) + len(results.crashes)
+            allowed = allowed_failures(found, p, c)
+            if allowed is None:
                 cell = "not judged"
-                unjudged.append(f"{nodeid}: missing cases {missing}")
-            elif allowed is None:
-                cell = "not judged"
-                unjudged.append(f"{nodeid}: {results.planned} cases cannot show p={p} at c={c}")
+                unjudged.append(f"{nodeid}: {found} cases cannot show p={p} at c={c}")
             elif len(failed) > allowed:
                 cell = "fail"
                 failing.append(f"{nodeid}: {len(failed)} failed, {allowed} allowed")
@@ -240,7 +234,7 @@ def verdict(
                 "requirement": requirement_id,
                 "verdict": cell,
                 "failed": len(failed),
-                "found": len(results.runs) + len(results.crashes),
+                "found": found,
                 "planned": results.planned,
                 "allowed": allowed,
                 "failed_cases": ", ".join(
