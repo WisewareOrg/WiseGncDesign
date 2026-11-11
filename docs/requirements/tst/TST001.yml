@@ -13,15 +13,15 @@ normative: true
 rationale: ''
 ref: ''
 references:
-- path: tests/scenarios/test_scenarios.py
+- path: analysis/mission.py
   type: file
 runs: 460
 scenario: leo500
 status: proposed
 text: |
-  Each capability above the linked requirements boots in the leo500 scenario and runs for the
-  scenario's default duration, once per dispersed case.
+  A mission's FSW boots in the leo500 scenario on the mission's vehicle and runs for the scenario's
+  default duration, once per dispersed case.
 verification-justification: |
-  Settles each linked requirement for each capability over this scenario's dispersions and
+  Settles each linked rung, for each mission flying it, over this scenario's dispersions and
   duration. Leaves unproven any other scenario, and any rung needing more cases than it flies.
 verification-method: test

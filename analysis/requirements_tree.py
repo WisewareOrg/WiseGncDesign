@@ -1,7 +1,8 @@
 """The Doorstop requirements tree under `docs/requirements/`, read as plain YAML.
 
-A SYS item is a capability, an SRS item one rung of its performance ladder, and a TST item a
-scenario every capability above its linked rungs is flown through.
+A SYS item is a capability, an SRS item one rung of performance any number of capabilities claim,
+and a TST item a scenario that evaluates the rungs it links to. Missions, outside the tree, choose
+what flies.
 """
 
 from pathlib import Path
@@ -11,7 +12,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 TREE = ROOT / "docs" / "requirements"
-SCENARIOS = "tests/scenarios/test_scenarios.py"
 
 
 def items(prefix: str) -> dict[str, dict[str, Any]]:
@@ -71,50 +71,3 @@ def limit(requirement_id: str, name: str) -> float:
         The limit.
     """
     return float(items("SRS")[requirement_id][name])
-
-
-def campaign_name(scenario_id: str, capability_id: str) -> str:
-    """The generated Monte Carlo test flying one capability through one scenario.
-
-    Args:
-        scenario_id: the TST ID.
-        capability_id: the SYS ID.
-
-    Returns:
-        The test's function name.
-    """
-    return f"test_{scenario_id.lower()}_{capability_id.lower()}"
-
-
-def campaigns() -> list[tuple[str, str]]:
-    """Every (scenario, capability) pair the tree links, through the rungs between them.
-
-    Returns:
-        (TST ID, SYS ID) pairs.
-    """
-    requirements = items("SRS")
-    pairs = []
-    for scenario_id, scenario in items("TST").items():
-        for requirement_id in parents(scenario):
-            for capability_id in parents(requirements[requirement_id]):
-                if (scenario_id, capability_id) not in pairs:
-                    pairs.append((scenario_id, capability_id))
-    return pairs
-
-
-def claiming_tests(requirement_id: str) -> list[str]:
-    """The node IDs of the generated tests whose runs judge one rung.
-
-    Args:
-        requirement_id: the SRS ID.
-
-    Returns:
-        One node ID per scenario linked to the rung, flying the rung's capability.
-    """
-    capabilities = parents(items("SRS")[requirement_id])
-    return [
-        f"{SCENARIOS}::{campaign_name(scenario_id, capability_id)}"
-        for scenario_id, scenario in items("TST").items()
-        if requirement_id in parents(scenario)
-        for capability_id in capabilities
-    ]

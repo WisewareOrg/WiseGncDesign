@@ -37,6 +37,7 @@ from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from gnc_algorithms.mrp import B, dcm_NB, shadow
 from gnc_cdh.basilisk import AlgorithmModule
+from mission import provides
 from runs import read_run
 from test_attitude_knowledge import attitude_error_rad
 from test_position_knowledge import position_error_m
@@ -497,6 +498,7 @@ def bound_inputs() -> dict[str, float]:
     }
 
 
+@provides("SYS001")
 def dead_reckoner(scenario: Scenario) -> AlgorithmModule:
     """The dead reckoner, built at t = 0 from a scenario's initial state, hosted on its vehicle.
 

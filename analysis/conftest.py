@@ -6,9 +6,13 @@ report, under the same path as the test's runs in the session. The matrices are 
 cells once the run ends, so analyzers on separate xdist workers do not overwrite one another.
 """
 
+import functools
+import importlib.util
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from matplotlib.figure import Figure
@@ -21,27 +25,48 @@ from wise_dynamics.sessions import (
     session_directory,
 )
 
-from requirements_tree import claiming_tests
+from requirements_tree import items, parents
 
 
 @pytest.fixture
 def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, CaseResults]]:
-    """A lookup of the active session's results for the scenario tests that judge a rung.
+    """A lookup of the active session's results for the mission tests that judge a rung.
 
-    The requirements tree decides which tests those are: one generated test per scenario linked to
-    the rung, flying the rung's capability. A test the session has no runs of is left out; the
-    verdict reports it as never run.
+    A recorded test judges a rung when its mission lists the rung, its scenario links to the rung,
+    and its FSW claims a capability the rung belongs to. The test is found by importing it from the
+    node ID in its `planned.json`. A mission listing the rung whose FSW claims none of the rung's
+    capabilities is noted in `lookup.notes`, for the verdict to report as not judged.
 
     Args:
         request: the pytest request.
 
     Returns:
-        A function mapping an SRS ID to each of its tests' results by node ID.
+        A function mapping an SRS ID to each judging test's results by node ID.
     """
     session = session_directory(request.config)
+    rootpath = Path(request.config.rootpath)
 
+    @functools.cache
+    def module(file: str) -> ModuleType:
+        """Import a test file once, under a name of its own.
+
+        Args:
+            file: the file, relative to the rootdir.
+
+        Returns:
+            The module.
+        """
+        path = rootpath / file
+        name = f"_monte_carlo_{path.stem}"
+        spec = importlib.util.spec_from_file_location(name, path)
+        imported = importlib.util.module_from_spec(spec)
+        sys.modules[name] = imported
+        spec.loader.exec_module(imported)
+        return imported
+
+    @functools.cache
     def lookup(requirement_id: str) -> dict[str, CaseResults]:
-        """Each of the rung's tests' results, for the tests the session has run.
+        """Each judging test's results by node ID.
 
         Args:
             requirement_id: the SRS ID.
@@ -49,13 +74,28 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
         Returns:
             The results by node ID.
         """
-        recorded = {test.nodeid: test.directory for test in recorded_tests(session)}
-        return {
-            nodeid: read_test_results(recorded[nodeid])
-            for nodeid in claiming_tests(requirement_id)
-            if nodeid in recorded
-        }
+        capabilities = set(parents(items("SRS")[requirement_id]))
+        found, notes = {}, []
+        for recorded in recorded_tests(session):
+            file, name = recorded.nodeid.split("::")[:2]
+            test = getattr(module(file), name, None)
+            mission = getattr(test, "mission", None)
+            if mission is None or requirement_id not in mission.rungs:
+                continue
+            if requirement_id not in parents(items("TST")[test.scenario_id]):
+                continue
+            if not capabilities & set(mission.fsw.provides):
+                claims = list(mission.fsw.provides)
+                notes.append(
+                    f"{recorded.nodeid}: {mission.fsw.__name__} claims {claims},"
+                    f" none of this rung's {sorted(capabilities)}"
+                )
+                continue
+            found[recorded.nodeid] = read_test_results(recorded.directory)
+        lookup.notes[requirement_id] = notes
+        return found
 
+    lookup.notes = {}
     return lookup
 
 
@@ -178,16 +218,12 @@ def verdict(
                 ),
             }
             (folder / f"{requirement_id}.json").write_text(json.dumps(record))
-        unjudged += [
-            f"{nodeid}: never run in this session"
-            for nodeid in claiming_tests(requirement_id)
-            if nodeid not in claimed
-        ]
+        unjudged += claimed_runs.notes.get(requirement_id, [])
         if failing:
             pytest.fail(f"{requirement_id} failed\n" + "\n".join(failing))
         if unjudged:
             pytest.skip(f"{requirement_id} not judged: " + "; ".join(unjudged))
-        if not claimed:
+        if not claimed and not unjudged:
             pytest.skip(f"{requirement_id} not judged: no test claims it")
 
     return judge
