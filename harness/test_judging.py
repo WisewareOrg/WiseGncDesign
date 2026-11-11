@@ -17,7 +17,7 @@ from wise_dynamics.sessions import (
     write_planned,
 )
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[1]
 GOOD = 0.9e-3
 BAD = 1.5e-3
 PLANNED = 10

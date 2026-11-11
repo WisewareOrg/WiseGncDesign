@@ -12,8 +12,8 @@ from matplotlib.figure import Figure
 from scipy.spatial.transform import Rotation
 from wise_dynamics.sessions import CaseResults
 
-from requirements_tree import limit, rungs
-from runs import read_run
+from harness.requirements_tree import limit, rungs
+from harness.runs import read_run
 
 
 def attitude_error_rad(sigma_truth_BN: np.ndarray, sigma_est_BN: np.ndarray) -> np.ndarray:

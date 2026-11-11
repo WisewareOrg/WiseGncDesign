@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 
 from gnc_cdh.basilisk import estimate_fields
-from requirements_tree import ROOT, items
+from harness.requirements_tree import ROOT, items
 
 
 def provides(*capability_ids: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:

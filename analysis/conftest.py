@@ -25,7 +25,7 @@ from wise_dynamics.sessions import (
     session_directory,
 )
 
-from requirements_tree import items, parents
+from harness.requirements_tree import items, parents
 
 
 @pytest.fixture

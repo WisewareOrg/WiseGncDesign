@@ -11,8 +11,8 @@ import pytest
 from matplotlib.figure import Figure
 from wise_dynamics.sessions import CaseResults
 
-from requirements_tree import limit, rungs
-from runs import read_run
+from harness.requirements_tree import limit, rungs
+from harness.runs import read_run
 
 
 def position_error_m(r_truth_N: np.ndarray, r_est_N: np.ndarray) -> np.ndarray:

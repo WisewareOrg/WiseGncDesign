@@ -6,7 +6,7 @@ It boots the dead reckoner on a WiseDynamics spacecraft.
 import doctest
 from pathlib import Path
 
-README = Path(__file__).resolve().parents[2] / "cdh" / "README.md"
+README = Path(__file__).resolve().parents[1] / "cdh" / "README.md"
 
 
 def test_the_readme_example_runs_as_written():

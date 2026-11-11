@@ -17,7 +17,7 @@
 """Missions: the IMU dead reckoner in low Earth orbit, on each vehicle."""
 
 from gnc_algorithms.imu_dead_reckoning import dead_reckoner
-from mission import Mission, mission_tests
+from harness.mission import Mission, mission_tests
 
 # %load_ext wise_dynamics.notebook
 
@@ -35,7 +35,7 @@ globals().update(mission_tests(*MISSIONS))
 
 
 # %% active="ipynb"
-# from judge import judge, plots
+# from harness.notebook import judge, plots
 #
 # judge()
 

@@ -25,7 +25,7 @@ from wise_dynamics.basilisk import ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from gnc_cdh.basilisk import AlgorithmModule
-from runs import read_run
+from harness.runs import read_run
 from test_attitude_knowledge import attitude_error_rad
 from test_position_knowledge import position_error_m
 from test_velocity_knowledge import velocity_error_m_s

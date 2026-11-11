@@ -11,8 +11,8 @@ import pytest
 from matplotlib.figure import Figure
 from wise_dynamics.sessions import CaseResults
 
-from requirements_tree import limit, rungs
-from runs import read_run
+from harness.requirements_tree import limit, rungs
+from harness.runs import read_run
 
 
 def velocity_error_m_s(v_truth_N: np.ndarray, v_est_N: np.ndarray) -> np.ndarray:

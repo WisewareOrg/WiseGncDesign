@@ -25,7 +25,7 @@ from wise_dynamics.basilisk import Scenario
 from gnc_algorithms.imu_dead_reckoning.gross_check import gross_check
 from gnc_algorithms.mrp import B, dcm_NB, shadow
 from gnc_cdh.basilisk import AlgorithmModule
-from mission import Mission, mission_tests, provides
+from harness.mission import Mission, mission_tests, provides
 
 __all__ = ["ImuDeadReckoner"]
 
@@ -363,7 +363,7 @@ globals().update(mission_tests(MISSION))
 
 # %% active="ipynb"
 # import matplotlib.pyplot as plt
-# from judge import judge, plots
+# from harness.notebook import judge, plots
 # from test_attitude_knowledge import attitude_error_rad
 # from test_position_knowledge import position_error_m
 # from test_velocity_knowledge import velocity_error_m_s

@@ -14,7 +14,7 @@ import pandas as pd
 from IPython.display import Image, display
 from wise_dynamics.sessions import read_pointer
 
-from requirements_tree import ROOT, items
+from harness.requirements_tree import ROOT, items
 
 
 def _report() -> Path:
