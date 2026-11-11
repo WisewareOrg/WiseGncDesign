@@ -19,11 +19,9 @@ lab:
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
     uv run --no-sync jupyter lab
 
-# Run the test suite in the `test` session, every Monte Carlo capped at two cases by `--ci`.
+# Run the test suite: every Monte Carlo capped at two cases, the notebooks run end to end.
 test *args:
-    uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
-    uv run --no-sync pytest --sim-session test
-    uv run --no-sync pytest --ci {{args}}
+    uv run --no-sync pytest {{args}}
 
 # Make `name` the active Monte Carlo session; with no name, list the sessions.
 session name="":
@@ -37,11 +35,6 @@ judge *args:
 reqs:
     uv run --locked --project docs/requirements check-reqs --root docs/requirements
 
-# Fly a notebook's Monte Carlo tests headless into the active session; extra arguments go to pytest.
+# Fly a notebook's Monte Carlo tests headless at full count into the active session; extra arguments go to pytest.
 fly notebook *args:
-    uv run --no-sync pytest {{notebook}} {{args}}
-
-# Run notebooks end to end in a kernel, two cases per flight, in the `smoke` session; with none named, every paired notebook. Outputs go to a temporary file, never the paired .ipynb.
-smoke *notebooks:
-    uv run --no-sync pytest --sim-session smoke
-    for nb in {{ if notebooks == "" { "$(grep -l '^#   jupytext:' algorithms/gnc_algorithms/*/*.py missions/*.py)" } else { notebooks } }}; do echo "smoke: $nb"; CI=1 JPY_SESSION_NAME="$PWD/$nb" uv run --no-sync jupytext --execute "$nb" -o "$(mktemp -d)/smoke.ipynb" > /dev/null || exit 1; done
+    uv run --no-sync pytest {{notebook}} --full-monte-carlo {{args}}

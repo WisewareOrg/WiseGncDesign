@@ -45,7 +45,7 @@ dev-mode-dirs = [".", "algorithms", "cdh", "analysis"]
 [tool.pytest.ini_options]
 testpaths = ["algorithms", "cdh", "harness", "missions"]
 strict_markers = true
-addopts = ["--import-mode=importlib", "-n", "auto", "-p", "pytester"]
+addopts = ["--import-mode=importlib", "-n", "auto", "--dist", "loadgroup", "-p", "pytester"]
 
 [tool.ruff]
 line-length = 100

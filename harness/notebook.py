@@ -3,19 +3,25 @@
 `judge()` runs the requirement analyzers in a subprocess, as `just judge` does, prints why any
 rung failed or was not judged and which folders it skipped, then shows one row per rung and one
 column per flight.
-`plots(<SRS ID>)` shows that rung's plot for each flight.
+`plots(<SRS ID>)` shows that rung's plot for each flight. `run_notebook` executes a notebook end to
+end in a kernel, as the test suite does.
 """
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pandas as pd
 from IPython.display import Image, display
+from jupyter_client.kernelspec import KernelSpecManager
 from wise_dynamics.sessions import current_session
 
 from harness import requirements_tree
+
+KERNEL = "wise-gnc-design"
 
 
 def _report() -> Path:
@@ -85,3 +91,31 @@ def plots(requirement_id: str) -> None:
     for path in sorted(_report().rglob(f"{requirement_id}.png")):
         print("/".join(path.parent.parts[-3:]))
         display(Image(filename=path))
+
+
+def run_notebook(path: Path) -> None:
+    """Execute a notebook end to end in the `wise-gnc-design` kernel, capped at two cases a flight.
+
+    The executed copy goes to a temporary directory, never beside the notebook. Cells that only
+    the notebook runs, such as those that judge and plot, run too.
+
+    Args:
+        path: the notebook's percent-format file.
+
+    Raises:
+        RuntimeError: the kernel is not registered, or a cell raised.
+    """
+    if KERNEL not in KernelSpecManager().find_kernel_specs():
+        raise RuntimeError(
+            f"the {KERNEL} kernel is not registered; run `just local` or `just pinned`"
+        )
+    with tempfile.TemporaryDirectory() as tmp:
+        result = subprocess.run(
+            [sys.executable, "-m", "jupytext", "--execute", str(path), "-o", f"{tmp}/run.ipynb"],
+            env={**os.environ, "JPY_SESSION_NAME": str(path), "WISE_DYNAMICS_CAPPED": "1"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if result.returncode:
+        raise RuntimeError(f"{path.name} failed:\n{result.stderr}")
