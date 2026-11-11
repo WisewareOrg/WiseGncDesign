@@ -1,57 +1,71 @@
-"""The requirement analyzers and their fixtures: cells, verdicts and the evidence they write.
+"""The judge: cells, verdicts and the evidence they write, from a session and a requirements tree.
 
-Each fake requirement keeps a real analyzer's code with p = 0.8, c = 0.5, X = 1e-3 in its units.
-Of 10 planned cases that allows one failure, as `allowed_failures(10, 0.8, 0.5)` gives.
+The tests write a requirements tree and a session in a pytester project, copy in the three real
+analyzers and judge it. Each rung has p = 0.8, c = 0.5 and x = 1e-3 in its units; of 10 planned
+cases that allows one failure, as `allowed_failures(10, 0.8, 0.5)` gives. SRS901 is the attitude
+rung, SRS902 the velocity rung and SRS903 the position rung, all under the capability SYS901 and
+all linked by the scenario TST901.
 """
 
 import json
-import re
+import math
 from pathlib import Path
 
 import h5py
 import numpy as np
 import pytest
-from wise_dynamics.sessions import (
-    crash_path,
-    run_path,
-    write_planned,
-)
+import yaml
+from wise_dynamics.sessions import crash_path, run_path, write_planned
 
 REPO = Path(__file__).resolve().parents[1]
 GOOD = 0.9e-3
 BAD = 1.5e-3
 PLANNED = 10
-MC = """\
-import pytest
+KINDS = {"attitude": "SRS901", "velocity": "SRS902", "position": "SRS903"}
+NODE = "missions/nb/Test_vehicle/test_fsw_alpha"
+NODEID = "missions/nb.py::Test_vehicle::test_fsw_alpha"
+ALL = {"scenario": "TST901", "capabilities": ["SYS901"], "rungs": None}
 
 
-@pytest.mark.verifies("SRS001")
-def test_tagged():
-    pass
+def write_item(root: Path, document: str, uid: str, **fields: object) -> None:
+    """Write one item of the tree.
+
+    Args:
+        root: the project root.
+        document: "sys", "srs" or "tst".
+        uid: the item's ID.
+        **fields: the item's fields beyond `active`.
+    """
+    folder = root / "docs" / "requirements" / document
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{uid}.yml").write_text(yaml.safe_dump({"active": True, "header": uid, **fields}))
 
 
-def test_untagged():
-    pass
-"""
-SIM_TEST = """\
-import numpy as np
-import pytest
+def write_tree(root: Path) -> None:
+    """Write the tree: one capability, the three rungs, one scenario linking them.
 
-
-@pytest.mark.verifies("SRS001")
-@pytest.mark.sim_runs(4)
-@pytest.mark.sim_duration_s(3)
-def test_tagged(sim_run_file):
-    est = np.zeros((5, 3))
-    est[2, 2] = np.tan(0.9e-3 / 4.0)
-    sim_run_file(
-        {
-            "t_s": (np.linspace(0.0, 1.0, 5), "s"),
-            "truth/sigma_BN": (np.zeros((5, 3)), "-"),
-            "est/sigma_BN": (est, "-"),
-        }
-    )
-"""
+    Args:
+        root: the project root.
+    """
+    write_item(root, "sys", "SYS901", links=[])
+    for name, uid in KINDS.items():
+        write_item(
+            root,
+            "srs",
+            uid,
+            links=[{"SYS901": "stamp"}],
+            references=[
+                {
+                    "path": f"analysis/test_{name}_knowledge.py",
+                    "keyword": f"def test_{name}_knowledge(",
+                    "type": "file",
+                }
+            ],
+            x=float(np.rad2deg(1e-3)) if name == "attitude" else 1e-3,
+            p=0.8,
+            c=0.5,
+        )
+    write_item(root, "tst", "TST901", links=[{uid: "stamp"} for uid in KINDS.values()])
 
 
 def write_run(path: Path, error: float, kind: str = "attitude") -> None:
@@ -76,57 +90,66 @@ def write_run(path: Path, error: float, kind: str = "attitude") -> None:
 
 
 def write_cases(
-    directory: Path,
+    session: Path,
     bad: tuple[int, ...] = (),
     crashed: tuple[int, ...] = (),
     missing: tuple[int, ...] = (),
-    test: str = "test_tagged",
-    kind: str = "attitude",
     nan: tuple[int, ...] = (),
+    kind: str = "attitude",
     planned: int = PLANNED,
-) -> None:
-    """Write a test's session folder.
+    node: str = NODE,
+    nodeid: str = NODEID,
+    flight: dict | None = ALL,
+) -> Path:
+    """Write a test's folder in a session, as a campaign leaves it.
 
     Args:
-        directory: the test's folder in a session.
+        session: the session's directory.
         bad: cases whose run exceeds the threshold.
         crashed: cases with a crash record and no run file.
         missing: cases with neither file.
-        test: the function the folder records.
-        kind: the error the runs carry, as `write_run` takes it.
         nan: cases whose error is NaN.
+        kind: the error the runs carry, as `write_run` takes it.
         planned: the planned case count.
+        node: the folder, relative to the session.
+        nodeid: the node ID recorded in the folder.
+        flight: the folder's `flight.json`, or None for none.
+
+    Returns:
+        The folder.
     """
-    write_planned(directory, planned, f"tests/test_mc.py::{test}")
+    directory = session / node
+    write_planned(directory, planned, nodeid)
+    if flight is not None:
+        (directory / "flight.json").write_text(json.dumps(flight))
     for case in range(planned):
         if case in missing:
             continue
         if case in crashed:
             crash_path(directory, case).write_text(json.dumps({"exception": "boom"}))
         else:
-            error = np.nan if case in nan else BAD if case in bad else GOOD
+            error = math.nan if case in nan else BAD if case in bad else GOOD
             write_run(run_path(directory, case), error, kind)
+    return directory
 
 
-def analyzer(name: str) -> str:
-    """A real analyzer's source with X = 1e-3, p = 0.8 and c = 0.5.
+def only(rung: str) -> dict:
+    """A flight judged on one rung of the capability.
 
     Args:
-        name: "attitude", "velocity" or "position".
+        rung: the SRS ID.
 
     Returns:
-        The source.
+        The `flight.json` content.
     """
-    source = (REPO / "analysis" / f"test_{name}_knowledge.py").read_text()
-    for constant, value in (("X", "1e-3"), ("P", "0.8"), ("C", "0.5")):
-        source, count = re.subn(rf"^{constant} = .*$", f"{constant} = {value}", source, flags=re.M)
-        assert count == 1, constant
-    return source
+    return {"scenario": "TST901", "capabilities": ["SYS901"], "rungs": [rung]}
 
 
 @pytest.fixture
 def project(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> pytest.Pytester:
-    """A project holding the requirement test with p = 0.8, c = 0.5 and an empty session.
+    """A project with the tree, the analyzers, an unimportable notebook and a session.
+
+    The notebook, `missions/nb.py`, records that it was imported and then raises.
 
     Args:
         pytester: the pytester fixture.
@@ -135,31 +158,62 @@ def project(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> pytes
     Returns:
         The pytester, rooted in the project.
     """
-    pytester.makefile(".ini", pytest="[pytest]\nmarkers =\n    verifies(*ids): a claim\n")
-    conftest = (REPO / "analysis" / "conftest.py").read_text()
-    pytester.makepyfile(
-        **{
-            "analysis/test_attitude_knowledge": analyzer("attitude"),
-            "analysis/conftest": conftest,
-            "tests/test_mc": MC,
-        }
+    monkeypatch.delenv("WISE_DYNAMICS_CAPPED", raising=False)
+    monkeypatch.setenv("COLUMNS", "400")
+    pytester.makefile(".ini", pytest="[pytest]\n")
+    files = {"analysis/conftest": "from harness.judging import *  # noqa: F403\n"}
+    for name in KINDS:
+        files[f"analysis/test_{name}_knowledge"] = (
+            REPO / "analysis" / f"test_{name}_knowledge.py"
+        ).read_text()
+    files["missions/nb"] = (
+        f'from pathlib import Path\nPath(r"{pytester.path}/imported").write_text("")\n'
+        'raise RuntimeError("the notebook was imported")\n'
     )
+    pytester.makepyfile(**files)
+    write_tree(pytester.path)
     (pytester.path / "monte_carlo").mkdir()
     (pytester.path / "monte_carlo" / "SESSION").write_text("s1\n")
-    monkeypatch.setenv("COLUMNS", "400")
     return pytester
 
 
-def judge(project: pytest.Pytester) -> pytest.RunResult:
-    """Run the requirement test in a subprocess.
+def session(project: pytest.Pytester, name: str = "s1") -> Path:
+    """A session's directory in the project.
 
     Args:
         project: the project.
+        name: the session.
+
+    Returns:
+        The directory.
+    """
+    return project.path / "monte_carlo" / name
+
+
+def judge(project: pytest.Pytester, *args: str) -> pytest.RunResult:
+    """Judge the project's analyzers in a subprocess.
+
+    Args:
+        project: the project.
+        *args: more pytest arguments.
 
     Returns:
         The result.
     """
-    return project.runpytest_subprocess("analysis", "-rs", "-p", "no:xdist")
+    return project.runpytest_subprocess("analysis", "-rs", "-p", "no:xdist", *args)
+
+
+def cell_matrix(project: pytest.Pytester, name: str = "s1") -> str:
+    """The matrix the judge wrote for the test `NODE`.
+
+    Args:
+        project: the project.
+        name: the session.
+
+    Returns:
+        Its text.
+    """
+    return (session(project, name) / "report" / NODE / "matrix.md").read_text()
 
 
 def test_allowed_failures_matches_the_known_values(project: pytest.Pytester) -> None:
@@ -190,17 +244,17 @@ def test_rule(allowed_failures, n, p, c, expected):
 
 
 def test_failures_within_the_allowance_pass(project: pytest.Pytester) -> None:
-    """One failure of ten is allowed and the requirement passes.
+    """One failure of ten is allowed and the rung passes; nothing was skipped.
 
     Args:
         project: the project.
     """
-    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged"
-    write_cases(directory, bad=(3,))
+    write_cases(session(project), bad=(3,), flight=only("SRS901"))
 
-    judge(project).assert_outcomes(passed=1)
-    test_matrix = directory.parents[1] / "report" / "test_mc" / "test_tagged" / "matrix.md"
-    assert "| SRS001 | pass | 1/10/10 | 1 | 3 |" in test_matrix.read_text()
+    judge(project).assert_outcomes(passed=1, skipped=2)
+
+    assert "| SRS901 | pass | 1/10/10 | 1 | 3 |" in cell_matrix(project)
+    assert "## Skipped folders" not in (session(project) / "report" / "matrix.md").read_text()
 
 
 def test_a_crash_counts_as_a_failed_case(project: pytest.Pytester) -> None:
@@ -209,97 +263,81 @@ def test_a_crash_counts_as_a_failed_case(project: pytest.Pytester) -> None:
     Args:
         project: the project.
     """
-    write_cases(
-        project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged", bad=(3,), crashed=(5,)
-    )
+    write_cases(session(project), bad=(3,), crashed=(5,), flight=only("SRS901"))
 
     result = judge(project)
 
-    result.assert_outcomes(failed=1)
-    result.stdout.fnmatch_lines(["*tests/test_mc.py::test_tagged: 2 failed, 1 allowed*"])
-    test_matrix = project.path / "monte_carlo" / "s1" / "report" / "test_mc" / "test_tagged"
-    assert (
-        "| SRS001 | fail | 2/10/10 | 1 | 3, 5 (crash) |" in (test_matrix / "matrix.md").read_text()
-    )
+    result.assert_outcomes(failed=1, skipped=2)
+    result.stdout.fnmatch_lines([f"*{NODEID}: 2 failed, 1 allowed*"])
+    assert "| SRS901 | fail | 2/10/10 | 1 | 3, 5 (crash) |" in cell_matrix(project)
 
 
-def test_failures_over_the_allowance_fail_and_name_the_cases(project: pytest.Pytester) -> None:
-    """The requirement fails with a rerun command per failing case; both matrices record it.
+def test_failures_over_the_allowance_fail_name_the_cases_and_how_to_rerun_them(
+    project: pytest.Pytester,
+) -> None:
+    """The rung fails with a rerun command per failing case, each carrying `--full-monte-carlo`.
 
     Args:
         project: the project.
     """
-    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged"
-    write_cases(directory, bad=(2, 7))
+    write_cases(session(project), bad=(2, 7), flight=only("SRS901"))
 
     result = judge(project)
 
-    result.assert_outcomes(failed=1)
+    result.assert_outcomes(failed=1, skipped=2)
     result.stdout.fnmatch_lines(
         [
-            '*case 2: uv run --no-sync pytest "tests/test_mc.py::test_tagged[[]2[]]" -n 0*',
-            '*case 7: uv run --no-sync pytest "tests/test_mc.py::test_tagged[[]7[]]" -n 0*',
+            f'*case 2: uv run --no-sync pytest "{NODEID}[[]2[]]"*--full-monte-carlo*',
+            f'*case 7: uv run --no-sync pytest "{NODEID}[[]7[]]"*--full-monte-carlo*',
         ]
     )
-    report = project.path / "monte_carlo" / "s1" / "report"
-    test_matrix = (report / "test_mc" / "test_tagged" / "matrix.md").read_text()
-    assert "| SRS001 | fail | 2/10/10 | 1 | 2, 7 |\n" in test_matrix
-    rollup = (report / "matrix.md").read_text()
-    assert "| SRS001 | [fail, 2 of 1 allowed](test_mc/test_tagged/SRS001.png) | fail |" in rollup
+    assert "| SRS901 | fail | 2/10/10 | 1 | 2, 7 |\n" in cell_matrix(project)
+    rollup = (session(project) / "report" / "matrix.md").read_text()
+    assert f"| SRS901 | [fail, 2 of 1 allowed]({NODE}/SRS901.png) | fail |" in rollup
 
 
-def test_a_missing_case_leaves_the_requirement_not_judged(project: pytest.Pytester) -> None:
-    """A case with neither run nor crash skips the requirement, naming the missing case.
+def test_a_flight_whose_runs_all_crashed_fails(project: pytest.Pytester) -> None:
+    """Ten crashes are ten failed cases and are counted as ten found.
 
     Args:
         project: the project.
     """
-    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged"
-    write_cases(directory, bad=(2, 7), missing=(4,))
+    write_cases(session(project), crashed=tuple(range(PLANNED)), flight=only("SRS901"))
 
     result = judge(project)
 
-    result.assert_outcomes(skipped=1)
-    result.stdout.fnmatch_lines(["*::test_tagged: missing cases [[]4[]]*"])
+    result.assert_outcomes(failed=1, skipped=2)
+    assert "| SRS901 | fail | 10/10/10 | 1 |" in cell_matrix(project)
 
 
-def test_an_untagged_test_is_not_judged(project: pytest.Pytester) -> None:
-    """A test without the mark is no cell, so nothing claims the requirement.
+def test_a_missing_case_leaves_the_rung_not_judged(project: pytest.Pytester) -> None:
+    """A case with neither run nor crash skips the rung, naming the missing case.
 
     Args:
         project: the project.
     """
-    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "test_untagged"
-    write_cases(directory, bad=(2, 7), test="test_untagged")
+    write_cases(session(project), bad=(2, 7), missing=(4,), flight=only("SRS901"))
 
     result = judge(project)
 
-    result.assert_outcomes(skipped=1)
-    result.stdout.fnmatch_lines(["*no test claims it*"])
-    assert not (directory.parents[1] / "report" / "test_mc" / "test_untagged").exists()
+    result.assert_outcomes(skipped=3)
+    result.stdout.fnmatch_lines(["*::test_fsw_alpha: missing cases [[]4[]]*"])
 
 
-@pytest.mark.parametrize(("name", "requirement"), [("velocity", "SRS002"), ("position", "SRS003")])
-def test_each_analyzer_judges_its_own_error(
-    project: pytest.Pytester, name: str, requirement: str
-) -> None:
-    """The velocity and position analyzers read their own datasets and fail runs over X.
+@pytest.mark.parametrize("kind", ["velocity", "position"])
+def test_each_analyzer_judges_its_own_error(project: pytest.Pytester, kind: str) -> None:
+    """The velocity and position analyzers read their own datasets and fail runs over x.
 
     Args:
         project: the project.
-        name: the analyzer, and the kind of error its runs carry.
-        requirement: the analyzer's requirement.
+        kind: the analyzer, and the kind of error its runs carry.
     """
-    (project.path / "analysis" / "test_attitude_knowledge.py").unlink()
-    (project.path / "analysis" / f"test_{name}_knowledge.py").write_text(analyzer(name))
-    (project.path / "tests" / "test_mc.py").write_text(MC.replace("SRS001", requirement, 1))
-    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged"
-    write_cases(directory, bad=(2, 7), kind=name)
+    write_cases(session(project), bad=(2, 7), kind=kind, flight=only(KINDS[kind]))
 
     result = judge(project)
 
-    result.assert_outcomes(failed=1)
-    result.stdout.fnmatch_lines(["*tests/test_mc.py::test_tagged: 2 failed, 1 allowed*"])
+    result.assert_outcomes(failed=1, skipped=2)
+    result.stdout.fnmatch_lines([f"*{NODEID}: 2 failed, 1 allowed*"])
 
 
 def test_a_nan_error_counts_as_a_failed_case(project: pytest.Pytester) -> None:
@@ -308,105 +346,157 @@ def test_a_nan_error_counts_as_a_failed_case(project: pytest.Pytester) -> None:
     Args:
         project: the project.
     """
-    (project.path / "analysis" / "test_attitude_knowledge.py").unlink()
-    (project.path / "analysis" / "test_velocity_knowledge.py").write_text(analyzer("velocity"))
-    (project.path / "tests" / "test_mc.py").write_text(MC.replace("SRS001", "SRS002", 1))
-    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged"
-    write_cases(directory, bad=(2,), nan=(5,), kind="velocity")
+    write_cases(session(project), bad=(2,), nan=(5,), kind="velocity", flight=only("SRS902"))
 
     result = judge(project)
 
-    result.assert_outcomes(failed=1)
-    test_matrix = directory.parents[1] / "report" / "test_mc" / "test_tagged" / "matrix.md"
-    assert "| SRS002 | fail | 2/10/10 | 1 | 2, 5 |" in test_matrix.read_text()
+    result.assert_outcomes(failed=1, skipped=2)
+    assert "| SRS902 | fail | 2/10/10 | 1 | 2, 5 |" in cell_matrix(project)
 
 
-def test_too_few_planned_cases_leave_the_requirement_not_judged(project: pytest.Pytester) -> None:
+def test_too_few_planned_cases_leave_the_rung_not_judged(project: pytest.Pytester) -> None:
     """Three cases cannot show p = 0.8 at c = 0.5 even with no failure.
 
     Args:
         project: the project.
     """
-    write_cases(project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged", planned=3)
+    write_cases(session(project), planned=3, flight=only("SRS901"))
 
     result = judge(project)
 
-    result.assert_outcomes(skipped=1)
-    result.stdout.fnmatch_lines(["*test_tagged: 3 cases cannot show p=0.8 at c=0.5*"])
+    result.assert_outcomes(skipped=3)
+    result.stdout.fnmatch_lines(["*test_fsw_alpha: 3 cases cannot show p=0.8 at c=0.5*"])
 
 
-def test_a_class_claims_through_its_base_when_it_has_marks_of_its_own(
-    project: pytest.Pytester,
-) -> None:
-    """A test class inherits its base class's `verifies` alongside a mark of its own.
+def test_a_flight_judges_only_the_rungs_its_filter_names(project: pytest.Pytester) -> None:
+    """A flight filtered to the velocity rung gives no cell to the attitude rung, whose runs fail.
 
     Args:
         project: the project.
     """
-    (project.path / "tests" / "test_mc.py").write_text(
-        "import pytest\n\n\n"
-        '@pytest.mark.verifies("SRS001")\nclass Base:\n    pass\n\n\n'
-        '@pytest.mark.verifies("SRS999")\nclass TestSub(Base):\n'
-        "    def test_case(self):\n        pass\n"
-    )
-    directory = project.path / "monte_carlo" / "s1" / "test_mc" / "TestSub" / "test_case"
-    write_cases(directory, test="TestSub::test_case")
+    write_cases(session(project), bad=(1, 2, 3), flight=only("SRS902"))
 
-    judge(project).assert_outcomes(passed=1)
+    result = judge(project)
+
+    result.assert_outcomes(passed=1, skipped=2)
+    result.stdout.fnmatch_lines(["*SRS901 not judged: no test claims it*"])
+    matrix = cell_matrix(project)
+    assert "| SRS902 | pass |" in matrix
+    assert "SRS901" not in matrix
 
 
-def test_requirements_judged_on_separate_workers_share_the_matrix(
-    project: pytest.Pytester,
-) -> None:
+def test_rungs_judged_on_separate_workers_share_the_matrix(project: pytest.Pytester) -> None:
     """Each analyzer's cells reach `matrix.md` when xdist spreads the analyzers over workers.
 
     Args:
         project: the project.
     """
-    for name in ("velocity", "position"):
-        analyzer = f"test_{name}_knowledge.py"
-        (project.path / "analysis" / analyzer).write_text(
-            (REPO / "analysis" / analyzer).read_text()
-        )
-    claim_all = MC.replace('"SRS001"', '"SRS001", "SRS002", "SRS003"', 1)
-    (project.path / "tests" / "test_mc.py").write_text(claim_all)
-    write_cases(project.path / "monte_carlo" / "s1" / "test_mc" / "test_tagged")
+    write_cases(session(project))
 
-    project.runpytest_subprocess("analysis", "-n", "3").assert_outcomes(passed=1, skipped=2)
+    project.runpytest_subprocess("analysis", "-n", "3").assert_outcomes(passed=3)
 
-    matrix = (project.path / "monte_carlo" / "s1" / "report" / "matrix.md").read_text()
-    assert [row.split(" | ")[0] for row in matrix.splitlines()[2:]] == [
-        "| SRS001",
-        "| SRS002",
-        "| SRS003",
+    matrix = (session(project) / "report" / "matrix.md").read_text()
+    assert [row.split(" | ")[0] for row in matrix.splitlines()[2:5]] == [
+        "| SRS901",
+        "| SRS902",
+        "| SRS903",
     ]
 
 
-def test_a_session_written_by_the_wise_dynamics_plugin_passes(project: pytest.Pytester) -> None:
-    """A real `sim_` test's session is found and judged, and the evidence is written.
-
-    Four planned cases are the fewest that can show p = 0.8 at c = 0.5.
+def test_a_stale_report_is_removed_before_judging(project: pytest.Pytester) -> None:
+    """A cell from an earlier judging does not survive into this one's matrices.
 
     Args:
         project: the project.
     """
-    (project.path / "tests" / "test_mc.py").write_text(SIM_TEST)
-    out = ("-o", "sim_out=monte_carlo")
-    project.runpytest_subprocess("--sim-session", "s1", *out)
-    project.runpytest_subprocess("tests/test_mc.py", *out, "-n", "0").assert_outcomes(passed=4)
-
-    judge(project).assert_outcomes(passed=1)
-
-    report = project.path / "monte_carlo" / "s1" / "report"
-    assert (
-        (report / "tests" / "test_mc" / "test_tagged" / "SRS001.png")
-        .read_bytes()
-        .startswith(b"\x89PNG")
+    stale = session(project) / "report" / "missions" / "old" / "Test_vehicle" / "test_old"
+    stale.mkdir(parents=True)
+    (stale / "SRS901.json").write_text(
+        json.dumps(
+            {
+                "requirement": "SRS901",
+                "verdict": "fail",
+                "failed": 9,
+                "found": 10,
+                "planned": 10,
+                "allowed": 1,
+                "failed_cases": "1",
+            }
+        )
     )
-    test_matrix = (report / "tests" / "test_mc" / "test_tagged" / "matrix.md").read_text()
-    assert "| SRS001 | pass | 0/4/4 | 0 |  |" in test_matrix
-    rollup = (report / "matrix.md").read_text()
-    assert "[test_tagged](tests/test_mc/test_tagged/matrix.md)" in rollup
-    assert (
-        "| SRS001 | [pass, 0 of 0 allowed](tests/test_mc/test_tagged/SRS001.png) | pass |" in rollup
+    write_cases(session(project), flight=only("SRS901"))
+
+    judge(project).assert_outcomes(passed=1, skipped=2)
+
+    assert not stale.exists()
+    assert "test_old" not in (session(project) / "report" / "matrix.md").read_text()
+
+
+def test_a_notebook_that_raises_on_import_is_still_judged(project: pytest.Pytester) -> None:
+    """The judge reads the flight's facts from its folder and never imports the notebook.
+
+    Args:
+        project: the project.
+    """
+    write_cases(session(project), flight=only("SRS901"))
+
+    judge(project).assert_outcomes(passed=1, skipped=2)
+
+    assert not (project.path / "imported").exists()
+
+
+def test_folders_without_a_flight_or_a_test_file_are_skipped_and_listed(
+    project: pytest.Pytester,
+) -> None:
+    """The rest are judged; each skipped folder is listed under "Skipped folders" with its reason.
+
+    Args:
+        project: the project.
+    """
+    root = session(project)
+    write_cases(root, flight=only("SRS901"))
+    write_cases(
+        root,
+        node="missions/nb/Test_vehicle/test_unflown",
+        nodeid="missions/nb.py::Test_vehicle::test_unflown",
+        flight=None,
     )
+    write_cases(
+        root,
+        node="missions/gone/Test_vehicle/test_fsw_beta",
+        nodeid="missions/gone.py::Test_vehicle::test_fsw_beta",
+        flight=only("SRS901"),
+    )
+
+    judge(project).assert_outcomes(passed=1, skipped=2)
+
+    matrix = (root / "report" / "matrix.md").read_text()
+    head, heading, listing = matrix.partition("## Skipped folders")
+    assert "| SRS901 |" in head
+    assert heading
+    assert sorted(line for line in listing.splitlines() if line.strip()) == [
+        "- missions/gone/Test_vehicle/test_fsw_beta: test file gone",
+        "- missions/nb/Test_vehicle/test_unflown: no flight.json",
+    ]
+
+
+def test_capped_runs_are_judged_in_scratch_and_leave_the_active_session_alone(
+    project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the capped variable set the judge reads `scratch`, not the session the pointer names.
+
+    Args:
+        project: the project.
+        monkeypatch: the monkeypatch fixture.
+    """
+    monkeypatch.setenv("WISE_DYNAMICS_CAPPED", "1")
+    write_cases(session(project, "scratch"), bad=(3,), planned=2, flight=only("SRS901"))
+    kept = session(project) / "report"
+    kept.mkdir(parents=True)
+    (kept / "matrix.md").write_text("the active session's rollup\n")
+
+    judge(project).assert_outcomes(passed=1, skipped=2)
+
+    assert "| SRS901 | " in cell_matrix(project, "scratch")
+    assert (kept / "matrix.md").read_text() == "the active session's rollup\n"
+    assert [path.name for path in kept.iterdir()] == ["matrix.md"]
