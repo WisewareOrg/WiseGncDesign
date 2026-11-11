@@ -310,18 +310,19 @@ def test_a_flight_whose_runs_all_crashed_fails(project: pytest.Pytester) -> None
     assert "| SRS901 | fail | 10/10/10 | 1 |" in cell_matrix(project)
 
 
-def test_a_missing_case_leaves_the_rung_not_judged(project: pytest.Pytester) -> None:
-    """A case with neither run nor crash skips the rung, naming the missing case.
+def test_a_missing_case_is_not_counted_and_the_found_cases_are_judged(
+    project: pytest.Pytester,
+) -> None:
+    """An interrupted campaign is judged on the runs found: n counts runs and crash records only.
+
+    Four of five planned cases finished, all within x, and four runs show p = 0.8 at c = 0.5.
 
     Args:
         project: the project.
     """
-    write_cases(session(project), bad=(2, 7), missing=(4,), flight=only("SRS901"))
+    write_cases(session(project), missing=(4,), planned=5, flight=only("SRS901"))
 
-    result = judge(project)
-
-    result.assert_outcomes(skipped=3)
-    result.stdout.fnmatch_lines(["*::test_fsw_alpha: missing cases [[]4[]]*"])
+    judge(project).assert_outcomes(passed=1, skipped=2)
 
 
 @pytest.mark.parametrize("kind", ["velocity", "position"])
@@ -354,13 +355,13 @@ def test_a_nan_error_counts_as_a_failed_case(project: pytest.Pytester) -> None:
     assert "| SRS902 | fail | 2/10/10 | 1 | 2, 5 |" in cell_matrix(project)
 
 
-def test_too_few_planned_cases_leave_the_rung_not_judged(project: pytest.Pytester) -> None:
-    """Three cases cannot show p = 0.8 at c = 0.5 even with no failure.
+def test_too_few_cases_found_leave_the_rung_not_judged(project: pytest.Pytester) -> None:
+    """Three runs found cannot show p = 0.8 at c = 0.5 even with no failure, whatever was planned.
 
     Args:
         project: the project.
     """
-    write_cases(session(project), planned=3, flight=only("SRS901"))
+    write_cases(session(project), missing=(3, 4), planned=5, flight=only("SRS901"))
 
     result = judge(project)
 
