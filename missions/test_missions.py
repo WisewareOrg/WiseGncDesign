@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from harness.notebook import run_notebook
+
 NOTEBOOKS = sorted(
     path for path in Path(__file__).parent.glob("*.py") if not path.name.startswith("test_")
 )
@@ -18,6 +20,4 @@ def test_a_mission_notebook_runs_end_to_end(notebook: Path) -> None:
     Args:
         notebook: the mission notebook's percent-format file.
     """
-    from harness.notebook import run_notebook
-
     run_notebook(notebook)

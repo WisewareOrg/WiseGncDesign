@@ -3,6 +3,9 @@
 from pathlib import Path
 
 import pytest
+from jupyter_client.kernelspec import KernelSpecManager
+
+from harness.notebook import run_notebook
 
 CELLS = """\
 # %%
@@ -20,8 +23,6 @@ def test_a_notebook_whose_cells_all_run_passes(tmp_path: Path) -> None:
     Args:
         tmp_path: the test's directory.
     """
-    from harness.notebook import run_notebook
-
     notebook = tmp_path / "ok.py"
     notebook.write_text(CELLS.format(body="assert x == 1"))
 
@@ -35,8 +36,6 @@ def test_an_error_in_a_notebook_only_cell_fails_the_run(tmp_path: Path) -> None:
     Args:
         tmp_path: the test's directory.
     """
-    from harness.notebook import run_notebook
-
     notebook = tmp_path / "seeded.py"
     notebook.write_text(CELLS.format(body='raise RuntimeError("seeded")'))
 
@@ -51,8 +50,6 @@ def test_the_run_is_capped_and_names_the_notebook_as_its_session(tmp_path: Path)
     Args:
         tmp_path: the test's directory.
     """
-    from harness.notebook import run_notebook
-
     notebook = tmp_path / "env.py"
     body = (
         'import os; assert os.environ["WISE_DYNAMICS_CAPPED"] == "1"; '
@@ -72,10 +69,6 @@ def test_an_unregistered_kernel_fails_the_run_naming_the_fix(
         tmp_path: the test's directory.
         monkeypatch: the monkeypatch fixture.
     """
-    from jupyter_client.kernelspec import KernelSpecManager
-
-    from harness.notebook import run_notebook
-
     monkeypatch.setattr(KernelSpecManager, "find_kernel_specs", lambda self: {})
     notebook = tmp_path / "ok.py"
     notebook.write_text(CELLS.format(body="assert x == 1"))

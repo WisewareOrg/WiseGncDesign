@@ -18,6 +18,7 @@ import yaml
 from wise_dynamics.sessions import crash_path, run_path, write_planned
 
 from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+from harness import notebook, requirements_tree
 
 REPO = Path(__file__).resolve().parents[1]
 GOOD = 0.9e-3
@@ -525,8 +526,6 @@ def test_the_notebook_judge_returns_the_matrix_lists_skipped_folders_and_plots_t
         monkeypatch: the monkeypatch fixture.
         capsys: the capture fixture.
     """
-    from harness import notebook, requirements_tree
-
     root = session(project)
     write_cases(root, bad=(3,), flight=only("SRS901"))
     write_cases(
@@ -570,8 +569,6 @@ def test_a_flown_mission_is_judged_end_to_end(
         project: the project.
         monkeypatch: the monkeypatch fixture.
     """
-    from harness import requirements_tree
-
     assert dead_reckoner.provides
     monkeypatch.setattr(requirements_tree, "ROOT", project.path)
     root = project.path
@@ -628,3 +625,21 @@ globals().update(
         assert (
             (session(project) / "report" / node / f"{uid}.png").read_bytes().startswith(b"\x89PNG")
         )
+
+
+def test_the_notebook_judge_raises_when_the_analysis_run_itself_fails(
+    project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An analyzer that cannot be collected is an error, not a stale or empty matrix.
+
+    Args:
+        project: the project.
+        monkeypatch: the monkeypatch fixture.
+    """
+    write_cases(session(project), flight=only("SRS901"))
+    (project.path / "analysis" / "test_attitude_knowledge.py").write_text("def broken(:\n")
+    monkeypatch.chdir(project.path)
+    monkeypatch.setattr(requirements_tree, "ROOT", project.path)
+
+    with pytest.raises(RuntimeError, match=r"judging failed \(2\)"):
+        notebook.judge()

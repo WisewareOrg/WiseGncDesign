@@ -12,6 +12,7 @@ from scipy.spatial.transform import Rotation
 from gnc_algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
 from gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
 from gnc_algorithms.mrp import dcm_NB
+from harness.notebook import run_notebook
 
 _IDENTITY = np.eye(3)
 # The tests' IMU mounting [PB]: the platform frame is the body frame.
@@ -164,6 +165,4 @@ def test_a_nan_error_is_a_violation():
 @pytest.mark.xdist_group("notebooks")
 def test_the_notebook_runs_end_to_end() -> None:
     """Every cell of the algorithm notebook runs, the notebook-only cells included."""
-    from harness.notebook import run_notebook
-
     run_notebook(Path(__file__).with_name("imu_dead_reckoning.py"))

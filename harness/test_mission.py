@@ -507,6 +507,29 @@ globals().update(
     result.stdout.fnmatch_lines(["*Test_imu_spacecraft::test_fsw_alpha*"])
 
 
+def test_a_scenario_file_that_raised_on_import_is_imported_afresh_once_fixed(
+    tree: Path,
+) -> None:
+    """A failed import leaves nothing registered, so the lookup after the fix succeeds.
+
+    Args:
+        tree: the tree.
+    """
+    scenarios = tree / "scenarios"
+    scenarios.mkdir()
+    (scenarios / "alpha.py").write_text('raise RuntimeError("alpha is broken")\n')
+    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901",))
+
+    with pytest.raises(RuntimeError, match="alpha is broken"):
+        mission_tests(mission)
+
+    (scenarios / "alpha.py").write_text(ALPHA.format(duration=1.0))
+    [vehicle_class] = mission_tests(mission).values()
+    assert [name for name in vars(vehicle_class) if name.startswith("test_")] == [
+        "test_build_alpha"
+    ]
+
+
 def test_flying_a_scenario_before_defining_it_is_an_error(project: pytest.Pytester) -> None:
     """A file whose missions come before the definition they reference fails, naming it.
 
