@@ -17,3 +17,5 @@ attributes:
   - rationale
   - verification-method
   - verification-justification
+  - scenario
+  - runs

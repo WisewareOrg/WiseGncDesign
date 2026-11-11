@@ -1,22 +1,19 @@
-"""SRS001, attitude knowledge: the worst attitude error stays within X in a share p of runs.
+"""Attitude knowledge: the worst attitude error over a run stays within x in a share p of runs.
 
-ID's limits X, p and c are read from its item in the Doorstop tree.
+Judges every SRS rung in the requirements tree that references this file, each with its own
+x (degrees), p and c.
 """
 
 from collections.abc import Callable
 
 import numpy as np
+import pytest
 from matplotlib.figure import Figure
 from scipy.spatial.transform import Rotation
 from wise_dynamics.sessions import CaseResults
 
-from limits import limit
+from requirements_tree import limit, rungs
 from runs import read_run
-
-ID = "SRS001"
-X = limit(ID, "x")  # rad
-P = limit(ID, "p")
-C = limit(ID, "c")
 
 
 def attitude_error_rad(sigma_truth_BN: np.ndarray, sigma_est_BN: np.ndarray) -> np.ndarray:
@@ -33,17 +30,22 @@ def attitude_error_rad(sigma_truth_BN: np.ndarray, sigma_est_BN: np.ndarray) -> 
     return (truth * estimate.inv()).magnitude()
 
 
+@pytest.mark.parametrize("requirement_id", rungs(__file__))
 def test_attitude_knowledge(
-    claimed_runs: Callable[[str], dict[str, CaseResults]], verdict: Callable[..., None]
+    requirement_id: str,
+    claimed_runs: Callable[[str], dict[str, CaseResults]],
+    verdict: Callable[..., None],
 ) -> None:
     """Find the worst attitude error of every claiming run, plot them, and judge the requirement.
 
     Args:
+        requirement_id: the rung judged.
         claimed_runs: the results of the tests claiming an ID.
         verdict: judges the requirement from each run's number and saves the plots.
     """
+    x = np.deg2rad(limit(requirement_id, "x"))
     worst, figures = {}, {}
-    for nodeid, results in claimed_runs(ID).items():
+    for nodeid, results in claimed_runs(requirement_id).items():
         worst[nodeid] = {}
         for case, path in results.runs.items():
             run = read_run(path)
@@ -52,12 +54,19 @@ def test_attitude_knowledge(
         figure = Figure(layout="constrained")
         axes = figure.subplots()
         axes.hist(list(worst[nodeid].values()), bins=30)
-        axes.axvline(X, color="k", linestyle="--", label="X")
+        axes.axvline(x, color="k", linestyle="--", label="X")
         axes.set(
             xlabel="worst attitude error (rad)",
             ylabel="runs",
-            title=f"{ID}: {nodeid.rsplit('::', 1)[-1]}",
+            title=f"{requirement_id}: {nodeid.rsplit('::', 1)[-1]}",
         )
         axes.legend()
         figures[nodeid] = figure
-    verdict(ID, worst, figures, x=X, p=P, c=C)
+    verdict(
+        requirement_id,
+        worst,
+        figures,
+        x=x,
+        p=limit(requirement_id, "p"),
+        c=limit(requirement_id, "c"),
+    )

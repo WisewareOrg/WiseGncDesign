@@ -1,25 +1,27 @@
 active: true
 derived: false
 header: |
-  400 km campaign: attitude
+  Scenario: leo400
 level: 1.2
 links:
 - SRS001: null
+- SRS002: null
+- SRS003: null
+- SRS004: null
+- SRS005: null
 normative: true
 rationale: ''
 ref: ''
 references:
-- keyword: def test_imu_dead_reckoning_leo400_case(
-  path: algorithms/gnc_algorithms/imu_dead_reckoning.py
+- path: tests/scenarios/test_scenarios.py
   type: file
-- keyword: def test_attitude_knowledge(
-  path: analysis/test_attitude_knowledge.py
-  type: file
+runs: 460
+scenario: leo400
 status: proposed
 text: |
-  The dead reckoner's Monte Carlo campaign on the 400 km orbit is judged by the attitude knowledge
-  analyzer as one cell.
+  Each capability above the linked requirements boots in the leo400 scenario and runs for the
+  scenario's default duration, once per dispersed case.
 verification-justification: |
-  Settles that this campaign's runs meet the parent's limits for the dead reckoner. Leaves unproven
-  any other algorithm, orbit or dispersion set.
+  Settles each linked requirement for each capability over this scenario's dispersions and
+  duration. Leaves unproven any other scenario, and any rung needing more cases than it flies.
 verification-method: test

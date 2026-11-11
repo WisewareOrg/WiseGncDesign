@@ -1,20 +1,23 @@
 active: true
 derived: false
 header: |
-  Spike: notional LEO navigation knowledge
+  Dead reckoning from gyro and accelerometer
 level: 1
 links: []
 normative: true
 rationale: |
-  Spike placeholder. A notional LEO mission that needs the spacecraft to know where it is and how it
-  is oriented; it exists so the three knowledge requirements have a parent while Doorstop is tried
-  out. No real mission stands behind it.
+  Spike: the IMU dead reckoner as a capability, so its performance ladder has a parent. The
+  reference names the function that builds this capability's flight software.
 ref: ''
+references:
+- keyword: def dead_reckoner(
+  path: algorithms/gnc_algorithms/imu_dead_reckoning.py
+  type: file
 status: proposed
 text: |
-  The spacecraft shall know its attitude, velocity and position well enough for a notional LEO
-  mission.
+  The flight software shall estimate attitude, velocity and position by dead reckoning from gyro
+  and accelerometer measurements alone.
 verification-justification: |
-  Settled by its children's Monte Carlo judgements. What no check settles is whether their limits
-  are what a LEO mission needs; they are placeholders.
+  Settled by its children, each judged over the scenarios linked to it. No check settles that the
+  ladder's rungs are the interesting ones.
 verification-method: test

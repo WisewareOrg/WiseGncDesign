@@ -1,23 +1,28 @@
 active: true
-c: 0.9
+c: 0.95
 derived: false
 header: |
-  Velocity knowledge
+  Attitude knowledge: 5 deg at p 0.99, c 0.95
 level: 1.2
 links:
 - SYS001: null
 normative: true
 p: 0.99
 rationale: |
-  Spike placeholder: x, p and c are the crawl's placeholder limits, moved here from the analyzer.
+  Spike: one rung of the capability's ladder. Rungs are set to bracket the capability, so some are
+  expected to fail.
 ref: ''
+references:
+- keyword: def test_attitude_knowledge(
+  path: analysis/test_attitude_knowledge.py
+  type: file
 status: proposed
 text: |
-  Over the whole of every dispersed run, the velocity knowledge error shall stay within x m/s in at
+  Over the whole of every dispersed run, the attitude knowledge error shall stay within x degrees in at
   least a share p of runs, demonstrated at confidence c.
 verification-justification: |
   Judged from the worst error over each run, sampled at the flight software's 1 Hz, over the
-  dispersions the scenario models and its default duration. It does not establish the error between
-  samples, beyond the run's duration, or under errors the scenario does not disperse.
+  dispersions each scenario models and its duration. It does not establish the error between
+  samples, beyond the run's duration, or under errors no scenario disperses.
 verification-method: test
 x: 5.0

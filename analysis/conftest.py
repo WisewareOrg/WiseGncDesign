@@ -6,10 +6,7 @@ report, under the same path as the test's runs in the session. The matrices are 
 cells once the run ends, so analyzers on separate xdist workers do not overwrite one another.
 """
 
-import functools
-import importlib.util
 import json
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -24,53 +21,40 @@ from wise_dynamics.sessions import (
     session_directory,
 )
 
+from requirements_tree import claiming_tests
+
 
 @pytest.fixture
 def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, CaseResults]]:
-    """A lookup of the active session's results by the requirement ID a test claims.
+    """A lookup of the active session's results for the scenario tests that judge a rung.
 
-    A test claims an ID with `@pytest.mark.verifies("<ID>")` on its module, its function, or its
-    class or any base class of it.
+    The requirements tree decides which tests those are: one generated test per scenario linked to
+    the rung, flying the rung's capability. A test the session has no runs of is left out; the
+    verdict reports it as never run.
 
     Args:
         request: the pytest request.
 
     Returns:
-        A function mapping an ID to each claiming test's results by node ID.
+        A function mapping an SRS ID to each of its tests' results by node ID.
     """
     session = session_directory(request.config)
 
-    @functools.cache
     def lookup(requirement_id: str) -> dict[str, CaseResults]:
-        """Each claiming test's results by node ID.
+        """Each of the rung's tests' results, for the tests the session has run.
 
         Args:
-            requirement_id: the ID the tests claim.
+            requirement_id: the SRS ID.
 
         Returns:
             The results by node ID.
         """
-        found = {}
-        for recorded in recorded_tests(session):
-            file, *names = recorded.nodeid.split("::")
-            path = Path(request.config.rootpath) / file
-            name = f"_monte_carlo_{path.stem}"
-            spec = importlib.util.spec_from_file_location(name, path)
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[name] = module
-            spec.loader.exec_module(module)
-            chain = [module]
-            for attribute in names:
-                chain.append(getattr(chain[-1], attribute))
-            for node in chain:
-                owners = node.__mro__ if isinstance(node, type) else [node]
-                for owner in owners:
-                    marks = vars(owner).get("pytestmark", [])
-                    marks = marks if isinstance(marks, list) else [marks]
-                    for mark in marks:
-                        if mark.name == "verifies" and requirement_id in mark.args:
-                            found[recorded.nodeid] = read_test_results(recorded.directory)
-        return found
+        recorded = {test.nodeid: test.directory for test in recorded_tests(session)}
+        return {
+            nodeid: read_test_results(recorded[nodeid])
+            for nodeid in claiming_tests(requirement_id)
+            if nodeid in recorded
+        }
 
     return lookup
 
@@ -194,6 +178,11 @@ def verdict(
                 ),
             }
             (folder / f"{requirement_id}.json").write_text(json.dumps(record))
+        unjudged += [
+            f"{nodeid}: never run in this session"
+            for nodeid in claiming_tests(requirement_id)
+            if nodeid not in claimed
+        ]
         if failing:
             pytest.fail(f"{requirement_id} failed\n" + "\n".join(failing))
         if unjudged:
