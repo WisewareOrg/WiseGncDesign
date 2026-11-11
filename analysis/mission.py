@@ -56,8 +56,7 @@ class Mission:
 
     Attributes:
         name: an identifier, used in the generated tests' names.
-        vehicle: the vehicle class every scenario must fly. Scenarios build their own vehicle
-            today, so this is checked against the scenario rather than chosen.
+        vehicle: the vehicle every scenario flies, by its name in WiseDynamics' `VEHICLES`.
         fsw: builds the flight software for one case from its dispersed scenario, and claims its
             capabilities with `provides`.
         rungs: the SRS items to judge.
@@ -74,11 +73,15 @@ class Mission:
         """Check every name against the requirements tree.
 
         Raises:
-            ValueError: a name is not an identifier, the FSW claims nothing, or a rung or
-                scenario is not in the tree.
+            ValueError: a name is not an identifier, the vehicle is unknown, the FSW claims
+                nothing, or a rung or scenario is not in the tree.
         """
+        from wise_dynamics.basilisk.vehicles import VEHICLES
+
         if not re.fullmatch(r"[a-z][a-z0-9_]*", self.name):
             raise ValueError(f"mission name {self.name!r} is not a lowercase identifier")
+        if self.vehicle not in VEHICLES:
+            raise ValueError(f"no vehicle {self.vehicle!r}; known: {sorted(VEHICLES)}")
         if not getattr(self.fsw, "provides", None):
             raise ValueError(f"{self.fsw.__name__} claims no capability; mark it with provides")
         for prefix, chosen in (("SRS", self.rungs), ("TST", self.scenarios)):
@@ -130,6 +133,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
 
     @pytest.mark.sim_runs(scenario["runs"])
     @pytest.mark.sim_scenario(scenario["scenario"])
+    @pytest.mark.sim_vehicle(mission.vehicle)
     def test(sim_scenario: Any, sim_duration_s: float, sim_run_file: Callable[..., Path]) -> None:
         """One case of the mission in the scenario writes its run file.
 
@@ -138,8 +142,6 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_duration_s: s, the case's simulated duration.
             sim_run_file: writes the case's run file.
         """
-        flown = type(sim_scenario.vehicle).__name__
-        assert flown == mission.vehicle, f"the scenario flies a {flown}, not a {mission.vehicle}"
         fsw = mission.fsw(sim_scenario)
         fields = sys.modules[mission.fsw.__module__].estimate_fields(fsw)
         datasets = sim_scenario.run(fsw, fields, duration_s=sim_duration_s)
@@ -148,6 +150,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             {
                 "versions_wise_gnc_design": version("wise-gnc-design"),
                 "mission": mission.name,
+                "vehicle": mission.vehicle,
                 "scenario_item": scenario_id,
                 "capabilities": ",".join(mission.fsw.provides),
             },

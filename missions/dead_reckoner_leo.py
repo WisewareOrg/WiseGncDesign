@@ -27,7 +27,7 @@ from mission import Mission, mission_tests
 
 MISSION = Mission(
     name="dead_reckoner_leo",
-    vehicle="ImuSpacecraft",
+    vehicle="imu_spacecraft",
     fsw=dead_reckoner,
     rungs=("SRS001", "SRS002", "SRS003", "SRS004", "SRS005"),
     scenarios=("TST001", "TST002"),
