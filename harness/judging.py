@@ -64,7 +64,7 @@ def _flight(directory: Path) -> dict | None:
     return json.loads(path.read_text()) if path.is_file() else None
 
 
-def _skipped(session: Path, rootpath: Path) -> dict[str, str]:
+def skipped_folders(session: Path, rootpath: Path) -> dict[str, str]:
     """The recorded folders the judge cannot judge, each with why.
 
     Args:
@@ -101,7 +101,7 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
     """
     session = session_directory(request.config)
     rootpath = Path(request.config.rootpath)
-    skipped = _skipped(session, rootpath)
+    skipped = skipped_folders(session, rootpath)
 
     @functools.cache
     def lookup(requirement_id: str) -> dict[str, CaseResults]:
@@ -305,7 +305,7 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
             shown.append(f"[{text}]({test}/{requirement}.png)")
         rows.append(f"| {requirement} | {' | '.join(shown)} | {overall} |")
     text = "\n".join(rows) + "\n"
-    if skipped := _skipped(report.parent, Path(session.config.rootpath)):
+    if skipped := skipped_folders(report.parent, Path(session.config.rootpath)):
         listing = [f"- {folder}: {reason}" for folder, reason in sorted(skipped.items())]
         text += "\n## Skipped folders\n\n" + "\n".join(listing) + "\n"
     (report / "matrix.md").write_text(text)

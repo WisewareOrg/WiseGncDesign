@@ -20,6 +20,7 @@ from jupyter_client.kernelspec import KernelSpecManager
 from wise_dynamics.sessions import current_session
 
 from harness import requirements_tree
+from harness.judging import skipped_folders
 
 KERNEL = "wise-gnc-design"
 
@@ -55,6 +56,9 @@ def judge() -> pd.DataFrame:
 
     Returns:
         The matrix.
+
+    Raises:
+        RuntimeError: pytest failed for a reason other than a failing or unjudged rung.
     """
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "analysis", "-q", "-rfEs", "-p", "no:cacheprovider"],
@@ -63,13 +67,14 @@ def judge() -> pd.DataFrame:
         text=True,
         check=False,
     )
+    if result.returncode not in (0, 1, 5):
+        raise RuntimeError(f"judging failed ({result.returncode}):\n{result.stdout}{result.stderr}")
     summary = result.stdout.partition("short test summary info")[2].splitlines()[1:]
     print("\n".join(summary) if summary else result.stdout.strip() or result.stderr)
-    matrix = _report() / "matrix.md"
-    if matrix.is_file():
-        skipped = matrix.read_text().partition("## Skipped folders")[2].strip()
-        if skipped:
-            print("Skipped folders:\n" + skipped)
+    skipped = skipped_folders(current_session(), requirements_tree.ROOT)
+    if skipped:
+        print("Skipped folders:")
+        print("\n".join(f"- {folder}: {reason}" for folder, reason in sorted(skipped.items())))
     headers = {uid: item["header"].strip() for uid, item in requirements_tree.items("SRS").items()}
     rows: dict[str, dict[str, str]] = {}
     for (flight, uid), cell in _cells().items():

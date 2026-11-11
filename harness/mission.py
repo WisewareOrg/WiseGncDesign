@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from wise_dynamics.basilisk.vehicles import VEHICLES
 
 from gnc_cdh.basilisk import estimate_fields
 from harness import requirements_tree
@@ -80,11 +81,9 @@ class Mission:
 
         Raises:
             ValueError: the vehicle is unknown, the FSW claims nothing, a rung or scenario is not
-                in the tree, a scenario leaves the FSW no rung to judge, or a rung is reached by
-                none of the scenarios.
+                in the tree, a scenario leaves the FSW no rung to judge, a rung is reached by none
+                of the scenarios, or the rungs leave a scenario nothing to judge.
         """
-        from wise_dynamics.basilisk.vehicles import VEHICLES
-
         if self.vehicle not in VEHICLES:
             raise ValueError(f"no vehicle {self.vehicle!r}; known: {sorted(VEHICLES)}")
         if not getattr(self.fsw, "provides", None):
@@ -105,6 +104,9 @@ class Mission:
         outside = sorted(set(self.rungs or ()) - reached)
         if outside:
             raise ValueError(f"no scenario of {self.scenarios} reaches the rungs {outside}")
+        for scenario_id in self.scenarios:
+            if not requirements_tree.flight_rungs(scenario_id, self.fsw.provides, self.rungs):
+                raise ValueError(f"the rungs {self.rungs} leave {scenario_id} nothing to judge")
 
     def but(self, **changes: Any) -> "Mission":
         """This mission with some fields changed.
@@ -248,6 +250,8 @@ def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[
     Raises:
         ValueError: the file references a definition it has not yet defined, because a mission
             flying it comes first.
+        BaseException: the file raised while importing; it is then not left registered, so a
+            later lookup imports it afresh.
     """
     reference = dict(reference)
     path = (root / reference["path"]).resolve()
@@ -265,5 +269,9 @@ def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[
     spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        del sys.modules[module_name]
+        raise
     return getattr(module, name)
