@@ -7,6 +7,9 @@ globals: a class per vehicle, holding a test per FSW and scenario, so each fligh
 folder of their own.
 """
 
+import functools
+import importlib.util
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -16,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from requirements_tree import items
+from requirements_tree import ROOT, items
 
 
 def provides(*capability_ids: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -131,7 +134,9 @@ def mission_tests(*missions: Mission) -> dict[str, type]:
 def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """The Monte Carlo test flying a mission through one scenario.
 
-    The FSW's module provides `estimate_fields`, which names what to record.
+    The TST item's reference names the scenario's definition, whose `sim_` marks say how it is
+    flown; the test carries them and the mission's vehicle. The FSW's module provides
+    `estimate_fields`, which names what to record.
 
     Args:
         mission: the mission.
@@ -140,10 +145,8 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     Returns:
         The test, carrying `mission` and `scenario_id` for the judge.
     """
-    scenario = items("TST")[scenario_id]
+    definition = _definition(tuple(items("TST")[scenario_id]["references"][0].items()))
 
-    @pytest.mark.sim_runs(scenario["runs"])
-    @pytest.mark.sim_scenario(scenario["scenario"])
     @pytest.mark.sim_vehicle(mission.vehicle)
     def test(
         self: object, sim_scenario: Any, sim_duration_s: float, sim_run_file: Callable[..., Path]
@@ -169,7 +172,27 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             },
         )
 
-    test.__name__ = f"test_{mission.fsw.__name__}_{scenario['scenario']}"
+    test.pytestmark = [*test.pytestmark, *definition.pytestmark]
+    test.__name__ = f"test_{mission.fsw.__name__}_{definition.__name__}"
     test.mission = mission
     test.scenario_id = scenario_id
     return test
+
+
+@functools.cache
+def _definition(reference: tuple[tuple[str, str], ...] | dict[str, str]) -> Callable[..., None]:
+    """The scenario definition a TST item's reference names.
+
+    Args:
+        reference: the reference, its `path` relative to the repository and its `keyword`, the
+            line `def <name>(` declaring the definition.
+
+    Returns:
+        The definition, whose `pytestmark` holds its `sim_` marks.
+    """
+    reference = dict(reference)
+    path = ROOT / reference["path"]
+    spec = importlib.util.spec_from_file_location(f"_scenarios_{path.stem}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, re.match(r"def (\w+)\(", reference["keyword"]).group(1))

@@ -267,7 +267,7 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
                     f"{cell['planned']} | {cell['allowed']} | {cell['failed_cases']} |"
                 )
         (report / test / "matrix.md").write_text("\n".join(rows) + "\n")
-    links = [f"[{test.rsplit('/', 1)[-1]}]({test}/matrix.md)" for test in tests]
+    links = [f"[{'/'.join(test.split('/')[-2:])}]({test}/matrix.md)" for test in tests]
     rows = [f"| Requirement | {' | '.join(links)} | Verdict |", "|---" * (len(tests) + 2) + "|"]
     for requirement in requirements:
         row = [cells.get((test, requirement)) for test in tests]

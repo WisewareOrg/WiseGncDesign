@@ -13,14 +13,13 @@ normative: true
 rationale: ''
 ref: ''
 references:
-- path: analysis/mission.py
+- keyword: def leo400(
+  path: analysis/scenarios.py
   type: file
-runs: 460
-scenario: leo400
 status: proposed
 text: |
-  A mission's FSW boots in the leo400 scenario on the mission's vehicle and runs for the scenario's
-  default duration, once per dispersed case.
+  A mission's FSW boots in the leo400 scenario on the mission's vehicle and runs for 5700 s, once
+  per dispersed case.
 verification-justification: |
   Settles each linked rung, for each mission flying it, over this scenario's dispersions and
   duration. Leaves unproven any other scenario, and any rung needing more cases than it flies.

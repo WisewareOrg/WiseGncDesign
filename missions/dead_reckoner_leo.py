@@ -36,3 +36,18 @@ MISSIONS = [BASE, BASE.but(vehicle="heavy_imu_spacecraft")]
 # %%
 # %%monte_carlo
 globals().update(mission_tests(*MISSIONS))
+
+
+# %% active="ipynb"
+# from judge import judge, plots
+#
+# judge()
+
+# %% active="ipynb"
+# plots("SRS001")
+
+# %% active="ipynb"
+# from wise_dynamics.notebook import load_runs
+#
+# runs = load_runs(Test_heavy_imu_spacecraft.test_dead_reckoner_leo500)
+# len(runs), runs[0]["attrs"]["vehicle"], runs[0]["datasets"]["truth/sigma_BN"][0].shape
