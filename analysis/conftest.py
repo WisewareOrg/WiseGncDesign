@@ -77,8 +77,10 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
         capabilities = set(parents(items("SRS")[requirement_id]))
         found, notes = {}, []
         for recorded in recorded_tests(session):
-            file, name = recorded.nodeid.split("::")[:2]
-            test = getattr(module(file), name, None)
+            file, *names = recorded.nodeid.split("::")
+            test = module(file)
+            for name in names:
+                test = getattr(test, name, None)
             mission = getattr(test, "mission", None)
             if mission is None or requirement_id not in mission.rungs:
                 continue

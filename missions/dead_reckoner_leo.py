@@ -10,29 +10,29 @@
 # ---
 
 # %% [markdown]
-# # Mission: the dead reckoner in low Earth orbit
+# # Missions: the dead reckoner in low Earth orbit, on each vehicle
 #
-# The IMU dead reckoner on the IMU spacecraft, flown through the 500 km and 400 km scenarios and
-# judged on the attitude ladder and the velocity and position rungs. The FSW brings its own
-# capability claims; this mission chooses the vehicle, the rungs and the scenarios. Pick a session
-# with `just session <name>`, run the `%%monte_carlo` cell, then `just judge`.
+# The IMU dead reckoner flown through the 500 km and 400 km scenarios on the IMU spacecraft and on
+# the heavy stand-in, and judged on the attitude ladder and the velocity and position rungs. The FSW
+# brings its own capability claims; each mission chooses the vehicle, the rungs and the scenarios.
+# Pick a session with `just session <name>`, run the `%%monte_carlo` cell, then `just judge`.
 
 # %%
-"""Mission: the IMU dead reckoner in low Earth orbit."""
+"""Missions: the IMU dead reckoner in low Earth orbit, on each vehicle."""
 
 from gnc_algorithms.imu_dead_reckoning import dead_reckoner
 from mission import Mission, mission_tests
 
 # %load_ext wise_dynamics.notebook
 
-MISSION = Mission(
-    name="dead_reckoner_leo",
+BASE = Mission(
     vehicle="imu_spacecraft",
     fsw=dead_reckoner,
     rungs=("SRS001", "SRS002", "SRS003", "SRS004", "SRS005"),
     scenarios=("TST001", "TST002"),
 )
+MISSIONS = [BASE, BASE.but(vehicle="heavy_imu_spacecraft")]
 
 # %%
 # %%monte_carlo
-globals().update(mission_tests(MISSION))
+globals().update(mission_tests(*MISSIONS))
