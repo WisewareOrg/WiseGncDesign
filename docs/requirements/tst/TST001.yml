@@ -1,0 +1,25 @@
+active: true
+derived: false
+header: |
+  500 km campaign: attitude
+level: 1.1
+links:
+- SRS001: null
+normative: true
+rationale: ''
+ref: ''
+references:
+- keyword: def test_imu_dead_reckoning_case(
+  path: algorithms/gnc_algorithms/imu_dead_reckoning.py
+  type: file
+- keyword: def test_attitude_knowledge(
+  path: analysis/test_attitude_knowledge.py
+  type: file
+status: proposed
+text: |
+  The dead reckoner's Monte Carlo campaign on the 500 km orbit is judged by the attitude knowledge
+  analyzer as one cell.
+verification-justification: |
+  Settles that this campaign's runs meet the parent's limits for the dead reckoner. Leaves unproven
+  any other algorithm, orbit or dispersion set.
+verification-method: test

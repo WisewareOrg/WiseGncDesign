@@ -1,0 +1,23 @@
+active: true
+c: 0.9
+derived: false
+header: |
+  Velocity knowledge
+level: 1.2
+links:
+- SYS001: null
+normative: true
+p: 0.99
+rationale: |
+  Spike placeholder: x, p and c are the crawl's placeholder limits, moved here from the analyzer.
+ref: ''
+status: proposed
+text: |
+  Over the whole of every dispersed run, the velocity knowledge error shall stay within x m/s in at
+  least a share p of runs, demonstrated at confidence c.
+verification-justification: |
+  Judged from the worst error over each run, sampled at the flight software's 1 Hz, over the
+  dispersions the scenario models and its default duration. It does not establish the error between
+  samples, beyond the run's duration, or under errors the scenario does not disperse.
+verification-method: test
+x: 5.0

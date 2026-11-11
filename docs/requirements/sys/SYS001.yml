@@ -1,0 +1,20 @@
+active: true
+derived: false
+header: |
+  Spike: notional LEO navigation knowledge
+level: 1
+links: []
+normative: true
+rationale: |
+  Spike placeholder. A notional LEO mission that needs the spacecraft to know where it is and how it
+  is oriented; it exists so the three knowledge requirements have a parent while Doorstop is tried
+  out. No real mission stands behind it.
+ref: ''
+status: proposed
+text: |
+  The spacecraft shall know its attitude, velocity and position well enough for a notional LEO
+  mission.
+verification-justification: |
+  Settled by its children's Monte Carlo judgements. What no check settles is whether their limits
+  are what a LEO mission needs; they are placeholders.
+verification-method: test

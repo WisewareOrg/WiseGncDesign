@@ -31,3 +31,7 @@ session name="":
 # Judge the active session against the requirement analyzers.
 judge *args:
     uv run --no-sync pytest analysis {{args}}
+
+# Check the Doorstop requirements tree with wise-ci's check-reqs.
+reqs:
+    uv run --locked --project docs/requirements check-reqs --root docs/requirements

@@ -1,0 +1,25 @@
+active: true
+derived: false
+header: |
+  500 km campaign: velocity
+level: 1.3
+links:
+- SRS002: null
+normative: true
+rationale: ''
+ref: ''
+references:
+- keyword: def test_imu_dead_reckoning_case(
+  path: algorithms/gnc_algorithms/imu_dead_reckoning.py
+  type: file
+- keyword: def test_velocity_knowledge(
+  path: analysis/test_velocity_knowledge.py
+  type: file
+status: proposed
+text: |
+  The dead reckoner's Monte Carlo campaign on the 500 km orbit is judged by the velocity knowledge
+  analyzer as one cell.
+verification-justification: |
+  Settles that this campaign's runs meet the parent's limits for the dead reckoner. Leaves unproven
+  any other algorithm, orbit or dispersion set.
+verification-method: test

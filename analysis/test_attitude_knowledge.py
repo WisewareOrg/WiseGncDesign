@@ -1,4 +1,7 @@
-"""SRS001, attitude knowledge: the worst attitude error stays within X in a share p of runs."""
+"""SRS001, attitude knowledge: the worst attitude error stays within X in a share p of runs.
+
+ID's limits X, p and c are read from its item in the Doorstop tree.
+"""
 
 from collections.abc import Callable
 
@@ -7,12 +10,13 @@ from matplotlib.figure import Figure
 from scipy.spatial.transform import Rotation
 from wise_dynamics.sessions import CaseResults
 
+from limits import limit
 from runs import read_run
 
-ID = "SRS001"  # placeholder
-X = 1  # placeholder, rad
-P = 0.99  # placeholder
-C = 0.90  # placeholder
+ID = "SRS001"
+X = limit(ID, "x")  # rad
+P = limit(ID, "p")
+C = limit(ID, "c")
 
 
 def attitude_error_rad(sigma_truth_BN: np.ndarray, sigma_est_BN: np.ndarray) -> np.ndarray:

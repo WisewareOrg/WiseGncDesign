@@ -1,4 +1,7 @@
-"""SRS002, velocity knowledge: the worst velocity error stays within X in a share p of runs."""
+"""SRS002, velocity knowledge: the worst velocity error stays within X in a share p of runs.
+
+ID's limits X, p and c are read from its item in the Doorstop tree.
+"""
 
 from collections.abc import Callable
 
@@ -6,12 +9,13 @@ import numpy as np
 from matplotlib.figure import Figure
 from wise_dynamics.sessions import CaseResults
 
+from limits import limit
 from runs import read_run
 
-ID = "SRS002"  # placeholder
-X = 5  # placeholder, m/s
-P = 0.99  # placeholder
-C = 0.90  # placeholder
+ID = "SRS002"
+X = limit(ID, "x")  # m/s
+P = limit(ID, "p")
+C = limit(ID, "c")
 
 
 def velocity_error_m_s(v_truth_N: np.ndarray, v_est_N: np.ndarray) -> np.ndarray:

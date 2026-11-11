@@ -1,0 +1,19 @@
+settings:
+  digits: 3
+  itemformat: yaml
+  parent: SRS
+  prefix: TST
+  sep: ''
+extensions:
+  item_sha_required: true
+  item_validator: .req_sha_item_validator.py
+attributes:
+  defaults:
+    status: proposed
+    verification-method: ''
+    verification-justification: ''
+    rationale: ''
+  reviewed:
+  - rationale
+  - verification-method
+  - verification-justification

@@ -1,0 +1,19 @@
+settings:
+  digits: 3
+  itemformat: yaml
+  parent: SYS
+  prefix: SRS
+  sep: ''
+attributes:
+  defaults:
+    status: proposed
+    verification-method: ''
+    verification-justification: ''
+    rationale: ''
+  reviewed:
+  - rationale
+  - verification-method
+  - verification-justification
+  - x
+  - p
+  - c

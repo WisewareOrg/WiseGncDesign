@@ -1,4 +1,7 @@
-"""SRS003, position knowledge: the worst position error stays within X in a share p of runs."""
+"""SRS003, position knowledge: the worst position error stays within X in a share p of runs.
+
+ID's limits X, p and c are read from its item in the Doorstop tree.
+"""
 
 from collections.abc import Callable
 
@@ -6,12 +9,13 @@ import numpy as np
 from matplotlib.figure import Figure
 from wise_dynamics.sessions import CaseResults
 
+from limits import limit
 from runs import read_run
 
-ID = "SRS003"  # placeholder
-X = 5000  # placeholder, m
-P = 0.99  # placeholder
-C = 0.90  # placeholder
+ID = "SRS003"
+X = limit(ID, "x")  # m
+P = limit(ID, "p")
+C = limit(ID, "c")
 
 
 def position_error_m(r_truth_N: np.ndarray, r_est_N: np.ndarray) -> np.ndarray:
