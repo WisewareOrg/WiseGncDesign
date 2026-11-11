@@ -119,19 +119,21 @@ def test_the_tree_functions_read_the_default_root_when_called(tree: Path) -> Non
     assert sorted(requirements_tree.items("SYS")) == ["SYS901", "SYS902"]
 
 
-def test_the_tree_functions_take_a_root(
-    tree: Path, tmp_path_factory: pytest.TempPathFactory
+def test_the_tree_functions_follow_the_root_when_it_is_reassigned(
+    tree: Path, tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An explicit `root` overrides the default.
+    """Reassigning the module's `ROOT` points the tree functions at another project.
 
     Args:
         tree: the tree the default reads.
         tmp_path_factory: makes a second project.
+        monkeypatch: the monkeypatch fixture.
     """
     other = tmp_path_factory.mktemp("other")
     _write_item(other, "sys", "SYS777", [])
+    monkeypatch.setattr(requirements_tree, "ROOT", other)
 
-    assert sorted(requirements_tree.items("SYS", root=other)) == ["SYS777"]
+    assert sorted(requirements_tree.items("SYS")) == ["SYS777"]
 
 
 def test_a_flight_judges_the_scenarios_rungs_under_the_capabilities_claimed(tree: Path) -> None:
@@ -160,12 +162,15 @@ def test_the_filter_narrows_a_flights_rungs(tree: Path) -> None:
     )
 
 
-def test_flight_rungs_takes_a_root(tree: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
-    """The tree is read from `root` when it is given.
+def test_flight_rungs_reads_the_root_it_holds_when_called(
+    tree: Path, tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The tree is read from the module's `ROOT` as it stands at the call.
 
     Args:
         tree: the tree the default reads.
         tmp_path_factory: makes a second project.
+        monkeypatch: the monkeypatch fixture.
     """
     other = tmp_path_factory.mktemp("other")
     write_tree(other)
@@ -173,8 +178,9 @@ def test_flight_rungs_takes_a_root(tree: Path, tmp_path_factory: pytest.TempPath
         yaml.safe_dump({"active": True, "links": [{"SRS904": "stamp"}]})
     )
 
-    assert requirements_tree.flight_rungs("TST901", ["SYS901"], root=other) == ("SRS904",)
     assert requirements_tree.flight_rungs("TST901", ["SYS901"]) == ("SRS901", "SRS902")
+    monkeypatch.setattr(requirements_tree, "ROOT", other)
+    assert requirements_tree.flight_rungs("TST901", ["SYS901"]) == ("SRS904",)
 
 
 def test_a_mission_has_no_rung_filter_by_default(tree: Path) -> None:
@@ -208,17 +214,25 @@ def test_a_flight_with_no_rungs_is_refused(tree: Path) -> None:
         Mission(VEHICLE, claiming("SYS902"), ("TST902",))
 
 
-def test_a_filter_answered_by_one_of_two_scenarios_is_accepted(tree: Path) -> None:
-    """SRS901 is linked by TST901 only; the filter is checked against both scenarios together.
-
-    TST902's flight is emptied by the filter and is allowed.
+def test_a_filter_that_empties_one_scenarios_flight_is_refused_naming_it(tree: Path) -> None:
+    """SRS901 is linked by TST901 only, so the filter leaves TST902 with no rung to judge.
 
     Args:
         tree: the tree.
     """
-    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901", "TST902"), rungs=("SRS901",))
+    with pytest.raises(ValueError, match="TST902"):
+        Mission(VEHICLE, claiming("SYS901"), ("TST901", "TST902"), rungs=("SRS901",))
 
-    assert mission.rungs == ("SRS901",)
+
+def test_a_filter_answered_by_every_scenarios_flight_is_accepted(tree: Path) -> None:
+    """SRS902 is linked by both TST901 and TST902, so each flight keeps a rung under the filter.
+
+    Args:
+        tree: the tree.
+    """
+    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901", "TST902"), rungs=("SRS902",))
+
+    assert mission.rungs == ("SRS902",)
 
 
 def test_an_fsw_claiming_nothing_one_scenario_links_is_refused_naming_it(tree: Path) -> None:
