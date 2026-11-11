@@ -7,12 +7,12 @@ _sync:
 local: _sync
     uv pip install -e "${WISE_DYNAMICS_PATH:-../WiseDynamics}[notebook]"
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
-    uv run --no-sync jupytext --sync algorithms/gnc_algorithms/*.py
+    uv run --no-sync jupytext --sync $(grep -l '^#   jupytext:' algorithms/gnc_algorithms/*/*.py missions/*.py)
 
 # Install the WiseDynamics commit in uv.lock and print the one in use.
 pinned: _sync
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
-    uv run --no-sync jupytext --sync algorithms/gnc_algorithms/*.py
+    uv run --no-sync jupytext --sync $(grep -l '^#   jupytext:' algorithms/gnc_algorithms/*/*.py missions/*.py)
 
 # Open JupyterLab in this environment.
 lab:
@@ -44,4 +44,4 @@ fly notebook *args:
 # Run notebooks end to end in a kernel, two cases per flight, in the `smoke` session; with none named, every paired notebook. Outputs go to a temporary file, never the paired .ipynb.
 smoke *notebooks:
     uv run --no-sync pytest --sim-session smoke
-    for nb in {{ if notebooks == "" { "$(grep -l '^#   jupytext:' algorithms/gnc_algorithms/*.py missions/*.py)" } else { notebooks } }}; do echo "smoke: $nb"; CI=1 JPY_SESSION_NAME="$PWD/$nb" uv run --no-sync jupytext --execute "$nb" -o "$(mktemp -d)/smoke.ipynb" > /dev/null || exit 1; done
+    for nb in {{ if notebooks == "" { "$(grep -l '^#   jupytext:' algorithms/gnc_algorithms/*/*.py missions/*.py)" } else { notebooks } }}; do echo "smoke: $nb"; CI=1 JPY_SESSION_NAME="$PWD/$nb" uv run --no-sync jupytext --execute "$nb" -o "$(mktemp -d)/smoke.ipynb" > /dev/null || exit 1; done

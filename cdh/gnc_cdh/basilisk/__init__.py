@@ -4,5 +4,6 @@
 """
 
 from gnc_cdh.basilisk.algorithm_module import STANDARD_MESSAGES, AlgorithmModule
+from gnc_cdh.basilisk.fields import UNITS, estimate_fields
 
-__all__ = ["STANDARD_MESSAGES", "AlgorithmModule"]
+__all__ = ["STANDARD_MESSAGES", "UNITS", "AlgorithmModule", "estimate_fields"]

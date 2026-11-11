@@ -44,7 +44,7 @@ dev-mode-dirs = ["algorithms", "cdh", "analysis"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "algorithms"]
-python_files = ["test_*.py", "*/gnc_algorithms/*.py"]
+python_files = ["test_*.py", "*/gnc_algorithms/*.py", "*/gnc_algorithms/*/*.py"]
 strict_markers = true
 addopts = ["--import-mode=importlib", "-n", "auto", "-p", "pytester"]
 

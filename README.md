@@ -18,8 +18,8 @@ It has three parts:
 
 ## Development
 
-Each algorithm is one notebook, `algorithms/gnc_algorithms/<name>.py`: a jupytext percent-format
-module whose import loads the simulator stack and runs nothing, and whose tests pytest collects.
+Each algorithm is a package, `algorithms/gnc_algorithms/<name>/`, around one notebook,
+`<name>.py`: a jupytext percent-format module whose import loads the simulator stack and runs nothing, and whose tests pytest collects.
 The suite needs the simulator installed, from `just pinned` (the WiseDynamics commit in `uv.lock`)
 or `just local` (an editable checkout at `$WISE_DYNAMICS_PATH`, default `../WiseDynamics`).
 
@@ -47,7 +47,8 @@ own matrix and plots. The reasoning is in [ADR 0001 rev 1](docs/decisions/0001-j
 Setup creates an `.ipynb` beside each algorithm `.py`. To run an algorithm's proof, open the
 `.ipynb` in VS Code or JupyterLab on the `WiseGncDesign` kernel, save it, and run its
 `%%monte_carlo` cell. The cell after it, which runs in the notebook only, plots the runs, which
-land in `monte_carlo/`. The IMU dead reckoner is `algorithms/gnc_algorithms/imu_dead_reckoning.py`.
+land in `monte_carlo/`. The IMU dead reckoner is `algorithms/gnc_algorithms/imu_dead_reckoning/imu_dead_reckoning.py`,
+beside its `gross_check.py` and tests.
 
 CI (`.github/workflows/checks.yml`) runs, from the repository root:
 

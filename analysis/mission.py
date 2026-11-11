@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from gnc_cdh.basilisk import estimate_fields
 from requirements_tree import ROOT, items
 
 
@@ -138,8 +139,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """The Monte Carlo test flying a mission through one scenario.
 
     The TST item's reference names the scenario's definition, whose `sim_` marks say how it is
-    flown; the test carries them and the mission's vehicle. The FSW's module provides
-    `estimate_fields`, which names what to record.
+    flown; the test carries them and the mission's vehicle.
 
     Args:
         mission: the mission.
@@ -163,8 +163,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_run_file: writes the case's run file.
         """
         fsw = mission.fsw(sim_scenario)
-        fields = sys.modules[mission.fsw.__module__].estimate_fields(fsw)
-        datasets = sim_scenario.run(fsw, fields, duration_s=sim_duration_s)
+        datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
         path = sim_run_file(
             datasets,
             {
