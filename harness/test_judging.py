@@ -9,6 +9,7 @@ all linked by the scenario TST901.
 
 import json
 import math
+from collections.abc import Callable
 from pathlib import Path
 
 import h5py
@@ -17,7 +18,6 @@ import pytest
 import yaml
 from wise_dynamics.sessions import crash_path, run_path, write_planned
 
-from gnc_algorithms.imu_dead_reckoning import dead_reckoner
 from harness import notebook, requirements_tree
 
 REPO = Path(__file__).resolve().parents[1]
@@ -555,22 +555,19 @@ def test_the_notebook_judge_returns_the_matrix_lists_skipped_folders_and_plots_t
 
 
 def test_a_flown_mission_is_judged_end_to_end(
-    project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+    project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
     """A mission flown through the real plugin leaves a session the real judge reads.
 
     The flight's `flight.json` and run files come from the simulator's own writers, so a key or
     dataset the writer and the judge disagree on makes this fail. Four cases are the fewest that
     show p = 0.8 at c = 0.5, and each rung's x is set far above the dead reckoner's error so the
-    verdict rests on the agreement alone. The dead reckoner is imported at the top of this file,
-    under the repository's tree, because it loads the analyzers that read that tree.
+    verdict rests on the agreement alone.
 
     Args:
         project: the project.
-        monkeypatch: the monkeypatch fixture.
+        fly_in_a_subprocess: runs the project in a subprocess.
     """
-    assert dead_reckoner.provides
-    monkeypatch.setattr(requirements_tree, "ROOT", project.path)
     root = project.path
     for uid in KINDS.values():
         item = root / "docs" / "requirements" / "srs" / f"{uid}.yml"
@@ -608,9 +605,7 @@ globals().update(
 """
     )
 
-    project.runpytest_inprocess(
-        "test_flights.py", "-p", "no:cacheprovider", "--full-monte-carlo"
-    ).assert_outcomes(passed=4)
+    fly_in_a_subprocess(project, "test_flights.py", "--full-monte-carlo").assert_outcomes(passed=4)
     node = "test_flights/Test_imu_spacecraft/test_reckoner_alpha"
     flown = session(project) / node
     assert sorted(path.name for path in flown.glob("run_*.h5")) == [

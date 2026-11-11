@@ -9,13 +9,13 @@ scenarios:
 """
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import h5py
 import pytest
 import yaml
 
-from gnc_algorithms.imu_dead_reckoning import dead_reckoner
 from harness import requirements_tree
 from harness.mission import Mission, mission_tests, provides
 
@@ -379,17 +379,14 @@ globals().update(
 
 
 def test_a_failing_check_fails_the_case_with_its_messages_and_the_run_file_is_plain(
-    project: pytest.Pytester,
+    project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
     """The check's messages are in the failure; the run file carries no GNC attribute.
 
-    The notebook module is imported at the top of this file, under the repository's tree, because
-    its FSW claims a capability the test's tree does not hold.
-
     Args:
         project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
     """
-    assert dead_reckoner.provides
     project.makepyfile(
         test_flights="""
 from gnc_algorithms.imu_dead_reckoning import dead_reckoner
@@ -415,7 +412,7 @@ globals().update(
 """
     )
 
-    result = project.runpytest_inprocess("-p", "no:cacheprovider")
+    result = fly_in_a_subprocess(project)
 
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*the first problem*", "*the second problem*"])
@@ -427,14 +424,14 @@ globals().update(
 
 
 def test_a_check_is_given_the_cases_run_file_and_a_passing_check_passes(
-    project: pytest.Pytester,
+    project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
     """`check` receives the finished case's run file; returning no messages passes the case.
 
     Args:
         project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
     """
-    assert dead_reckoner.provides
     project.makepyfile(
         test_flights="""
 import h5py
@@ -465,7 +462,7 @@ globals().update(
 """
     )
 
-    project.runpytest_inprocess("-p", "no:cacheprovider").assert_outcomes(passed=1)
+    fly_in_a_subprocess(project).assert_outcomes(passed=1)
 
 
 def test_a_notebook_can_fly_a_scenario_it_defines_before_its_missions(
