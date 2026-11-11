@@ -13,11 +13,11 @@ import pytest
 @pytest.mark.sim_duration_s(5700.0)
 @pytest.mark.sim_runs(460)
 def leo500() -> None:
-    """The 500 km, 45 degree orbit for 5700 s, 460 dispersed cases."""
+    """The 500 km, 45 degree orbit."""
 
 
 @pytest.mark.sim_scenario("leo400")
 @pytest.mark.sim_duration_s(5700.0)
 @pytest.mark.sim_runs(460)
 def leo400() -> None:
-    """The 400 km, 45 degree orbit for 5700 s, 460 dispersed cases."""
+    """The 400 km, 45 degree orbit."""
