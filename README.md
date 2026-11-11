@@ -42,8 +42,7 @@ failing case with the command that re-simulates it. A crash record counts as one
 the allowed failures. A case with neither a run nor a crash record leaves its test not judged.
 
 The report lands in the session's `report/`; start at `report/matrix.md`, which links each test's
-own matrix and plots. The analyzers also appear in the VS Code test explorer
-(`.vscode/settings.json`). The reasoning is in [ADR 0001 rev 1](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
+own matrix and plots. The reasoning is in [ADR 0001 rev 1](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
 
 Setup creates an `.ipynb` beside each algorithm `.py`. To run an algorithm's proof, open the
 `.ipynb` in VS Code or JupyterLab on the `WiseGncDesign` kernel, save it, and run its
