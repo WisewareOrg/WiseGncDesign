@@ -1,11 +1,11 @@
 active: true
-c: 0.90
+c: 0.9
 derived: false
 header: |
   Position knowledge: 5000 m at p 0.99, c 0.90
 level: 1.5
 links:
-- SYS001: null
+- SYS001: E2wQd5ksdhNrNwx6nhC0kjMLFrJ2BjBi8W05B0X8kJY=
 normative: true
 p: 0.99
 rationale: |
@@ -16,6 +16,7 @@ references:
 - keyword: def test_position_knowledge(
   path: analysis/test_position_knowledge.py
   type: file
+reviewed: 8nQNSt-8voGA3SwDssqETxhAdd57D3Qz4--t2Tx3O80=
 status: proposed
 text: |
   Over the whole of every dispersed run, the position knowledge error shall stay within x metres in at

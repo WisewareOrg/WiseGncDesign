@@ -1,11 +1,11 @@
 active: true
-c: 0.90
+c: 0.9
 derived: false
 header: |
   Attitude knowledge: 1 deg at p 0.97, c 0.90
 level: 1.3
 links:
-- SYS001: null
+- SYS001: E2wQd5ksdhNrNwx6nhC0kjMLFrJ2BjBi8W05B0X8kJY=
 normative: true
 p: 0.97
 rationale: |
@@ -16,6 +16,7 @@ references:
 - keyword: def test_attitude_knowledge(
   path: analysis/test_attitude_knowledge.py
   type: file
+reviewed: oVqZTNJsvjCLbp8Kd_5roLtEWuZkQu69ZBgEqHoqXF4=
 status: proposed
 text: |
   Over the whole of every dispersed run, the attitude knowledge error shall stay within x degrees in at

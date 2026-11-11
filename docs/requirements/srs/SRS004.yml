@@ -1,11 +1,11 @@
 active: true
-c: 0.90
+c: 0.9
 derived: false
 header: |
   Velocity knowledge: 5 m per s at p 0.99, c 0.90
 level: 1.4
 links:
-- SYS001: null
+- SYS001: E2wQd5ksdhNrNwx6nhC0kjMLFrJ2BjBi8W05B0X8kJY=
 normative: true
 p: 0.99
 rationale: |
@@ -16,6 +16,7 @@ references:
 - keyword: def test_velocity_knowledge(
   path: analysis/test_velocity_knowledge.py
   type: file
+reviewed: b6dp63PApjLG8PPnz2G5xiCrWBqtkQ1yy6SDYQsvNpY=
 status: proposed
 text: |
   Over the whole of every dispersed run, the velocity knowledge error shall stay within x m/s in at
