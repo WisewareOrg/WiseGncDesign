@@ -22,7 +22,7 @@
 # %%
 """Strapdown inertial dead reckoning from one IMU."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -31,12 +31,16 @@ import numpy as np
 import pytest
 from numba import njit
 from scipy.spatial.transform import Rotation
-from wise_dynamics.basilisk import ImuSpacecraft
+from wise_dynamics.basilisk import ImuSpacecraft, Scenario
+from wise_dynamics.basilisk.scenarios.leo400 import Leo400
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from gnc_algorithms.mrp import B, dcm_NB, shadow
-from gnc_analysis.error_bounds import read_run, violations
 from gnc_cdh.basilisk import AlgorithmModule
+from runs import read_run
+from test_attitude_knowledge import attitude_error_rad
+from test_position_knowledge import position_error_m
+from test_velocity_knowledge import velocity_error_m_s
 
 __all__ = ["ImuDeadReckoner"]
 
@@ -493,7 +497,7 @@ def bound_inputs() -> dict[str, float]:
     }
 
 
-def dead_reckoner(scenario: Leo500) -> AlgorithmModule:
+def dead_reckoner(scenario: Scenario) -> AlgorithmModule:
     """The dead reckoner, built at t = 0 from a scenario's initial state, hosted on its vehicle.
 
     Args:
@@ -508,25 +512,310 @@ def dead_reckoner(scenario: Leo500) -> AlgorithmModule:
         initial["r0_N"],
         initial["v0_N"],
         t0=0.0,
-        mu=Leo500.mu_m3_s2["earth"],
+        mu=scenario.mu_m3_s2["earth"],
         dcm_PB=IMU_DCM_PB,
     )
     return AlgorithmModule(algorithm, scenario.vehicle.readers())
 
 
 # %% [markdown]
+# ## The per-case gross check
+#
+# The Monte Carlo's pass/fail criterion for the IMU dead reckoner.
+#
+# Each of the estimate's errors against truth, attitude, velocity and position, must stay under
+# `BOUND_FACTOR` times a growth bound derived from the run's drawn IMU bias, the IMU's noise sigma,
+# the flight software's step and the orbit's mean motion. At t = 0, where the estimate starts from
+# truth, each error must be under `ERROR_AT_START`.
+#
+# A run is one run file as `read_run` returns it. Attitude error is graded with SciPy's `Rotation`,
+# independently of the dead reckoner's own MRP math.
+#
+# Each bound is a first-order derivation that holds to 4 orbits, where the position error stays
+# within about 6% of the orbit radius at the largest drawn bias. With every sensor error zero, the
+# velocity and position errors stay under 5e-11 m/s and 4e-8 m over an orbit, so the held specific
+# force needs no term. `BOUND_FACTOR` covers what the leading terms leave out, chiefly the attitude
+# error rotating the accelerometer bias, which is second order and under 15% of the bias term.
+
+# %%
+ERROR_AT_START = 1e-9
+"""Bound on every error at t = 0, in rad, m and m/s, where the estimate starts from truth."""
+
+BOUND_FACTOR = 3.0
+"""Margin on each growth bound, covering the terms its derivation leaves out."""
+
+
+def attitude_bound_rad(
+    t_s: np.ndarray,
+    gyro_bias_rad_s: float,
+    omega_dot_max_rad_s2: float,
+    gyro_noise_std_rad_s: float,
+    step_s: float,
+) -> np.ndarray:
+    """The attitude error's growth bound, `b_g t + 1/2 max|omega_dot| dt t + 3 sigma_g sqrt(t dt)`.
+
+    - A constant gyro bias turns the estimate at most `b_g` faster than truth.
+    - Holding each sampled rate over its step while the true rate changes by up to
+      `max|omega_dot| dt` leaves at most half that per second.
+    - The gyro's white noise is a random walk of `sigma_g sqrt(t dt)` per axis, taken at 3 sigma.
+
+    Args:
+        t_s: (N,) s, time since the estimate started from truth.
+        gyro_bias_rad_s: `b_g`, rad/s, the norm of the drawn gyro bias.
+        omega_dot_max_rad_s2: `max|omega_dot|`, rad/s^2, the true body rate's largest change.
+        gyro_noise_std_rad_s: `sigma_g`, rad/s, the gyro's per-sample 1-sigma noise.
+        step_s: `dt`, s, the flight software's step.
+
+    Returns:
+        (N,) rad.
+    """
+    t, dt = t_s, step_s
+    return (
+        gyro_bias_rad_s * t
+        + 0.5 * omega_dot_max_rad_s2 * dt * t
+        + 3.0 * gyro_noise_std_rad_s * np.sqrt(t * dt)
+    )
+
+
+def velocity_bound_m_s(
+    t_s: np.ndarray,
+    accel_bias_m_s2: float,
+    accel_noise_std_m_s2: float,
+    step_s: float,
+    mean_motion_rad_s: float,
+) -> np.ndarray:
+    """The velocity error's growth bound, `(1 + (n t)^2 / 3) (b_a t + 3 sigma_a sqrt(t dt))`.
+
+    - A constant accelerometer bias adds `b_a t`; its white noise is a random walk of
+      `sigma_a sqrt(t dt)`, taken at 3 sigma.
+    - Gravity is evaluated at the estimated position, so the position error feeds back through
+      the gravity gradient, whose largest eigenvalue is `2 n^2`. The factor `1 + (n t)^2 / 3` is
+      that feedback to first order; the linearized worst case over any bias-direction history is
+      within 1.03 times it, verified to 4 orbits.
+
+    Args:
+        t_s: (N,) s, time since the estimate started from truth.
+        accel_bias_m_s2: `b_a`, m/s^2, the norm of the drawn accelerometer bias.
+        accel_noise_std_m_s2: `sigma_a`, m/s^2, the accelerometer's per-sample 1-sigma noise.
+        step_s: `dt`, s, the flight software's step.
+        mean_motion_rad_s: `n`, rad/s, the orbit's mean motion.
+
+    Returns:
+        (N,) m/s.
+    """
+    t, dt, n = t_s, step_s, mean_motion_rad_s
+    return (1.0 + (n * t) ** 2 / 3.0) * (
+        accel_bias_m_s2 * t + 3.0 * accel_noise_std_m_s2 * np.sqrt(t * dt)
+    )
+
+
+def position_bound_m(
+    t_s: np.ndarray,
+    accel_bias_m_s2: float,
+    accel_noise_std_m_s2: float,
+    step_s: float,
+    mean_motion_rad_s: float,
+) -> np.ndarray:
+    """The position error's growth bound.
+
+    `(1 + (n t)^2 / 6) (b_a t^2 / 2 + 3 sigma_a sqrt(dt / 3) t^(3/2))`.
+
+    - A constant accelerometer bias gives `b_a t^2 / 2`; the accelerometer's random walk
+      integrates to `sigma_a sqrt(dt / 3) t^(3/2)`, taken at 3 sigma.
+    - The factor `1 + (n t)^2 / 6` is the gravity-gradient feedback to first order. Without it the
+      along-track secular growth reaches 3.29 times `b_a t^2 / 2` for the worst bias-direction
+      history; with it the linearized worst case is within 1.002 times, verified to 4 orbits.
+
+    Args:
+        t_s: (N,) s, time since the estimate started from truth.
+        accel_bias_m_s2: `b_a`, m/s^2, the norm of the drawn accelerometer bias.
+        accel_noise_std_m_s2: `sigma_a`, m/s^2, the accelerometer's per-sample 1-sigma noise.
+        step_s: `dt`, s, the flight software's step.
+        mean_motion_rad_s: `n`, rad/s, the orbit's mean motion.
+
+    Returns:
+        (N,) m.
+    """
+    t, dt, n = t_s, step_s, mean_motion_rad_s
+    return (1.0 + (n * t) ** 2 / 6.0) * (
+        0.5 * accel_bias_m_s2 * t**2 + 3.0 * accel_noise_std_m_s2 * np.sqrt(dt / 3.0) * t**1.5
+    )
+
+
+def error_growth(
+    run: Mapping[str, np.ndarray],
+    gyro_noise_std_rad_s: float,
+    accel_noise_std_m_s2: float,
+    step_s: float,
+    mu: float,
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Each of a run's errors beside its growth bound.
+
+    The bounds take the run's drawn biases, `draw_gyro_bias_P_rad_s` and
+    `draw_accel_bias_P_m_s2`; the largest change of its true body rate, `truth/omega_BN_B`; and
+    its mean motion `n = sqrt(mu / |r0|^3)`, from `truth/r_N` at t = 0.
+
+    Args:
+        run: one run, as `read_run` returns it.
+        gyro_noise_std_rad_s: rad/s, the gyro's per-sample 1-sigma noise.
+        accel_noise_std_m_s2: m/s^2, the accelerometer's per-sample 1-sigma noise.
+        step_s: s, the flight software's step.
+        mu: m^3/s^2, the central body's gravitational parameter.
+
+    Returns:
+        `{metric: (error, bound)}` for `"attitude error [rad]"`, `"velocity error [m/s]"` and
+        `"position error [m]"`, each a pair of (N,) arrays over `t_s`.
+    """
+    t = run["t_s"]
+    omega_dot = np.linalg.norm(np.diff(run["truth/omega_BN_B"], axis=0), axis=1) / np.diff(t)
+    accel_bias = float(np.linalg.norm(run["draw_accel_bias_P_m_s2"]))
+    n = np.sqrt(mu / float(np.linalg.norm(run["truth/r_N"][0])) ** 3)
+    return {
+        "attitude error [rad]": (
+            attitude_error_rad(run["truth/sigma_BN"], run["est/sigma_BN"]),
+            attitude_bound_rad(
+                t,
+                float(np.linalg.norm(run["draw_gyro_bias_P_rad_s"])),
+                omega_dot.max(),
+                gyro_noise_std_rad_s,
+                step_s,
+            ),
+        ),
+        "velocity error [m/s]": (
+            velocity_error_m_s(run["truth/v_N"], run["est/v_BN_N"]),
+            velocity_bound_m_s(t, accel_bias, accel_noise_std_m_s2, step_s, n),
+        ),
+        "position error [m]": (
+            position_error_m(run["truth/r_N"], run["est/r_BN_N"]),
+            position_bound_m(t, accel_bias, accel_noise_std_m_s2, step_s, n),
+        ),
+    }
+
+
+def bound_ratios(
+    run: Mapping[str, np.ndarray],
+    gyro_noise_std_rad_s: float,
+    accel_noise_std_m_s2: float,
+    step_s: float,
+    mu: float,
+) -> dict[str, np.ndarray]:
+    """Each of a run's errors divided by its growth bound, at every sample after t = 0.
+
+    The run passes where every ratio is at most `BOUND_FACTOR`.
+
+    Args:
+        run: one run, as `read_run` returns it.
+        gyro_noise_std_rad_s: rad/s, the gyro's per-sample 1-sigma noise.
+        accel_noise_std_m_s2: m/s^2, the accelerometer's per-sample 1-sigma noise.
+        step_s: s, the flight software's step.
+        mu: m^3/s^2, the central body's gravitational parameter.
+
+    Returns:
+        `{metric: (N - 1,) array}`, dimensionless, keyed as `error_growth` keys them.
+    """
+    growths = error_growth(run, gyro_noise_std_rad_s, accel_noise_std_m_s2, step_s, mu)
+    return {name: error[1:] / bound[1:] for name, (error, bound) in growths.items()}
+
+
+def violations(
+    run: Mapping[str, np.ndarray],
+    gyro_noise_std_rad_s: float,
+    accel_noise_std_m_s2: float,
+    step_s: float,
+    mu: float,
+) -> list[str]:
+    """Every way a run fails the criterion, one message per metric.
+
+    Args:
+        run: one run, as `read_run` returns it.
+        gyro_noise_std_rad_s: rad/s, the gyro's per-sample 1-sigma noise.
+        accel_noise_std_m_s2: m/s^2, the accelerometer's per-sample 1-sigma noise.
+        step_s: s, the flight software's step.
+        mu: m^3/s^2, the central body's gravitational parameter.
+
+    Returns:
+        A message for each metric whose error is not within `ERROR_AT_START` at t = 0, or not
+        within `BOUND_FACTOR` times its bound at a subsequent sample, NaN included, naming the
+        earliest such sample. Empty when the run passes.
+    """
+    t = run["t_s"]
+    found = []
+    growths = error_growth(run, gyro_noise_std_rad_s, accel_noise_std_m_s2, step_s, mu)
+    for name, (error, bound) in growths.items():
+        if not error[0] <= ERROR_AT_START:
+            found.append(f"{name} at t = 0 is {error[0]}, above {ERROR_AT_START}")
+            continue
+        over = np.flatnonzero(~(error[1:] <= BOUND_FACTOR * bound[1:])) + 1
+        if over.size:
+            k = over[0]
+            found.append(
+                f"{name} exceeds {BOUND_FACTOR} x its bound from t = {t[k]} s: "
+                f"{error[k]} > {BOUND_FACTOR * bound[k]}"
+            )
+    return found
+
+
+# %%
+def test_a_nan_error_is_a_violation():
+    """A diverged estimate, whose error is NaN, fails the gross check instead of passing it."""
+    zeros = np.zeros((3, 3))
+    r_N = np.tile([7.0e6, 0.0, 0.0], (3, 1))
+    v_est_N = zeros.copy()
+    v_est_N[2, 0] = np.nan
+    run = {
+        "t_s": np.array([0.0, 1.0, 2.0]),
+        "truth/sigma_BN": zeros,
+        "est/sigma_BN": zeros,
+        "truth/omega_BN_B": zeros,
+        "truth/v_N": zeros,
+        "est/v_BN_N": v_est_N,
+        "truth/r_N": r_N,
+        "est/r_BN_N": r_N,
+        "draw_gyro_bias_P_rad_s": np.zeros(3),
+        "draw_accel_bias_P_m_s2": np.zeros(3),
+    }
+
+    found = violations(run, **bound_inputs())
+
+    assert [message.split()[0] for message in found] == ["velocity"]
+
+
+# %% [markdown]
 # Each case runs the estimator for the scenario's default duration, writes its
-# run file and holds the estimate within `gnc_analysis.error_bounds`' bound (`BOUND_FACTOR` times
+# run file and holds the estimate within the gross check's bound (`BOUND_FACTOR` times
 # the growth the case's drawn biases, the IMU noise, the 1 s step and the orbit imply).
 
 
 # %%
 # %%monte_carlo
 @pytest.mark.sim_runs(852)
+@pytest.mark.verifies("SRS001", "SRS002", "SRS003")
 def test_imu_dead_reckoning_case(
     sim_scenario: Leo500, sim_duration_s: float, sim_run_file: Callable[..., Path]
 ) -> None:
     """One Monte Carlo case holds every error within its bound.
+
+    Args:
+        sim_scenario: the case's dispersed scenario, from WiseDynamics' plugin.
+        sim_duration_s: s, the case's simulated duration.
+        sim_run_file: writes the case's run file and returns its path.
+    """
+    fsw = dead_reckoner(sim_scenario)
+    datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
+    path = sim_run_file(datasets, {"versions_wise_gnc_design": version("wise-gnc-design")})
+
+    assert violations(read_run(path), **bound_inputs()) == []
+
+
+# %%
+# %%monte_carlo
+@pytest.mark.sim_runs(852)
+@pytest.mark.sim_scenario("leo400")
+@pytest.mark.verifies("SRS001", "SRS002", "SRS003")
+def test_imu_dead_reckoning_leo400_case(
+    sim_scenario: Leo400, sim_duration_s: float, sim_run_file: Callable[..., Path]
+) -> None:
+    """One Monte Carlo case on the 400 km orbit holds every error within its bound.
 
     Args:
         sim_scenario: the case's dispersed scenario, from WiseDynamics' plugin.
@@ -550,7 +839,6 @@ def test_imu_dead_reckoning_case(
 # import matplotlib.pyplot as plt
 # from wise_dynamics.notebook import load_runs
 #
-# from gnc_analysis.error_bounds import BOUND_FACTOR, bound_ratios, error_growth
 #
 # runs = [
 #     {**run["attrs"], **{name: values for name, (values, _) in run["datasets"].items()}}

@@ -37,6 +37,7 @@ decision and its reasoning, not who ruled it.
 
 | # | Rev | Decided | Decision |
 |---|---|---|---|
+| [0001](0001-judge-monte-carlo-sessions-with-requirement-analyzers.md) | 1 | 2026-11-09 | Judge Monte Carlo sessions with requirement analyzers |
 
 ## Revisions
 
