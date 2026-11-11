@@ -1,7 +1,8 @@
 """Judge the active session from a notebook cell, and show the result there.
 
 `judge()` runs the requirement analyzers in a subprocess, as `just judge` does, prints why any
-rung failed or was not judged, then shows one row per rung and one column per flight.
+rung failed or was not judged and which folders it skipped, then shows one row per rung and one
+column per flight.
 `plots(<SRS ID>)` shows that rung's plot for each flight.
 """
 
@@ -12,19 +13,18 @@ from pathlib import Path
 
 import pandas as pd
 from IPython.display import Image, display
-from wise_dynamics.sessions import read_pointer
+from wise_dynamics.sessions import current_session
 
-from harness.requirements_tree import ROOT, items
+from harness import requirements_tree
 
 
 def _report() -> Path:
     """The active session's report directory.
 
     Returns:
-        `monte_carlo/<session>/report`.
+        `report` in the session `current_session()` finds.
     """
-    root = ROOT / "monte_carlo"
-    return root / read_pointer(root) / "report"
+    return current_session() / "report"
 
 
 def _cells() -> dict[tuple[str, str], dict]:
@@ -52,14 +52,19 @@ def judge() -> pd.DataFrame:
     """
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "analysis", "-q", "-rfEs", "-p", "no:cacheprovider"],
-        cwd=ROOT,
+        cwd=requirements_tree.ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
     summary = result.stdout.partition("short test summary info")[2].splitlines()[1:]
     print("\n".join(summary) if summary else result.stdout.strip() or result.stderr)
-    headers = {uid: item["header"].strip() for uid, item in items("SRS").items()}
+    matrix = _report() / "matrix.md"
+    if matrix.is_file():
+        skipped = matrix.read_text().partition("## Skipped folders")[2].strip()
+        if skipped:
+            print("Skipped folders:\n" + skipped)
+    headers = {uid: item["header"].strip() for uid, item in requirements_tree.items("SRS").items()}
     rows: dict[str, dict[str, str]] = {}
     for (flight, uid), cell in _cells().items():
         text = cell["verdict"]
