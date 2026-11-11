@@ -1,7 +1,8 @@
 """Judge the active session from a notebook cell, and show the result there.
 
-`judge()` runs the requirement analyzers in a subprocess, as `just judge` does, then shows one row
-per rung and one column per flight. `plots(<SRS ID>)` shows that rung's plot for each flight.
+`judge()` runs the requirement analyzers in a subprocess, as `just judge` does, prints why any
+rung failed or was not judged, then shows one row per rung and one column per flight.
+`plots(<SRS ID>)` shows that rung's plot for each flight.
 """
 
 import json
@@ -30,11 +31,11 @@ def _cells() -> dict[tuple[str, str], dict]:
     """Every cell the last judging wrote, by flight and rung.
 
     Returns:
-        Each cell's record by (flight, SRS ID); a flight is `<class>/<test>`.
+        Each cell's record by (flight, SRS ID); a flight is `<notebook>/<class>/<test>`.
     """
     report = _report()
     return {
-        ("/".join(path.parent.relative_to(report).parts[-2:]), path.stem): json.loads(
+        ("/".join(path.parent.relative_to(report).parts[-3:]), path.stem): json.loads(
             path.read_text()
         )
         for path in sorted(report.rglob("SRS*.json"))
@@ -50,21 +51,22 @@ def judge() -> pd.DataFrame:
         The matrix.
     """
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "analysis", "-q", "-rs", "-p", "no:cacheprovider"],
+        [sys.executable, "-m", "pytest", "analysis", "-q", "-rfEs", "-p", "no:cacheprovider"],
         cwd=ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
-    print(result.stdout.strip().splitlines()[-1] if result.stdout.strip() else result.stderr)
+    summary = result.stdout.partition("short test summary info")[2].splitlines()[1:]
+    print("\n".join(summary) if summary else result.stdout.strip() or result.stderr)
     headers = {uid: item["header"].strip() for uid, item in items("SRS").items()}
     rows: dict[str, dict[str, str]] = {}
     for (flight, uid), cell in _cells().items():
         text = cell["verdict"]
         if text != "not judged":
             text += f" {cell['failed']}/{cell['allowed']}"
-        vehicle, test = flight.split("/")
-        column = f"{vehicle.removeprefix('Test_')} / {test.removeprefix('test_')}"
+        notebook, vehicle, test = flight.split("/")
+        column = f"{notebook}: {vehicle.removeprefix('Test_')} / {test.removeprefix('test_')}"
         rows.setdefault(f"{uid} {headers.get(uid, '')}", {})[column] = text
     return pd.DataFrame.from_dict(rows, orient="index").sort_index()
 
@@ -76,5 +78,5 @@ def plots(requirement_id: str) -> None:
         requirement_id: the SRS ID.
     """
     for path in sorted(_report().rglob(f"{requirement_id}.png")):
-        print("/".join(path.parent.parts[-2:]))
+        print("/".join(path.parent.parts[-3:]))
         display(Image(filename=path))

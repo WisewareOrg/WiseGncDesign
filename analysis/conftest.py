@@ -35,7 +35,8 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
     A recorded test judges a rung when its mission lists the rung, its scenario links to the rung,
     and its FSW claims a capability the rung belongs to. The test is found by importing it from the
     node ID in its `planned.json`. A mission listing the rung whose FSW claims none of the rung's
-    capabilities is noted in `lookup.notes`, for the verdict to report as not judged.
+    capabilities is noted in `lookup.notes`, for the verdict to report as not judged. A recorded
+    test whose file no longer exists claims nothing.
 
     Args:
         request: the pytest request.
@@ -78,6 +79,8 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
         found, notes = {}, []
         for recorded in recorded_tests(session):
             file, *names = recorded.nodeid.split("::")
+            if not (rootpath / file).is_file():
+                continue
             test = module(file)
             for name in names:
                 test = getattr(test, name, None)
@@ -267,7 +270,7 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
                     f"{cell['planned']} | {cell['allowed']} | {cell['failed_cases']} |"
                 )
         (report / test / "matrix.md").write_text("\n".join(rows) + "\n")
-    links = [f"[{'/'.join(test.split('/')[-2:])}]({test}/matrix.md)" for test in tests]
+    links = [f"[{'/'.join(test.split('/')[-3:])}]({test}/matrix.md)" for test in tests]
     rows = [f"| Requirement | {' | '.join(links)} | Verdict |", "|---" * (len(tests) + 2) + "|"]
     for requirement in requirements:
         row = [cells.get((test, requirement)) for test in tests]
