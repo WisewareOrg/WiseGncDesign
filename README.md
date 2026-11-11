@@ -5,18 +5,7 @@ from [WiseDynamics](https://github.com/WisewareOrg/WiseDynamics), which `pyproje
 under `[tool.uv.sources]`. The flight software runs at 1 Hz on the simulation's dynamics step,
 50 Hz at its `hi` fidelity, 20 Hz at `med` and 10 Hz at `lo`.
 
-It has these parts:
-- `algorithms/gnc_algorithms/<name>/`, each algorithm as a package around its notebook, which holds
-  the derivation and the implementation side by side, with its math compiled by numba. Importing
-  one loads the simulator stack and runs nothing. Algorithms name their inputs and outputs by the
-  simulation's standard field names, so a host resolves them by name;
-- `cdh/`, `gnc_cdh`, which hosts an algorithm in the simulator ([`cdh/README.md`](cdh/README.md));
-- `harness/`, the machinery that flies and judges missions and knows no specific requirement,
-  metric or scenario;
-- `analysis/`, the requirement analyzers, one per metric;
-- `scenarios/`, how each scenario is flown;
-- `missions/`, notebooks that plan missions;
-- `docs/requirements/`, the Doorstop requirements tree.
+The repository's parts are laid out under Development.
 
 ## Development
 
@@ -70,9 +59,9 @@ Monte Carlo tests refuse to run without an active session, a named folder under 
 Each flight's runs land under the session in a folder of its own, so several vehicles and notebooks
 share one session.
 
-A Monte Carlo test flies two cases unless `--full-monte-carlo` is passed, and capped runs go into
-the reserved `scratch` session whatever session is active. The `%%monte_carlo` cell and `just fly`
-fly the full campaign. Bare `pytest`, the VS Code test explorer, `just test` and CI do not.
+A Monte Carlo test flies two cases, into the reserved `scratch` session, unless `--full-monte-carlo`
+is passed. The `%%monte_carlo` cell and `just fly` pass it; bare `pytest`, the VS Code test explorer,
+`just test` and CI do not.
 
 ```sh
 just session <name>
@@ -84,41 +73,13 @@ uv run --no-sync pytest missions/dead_reckoner_leo.py --full-monte-carlo   # the
 
 `just judge` runs the requirement analyzers in `analysis/`, outside `testpaths` so `just test` never
 judges, over the active session. `judge()` in a notebook does the same and returns the matrix, a row
-per rung and a column per flight. Each analyzer judges one metric for every rung whose tree item
-references its file. A rung's verdict compares each run with `x`, then the failures with the number
-the `n` runs found allow at `p` and `c`. A crash record counts as a failed case. A failing rung lists
-each failing case with the command that re-simulates it.
-
-The report lands in the session's `report/` and is rebuilt on every judging; start at
-`report/matrix.md`. Folders without a `flight.json` or whose test file is gone are skipped and listed
-there. The judge reads what a flight recorded when it flew and never executes a notebook. The
-reasoning is in
+per rung and a column per flight. A failing rung lists each failing case with the command that
+re-simulates it. The report lands in the session's `report/` and is rebuilt on every judging; start
+at `report/matrix.md`. How a verdict is reached is in
+[ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md) and
 [ADR 0001 rev 2](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
 
-### Recipes
+### Recipes and CI
 
-| Recipe | What it does |
-|---|---|
-| `just pinned` | Sync the environment at the WiseDynamics commit in `uv.lock`, register the kernel, and sync the notebooks. |
-| `just local` | The same with an editable WiseDynamics checkout. |
-| `just lab` | Open JupyterLab in this environment. |
-| `just session [name]` | Make `name` the active session, or list the sessions. |
-| `just fly <notebook>` | Fly a notebook's Monte Carlo tests headless at full count into the active session; extra arguments go to pytest. |
-| `just test` | The suite: every Monte Carlo capped at two cases, each notebook run end to end in a kernel. |
-| `just judge` | Judge the active session. |
-| `just reqs` | Check the requirements tree with `check-reqs`. |
-
-### CI
-
-CI (`.github/workflows/checks.yml`) runs, from the repository root:
-
-```sh
-uv sync --locked
-uv run ruff check . && uv run ruff format --check .
-uv run interrogate -v --fail-under 100 algorithms cdh analysis harness scenarios missions
-uv run pydoclint algorithms cdh analysis harness scenarios missions
-just reqs
-uv sync --locked --group sim --group notebooks
-uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
-uv run --no-sync pytest
-```
+`just --list` shows every recipe with its description. `.github/workflows/checks.yml` is the
+authority on what CI runs: lint and docstring coverage, `just reqs`, and the suite.

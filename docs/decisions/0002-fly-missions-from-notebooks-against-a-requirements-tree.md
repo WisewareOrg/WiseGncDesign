@@ -18,7 +18,7 @@ follow.
 - A flight is a hardware and software combination flown through a scenario, and the same flight
   software must be flown on more than one vehicle, so a Monte Carlo test cannot carry the whole
   combination in a tag.
-- The owner works in notebooks. Defining a flight, flying it, judging it and plotting it belong in
+- Work happens in notebooks. Defining a flight, flying it, judging it and plotting it belong in
   one place, and the same flight must also run unattended in CI.
 
 ## Decision
