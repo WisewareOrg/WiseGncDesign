@@ -46,4 +46,4 @@ globals().update(mission_tests(*MISSIONS))
 # from wise_dynamics.notebook import load_runs
 #
 # runs = load_runs(Test_heavy_imu_spacecraft.test_dead_reckoner_leo500)
-# len(runs), runs[0]["attrs"]["vehicle"], runs[0]["datasets"]["truth/sigma_BN"][0].shape
+# len(runs), runs[0]["datasets"]["truth/sigma_BN"][0].shape
