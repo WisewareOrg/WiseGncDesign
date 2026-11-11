@@ -1,4 +1,5 @@
-# Pairs each literate algorithm module, the percent-format source of truth, with the
-# <name>.ipynb beside it, which git ignores.
+# Pairs each notebook's percent-format .py, the source of truth, with the <name>.ipynb beside it,
+# which git ignores. The kernel is the machine's choice, not the notebook's, so the .py never
+# records it.
 formats = "ipynb,py:percent"
-notebook_metadata_filter = "-jupytext.text_representation"
+notebook_metadata_filter = "-jupytext.text_representation,-kernelspec"

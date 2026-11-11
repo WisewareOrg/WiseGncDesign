@@ -2,11 +2,7 @@
 # jupyter:
 #   jupytext:
 #     cell_metadata_filter: active,-all
-#     notebook_metadata_filter: -jupytext.text_representation
-#   kernelspec:
-#     display_name: WiseGncDesign
-#     language: python
-#     name: wise-gnc-design
+#     notebook_metadata_filter: -jupytext.text_representation,-kernelspec
 # ---
 
 # %% [markdown]
