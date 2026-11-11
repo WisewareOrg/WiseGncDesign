@@ -206,6 +206,29 @@ def test_a_flight_with_no_rungs_is_refused(tree: Path) -> None:
         Mission(VEHICLE, claiming("SYS902"), ("TST902",))
 
 
+def test_a_filter_answered_by_one_of_two_scenarios_is_accepted(tree: Path) -> None:
+    """SRS901 is linked by TST901 only; the filter is checked against both scenarios together.
+
+    TST902's flight is emptied by the filter and is allowed.
+
+    Args:
+        tree: the tree.
+    """
+    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901", "TST902"), rungs=("SRS901",))
+
+    assert mission.rungs == ("SRS901",)
+
+
+def test_an_fsw_claiming_nothing_one_scenario_links_is_refused_naming_it(tree: Path) -> None:
+    """SYS902 owns SRS903, which TST901 links but TST902 does not.
+
+    Args:
+        tree: the tree.
+    """
+    with pytest.raises(ValueError, match="TST902"):
+        Mission(VEHICLE, claiming("SYS902"), ("TST901", "TST902"))
+
+
 @pytest.mark.parametrize(
     ("changes", "unknown"),
     [
