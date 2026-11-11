@@ -3,7 +3,10 @@
 Flight conditions with closed forms check the algorithm alone, with no simulator.
 """
 
+from pathlib import Path
+
 import numpy as np
+import pytest
 from scipy.spatial.transform import Rotation
 
 from gnc_algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
@@ -156,3 +159,11 @@ def test_a_nan_error_is_a_violation():
     found = violations(run, **bound_inputs())
 
     assert [message.split()[0] for message in found] == ["velocity"]
+
+
+@pytest.mark.xdist_group("notebooks")
+def test_the_notebook_runs_end_to_end() -> None:
+    """Every cell of the algorithm notebook runs, the notebook-only cells included."""
+    from harness.notebook import run_notebook
+
+    run_notebook(Path(__file__).with_name("imu_dead_reckoning.py"))
