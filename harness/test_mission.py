@@ -412,6 +412,48 @@ globals().update(
         assert not {"vehicle", "scenario_item", "capabilities"} & set(f.attrs)
 
 
+def test_a_check_is_given_the_cases_run_file_and_a_passing_check_passes(
+    project: pytest.Pytester,
+) -> None:
+    """`check` receives the finished case's run file; returning no messages passes the case.
+
+    Args:
+        project: the project.
+    """
+    assert dead_reckoner.provides
+    project.makepyfile(
+        test_flights="""
+import h5py
+
+from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+from harness.mission import Mission, mission_tests, provides
+
+
+@provides("SYS901")
+def reckoner(scenario):
+    return dead_reckoner(scenario)
+
+
+def check(path):
+    with h5py.File(path, "r") as f:
+        if "est" not in f or "truth" not in f:
+            return ["not the case's run file"]
+    return []
+
+
+globals().update(
+    mission_tests(
+        Mission(
+            vehicle="imu_spacecraft", fsw=reckoner, scenarios=("TST901",), check=check
+        )
+    )
+)
+"""
+    )
+
+    project.runpytest_inprocess("-p", "no:cacheprovider").assert_outcomes(passed=1)
+
+
 def test_a_notebook_can_fly_a_scenario_it_defines_before_its_missions(
     project: pytest.Pytester,
 ) -> None:

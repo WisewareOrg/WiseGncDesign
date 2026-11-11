@@ -17,6 +17,8 @@ import pytest
 import yaml
 from wise_dynamics.sessions import crash_path, run_path, write_planned
 
+from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+
 REPO = Path(__file__).resolve().parents[1]
 GOOD = 0.9e-3
 BAD = 1.5e-3
@@ -506,3 +508,123 @@ def test_capped_runs_are_judged_in_scratch_and_leave_the_active_session_alone(
     assert "| SRS901 | " in cell_matrix(project, "scratch")
     assert (kept / "matrix.md").read_text() == "the active session's rollup\n"
     assert [path.name for path in kept.iterdir()] == ["matrix.md"]
+
+
+def test_the_notebook_judge_returns_the_matrix_lists_skipped_folders_and_plots_the_rung(
+    project: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The notebook's `judge()` returns the matrix and prints what it skipped; `plots()` shows PNGs.
+
+    The matrix has a row per rung and a column per flight; `plots()` shows the rung's PNG for each
+    flight.
+
+    Args:
+        project: the project.
+        monkeypatch: the monkeypatch fixture.
+        capsys: the capture fixture.
+    """
+    from harness import notebook, requirements_tree
+
+    root = session(project)
+    write_cases(root, bad=(3,), flight=only("SRS901"))
+    write_cases(
+        root,
+        node="missions/nb/Test_vehicle/test_unflown",
+        nodeid="missions/nb.py::Test_vehicle::test_unflown",
+        flight=None,
+    )
+    monkeypatch.chdir(project.path)
+    monkeypatch.setattr(requirements_tree, "ROOT", project.path)
+    shown = []
+    monkeypatch.setattr(notebook, "display", shown.append)
+
+    matrix = notebook.judge()
+
+    assert matrix.to_dict() == {"nb: vehicle / fsw_alpha": {"SRS901 SRS901": "pass 1/1"}}
+    printed = capsys.readouterr().out
+    assert "SRS902 not judged: no test claims it" in printed
+    assert "Skipped folders:\n- missions/nb/Test_vehicle/test_unflown: no flight.json" in printed
+
+    notebook.plots("SRS901")
+
+    [image] = shown
+    assert Path(image.filename) == root / "report" / NODE / "SRS901.png"
+    assert Path(image.filename).read_bytes().startswith(b"\x89PNG")
+    assert "nb/Test_vehicle/test_fsw_alpha" in capsys.readouterr().out
+
+
+def test_a_flown_mission_is_judged_end_to_end(
+    project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mission flown through the real plugin leaves a session the real judge reads.
+
+    The flight's `flight.json` and run files come from the simulator's own writers, so a key or
+    dataset the writer and the judge disagree on makes this fail. Four cases are the fewest that
+    show p = 0.8 at c = 0.5, and each rung's x is set far above the dead reckoner's error so the
+    verdict rests on the agreement alone. The dead reckoner is imported at the top of this file,
+    under the repository's tree, because it loads the analyzers that read that tree.
+
+    Args:
+        project: the project.
+        monkeypatch: the monkeypatch fixture.
+    """
+    from harness import requirements_tree
+
+    assert dead_reckoner.provides
+    monkeypatch.setattr(requirements_tree, "ROOT", project.path)
+    root = project.path
+    for uid in KINDS.values():
+        item = root / "docs" / "requirements" / "srs" / f"{uid}.yml"
+        item.write_text(yaml.safe_dump(yaml.safe_load(item.read_text()) | {"x": 1e9}))
+    write_item(
+        root,
+        "tst",
+        "TST901",
+        links=[{uid: "stamp"} for uid in KINDS.values()],
+        references=[{"path": "scenarios/alpha.py", "keyword": "def alpha(", "type": "file"}],
+    )
+    project.mkdir("scenarios")
+    (root / "scenarios" / "alpha.py").write_text(
+        "import pytest\n\n\n"
+        '@pytest.mark.sim_scenario("leo500")\n'
+        "@pytest.mark.sim_duration_s(1.0)\n"
+        "@pytest.mark.sim_runs(4)\n"
+        "def alpha() -> None:\n"
+        "    pass\n"
+    )
+    project.makepyfile(
+        test_flights="""
+from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+from harness.mission import Mission, mission_tests, provides
+
+
+@provides("SYS901")
+def reckoner(scenario):
+    return dead_reckoner(scenario)
+
+
+globals().update(
+    mission_tests(Mission(vehicle="imu_spacecraft", fsw=reckoner, scenarios=("TST901",)))
+)
+"""
+    )
+
+    project.runpytest_inprocess(
+        "test_flights.py", "-p", "no:cacheprovider", "--full-monte-carlo"
+    ).assert_outcomes(passed=4)
+    node = "test_flights/Test_imu_spacecraft/test_reckoner_alpha"
+    flown = session(project) / node
+    assert sorted(path.name for path in flown.glob("run_*.h5")) == [
+        f"run_000{case}.h5" for case in range(4)
+    ]
+
+    judge(project).assert_outcomes(passed=3)
+
+    matrix = (session(project) / "report" / node / "matrix.md").read_text()
+    for uid in KINDS.values():
+        assert f"| {uid} | pass | 0/4/4 | 0 |" in matrix
+        assert (
+            (session(project) / "report" / node / f"{uid}.png").read_bytes().startswith(b"\x89PNG")
+        )
