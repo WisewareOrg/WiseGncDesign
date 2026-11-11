@@ -31,7 +31,7 @@ notebooks = ["ipykernel>=6.29", "jupyterlab>=4.4", "jupytext>=1.17", "notebook",
 
 [tool.uv.sources]
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "d875351a59d3b47aca94a55b204eba8c179c2f9c" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "807e96ff89a781d84a5bfb9b78b31f357d0a8cc2" }
 
 [build-system]
 requires = ["hatchling"]
