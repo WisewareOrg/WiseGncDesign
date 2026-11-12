@@ -41,9 +41,11 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     set_target_properties(_wise_fsw PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${FPRIME_PROJECT_ROOT}/cdh/gnc_cdh/fprime")
     # The dictionary ships beside the extension: Python names and decodes the telemetry with it.
-    add_dependencies(_wise_fsw cdh_fprime_Top_dictionary)
-    add_custom_command(TARGET _wise_fsw POST_BUILD
+    # A target without outputs runs on every build, so the copy tracks the dictionary the build just wrote.
+    add_custom_target(wise_fsw_dictionary
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${CMAKE_BINARY_DIR}/cdh/fprime/Top/WiseFswTopologyDictionary.json"
-            "${FPRIME_PROJECT_ROOT}/cdh/gnc_cdh/fprime/WiseFswTopologyDictionary.json")
+            "${FPRIME_PROJECT_ROOT}/cdh/gnc_cdh/fprime/WiseFswTopologyDictionary.json"
+        DEPENDS cdh_fprime_Top_dictionary)
+    add_dependencies(_wise_fsw wise_fsw_dictionary)
 endif()
