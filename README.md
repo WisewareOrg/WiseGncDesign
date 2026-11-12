@@ -1,9 +1,9 @@
 # WiseGncDesign
 
-WiseGncDesign holds Wiseware's GNC flight software in Python, flown against simulated spacecraft
-from [WiseDynamics](https://github.com/WisewareOrg/WiseDynamics), which `pyproject.toml` pins
-under `[tool.uv.sources]`. The flight software runs at 1 Hz on the simulation's dynamics step,
-50 Hz at its `hi` fidelity, 20 Hz at `med` and 10 Hz at `lo`.
+WiseGncDesign holds Wiseware's GNC flight software in two builds side by side, Python and F´ (C++),
+flown against simulated spacecraft from [WiseDynamics](https://github.com/WisewareOrg/WiseDynamics),
+which `pyproject.toml` pins under `[tool.uv.sources]`. The flight software runs at 1 Hz on the
+simulation's dynamics step, 50 Hz at its `hi` fidelity, 20 Hz at `med` and 10 Hz at `lo`.
 
 The repository's parts are laid out under Development.
 
@@ -15,15 +15,29 @@ The repository's parts are laid out under Development.
 harness/       mission.py, requirements_tree.py, judging.py (a pytest plugin), notebook.py, runs.py
 analysis/      one analyzer per metric: its limits, error math and plot
 scenarios/     how each scenario a TST item references is flown
-algorithms/gnc_algorithms/<name>/   notebook, gross check, tests, and an __init__ re-exporting the notebook
+algorithms/gnc_algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
+                                    re-exporting the notebook
 missions/      notebooks that plan missions, and the test running them
-cdh/           the Basilisk host and its worked example
+cdh/           gnc_cdh, the Python and F´ hosts and a worked example; fprime/, the F´ project
 docs/          requirements/ (Doorstop tree), decisions/ (ADRs)
 ```
 
 Tests sit beside the code they test. The suite needs the simulator installed, from `just pinned`
 (the WiseDynamics commit in `uv.lock`) or `just local` (an editable checkout at
 `$WISE_DYNAMICS_PATH`, default `../WiseDynamics`).
+
+### The F´ build
+
+`just pinned` and `just local` also build the F´ deployment. Besides `uv.lock`, the build needs the
+system C++ compiler and git. The F´ framework and Eigen are fetched by tag into gitignored folders
+under `cdh/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
+GitLab only the first time, or when a tag changes. Each sync rebuilds the F´ build cache from
+scratch, which needs no network.
+
+`just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
+picked up. That rebuild reuses the existing cache, so after switching branches run `just pinned` or
+`just local` to rebuild it from scratch. Why the F´ build flies inside the simulation, and how, is
+in [ADR 0003 rev 1](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 ### Requirements and missions
 
