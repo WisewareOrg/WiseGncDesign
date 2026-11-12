@@ -38,6 +38,26 @@ def _telemetry() -> dict[str, object]:
     }
 
 
+def _assert_matches(python: ImuDeadReckoner) -> None:
+    """The deployment's latest telemetry is a propagated state that agrees with `python`'s.
+
+    Args:
+        python: the notebook's reckoner, stepped through the same readings.
+    """
+    tlm = _telemetry()
+    q = [tlm[f"nav.bodyEciAttitude{a}"] for a in "XYZW"]
+    assert tlm["nav.navState"] == "propagated"
+    np.testing.assert_allclose(
+        Rotation.from_quat(q).as_matrix(), dcm_NB(python.sigma_BN), atol=1e-12
+    )
+    np.testing.assert_allclose(
+        [tlm[f"nav.bodyEciPos{a}"] for a in "XYZ"], python.r_BN_N, rtol=1e-12
+    )
+    np.testing.assert_allclose(
+        [tlm[f"nav.bodyEciVel{a}"] for a in "XYZ"], python.v_BN_N, rtol=1e-12
+    )
+
+
 def test_a_booted_reckoner_reports_idle_and_no_state():
     """Booted, the deployment reports `navState` idle and writes no position."""
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
@@ -84,15 +104,50 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: f
         python.step(t=k * step_ns / NS, AngVelPlatform=omega, AccelPlatform=accel)
         _wise_fsw.step(t_ns=k * step_ns, angVelPlatform=omega, accelPlatform=accel)
 
-    tlm = _telemetry()
-    q = [tlm[f"nav.bodyEciAttitude{a}"] for a in "XYZW"]
-    assert tlm["nav.navState"] == "propagated"
-    np.testing.assert_allclose(
-        Rotation.from_quat(q).as_matrix(), dcm_NB(python.sigma_BN), atol=1e-12
-    )
-    np.testing.assert_allclose(
-        [tlm[f"nav.bodyEciPos{a}"] for a in "XYZ"], python.r_BN_N, rtol=1e-12
-    )
-    np.testing.assert_allclose(
-        [tlm[f"nav.bodyEciVel{a}"] for a in "XYZ"], python.v_BN_N, rtol=1e-12
-    )
+    _assert_matches(python)
+
+
+SIGMA_B = np.array([-0.2, 0.05, 0.4])
+R_B = np.array([7000.0e3, 100.0e3, -50.0e3])
+V_B = np.array([-200.0, 5.0e3, 5.6e3])
+"""A second flight's initial state, apart from `SIGMA0`, `R0` and `V0` in every component."""
+
+
+def _fly_a_first_flight() -> None:
+    """Boots, initializes from the first state and steps to t = 600 s with nonzero readings."""
+    rng = np.random.default_rng(3)
+    _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
+    _wise_fsw.initialize_nav(t_ns=0, sigma_BN=SIGMA0, r_BN_N=R0, v_BN_N=V0)
+    for k in range(1, 61):
+        _wise_fsw.step(
+            t_ns=10 * k * NS,
+            angVelPlatform=0.02 * rng.normal(size=3),
+            accelPlatform=1e-3 * rng.normal(size=3),
+        )
+    assert _telemetry()["nav.navState"] == "propagated"
+
+
+def test_a_rebooted_reckoner_keeps_nothing_of_the_previous_flight():
+    """After a flight, booting again leaves the reckoner idle, with no state, from t = 0."""
+    _fly_a_first_flight()
+
+    _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
+    _wise_fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+
+    assert _telemetry() == {"nav.navState": "idle"}
+
+
+def test_a_second_flight_matches_a_fresh_notebook_reckoner():
+    """A flight after another, from its own state, agrees with a reckoner that never flew before."""
+    _fly_a_first_flight()
+    rng = np.random.default_rng(11)
+    readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
+    python = ImuDeadReckoner(SIGMA_B, R_B, V_B, t0=0.0, mu=MU, dcm_PB=MOUNTING)
+
+    _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
+    _wise_fsw.initialize_nav(t_ns=0, sigma_BN=SIGMA_B, r_BN_N=R_B, v_BN_N=V_B)
+    for k, (omega, accel) in enumerate(readings, start=1):
+        python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
+        _wise_fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
+
+    _assert_matches(python)
