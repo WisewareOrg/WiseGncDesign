@@ -284,3 +284,8 @@ def test_a_task_at_the_module_period_writes_the_outputs_at_whole_seconds():
     assert nav_trans.timeWritten() == 3 * ONE_SECOND_NS
     np.testing.assert_array_equal(nav_trans().r_BN_N, 3 * STEPPED)
     assert module.algorithm.t == 3.0
+
+
+def test_the_build_names_the_host():
+    """`build` is exactly the host's name."""
+    assert _module().build == {"host": "gnc_cdh.basilisk.AlgorithmModule"}

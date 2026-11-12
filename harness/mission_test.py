@@ -8,7 +8,9 @@ scenarios:
     TST901 links SRS901, SRS902, SRS903   TST902 links SRS902
 """
 
+import contextlib
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -562,3 +564,171 @@ def alpha():
 
     result.assert_outcomes(errors=1)
     result.stdout.fnmatch_lines(["*ValueError*alpha*"])
+
+
+STUB_HOST = """
+import numpy as np
+from Basilisk.architecture import sysModel
+
+
+class StubHost(sysModel.SysModel):
+    period_s = 1.0
+    build = {"host": "stub", "revision": "r1"}
+
+    def Reset(self, CurrentSimNanos):
+        pass
+
+    def UpdateState(self, CurrentSimNanos):
+        pass
+
+    def fly(self, run):
+        datasets = run(self, {})
+        n = len(datasets["t_s"][0])
+        datasets["est/stub_scalar"] = (np.full(n, 3.0), "m")
+        datasets["est/stub_vector"] = (np.full((n, 3), -2.0), "m/s")
+        return datasets
+"""
+
+
+def test_a_flight_records_through_the_hosts_fly_with_the_scenarios_stopping_rule(
+    project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
+) -> None:
+    """A host that is neither built-in type flies through its own `fly`, which the harness binds.
+
+    The stub's `fly` calls `run(self, {})` and adds fixed `est/*` arrays. The run file holds
+    exactly those beside the truth, and ends at the TST definition's `sim_duration_s`, so the
+    harness bound the stopping rule. `flight.json` names the builder and the stub's `build`.
+
+    Args:
+        project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
+    """
+    (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=20.0))
+    project.makepyfile(
+        test_flights=STUB_HOST
+        + """
+from harness.mission import Mission, mission_tests, provides
+
+
+@provides("SYS901")
+def stub_fsw(scenario):
+    return StubHost()
+
+
+globals().update(
+    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
+)
+"""
+    )
+
+    result = fly_in_a_subprocess(project)
+
+    result.assert_outcomes(passed=1)
+    [path] = project.path.rglob("run_0000.h5")
+    with h5py.File(path, "r") as f:
+        assert sorted(f["est"]) == ["stub_scalar", "stub_vector"]
+        assert (f["est/stub_scalar"][:] == 3.0).all()
+        assert (f["est/stub_vector"][:] == -2.0).all()
+        assert f["est/stub_scalar"].attrs["units"] == "m"
+        assert "r_N" in f["truth"]
+        assert f["t_s"][-1] == 20.0
+    [flight] = project.path.rglob("flight.json")
+    assert json.loads(flight.read_text()) == {
+        "scenario": "TST901",
+        "capabilities": ["SYS901"],
+        "rungs": None,
+        "fsw": "stub_fsw",
+        "build": {"host": "stub", "revision": "r1"},
+    }
+
+
+def test_a_later_cases_base_write_keeps_the_build_an_earlier_case_merged(
+    project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
+) -> None:
+    """Case 0 builds the stub host; case 1's builder raises, and `flight.json` still has `build`.
+
+    Case 1's fixture writes the flight's base facts before its builder raises, so the base write
+    must merge into the file rather than replace it.
+
+    Args:
+        project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
+    """
+    (project.path / "scenarios" / "alpha.py").write_text(
+        ALPHA.format(duration=1.0).replace("sim_runs(1)", "sim_runs(2)")
+    )
+    project.makepyfile(
+        test_flights=STUB_HOST
+        + """
+from harness.mission import Mission, mission_tests, provides
+
+BUILT = []
+
+
+@provides("SYS901")
+def stub_fsw(scenario):
+    BUILT.append(scenario)
+    if len(BUILT) > 1:
+        raise RuntimeError("the second case cannot build its host")
+    return StubHost()
+
+
+globals().update(
+    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
+)
+"""
+    )
+
+    result = fly_in_a_subprocess(project)
+
+    result.assert_outcomes(passed=1, failed=1)
+    result.stdout.fnmatch_lines(["*the second case cannot build its host*"])
+    [flight] = project.path.rglob("flight.json")
+    assert json.loads(flight.read_text()) == {
+        "scenario": "TST901",
+        "capabilities": ["SYS901"],
+        "rungs": None,
+        "fsw": "stub_fsw",
+        "build": {"host": "stub", "revision": "r1"},
+    }
+
+
+def test_an_interrupted_flight_json_write_leaves_the_old_file_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The write goes to a temporary file beside the target and lands by `os.replace`.
+
+    A write interrupted where it would land leaves the previous file whole.
+
+    Args:
+        tmp_path: the test's directory.
+        monkeypatch: the monkeypatch fixture.
+    """
+    from harness.mission import _merge_json
+
+    target = tmp_path / "flight.json"
+    _merge_json(target, {"scenario": "TST901"})
+    landed: list[Path] = []
+
+    def interrupted(source: str | Path, destination: str | Path) -> None:
+        """Record the source and fail as a write killed at the rename.
+
+        Args:
+            source: the temporary file.
+            destination: the file it would land as.
+
+        Raises:
+            OSError: always.
+        """
+        landed.append(Path(source))
+        raise OSError("interrupted")
+
+    monkeypatch.setattr(os, "replace", interrupted)
+
+    with contextlib.suppress(OSError):
+        _merge_json(target, {"build": {"host": "stub"}})
+
+    assert json.loads(target.read_text()) == {"scenario": "TST901"}
+    [source] = landed
+    assert source.parent == tmp_path
+    assert source != target
