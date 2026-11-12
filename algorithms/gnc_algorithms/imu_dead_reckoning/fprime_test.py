@@ -33,9 +33,7 @@ def _telemetry() -> dict[str, object]:
         Channel name, `<instance>.<channel>`, to its decoded value.
     """
     channels = decoders(json.loads(DICTIONARY.read_text()))
-    return {
-        channels[cid][0]: channels[cid][1](raw) for cid, (_, raw) in _wise_fsw.telemetry().items()
-    }
+    return {channels[cid][0]: channels[cid][1](raw) for cid, raw in _wise_fsw.telemetry().items()}
 
 
 def _assert_matches(python: ImuDeadReckoner) -> None:
