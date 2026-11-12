@@ -306,7 +306,8 @@ def test_flight_json_survives_a_case_that_crashes_before_it_flies(
     """A case that crashes setting up `sim_scenario` still leaves its flight's facts.
 
     Two missions fly one vehicle: one judges every rung, one a filter. Each flight's folder holds
-    `flight.json` with the scenario, the sorted capabilities and the filter or null.
+    `flight.json` with the scenario, the FSW builder's name, the sorted capabilities and the filter
+    or null, and no `build`, since no host was built.
 
     Args:
         project: the project.
@@ -369,11 +370,13 @@ globals().update(
     )
     assert json.loads(found["test_everything_alpha"].read_text()) == {
         "scenario": "TST901",
+        "fsw": "everything",
         "capabilities": ["SYS901", "SYS902"],
         "rungs": None,
     }
     assert json.loads(found["test_narrowed_alpha"].read_text()) == {
         "scenario": "TST901",
+        "fsw": "narrowed",
         "capabilities": ["SYS901"],
         "rungs": ["SRS902"],
     }

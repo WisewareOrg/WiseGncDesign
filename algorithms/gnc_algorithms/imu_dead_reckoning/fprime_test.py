@@ -11,7 +11,7 @@ from scipy.spatial.transform import Rotation
 
 from gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
 from gnc_algorithms.mrp import dcm_NB
-from gnc_cdh.fprime import DICTIONARY, _wise_fsw, decoders
+from gnc_cdh.fprime import DICTIONARY, _wise_fsw, decoders, telemetry_by_name
 
 MU = 3.986004360e14
 """m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
@@ -25,6 +25,9 @@ MOUNTING = Rotation.from_euler("zyx", [10.0, -20.0, 30.0], degrees=True).as_matr
 NS = 1_000_000_000
 """ns per s."""
 
+CHANNELS = decoders(json.loads(DICTIONARY.read_text()))
+"""The decoder of every channel in the generated dictionary."""
+
 
 def _telemetry() -> dict[str, object]:
     """The latest value of every channel, by name.
@@ -32,8 +35,7 @@ def _telemetry() -> dict[str, object]:
     Returns:
         Channel name, `<instance>.<channel>`, to its decoded value.
     """
-    channels = decoders(json.loads(DICTIONARY.read_text()))
-    return {channels[cid][0]: channels[cid][1](raw) for cid, raw in _wise_fsw.telemetry().items()}
+    return telemetry_by_name(CHANNELS, _wise_fsw.telemetry())
 
 
 def _assert_matches(python: ImuDeadReckoner) -> None:
