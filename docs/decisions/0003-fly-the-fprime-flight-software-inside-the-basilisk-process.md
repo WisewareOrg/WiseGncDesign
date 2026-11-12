@@ -121,13 +121,9 @@ autocoder.
   recorders, which no need asks for. Rejected.
 - **A duration parameter on the recording method.** Rejected: a flight is not defined by a fixed
   simulated length.
-- **`fly(scenario, stop)`.** The host would receive the scenario and pass its stopping arguments
-  through to `Scenario.run`, so every host would carry how a flight is stopped. Rejected: with
-  `fly(run)` that stays in the harness, so a different way to end a flight, such as a ground
-  procedure, changes the harness alone.
-- **A stop value type.** Every host would convert it into `Scenario.run`'s arguments, which teaches
-  each host the stopping vocabulary, and it adds a type to carry the one rule that exists, a
-  duration. Rejected for `fly(run)`, which keeps that vocabulary in the harness.
+- **`fly(scenario, stop)`** and **a stop value type.** Rejected for `fly(run)`: the harness binds
+  the scenario and its stopping rule into one callable, and the host never sees the scenario or its
+  stopping rule.
 - **The build identity in run-file attributes.** Rejected: it would need the simulator changed.
 - **The repository commit alone as the build identity.** Rejected: it cannot tell two builds of one
   commit apart.

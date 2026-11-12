@@ -4,6 +4,11 @@
 `gnc_algorithms` in a simulator: `gnc_cdh.basilisk` hosts its Python build, and `gnc_cdh.fprime`
 its F´ build.
 
+Each host implements `fly(run) -> datasets`, which the harness calls to fly a case and record the
+estimate, and `build`, the host's build identity, which the harness records in the flight's
+`flight.json`. The contract and its reasoning are in
+[ADR 0003 rev 1](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
 algorithm's `step` as plain arrays, and the arrays it returns into messages, by name. Frames,
 mountings and units belong to the algorithm.
