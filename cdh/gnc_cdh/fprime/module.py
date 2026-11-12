@@ -2,7 +2,7 @@
 
 import json
 import struct
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -12,9 +12,10 @@ from scipy.spatial.transform import Rotation
 
 from gnc_cdh.basilisk import UNITS, AlgorithmModule
 
-__all__ = ["DICTIONARY", "FprimeModule", "decoders"]
+__all__ = ["DICTIONARY", "FprimeModule", "decoders", "telemetry_by_name"]
 
 _NANOSECONDS_PER_SECOND = 1e9
+_NANOSECONDS_PER_MICROSECOND = 1_000
 
 DICTIONARY = Path(__file__).with_name("WiseFswTopologyDictionary.json")
 """The dictionary F´ generated for the deployment, copied here by `just fsw`."""
@@ -59,9 +60,26 @@ def decoders(dictionary: Mapping[str, Any]) -> dict[int, tuple[str, Any]]:
     return channels
 
 
+def telemetry_by_name(
+    channels: Mapping[int, tuple[str, Any]], raw: Mapping[int, bytes]
+) -> dict[str, Any]:
+    """One call's raw telemetry, decoded and named.
+
+    Args:
+        channels: the decoder table `decoders` builds.
+        raw: channel ID to serialized value, as the extension's `telemetry()` returns it.
+
+    Returns:
+        Channel name to value.
+    """
+    return {channels[cid][0]: channels[cid][1](value) for cid, value in raw.items()}
+
+
 class FprimeModule(sysModel.SysModel):
     """Runs the WiseFsw deployment each tick: the clock set, the IMU reading sent, the schedule run.
 
+    The deployment is the WiseFsw topology, whose content today is the dead reckoner. The channel to
+    estimate mapping in `estimate_datasets` is the one dead-reckoner-specific piece of this host.
     The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
     and gives the dead reckoner its initial state; until the initNavState command exists, that
     state is handed over directly. Each `UpdateState` after the last tick reads the IMU once,
@@ -70,9 +88,12 @@ class FprimeModule(sysModel.SysModel):
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in, the Python
             host's, so the two builds fly at one rate.
+        build: the host's build identity, recorded in a flight's `flight.json`: the host, F´'s
+            version and the commit the deployment was built from.
     """
 
     period_s = AlgorithmModule.period_s
+    build: dict[str, str]
 
     def __init__(
         self, imu: Any, mu: float, dcm_PB: np.ndarray, initial: Mapping[str, np.ndarray]
@@ -91,7 +112,13 @@ class FprimeModule(sysModel.SysModel):
         self._mu = float(mu)
         self._dcm_PB = np.asarray(dcm_PB, dtype=float)
         self._initial = {k: np.asarray(v, dtype=float) for k, v in initial.items()}
-        self._channels = decoders(json.loads(DICTIONARY.read_text()))
+        dictionary = json.loads(DICTIONARY.read_text())
+        self._channels = decoders(dictionary)
+        self.build = {
+            "host": "gnc_cdh.fprime.FprimeModule",
+            "frameworkVersion": dictionary["metadata"]["frameworkVersion"],
+            "projectVersion": dictionary["metadata"]["projectVersion"],
+        }
         self._t_ns = 0
         self._log: dict[int, dict[str, Any]] = {}
 
@@ -125,12 +152,18 @@ class FprimeModule(sysModel.SysModel):
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
-            RuntimeError: the IMU reader has never been written.
+            RuntimeError: the tick is not at a whole microsecond, or the IMU reader has never
+                been written.
         """
         from gnc_cdh.fprime import _wise_fsw
 
         if not CurrentSimNanos > self._t_ns:
             return
+        if CurrentSimNanos % _NANOSECONDS_PER_MICROSECOND:
+            raise RuntimeError(
+                f"the tick at {CurrentSimNanos} ns is not a whole microsecond,"
+                " which the deployment's clock cannot hold"
+            )
         if not self._imu.isWritten():
             t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
             raise RuntimeError(f"the IMU has not been written at t = {t} s")
@@ -152,10 +185,21 @@ class FprimeModule(sysModel.SysModel):
         Returns:
             Channel name to value.
         """
-        return {
-            self._channels[cid][0]: self._channels[cid][1](raw)
-            for cid, raw in wise_fsw.telemetry().items()
-        }
+        return telemetry_by_name(self._channels, wise_fsw.telemetry())
+
+    def fly(self, run: Callable[[Any, dict], dict]) -> dict:
+        """Flies the scenario through `run` and records the estimate from the telemetry log.
+
+        Args:
+            run: flies the scenario with this host and the datasets to record, as the harness
+                binds it from the scenario and its stopping rule.
+
+        Returns:
+            The run's datasets with the estimate's added.
+        """
+        datasets = run(self, {})
+        datasets.update(self.estimate_datasets(datasets["t_s"][0]))
+        return datasets
 
     def estimate_datasets(self, t_s: np.ndarray) -> dict[str, tuple[np.ndarray, str]]:
         """The estimate's run-file datasets at the record times, from the logged telemetry.

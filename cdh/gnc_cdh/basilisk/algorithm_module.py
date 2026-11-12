@@ -1,7 +1,7 @@
 """A Basilisk Python `SysModel` hosting one algorithm, wired by its names."""
 
 import inspect
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from types import MappingProxyType
 from typing import Any
 
@@ -91,6 +91,11 @@ class AlgorithmModule(sysModel.SysModel):
         return roles[0]
 
     @property
+    def build(self) -> dict[str, str]:
+        """The host's build identity, recorded in a flight's `flight.json`."""
+        return {"host": "gnc_cdh.basilisk.AlgorithmModule"}
+
+    @property
     def inputs(self) -> Mapping[str, Any]:
         """Reader by input role."""
         return self._inputs
@@ -150,6 +155,20 @@ class AlgorithmModule(sysModel.SysModel):
             for role, keyword in self._reads
         }
         self._write_outputs(self._algorithm.step(t=t, **fields), CurrentSimNanos)
+
+    def fly(self, run: Callable[[Any, dict[str, tuple[Any, str, str]]], dict]) -> dict:
+        """Flies the scenario through `run` and records the estimate from the messages written.
+
+        Args:
+            run: flies the scenario with this host and the datasets to record, as the harness
+                binds it from the scenario and its stopping rule.
+
+        Returns:
+            The run's datasets.
+        """
+        from gnc_cdh.basilisk.fields import estimate_fields
+
+        return run(self, estimate_fields(self))
 
     def _write_outputs(self, values: Mapping[str, Any], CurrentSimNanos: int) -> None:
         """Copies each output's array into its message field and writes every output message.
