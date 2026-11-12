@@ -7,7 +7,7 @@ _sync:
 
 # Build the F´ deployment into gnc_cdh.fprime: its Python extension and its dictionary.
 fsw:
-    [ -d cdh/fprime/build-fprime-automatic-native ] || (cd cdh/fprime && uv run --no-sync fprime-util generate -DPython_EXECUTABLE="$(uv run --no-sync python -c 'import sys; print(sys.executable)')")
+    [ -d cdh/fprime/build-fprime-automatic-native ] || (cd cdh/fprime && uv run --no-sync fprime-util generate -DCMAKE_BUILD_TYPE=Release -DPython_EXECUTABLE="$(uv run --no-sync python -c 'import sys; print(sys.executable)')")
     uv run --no-sync cmake --build cdh/fprime/build-fprime-automatic-native --target _wise_fsw
 
 # Install an editable WiseDynamics checkout and print the one in use.
