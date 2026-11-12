@@ -18,6 +18,8 @@ module WiseFsw {
     telemetry connections instance tlmCapture
 
     connections Simulation {
+      simBridge.navConfigOut -> nav.configureIn
+      simBridge.navInitOut -> nav.initializeIn
       simBridge.imuOut -> nav.imuIn
       simBridge.schedOut[0] -> nav.schedIn
     }

@@ -13,9 +13,13 @@ module Sim {
 
   @ The simulation's side of the deployment: feeds sensor readings and drives the schedule
   passive component SimBridge {
+    @ The navigation filter's configuration
+    output port navConfigOut: Gnc.NavConfig
+    @ The navigation state to start from. Temporary: the initNavState command replaces it.
+    output port navInitOut: Gnc.NavInit
     @ The IMU reading of this tick
     output port imuOut: Gnc.ImuReading
-    @ The 1 Hz schedule, standing in for a timer and rate group
+    @ The schedule, standing in for a timer and rate group
     output port schedOut: [1] Svc.Sched
   }
 

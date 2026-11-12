@@ -39,36 +39,48 @@ Derivative derivative(const Vector3d& sigma, const Vector3d& r, const Vector3d& 
     return {0.25 * kinematics(sigma) * omega, v, dcmNB(sigma) * accel - mu * r / (rNorm * rNorm * rNorm)};
 }
 
+Vector3d vector(const Gnc::Vector3& v) {
+    return Vector3d(v[0], v[1], v[2]);
+}
+
 }  // namespace
 
 ImuDeadReckoner::ImuDeadReckoner(const char* compName) : ImuDeadReckonerComponentBase(compName) {}
 
-void ImuDeadReckoner::configure(F64 mu, const Eigen::Matrix3d& dcm_PB) {
+F64 ImuDeadReckoner::now() {
+    const Fw::Time time = this->getTime();
+    return static_cast<F64>(time.getSeconds()) + static_cast<F64>(time.getUSeconds()) * 1e-6;
+}
+
+void ImuDeadReckoner::configureIn_handler(FwIndexType portNum, F64 mu, const Gnc::Matrix3& dcmPB) {
+    Matrix3d dcm_PB;
+    for (FwIndexType row = 0; row < 3; row++) {
+        dcm_PB.row(row) = vector(dcmPB[row]).transpose();
+    }
     this->m_mu = mu;
     this->m_dcm_BP = dcm_PB.transpose();
     this->m_navState = NavState::idle;
-    this->m_t = 0.0;
+    this->m_t = this->now();
 }
 
-void ImuDeadReckoner::initialize(F64 t, const Eigen::Vector3d& sigma_BN, const Eigen::Vector3d& r_BN_N,
-                                 const Eigen::Vector3d& v_BN_N) {
-    this->m_t = t;
-    this->m_sigma = sigma_BN;
-    this->m_r = r_BN_N;
-    this->m_v = v_BN_N;
+void ImuDeadReckoner::initializeIn_handler(FwIndexType portNum, const Gnc::Vector3& sigmaBN, const Gnc::Vector3& rBN_N,
+                                           const Gnc::Vector3& vBN_N) {
+    this->m_t = this->now();
+    this->m_sigma = vector(sigmaBN);
+    this->m_r = vector(rBN_N);
+    this->m_v = vector(vBN_N);
     this->m_navState = NavState::initialized;
     this->writeTelemetry();
 }
 
 void ImuDeadReckoner::imuIn_handler(FwIndexType portNum, const Gnc::Vector3& angVelPlatform,
                                     const Gnc::Vector3& accelPlatform) {
-    this->m_omega_P = Vector3d(angVelPlatform[0], angVelPlatform[1], angVelPlatform[2]);
-    this->m_accel_P = Vector3d(accelPlatform[0], accelPlatform[1], accelPlatform[2]);
+    this->m_omega_P = vector(angVelPlatform);
+    this->m_accel_P = vector(accelPlatform);
 }
 
 void ImuDeadReckoner::schedIn_handler(FwIndexType portNum, U32 context) {
-    const Fw::Time now = this->getTime();
-    const F64 t = static_cast<F64>(now.getSeconds()) + static_cast<F64>(now.getUSeconds()) * 1e-6;
+    const F64 t = this->now();
     if (this->m_navState == NavState::idle || !(t > this->m_t)) {
         this->writeTelemetry();
         return;

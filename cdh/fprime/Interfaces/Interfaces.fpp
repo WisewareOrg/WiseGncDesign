@@ -3,10 +3,26 @@ module Gnc {
   @ A 3-vector
   array Vector3 = [3] F64
 
+  @ A 3x3 matrix, by rows
+  array Matrix3 = [3] Vector3
+
   @ One IMU reading, in the IMU platform frame P
   port ImuReading(
     angVelPlatform: Vector3 @< rad/s, the rate of the body frame with respect to ECI, in P
     accelPlatform: Vector3 @< m/s^2, non-gravitational acceleration, in P
+  )
+
+  @ The navigation filter's configuration
+  port NavConfig(
+    mu: F64 @< m^3/s^2, the central body's gravitational parameter
+    dcmPB: Matrix3 @< the IMU's mounting [PB], v_P = [PB] v_B
+  )
+
+  @ A navigation state to start from, at the current time. Temporary: the initNavState command replaces it.
+  port NavInit(
+    sigmaBN: Vector3 @< MRP of the body frame with respect to ECI
+    rBN_N: Vector3 @< m, position in ECI
+    vBN_N: Vector3 @< m/s, velocity in ECI
   )
 
   @ The state of the navigation estimate

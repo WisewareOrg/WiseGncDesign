@@ -1,4 +1,4 @@
-// Temporary: the deployment's Python interface, hand-written until fprime-python's autocoder generates it.
+// The deployment's Python interface: a hand-written pybind11 module.
 // One deployment per process: its component instances are the topology's globals.
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
@@ -17,6 +17,11 @@ Gnc::Vector3 vector3(const Eigen::Vector3d& v) {
     return Gnc::Vector3({v.x(), v.y(), v.z()});
 }
 
+Gnc::Matrix3 matrix3(const Eigen::Matrix3d& m) {
+    return Gnc::Matrix3({Gnc::Vector3({m(0, 0), m(0, 1), m(0, 2)}), Gnc::Vector3({m(1, 0), m(1, 1), m(1, 2)}),
+                         Gnc::Vector3({m(2, 0), m(2, 1), m(2, 2)})});
+}
+
 }  // namespace
 
 PYBIND11_MODULE(_wise_fsw, m) {
@@ -32,7 +37,7 @@ PYBIND11_MODULE(_wise_fsw, m) {
             }
             WiseFsw::tlmCapture.clear();
             WiseFsw::simTime.set(0U);
-            WiseFsw::nav.configure(mu, dcm_PB);
+            WiseFsw::simBridge.configureNav(mu, matrix3(dcm_PB));
         },
         py::arg("mu"), py::arg("dcm_PB"),
         "Sets the deployment up on first use, and boots it at t = 0 s: telemetry cleared, the dead reckoner idle "
@@ -43,7 +48,7 @@ PYBIND11_MODULE(_wise_fsw, m) {
         [](U64 t_ns, const Eigen::Vector3d& sigma_BN, const Eigen::Vector3d& r_BN_N, const Eigen::Vector3d& v_BN_N) {
             WiseFsw::tlmCapture.clear();
             WiseFsw::simTime.set(t_ns);
-            WiseFsw::nav.initialize(static_cast<F64>(t_ns) * 1e-9, sigma_BN, r_BN_N, v_BN_N);
+            WiseFsw::simBridge.initializeNav(vector3(sigma_BN), vector3(r_BN_N), vector3(v_BN_N));
         },
         py::arg("t_ns"), py::arg("sigma_BN"), py::arg("r_BN_N"), py::arg("v_BN_N"),
         "Gives the dead reckoner its state at t_ns (ns); telemetry() then holds what that wrote. Temporary: the "
@@ -66,12 +71,10 @@ PYBIND11_MODULE(_wise_fsw, m) {
         []() {
             py::dict latest;
             for (const auto& entry : WiseFsw::tlmCapture.latest()) {
-                const Sim::TlmCapture::Sample& sample = entry.second;
-                latest[py::int_(entry.first)] = py::make_tuple(
-                    sample.time,
-                    py::bytes(reinterpret_cast<const char*>(sample.value.data()), sample.value.size()));
+                latest[py::int_(entry.first)] =
+                    py::bytes(reinterpret_cast<const char*>(entry.second.data()), entry.second.size());
             }
             return latest;
         },
-        "Every channel the last boot, initialize_nav or step wrote: channel ID to (time in s, serialized value).");
+        "Every channel the last boot, initialize_nav or step wrote: channel ID to serialized value.");
 }

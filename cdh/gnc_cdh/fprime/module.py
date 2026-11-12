@@ -154,7 +154,7 @@ class FprimeModule(sysModel.SysModel):
         """
         return {
             self._channels[cid][0]: self._channels[cid][1](raw)
-            for cid, (_, raw) in wise_fsw.telemetry().items()
+            for cid, raw in wise_fsw.telemetry().items()
         }
 
     def estimate_datasets(self, t_s: np.ndarray) -> dict[str, tuple[np.ndarray, str]]:

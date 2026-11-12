@@ -12,18 +12,16 @@ class ImuDeadReckoner final : public ImuDeadReckonerComponentBase {
   public:
     explicit ImuDeadReckoner(const char* compName);
 
-    //! Boots the estimator idle at t = 0 s, holding mu (m^3/s^2) and the IMU's mounting [PB], v_P = [PB] v_B.
-    void configure(F64 mu, const Eigen::Matrix3d& dcm_PB);
-
-    //! Gives the estimate its state at t (s): sigma_BN (MRP), r_BN_N (m) and v_BN_N (m/s).
-    //! Temporary: the initNavState command replaces it.
-    void initialize(F64 t, const Eigen::Vector3d& sigma_BN, const Eigen::Vector3d& r_BN_N,
-                    const Eigen::Vector3d& v_BN_N);
-
   private:
     void schedIn_handler(FwIndexType portNum, U32 context) override;
     void imuIn_handler(FwIndexType portNum, const Gnc::Vector3& angVelPlatform,
                        const Gnc::Vector3& accelPlatform) override;
+    void configureIn_handler(FwIndexType portNum, F64 mu, const Gnc::Matrix3& dcmPB) override;
+    void initializeIn_handler(FwIndexType portNum, const Gnc::Vector3& sigmaBN, const Gnc::Vector3& rBN_N,
+                              const Gnc::Vector3& vBN_N) override;
+
+    //! The clock's time, in s.
+    F64 now();
 
     //! Writes every telemetry channel from the held state.
     void writeTelemetry();

@@ -9,6 +9,12 @@ module Gnc {
     @ The IMU's latest reading, held until the next step
     sync input port imuIn: Gnc.ImuReading
 
+    @ Boots the estimator idle with its configuration
+    sync input port configureIn: Gnc.NavConfig
+
+    @ Gives the estimator its state at the current time. Temporary: the initNavState command replaces it.
+    sync input port initializeIn: Gnc.NavInit
+
     @ The deployment's clock
     time get port timeCaller
 
