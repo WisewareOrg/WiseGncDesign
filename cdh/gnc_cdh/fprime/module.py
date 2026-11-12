@@ -78,12 +78,12 @@ def telemetry_by_name(
 class FprimeModule(sysModel.SysModel):
     """Runs the WiseFsw deployment each tick: the clock set, the IMU reading sent, the schedule run.
 
-    The deployment is the WiseFsw topology, whose content today is the dead reckoner. The channel to
+    The deployment is the WiseFsw topology, whose content is the dead reckoner. The channel to
     estimate mapping in `estimate_datasets` is the one dead-reckoner-specific piece of this host.
     The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
-    and gives the dead reckoner its initial state; until the initNavState command exists, that
-    state is handed over directly. Each `UpdateState` after the last tick reads the IMU once,
-    steps the deployment and logs every channel the tick wrote, by the tick's time in ns.
+    and gives the dead reckoner its initial state, handed over directly rather than by command.
+    Each `UpdateState` after the last tick reads the IMU once, steps the deployment and logs
+    every channel the tick wrote, by the tick's time in ns.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in, the Python

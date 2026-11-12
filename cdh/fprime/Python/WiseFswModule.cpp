@@ -51,8 +51,8 @@ PYBIND11_MODULE(_wise_fsw, m) {
             WiseFsw::simBridge.initializeNav(vector3(sigma_BN), vector3(r_BN_N), vector3(v_BN_N));
         },
         py::arg("t_ns"), py::arg("sigma_BN"), py::arg("r_BN_N"), py::arg("v_BN_N"),
-        "Gives the dead reckoner its state at t_ns (ns); telemetry() then holds what that wrote. Temporary: the "
-        "initNavState command replaces it.");
+        "Gives the dead reckoner its state at t_ns (ns); telemetry() then holds what that wrote. The state "
+        "is given directly rather than by command.");
 
     m.def(
         "step",

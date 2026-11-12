@@ -18,7 +18,7 @@ module Gnc {
     dcmPB: Matrix3 @< the IMU's mounting [PB], v_P = [PB] v_B
   )
 
-  @ A navigation state to start from, at the current time. Temporary: the initNavState command replaces it.
+  @ A navigation state to start from, at the current time, given directly rather than by command
   port NavInit(
     sigmaBN: Vector3 @< MRP of the body frame with respect to ECI
     rBN_N: Vector3 @< m, position in ECI

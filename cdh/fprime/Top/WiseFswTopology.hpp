@@ -1,4 +1,4 @@
-// Sets up and tears down the WiseFsw deployment.
+// Sets up the WiseFsw deployment.
 #ifndef WISEFSW_WISEFSWTOPOLOGY_HPP
 #define WISEFSW_WISEFSWTOPOLOGY_HPP
 

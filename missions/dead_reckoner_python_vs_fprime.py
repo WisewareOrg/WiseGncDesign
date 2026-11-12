@@ -31,8 +31,8 @@ from harness.mission import Mission, mission_tests, provides
 # %% [markdown]
 # ## The F´ flight software
 #
-# `fprime_dead_reckoner` boots the deployment on the scenario's vehicle. Until the `initNavState`
-# command exists, the dead reckoner's initial state is handed over at boot, as the Python one's is.
+# `fprime_dead_reckoner` boots the deployment on the scenario's vehicle.
+# The dead reckoner's initial state is handed over at boot, as the Python one's is.
 
 
 # %%
