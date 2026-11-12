@@ -9,9 +9,4 @@ void setupTopology(const TopologyState& state) {
     configComponents(state);
 }
 
-void teardownTopology(const TopologyState& state) {
-    tearDownComponents(state);
-    deinitComponents(state);
-}
-
 }  // namespace WiseFsw

@@ -22,6 +22,9 @@ V0 = np.array([0.0, 5.4e3, 5.4e3])
 MOUNTING = Rotation.from_euler("zyx", [10.0, -20.0, 30.0], degrees=True).as_matrix()
 """A mounting [PB] that is not the identity, so a transposed mounting shows."""
 
+NS = 1_000_000_000
+"""ns per s."""
+
 
 def _telemetry() -> dict[str, object]:
     """The latest value of every channel, by name.
@@ -38,7 +41,7 @@ def _telemetry() -> dict[str, object]:
 def test_a_booted_reckoner_reports_idle_and_no_state():
     """Booted, the deployment reports `navState` idle and writes no position."""
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.step(t=1.0, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+    _wise_fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
     assert _telemetry() == {"nav.navState": "idle"}
 
@@ -46,7 +49,7 @@ def test_a_booted_reckoner_reports_idle_and_no_state():
 def test_the_attitude_quaternion_takes_body_vectors_into_eci_with_w_nonnegative():
     """The quaternion's matrix is [NB] of the initial MRP, and its W is not negative."""
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t=0.0, sigma_BN=SIGMA0, r_BN_N=R0, v_BN_N=V0)
+    _wise_fsw.initialize_nav(t_ns=0, sigma_BN=SIGMA0, r_BN_N=R0, v_BN_N=V0)
 
     tlm = _telemetry()
     q = [tlm[f"nav.bodyEciAttitude{a}"] for a in "XYZW"]
@@ -56,24 +59,30 @@ def test_the_attitude_quaternion_takes_body_vectors_into_eci_with_w_nonnegative(
     np.testing.assert_allclose(Rotation.from_quat(q).as_mrp(), SIGMA0, atol=1e-15)
 
 
-@pytest.mark.parametrize("rate_rad_s", [0.02, 0.5], ids=["slow", "past-the-shadow-switch"])
-def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: float):
-    """Fed the same readings at 1 Hz for 600 s, the two builds agree to rounding.
+@pytest.mark.parametrize(
+    ("rate_rad_s", "step_ns"),
+    [(0.02, NS), (0.5, NS), (0.02, NS // 10)],
+    ids=["slow", "past-the-shadow-switch", "at-10-Hz"],
+)
+def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: float, step_ns: int):
+    """Fed the same 600 readings, the two builds agree to rounding.
 
-    The faster rate turns the body past 180 degrees, so both switch to the shadow set.
+    The faster rate turns the body past 180 degrees, so both switch to the shadow set; the 10 Hz
+    case ticks between whole seconds.
 
     Args:
         rate_rad_s: rad/s, the gyro reading's magnitude.
+        step_ns: ns between readings.
     """
     rng = np.random.default_rng(7)
     readings = [(rate_rad_s * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(600)]
     python = ImuDeadReckoner(SIGMA0, R0, V0, t0=0.0, mu=MU, dcm_PB=MOUNTING)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t=0.0, sigma_BN=SIGMA0, r_BN_N=R0, v_BN_N=V0)
+    _wise_fsw.initialize_nav(t_ns=0, sigma_BN=SIGMA0, r_BN_N=R0, v_BN_N=V0)
 
     for k, (omega, accel) in enumerate(readings, start=1):
-        python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
-        _wise_fsw.step(t=float(k), angVelPlatform=omega, accelPlatform=accel)
+        python.step(t=k * step_ns / NS, AngVelPlatform=omega, AccelPlatform=accel)
+        _wise_fsw.step(t_ns=k * step_ns, angVelPlatform=omega, accelPlatform=accel)
 
     tlm = _telemetry()
     q = [tlm[f"nav.bodyEciAttitude{a}"] for a in "XYZW"]

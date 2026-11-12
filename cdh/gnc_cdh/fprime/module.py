@@ -10,6 +10,8 @@ import numpy as np
 from Basilisk.architecture import sysModel
 from scipy.spatial.transform import Rotation
 
+from gnc_cdh.basilisk import UNITS, AlgorithmModule
+
 __all__ = ["DICTIONARY", "FprimeModule", "decoders"]
 
 _NANOSECONDS_PER_SECOND = 1e9
@@ -63,13 +65,14 @@ class FprimeModule(sysModel.SysModel):
     The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
     and gives the dead reckoner its initial state; until the initNavState command exists, that
     state is handed over directly. Each `UpdateState` after the last tick reads the IMU once,
-    steps the deployment and logs every channel the tick wrote.
+    steps the deployment and logs every channel the tick wrote, by the tick's time in ns.
 
     Attributes:
-        period_s: the period, in s, of the task the simulation runs this module in: 1 Hz.
+        period_s: the period, in s, of the task the simulation runs this module in, the Python
+            host's, so the two builds fly at one rate.
     """
 
-    period_s = 1.0
+    period_s = AlgorithmModule.period_s
 
     def __init__(
         self, imu: Any, mu: float, dcm_PB: np.ndarray, initial: Mapping[str, np.ndarray]
@@ -89,13 +92,8 @@ class FprimeModule(sysModel.SysModel):
         self._dcm_PB = np.asarray(dcm_PB, dtype=float)
         self._initial = {k: np.asarray(v, dtype=float) for k, v in initial.items()}
         self._channels = decoders(json.loads(DICTIONARY.read_text()))
-        self._t = 0.0
-        self._log: list[tuple[float, dict[str, Any]]] = []
-
-    @property
-    def telemetry(self) -> list[tuple[float, dict[str, Any]]]:
-        """Each tick's telemetry: its time in s, and each channel it wrote by name."""
-        return self._log
+        self._t_ns = 0
+        self._log: dict[int, dict[str, Any]] = {}
 
     def Reset(self, CurrentSimNanos: int) -> None:
         """Boots the deployment, initializes the dead reckoner and logs the telemetry at t = 0.
@@ -110,15 +108,15 @@ class FprimeModule(sysModel.SysModel):
 
         if not self._imu.isLinked():
             raise RuntimeError("the IMU reader is not subscribed to any message")
-        self._t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
+        self._t_ns = CurrentSimNanos
         _wise_fsw.boot(mu=self._mu, dcm_PB=self._dcm_PB)
         _wise_fsw.initialize_nav(
-            t=self._t,
+            t_ns=self._t_ns,
             sigma_BN=self._initial["sigma0_BN"],
             r_BN_N=self._initial["r0_N"],
             v_BN_N=self._initial["v0_N"],
         )
-        self._log = [(self._t, self._latest(_wise_fsw))]
+        self._log = {self._t_ns: self._written(_wise_fsw)}
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
         """Steps the deployment to the current time when it lies after the last tick.
@@ -131,22 +129,22 @@ class FprimeModule(sysModel.SysModel):
         """
         from gnc_cdh.fprime import _wise_fsw
 
-        t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
-        if not t > self._t:
+        if not CurrentSimNanos > self._t_ns:
             return
         if not self._imu.isWritten():
+            t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
             raise RuntimeError(f"the IMU has not been written at t = {t} s")
         reading = self._imu()
         _wise_fsw.step(
-            t=t,
+            t_ns=CurrentSimNanos,
             angVelPlatform=np.array(reading.AngVelPlatform, dtype=float),
             accelPlatform=np.array(reading.AccelPlatform, dtype=float),
         )
-        self._t = t
-        self._log.append((t, self._latest(_wise_fsw)))
+        self._t_ns = CurrentSimNanos
+        self._log[CurrentSimNanos] = self._written(_wise_fsw)
 
-    def _latest(self, wise_fsw: Any) -> dict[str, Any]:
-        """Every channel written at the current tick, decoded and named.
+    def _written(self, wise_fsw: Any) -> dict[str, Any]:
+        """Every channel the deployment's last call wrote, decoded and named.
 
         Args:
             wise_fsw: the deployment's extension module.
@@ -156,8 +154,7 @@ class FprimeModule(sysModel.SysModel):
         """
         return {
             self._channels[cid][0]: self._channels[cid][1](raw)
-            for cid, (time, raw) in wise_fsw.telemetry().items()
-            if time == self._t
+            for cid, (_, raw) in wise_fsw.telemetry().items()
         }
 
     def estimate_datasets(self, t_s: np.ndarray) -> dict[str, tuple[np.ndarray, str]]:
@@ -166,7 +163,7 @@ class FprimeModule(sysModel.SysModel):
         The attitude quaternion becomes `sigma_BN`, the MRP whose [NB] is the quaternion's matrix.
 
         Args:
-            t_s: (N,) s, the record times, each one a tick's time.
+            t_s: (N,) s, the record times, each one a tick's time to the nanosecond.
 
         Returns:
             `est/sigma_BN` (MRP), `est/r_BN_N` (m) and `est/v_BN_N` (m/s), each (N, 3).
@@ -174,21 +171,16 @@ class FprimeModule(sysModel.SysModel):
         Raises:
             KeyError: naming a record time no tick logged.
         """
-        by_time = dict(self._log)
         rows = []
         for t in t_s:
-            if float(t) not in by_time:
+            t_ns = round(float(t) * _NANOSECONDS_PER_SECOND)
+            if t_ns not in self._log:
                 raise KeyError(f"no telemetry was logged at t = {t} s")
-            rows.append(by_time[float(t)])
+            rows.append(self._log[t_ns])
         quaternion = [[row[f"nav.bodyEciAttitude{a}"] for a in "XYZW"] for row in rows]
-        return {
-            "est/sigma_BN": (Rotation.from_quat(quaternion).as_mrp(), "MRP"),
-            "est/r_BN_N": (
-                np.array([[row[f"nav.bodyEciPos{a}"] for a in "XYZ"] for row in rows]),
-                "m",
-            ),
-            "est/v_BN_N": (
-                np.array([[row[f"nav.bodyEciVel{a}"] for a in "XYZ"] for row in rows]),
-                "m/s",
-            ),
+        values = {
+            "sigma_BN": Rotation.from_quat(quaternion).as_mrp(),
+            "r_BN_N": np.array([[row[f"nav.bodyEciPos{a}"] for a in "XYZ"] for row in rows]),
+            "v_BN_N": np.array([[row[f"nav.bodyEciVel{a}"] for a in "XYZ"] for row in rows]),
         }
+        return {f"est/{name}": (value, UNITS[name]) for name, value in values.items()}

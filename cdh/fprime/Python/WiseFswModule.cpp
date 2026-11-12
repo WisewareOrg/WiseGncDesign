@@ -31,7 +31,7 @@ PYBIND11_MODULE(_wise_fsw, m) {
                 g_setUp = true;
             }
             WiseFsw::tlmCapture.clear();
-            WiseFsw::simTime.set(0.0);
+            WiseFsw::simTime.set(0U);
             WiseFsw::nav.configure(mu, dcm_PB);
         },
         py::arg("mu"), py::arg("dcm_PB"),
@@ -40,22 +40,26 @@ PYBIND11_MODULE(_wise_fsw, m) {
 
     m.def(
         "initialize_nav",
-        [](double t, const Eigen::Vector3d& sigma_BN, const Eigen::Vector3d& r_BN_N, const Eigen::Vector3d& v_BN_N) {
-            WiseFsw::simTime.set(t);
-            WiseFsw::nav.initialize(t, sigma_BN, r_BN_N, v_BN_N);
+        [](U64 t_ns, const Eigen::Vector3d& sigma_BN, const Eigen::Vector3d& r_BN_N, const Eigen::Vector3d& v_BN_N) {
+            WiseFsw::tlmCapture.clear();
+            WiseFsw::simTime.set(t_ns);
+            WiseFsw::nav.initialize(static_cast<F64>(t_ns) * 1e-9, sigma_BN, r_BN_N, v_BN_N);
         },
-        py::arg("t"), py::arg("sigma_BN"), py::arg("r_BN_N"), py::arg("v_BN_N"),
-        "Gives the dead reckoner its state at t (s). Temporary: the initNavState command replaces it.");
+        py::arg("t_ns"), py::arg("sigma_BN"), py::arg("r_BN_N"), py::arg("v_BN_N"),
+        "Gives the dead reckoner its state at t_ns (ns); telemetry() then holds what that wrote. Temporary: the "
+        "initNavState command replaces it.");
 
     m.def(
         "step",
-        [](double t, const Eigen::Vector3d& angVelPlatform, const Eigen::Vector3d& accelPlatform) {
-            WiseFsw::simTime.set(t);
+        [](U64 t_ns, const Eigen::Vector3d& angVelPlatform, const Eigen::Vector3d& accelPlatform) {
+            WiseFsw::tlmCapture.clear();
+            WiseFsw::simTime.set(t_ns);
             WiseFsw::simBridge.sendImu(vector3(angVelPlatform), vector3(accelPlatform));
             WiseFsw::simBridge.tick();
         },
-        py::arg("t"), py::arg("angVelPlatform"), py::arg("accelPlatform"),
-        "Sets the clock to t (s), sends the IMU reading and runs the schedule once.");
+        py::arg("t_ns"), py::arg("angVelPlatform"), py::arg("accelPlatform"),
+        "Sets the clock to t_ns (ns), sends the IMU reading and runs the schedule once; telemetry() then holds "
+        "what that tick wrote.");
 
     m.def(
         "telemetry",
@@ -69,5 +73,5 @@ PYBIND11_MODULE(_wise_fsw, m) {
             }
             return latest;
         },
-        "The latest sample of every channel: channel ID to (time in s, serialized value).");
+        "Every channel the last boot, initialize_nav or step wrote: channel ID to (time in s, serialized value).");
 }

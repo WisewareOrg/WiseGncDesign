@@ -10,8 +10,8 @@ class SimTime final : public SimTimeComponentBase {
   public:
     explicit SimTime(const char* compName);
 
-    //! Sets the time every component reads, in s since the simulation's start.
-    void set(F64 seconds);
+    //! Sets the time every component reads, in ns since the simulation's start.
+    void set(U64 nanoseconds);
 
   private:
     void timeGetPort_handler(FwIndexType portNum, Fw::Time& time) override;
