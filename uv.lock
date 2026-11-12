@@ -3158,6 +3158,7 @@ fprime = [
     { name = "fprime-fpp" },
     { name = "fprime-tools" },
     { name = "ninja" },
+    { name = "packaging" },
     { name = "pybind11" },
 ]
 notebooks = [
@@ -3201,6 +3202,7 @@ fprime = [
     { name = "fprime-fpp", specifier = "==3.4.0" },
     { name = "fprime-tools", specifier = "==4.4.0" },
     { name = "ninja", specifier = "==1.11.1.4" },
+    { name = "packaging" },
     { name = "pybind11", specifier = ">=2.13" },
 ]
 notebooks = [
