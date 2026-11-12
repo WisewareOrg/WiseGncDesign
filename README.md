@@ -36,7 +36,7 @@ A mission is a vehicle, an FSW builder and the scenarios to fly, defined as a va
 The builder claims its capabilities with `@provides("SYS...")`, and a flight is judged on the rungs
 its scenario links to that sit under those capabilities. `mission_tests` turns missions into Monte
 Carlo tests: a class per vehicle holding a test per FSW and scenario. The reasoning is in
-[ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
+[ADR 0002 rev 2](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
 
 ### Notebooks
 
@@ -76,8 +76,8 @@ judges, over the active session. `judge()` in a notebook does the same and retur
 per rung and a column per flight. A failing rung lists each failing case with the command that
 re-simulates it. The report lands in the session's `report/` and is rebuilt on every judging; start
 at `report/matrix.md`. How a verdict is reached is in
-[ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md) and
-[ADR 0001 rev 2](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
+[ADR 0002 rev 2](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md) and
+[ADR 0001 rev 3](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
 
 ### Recipes and CI
 

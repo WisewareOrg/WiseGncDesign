@@ -2,15 +2,18 @@
 
 **Status:** accepted
 **Decided:** 2026-11-11 (issue 29 missions: the spike and its plan)
-**Rev:** 1
+**Rev:** 2
 
 ## Revisions
 
+- **rev 2** — 2026-11-12 — the facts `flight.json` records superseded in part by ADR 0003 rev 1,
+  which adds the FSW builder and its build; how a host records a flight cited to ADR 0003 rev 1;
+  the layout corrected for an F´ component inside `gnc_algorithms` (issue 31 F´ in Basilisk).
 - **rev 1** — 2026-11-11 — first written (issue 29 missions).
 
 ## Context
 
-ADR 0001 rev 2 judges a Monte Carlo session with requirement analyzers, and leaves open where the
+ADR 0001 rev 3 judges a Monte Carlo session with requirement analyzers, and leaves open where the
 requirements and their limits are stored and how a test is tied to a requirement. Three needs
 follow.
 
@@ -54,7 +57,8 @@ follow.
   `VEHICLES` registry. One session may hold several vehicles.
 - **A flight is a vehicle, an FSW and a scenario.** `mission_tests` makes a class per vehicle and a
   test per FSW and scenario, so each flight has a folder of its own in the session. Two missions
-  flying the same flight are an error raised before anything flies.
+  flying the same flight are an error raised before anything flies. How the FSW's host records a
+  case is decided by ADR 0003 rev 1.
 - **The rungs a flight is judged on are worked out**: the rungs its scenario links to that sit under
   a capability its FSW claims. A mission's rung filter is optional; each rung it lists must be one
   of those, checked against the union of the mission's scenarios when the `Mission` is built, so a
@@ -78,10 +82,11 @@ follow.
   own file, and the rung's limits come from its tree item.
 - **The judge learns what a flight was from facts recorded when it flew.** Before its first case
   setup, the flight writes `flight.json` beside its runs: scenario, claimed capabilities and rung
-  filter. The judge reads those with the tree at judge time and never executes a notebook. A change
-  to the tree applies to existing runs; a change to an FSW's claims or to a mission's filter counts
-  after a re-flight. A flight whose every case crashed is still judged, as all failures. The
-  simulator records nothing about missions and tells a test where its runs live.
+  filter, and the FSW builder and its build as ADR 0003 rev 1 decides. The judge reads those with
+  the tree at judge time and never executes a notebook. A change to the tree applies to existing
+  runs; a change to an FSW's claims or to a mission's filter counts after a re-flight. A flight
+  whose every case crashed is still judged, as all failures. The simulator records nothing about
+  missions and tells a test where its runs live.
 - **A rung's verdict is two checks.** Each run's number is compared with `x`, and a run that is over
   it, or crashed, is a failure. Then the failures are compared with the allowance `k` for the `n`
   runs found, which also says whether `n` shows `p` at `c` at all; if not, the cell is not judged.
@@ -121,7 +126,8 @@ everywhere, even with `--full-monte-carlo`, and the session name `scratch` is re
   implementation readable together; the gross check and the tests live in the package.
 - **`gnc_algorithms` is a workbook, not a library.** It is installed editable so notebooks and tests
   import it, and is never shipped on its own. Its notebooks import the harness and the analyzers on
-  purpose, and the F´ flight software, which is C++, never imports it.
+  purpose. An algorithm's F´ component sits in its package beside the notebook, as ADR 0003 rev 1
+  decides; it is C++ and imports none of the Python.
 
 ### From the simulator
 

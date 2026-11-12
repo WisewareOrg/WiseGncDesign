@@ -3,10 +3,11 @@
 **Status:** accepted
 **Decided:** 2026-11-11 (issue 29 missions, which settled how a test claims a requirement and how a
 missing case is counted)
-**Rev:** 2
+**Rev:** 3
 
 ## Revisions
 
+- **rev 3** — 2026-11-12 — citations of ADR 0002 re-pinned to its rev 2 (issue 31 F´ in Basilisk).
 - **rev 2** — 2026-11-11 — three decisions superseded by ADR 0002 rev 1: the `verifies` tag, "a
   requirement owns its analyzer", and "a missing case leaves its cell not judged" (issue 29
   missions).
@@ -23,9 +24,9 @@ be written into one algorithm's test, and a test must be able to claim several r
 
 - **An analyzer is shared by every algorithm.** One analyzer module judges a requirement for every
   Monte Carlo test that claims it, so any algorithm is judged by the same analysis. Which
-  requirements an analyzer judges is decided by ADR 0002 rev 1.
+  requirements an analyzer judges is decided by ADR 0002 rev 2.
 - **A test claims requirements, many-to-many.** The simulator knows nothing of requirements, and a
-  requirement does not list the tests that claim it. How a test claims them is decided by ADR 0002 rev 1.
+  requirement does not list the tests that claim it. How a test claims them is decided by ADR 0002 rev 2.
 - **Judging is a separate pytest run after simulation, over one session.** It reads the runs a
   session holds and never re-simulates, so claiming a requirement for a test that already has runs
   judges them.
@@ -37,7 +38,7 @@ be written into one algorithm's test, and a test must be able to claim several r
 - **Evidence is kept in the session.** The report is written beside the runs it judges, organised
   by test: each claiming test's matrix and a plot per cell, and a rollup of requirement by test.
 
-Where requirements and their limits are stored is decided by ADR 0002 rev 1.
+Where requirements and their limits are stored is decided by ADR 0002 rev 2.
 
 ## Alternatives considered
 
