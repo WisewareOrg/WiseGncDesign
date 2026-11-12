@@ -4,3 +4,7 @@ __pycache__/
 .ipynb_checkpoints/
 /monte_carlo/
 *.ipynb
+# F´ build products: the build cache, and the extension and dictionary `just fsw` places beside its host
+build-fprime-*/
+/cdh/gnc_cdh/fprime/_wise_fsw*.so
+/cdh/gnc_cdh/fprime/WiseFswTopologyDictionary.json

@@ -21,6 +21,7 @@ import pytest
 from wise_dynamics.basilisk.vehicles import VEHICLES
 
 from gnc_cdh.basilisk import estimate_fields
+from gnc_cdh.fprime import FprimeModule
 from harness import requirements_tree
 
 
@@ -192,7 +193,8 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """The Monte Carlo test flying a mission through one scenario.
 
     The TST item's reference names the scenario's definition, whose `sim_` marks say how it is
-    flown; the test carries them and the mission's vehicle.
+    flown; the test carries them and the mission's vehicle. An F´ FSW's estimate is recorded from
+    its telemetry log; any other's, from the messages it writes.
 
     Args:
         mission: the mission.
@@ -217,7 +219,11 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_run_file: writes the case's run file.
         """
         fsw = mission.fsw(sim_scenario)
-        datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
+        if isinstance(fsw, FprimeModule):
+            datasets = sim_scenario.run(fsw, {}, duration_s=sim_duration_s)
+            datasets.update(fsw.estimate_datasets(datasets["t_s"][0]))
+        else:
+            datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
         path = sim_run_file(datasets)
         problems = [] if mission.check is None else mission.check(path)
         if problems:

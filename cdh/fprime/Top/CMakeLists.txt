@@ -1,0 +1,12 @@
+register_fprime_module(
+  AUTOCODER_INPUTS
+    "${CMAKE_CURRENT_LIST_DIR}/topology.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/WiseFswTopology.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/WiseFswTopology.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/WiseFswTopologyDefs.hpp"
+  DEPENDS
+    cdh_fprime_Sim
+    algorithms_gnc_algorithms_imu_dead_reckoning
+)

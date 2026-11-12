@@ -1,0 +1,4 @@
+[submodule "cdh/fprime/lib/fprime"]
+	path = cdh/fprime/lib/fprime
+	url = https://github.com/nasa/fprime.git
+	shallow = true
