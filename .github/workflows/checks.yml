@@ -60,3 +60,5 @@ jobs:
       # Syncs every group, registers the kernel and builds the F´ deployment the tests fly.
       - run: just _sync
       - run: uv run --no-sync pytest
+      # Everything the build and the suite write must be ignored.
+      - run: test -z "$(git status --porcelain)"

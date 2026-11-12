@@ -1,15 +1,31 @@
-# Sync the sim, notebook and F´ groups at their locked versions, register the kernel and build the F´ deployment.
+# The F´ release the framework clone is pinned to.
+fprime_tag := "v4.4.2"
+
+# Sync the sim, notebook and F´ groups at their locked versions, register the kernel and build the F´ deployment from scratch.
 _sync:
-    git submodule update --init --depth 1 cdh/fprime/lib/fprime
+    #!/usr/bin/env bash
+    set -euo pipefail
+    clone=cdh/fprime/lib/fprime
+    if [ "$(git -C "$clone" describe --tags --exact-match 2>/dev/null || true)" != "{{fprime_tag}}" ]; then
+        rm -rf "$clone"
+        git clone --quiet --depth 1 --branch "{{fprime_tag}}" https://github.com/nasa/fprime "$clone"
+    fi
     uv sync --locked --group sim --group notebooks --group fprime
     uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
+    rm -f cdh/fprime/build-fprime-automatic-native/CMakeCache.txt
     just fsw
 
 # Build the F´ deployment into gnc_cdh.fprime: its Python extension and its dictionary.
 fsw:
-    [ -d cdh/fprime/build-fprime-automatic-native ] || (cd cdh/fprime && uv run --no-sync fprime-util generate -DCMAKE_BUILD_TYPE=Release -DPython_EXECUTABLE="$(uv run --no-sync python -c 'import sys; print(sys.executable)')")
-    uv run --no-sync cmake -DCMAKE_BUILD_TYPE=Release cdh/fprime/build-fprime-automatic-native > /dev/null
-    uv run --no-sync cmake --build cdh/fprime/build-fprime-automatic-native --target _wise_fsw
+    #!/usr/bin/env bash
+    set -euo pipefail
+    build=cdh/fprime/build-fprime-automatic-native
+    if [ ! -f "$build/CMakeCache.txt" ]; then
+        (cd cdh/fprime && uv run --no-sync fprime-util generate --force -DCMAKE_BUILD_TYPE=Release -DPython_EXECUTABLE="$(uv run --no-sync python -c 'import sys; print(sys.executable)')")
+    fi
+    rm -rf "$build"/versions
+    uv run --no-sync cmake -DCMAKE_BUILD_TYPE=Release "$build" > /dev/null
+    uv run --no-sync cmake --build "$build" --target _wise_fsw
 
 # Install an editable WiseDynamics checkout and print the one in use.
 local: _sync
@@ -23,12 +39,12 @@ pinned: _sync
     uv run --no-sync jupytext --sync $(grep -l '^#   jupytext:' algorithms/gnc_algorithms/*/*.py missions/*.py)
 
 # Open JupyterLab in this environment.
-lab:
+lab: fsw
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
     uv run --no-sync jupyter lab
 
 # Run the test suite: every Monte Carlo capped at two cases, the notebooks run end to end.
-test *args:
+test *args: fsw
     uv run --no-sync pytest {{args}}
 
 # Make `name` the active Monte Carlo session; with no name, list the sessions.
@@ -44,5 +60,5 @@ reqs:
     uv run --locked --project docs/requirements check-reqs --root docs/requirements
 
 # Fly a notebook's Monte Carlo tests headless at full count into the active session; extra arguments go to pytest.
-fly notebook *args:
+fly notebook *args: fsw
     uv run --no-sync pytest {{notebook}} --full-monte-carlo {{args}}

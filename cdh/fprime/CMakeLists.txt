@@ -10,13 +10,14 @@ include("${CMAKE_CURRENT_LIST_DIR}/lib/fprime/cmake/FPrime.cmake")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 fprime_setup_included_code()
 
-# Eigen, header-only, pinned by version and hash.
+# Eigen, header-only, fetched by git tag into lib/, outside the build cache, so a regenerated cache keeps it.
 include(FetchContent)
+set(FETCHCONTENT_BASE_DIR "${CMAKE_CURRENT_LIST_DIR}/lib/fetchcontent")
 FetchContent_Declare(eigen
-    URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
-    URL_HASH SHA256=8586084f71f9bde545ee7fa6d00288b264a2b7ac3607b974e54d13e7162c1c72
-    SOURCE_SUBDIR do-not-add-eigen-build
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    GIT_TAG 3.4.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR do-not-add-eigen-build)
 FetchContent_MakeAvailable(eigen)
 add_library(wise_eigen INTERFACE)
 target_include_directories(wise_eigen SYSTEM INTERFACE "${eigen_SOURCE_DIR}")
@@ -26,7 +27,7 @@ add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/Sim")
 add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/algorithms/gnc_algorithms/imu_dead_reckoning")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/Top")
 
-# Temporary: the hand-written Python extension, until fprime-python's autocoder generates it.
+# The hand-written pybind11 module that hosts the deployment in the simulation's process.
 # The F´ sub-builds only gather model information and compile nothing.
 if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     set(PYBIND11_FINDPYTHON ON)

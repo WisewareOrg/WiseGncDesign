@@ -8,3 +8,11 @@ __pycache__/
 build-fprime-*/
 /cdh/gnc_cdh/fprime/_wise_fsw*.so
 /cdh/gnc_cdh/fprime/WiseFswTopologyDictionary.json
+# Fetched sources: the F´ clone and Eigen's checkout
+/cdh/fprime/lib/fprime/
+/cdh/fprime/lib/fetchcontent/
+# Generated output outside the build cache
+build-artifacts/
+*Ac.cpp
+*Ac.hpp
+*.template.*
