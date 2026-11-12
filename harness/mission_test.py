@@ -8,7 +8,6 @@ scenarios:
     TST901 links SRS901, SRS902, SRS903   TST902 links SRS902
 """
 
-import contextlib
 import json
 import os
 from collections.abc import Callable
@@ -698,7 +697,7 @@ def test_an_interrupted_flight_json_write_leaves_the_old_file_intact(
 ) -> None:
     """The write goes to a temporary file beside the target and lands by `os.replace`.
 
-    A write interrupted where it would land leaves the previous file whole.
+    A write interrupted where it would land raises and leaves the previous file whole.
 
     Args:
         tmp_path: the test's directory.
@@ -725,7 +724,7 @@ def test_an_interrupted_flight_json_write_leaves_the_old_file_intact(
 
     monkeypatch.setattr(os, "replace", interrupted)
 
-    with contextlib.suppress(OSError):
+    with pytest.raises(OSError, match="interrupted"):
         _merge_json(target, {"build": {"host": "stub"}})
 
     assert json.loads(target.read_text()) == {"scenario": "TST901"}
