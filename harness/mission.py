@@ -170,6 +170,7 @@ def _write_flight_json(self: object, request: pytest.FixtureRequest, sim_test_di
     """Record the facts of the flight this test flies, where the judge reads them.
 
     Autouse, so it runs before `sim_scenario` and a case that crashes in setup still leaves it.
+    The write merges, so a `build` that an earlier case of the flight recorded survives it.
 
     Args:
         self: the vehicle's test class.

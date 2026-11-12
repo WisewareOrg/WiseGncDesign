@@ -23,8 +23,8 @@ fsw:
     if [ ! -f "$build/CMakeCache.txt" ]; then
         (cd cdh/fprime && uv run --no-sync fprime-util generate --force -DCMAKE_BUILD_TYPE=Release -DPython_EXECUTABLE="$(uv run --no-sync python -c 'import sys; print(sys.executable)')")
     fi
-    rm -rf "$build"/versions
-    uv run --no-sync cmake -DCMAKE_BUILD_TYPE=Release "$build" > /dev/null
+    # F´ reruns its version command only when its outputs are missing, so remove them to restamp.
+    rm -f "$build"/versions/version.{hpp,cpp,json}
     uv run --no-sync cmake --build "$build" --target _wise_fsw
 
 # Install an editable WiseDynamics checkout and print the one in use.

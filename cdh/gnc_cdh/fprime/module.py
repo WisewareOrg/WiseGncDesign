@@ -187,7 +187,7 @@ class FprimeModule(sysModel.SysModel):
         """
         return telemetry_by_name(self._channels, wise_fsw.telemetry())
 
-    def fly(self, run: Callable[[Any, dict], dict]) -> dict:
+    def fly(self, run: Callable[[Any, dict[str, tuple[Any, str, str]]], dict]) -> dict:
         """Flies the scenario through `run` and records the estimate from the telemetry log.
 
         Args:

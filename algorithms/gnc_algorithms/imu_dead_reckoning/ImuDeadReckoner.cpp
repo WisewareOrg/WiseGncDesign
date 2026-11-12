@@ -61,6 +61,11 @@ void ImuDeadReckoner::configureIn_handler(FwIndexType portNum, F64 mu, const Gnc
     this->m_dcm_BP = dcm_PB.transpose();
     this->m_navState = NavState::idle;
     this->m_t = this->now();
+    this->m_sigma.setZero();
+    this->m_r.setZero();
+    this->m_v.setZero();
+    this->m_omega_P.setZero();
+    this->m_accel_P.setZero();
 }
 
 void ImuDeadReckoner::initializeIn_handler(FwIndexType portNum, const Gnc::Vector3& sigmaBN, const Gnc::Vector3& rBN_N,

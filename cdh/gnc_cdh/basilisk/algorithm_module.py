@@ -8,6 +8,8 @@ from typing import Any
 import numpy as np
 from Basilisk.architecture import messaging, sysModel
 
+from gnc_cdh.basilisk.fields import estimate_fields
+
 __all__ = ["STANDARD_MESSAGES", "AlgorithmModule"]
 
 _NANOSECONDS_PER_SECOND = 1e9
@@ -166,8 +168,6 @@ class AlgorithmModule(sysModel.SysModel):
         Returns:
             The run's datasets.
         """
-        from gnc_cdh.basilisk.fields import estimate_fields
-
         return run(self, estimate_fields(self))
 
     def _write_outputs(self, values: Mapping[str, Any], CurrentSimNanos: int) -> None:
