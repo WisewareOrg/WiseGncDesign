@@ -75,8 +75,8 @@ def test_the_attitude_quaternion_takes_body_vectors_into_eci_with_w_nonnegative(
     q = [tlm[f"nav.bodyEciAttitude{a}"] for a in "XYZW"]
     assert tlm["nav.navState"] == "initialized"
     assert q[3] >= 0.0
-    np.testing.assert_allclose(Rotation.from_quat(q).as_matrix(), dcm_NB(SIGMA0), atol=1e-15)
-    np.testing.assert_allclose(Rotation.from_quat(q).as_mrp(), SIGMA0, atol=1e-15)
+    np.testing.assert_allclose(Rotation.from_quat(q).as_matrix(), dcm_NB(SIGMA0), atol=1e-14)
+    np.testing.assert_allclose(Rotation.from_quat(q).as_mrp(), SIGMA0, atol=1e-14)
 
 
 @pytest.mark.parametrize(

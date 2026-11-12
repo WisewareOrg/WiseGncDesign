@@ -700,7 +700,8 @@ def test_an_interrupted_flight_json_write_leaves_the_old_file_intact(
 ) -> None:
     """The write goes to a temporary file beside the target and lands by `os.replace`.
 
-    A write interrupted where it would land raises and leaves the previous file whole.
+    A write interrupted where it would land raises, leaves the previous file whole and leaves no
+    temporary file behind.
 
     Args:
         tmp_path: the test's directory.
@@ -734,3 +735,4 @@ def test_an_interrupted_flight_json_write_leaves_the_old_file_intact(
     [source] = landed
     assert source.parent == tmp_path
     assert source != target
+    assert list(tmp_path.iterdir()) == [target]
