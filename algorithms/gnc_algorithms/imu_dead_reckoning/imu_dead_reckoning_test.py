@@ -8,10 +8,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
+from wise_dynamics.basilisk import ImuSpacecraft
 
 from gnc_algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
 from gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
 from gnc_algorithms.mrp import dcm_NB
+from gnc_cdh.basilisk import AlgorithmModule
 from harness.notebook import run_notebook
 
 _IDENTITY = np.eye(3)
@@ -160,6 +162,25 @@ def test_a_nan_error_is_a_violation():
     found = violations(run, **bound_inputs())
 
     assert [message.split()[0] for message in found] == ["velocity"]
+
+
+def test_the_bound_takes_each_sample_s_noise_from_the_density_and_the_step() -> None:
+    """The per-sample noise is the density over the square root of the flight software's step."""
+    assert bound_inputs()["gyro_noise_std_rad_s"] == 5e-5
+    assert bound_inputs()["accel_noise_std_m_s2"] == 5e-5
+
+
+def test_a_longer_step_lowers_each_sample_s_noise(monkeypatch: pytest.MonkeyPatch) -> None:
+    """At a 4 s step each sample carries half the density, as the IMU sampling every 4 s does.
+
+    Args:
+        monkeypatch: replaces the flight software's step for this test.
+    """
+    monkeypatch.setattr(AlgorithmModule, "period_s", 4.0)
+    inputs = bound_inputs()
+    assert inputs["step_s"] == 4.0
+    assert inputs["gyro_noise_std_rad_s"] == ImuSpacecraft.gyro_noise_density_rad_s_rthz / 2
+    assert inputs["accel_noise_std_m_s2"] == ImuSpacecraft.accel_noise_density_m_s2_rthz / 2
 
 
 @pytest.mark.xdist_group("notebooks")

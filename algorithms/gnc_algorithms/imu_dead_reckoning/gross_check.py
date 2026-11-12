@@ -250,11 +250,14 @@ def violations(
 def bound_inputs() -> dict[str, float]:
     """The bound's inputs, for the Monte Carlo test and the analysis cell alike.
 
+    The IMU samples once per flight-software step, so each sample's noise is `ImuSpacecraft`'s
+    density over the square root of the step; WiseDynamics' `tests/test_imu_spacecraft.py` holds
+    its IMU to that.
+
     Returns:
         `gyro_noise_std_rad_s` (rad/s) and `accel_noise_std_m_s2` (m/s^2), the per-sample 1-sigma
-        of `ImuSpacecraft`'s noise densities, which the IMU samples at the flight software's step,
-        `step_s`, the flight software's step `AlgorithmModule.period_s` (s), and `mu`, Earth's
-        gravitational parameter from `Leo500` (m^3/s^2).
+        noise; `step_s`, the flight software's step `AlgorithmModule.period_s` (s); and `mu`,
+        Earth's gravitational parameter from `Leo500` (m^3/s^2).
     """
     step_s = AlgorithmModule.period_s
     return {

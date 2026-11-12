@@ -36,8 +36,8 @@ it returns. Each docstring gives what it refuses.
 This example runs in a notebook or at a prompt, with the `sim` group installed
 (`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
 at its nominal configuration, and boots the dead reckoner on that vehicle. It then runs one minute,
-the dynamics, the IMU and the dead reckoner at 1 Hz, and compares the
-estimate with the vehicle's truth:
+with the dynamics, the IMU and the dead reckoner all stepping at 1 Hz, and compares the estimate
+with the vehicle's truth:
 
 ```python
 >>> import numpy as np
