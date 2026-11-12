@@ -1,0 +1,11 @@
+[project]
+name = "wise-gnc-design-requirements"
+version = "0.1.0"
+description = "Python tooling pinned for the requirements-tree gate (Doorstop, check-reqs)"
+requires-python = ">=3.12"
+
+[dependency-groups]
+dev = ["check-reqs"]
+
+[tool.uv.sources]
+check-reqs = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-reqs", rev = "4b3554d330465dee925aa10e0c62355903b1488a" }

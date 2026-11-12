@@ -29,8 +29,22 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run interrogate -v --fail-under 100 algorithms cdh analysis tests
-      - run: uv run pydoclint algorithms cdh analysis tests
+      - run: uv run interrogate -v --fail-under 100 algorithms cdh analysis harness scenarios missions
+      - run: uv run pydoclint algorithms cdh analysis harness scenarios missions
+
+  requirements:
+    name: requirements
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+      # wise-ci check-reqs: every item and link reviewed, and no file a TST references changed since.
+      - run: just reqs
 
   pytest:
     name: pytest
@@ -42,12 +56,6 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.7"
-      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
       - run: uv sync --locked --group sim --group notebooks
-      # `pytest --ci` and the notebook step both read the `ci` session.
-      - run: just session ci
-      - run: uv run pytest --ci
-      - name: The IMU dead reckoner's notebook
-        run: |
-          uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
-          JPY_SESSION_NAME=$PWD/algorithms/gnc_algorithms/imu_dead_reckoning.py uv run --no-sync jupytext --execute algorithms/gnc_algorithms/imu_dead_reckoning.py -o "$RUNNER_TEMP/imu_dead_reckoning.ipynb"
+      - run: uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
+      - run: uv run --no-sync pytest

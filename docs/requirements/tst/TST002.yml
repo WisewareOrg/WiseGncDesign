@@ -1,0 +1,28 @@
+active: true
+derived: false
+header: |
+  Scenario: leo400
+level: 1.2
+links:
+- SRS001: IYgvILxrz15zVcOwJKNI8VMFu2ECvpZAM6FyRrBjrsg=
+- SRS002: _XF2UPocNTGKCjEwJIa3S0ZYeJo8--6o8KLRzS6gfiU=
+- SRS003: sO1Svn6e559NgaidpAd7Y73RycxuaH40dXUb0sq4yKo=
+- SRS004: DDygX4AoMX3KMI_WXmY0_M5gcpOGA_TK5hpikwEyssQ=
+- SRS005: 8o0dKBAZ0V4O2nH-WO3bTJjy4nwzXeTAo9fW2AhsacU=
+normative: true
+rationale: ''
+ref: ''
+references:
+- keyword: def leo400(
+  path: scenarios/leo.py
+  sha: fb5087cb44a8b2d76c9c4d9f71dd480b4ad2d3a1b5e4f946baa4f2bf1a8d2721
+  type: file
+reviewed: YQ7VrvXwYQ-DyS54Ij2UBDN37LNKTMQK7ooiVXDH27o=
+status: proposed
+text: |
+  A mission's FSW boots in the leo400 scenario on the mission's vehicle and runs for 5700 s, once
+  per dispersed case.
+verification-justification: |
+  Settles each linked rung, for each mission flying it, over this scenario's dispersions and
+  duration. Leaves unproven any other scenario, and any rung needing more cases than it flies.
+verification-method: test

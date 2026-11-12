@@ -1,0 +1,29 @@
+active: true
+c: 0.9
+derived: false
+header: |
+  Position knowledge: 5000 m at p 0.99, c 0.90
+level: 1.5
+links:
+- SYS001: E2wQd5ksdhNrNwx6nhC0kjMLFrJ2BjBi8W05B0X8kJY=
+normative: true
+p: 0.99
+rationale: |
+  Spike: one rung of the capability's ladder. Rungs are set to bracket the capability, so some are
+  expected to fail.
+ref: ''
+references:
+- keyword: def test_position_knowledge(
+  path: analysis/test_position_knowledge.py
+  type: file
+reviewed: 8nQNSt-8voGA3SwDssqETxhAdd57D3Qz4--t2Tx3O80=
+status: proposed
+text: |
+  Over the whole of every dispersed run, the position knowledge error shall stay within x metres in at
+  least a share p of runs, demonstrated at confidence c.
+verification-justification: |
+  Judged from the worst error over each run, sampled at the flight software's 1 Hz, over the
+  dispersions each scenario models and its duration. It does not establish the error between
+  samples, beyond the run's duration, or under errors no scenario disperses.
+verification-method: test
+x: 5000.0

@@ -1,12 +1,15 @@
 # 0001 — Judge Monte Carlo sessions with requirement analyzers
 
 **Status:** accepted
-**Decided:** 2026-11-09 (issue 27 requirement analyzers, ruled with the design of WiseDynamics issue 22
-sim sessions)
-**Rev:** 1
+**Decided:** 2026-11-11 (issue 29 missions, which settled how a test claims a requirement and how a
+missing case is counted)
+**Rev:** 2
 
 ## Revisions
 
+- **rev 2** — 2026-11-11 — three decisions superseded by ADR 0002 rev 1: the `verifies` tag, "a
+  requirement owns its analyzer", and "a missing case leaves its cell not judged" (issue 29
+  missions).
 - **rev 1** — 2026-11-09 — first written (issue 27 requirement analyzers).
 
 ## Context
@@ -18,39 +21,31 @@ be written into one algorithm's test, and a test must be able to claim several r
 
 ## Decision
 
-- **A requirement owns its analyzer.** One analyzer module per requirement judges it. Every Monte Carlo
-  test that claims the requirement reuses that analyzer, so any algorithm is judged by the same
-  analysis.
-- **Monte Carlo tests are tagged with the requirements they verify.** A `verifies` mark names
-  requirement IDs, test to requirement, many-to-many. The tag is read from the test's source when
-  judging, so the simulator knows nothing of requirements. The work declares what it verifies, and
-  a requirement does not list the tests that verify it. The IDs are not fixed by this decision.
+- **An analyzer is shared by every algorithm.** One analyzer module judges a requirement for every
+  Monte Carlo test that claims it, so any algorithm is judged by the same analysis. Which
+  requirements an analyzer judges is decided by ADR 0002 rev 1.
+- **A test claims requirements, many-to-many.** The simulator knows nothing of requirements, and a
+  requirement does not list the tests that claim it. How a test claims them is decided by ADR 0002 rev 1.
 - **Judging is a separate pytest run after simulation, over one session.** It reads the runs a
-  session holds and never re-simulates, so tagging a test that already has runs judges them.
+  session holds and never re-simulates, so claiming a requirement for a test that already has runs
+  judges them.
 - **A cell is a (requirement, test) pair.** It gets an allowed-failures verdict: the largest `k`
   such that `k` failures still show `p` at confidence `c` under the one-sided Clopper-Pearson test
-  on `n` planned cases. If no `k` exists the cell is not judged. A requirement passes only when
+  on the `n` runs found. If no `k` exists the cell is not judged. A requirement passes only when
   every claiming cell passes.
-- **A missing case leaves its cell not judged**, naming the missing cases, rather than
-  counting as a pass or a failure.
+- **A crashed case counts as one failed case.**
 - **Evidence is kept in the session.** The report is written beside the runs it judges, organised
   by test: each claiming test's matrix and a plot per cell, and a rollup of requirement by test.
 
-Where requirements and their limits are stored is outside this decision; a later ADR decides it
-without touching this one.
+Where requirements and their limits are stored is decided by ADR 0002 rev 1.
 
 ## Alternatives considered
 
-- **The mark carries the analysis function.** The analysis would live with each test, so every
+- **The test carries the analysis function.** The analysis would live with each test, so every
   algorithm re-states it and two tests claiming one requirement can disagree. Rejected: the analysis
-  belongs to the requirement.
-- **Allocating requirements to roles or builds.** Rejected: a test already says what it verifies,
-  and a second allocation can only contradict it.
+  belongs with the metric, not with a test.
 - **Pooling runs across tests.** One verdict over the union of runs hides a test that fails alone,
   and mixes populations with different scenarios. Rejected: each test's cell is judged on its own.
-- **Tags recorded by WiseDynamics in the simulator's per-test record.** Rejected: it gives the simulator the concept
-  of a requirement, and a tag added later would need a re-simulation.
-- **Tags copied into run files.** Rejected for the same two reasons.
 - **Hard-coding the test in the analyzer.** Rejected: the analyzer would serve one algorithm.
 - **Discovering tests by data fit.** Choosing the tests whose runs contain the metric's data judges
   tests nobody claimed. Rejected: a claim is an explicit statement.
@@ -59,7 +54,8 @@ without touching this one.
 
 ## Consequences
 
-- Adding a requirement is adding an analyzer, and verifying it for another algorithm is adding a tag.
+- A new algorithm is judged by the analyzers that already exist once it claims requirements, and a
+  new requirement is an analyzer or a rung of one.
 - Judging a session twice gives the same verdict, and the session holds what it was judged from.
-- A cell needs every planned case before it is judged, so an interrupted campaign is reported as not
-  judged rather than as a pass.
+- An interrupted campaign is judged on the cases that finished, and is reported as not judged only
+  when they are too few to show `p` at `c`.

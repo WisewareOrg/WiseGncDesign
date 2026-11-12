@@ -1,6 +1,6 @@
 # Architecture decision records
 
-**Rev:** 1
+**Rev:** 2
 
 An ADR records a choice that took a **trade study**: real alternatives, analysed against each other.
 A decision that did not need that analysis is a convention, and belongs in the document that governs
@@ -31,14 +31,19 @@ one takes a rev whose *Revisions* line records `superseded by ADR NNNN rev M` �
 A number identifies a document rather than a moment: a squash commit on `main` naming one cannot be
 amended, so a number in git history need not mean what it means here.
 
+**An ADR records this repository's decisions.** It does not cite another repository's ADR. Where it
+relies on behaviour another repository provides, it states that behaviour in plain prose.
+
 **A decision is stated plainly.** No attribution marking who decided — no `(owner, YYYY-MM-DD)`
 marker, no parenthetical naming a person, and no quote of what someone said. The record is the
 decision and its reasoning, not who ruled it.
 
 | # | Rev | Decided | Decision |
 |---|---|---|---|
-| [0001](0001-judge-monte-carlo-sessions-with-requirement-analyzers.md) | 1 | 2026-11-09 | Judge Monte Carlo sessions with requirement analyzers |
+| [0001](0001-judge-monte-carlo-sessions-with-requirement-analyzers.md) | 2 | 2026-11-11 | Judge Monte Carlo sessions with requirement analyzers |
+| [0002](0002-fly-missions-from-notebooks-against-a-requirements-tree.md) | 1 | 2026-11-11 | Fly missions from notebooks against a requirements tree |
 
 ## Revisions
 
+- **rev 2** — 2026-11-11 — an ADR cites no other repository's ADR (issue 29 missions).
 - **rev 1** — 2026-10-31 — first written (stand-up).

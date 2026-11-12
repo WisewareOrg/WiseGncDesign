@@ -1,0 +1,20 @@
+active: true
+derived: false
+header: |
+  Dead reckoning from gyro and accelerometer
+level: 1
+links: []
+normative: true
+rationale: |
+  Spike: dead reckoning as a capability, so the rungs it claims have a parent. An FSW claims it
+  in code, with `provides`; the tree does not know which FSWs exist.
+ref: ''
+reviewed: E2wQd5ksdhNrNwx6nhC0kjMLFrJ2BjBi8W05B0X8kJY=
+status: proposed
+text: |
+  The flight software shall estimate attitude, velocity and position by dead reckoning from gyro
+  and accelerometer measurements alone.
+verification-justification: |
+  Settled by its children, each judged over the scenarios linked to it. No check settles that the
+  ladder's rungs are the interesting ones.
+verification-method: test
