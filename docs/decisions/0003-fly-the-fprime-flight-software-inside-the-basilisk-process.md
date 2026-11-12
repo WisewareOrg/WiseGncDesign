@@ -35,8 +35,9 @@ autocoder.
   fprime-python is reconsidered only once it fixes time, telemetry and build cost.
 - **Each F´ component sits beside the algorithm it ports.** The repository root is F´'s project root
   (`cdh/fprime/settings.ini`). The dead reckoner's `ImuDeadReckoner.fpp`, `.hpp` and `.cpp` sit in
-  its package beside the notebook. `cdh/fprime/` holds the rest of the F´ project: the interface
-  types, the sim-side components, the topology and the binding.
+  its package beside the notebook, the package ADR 0002 rev 1 lays out around each algorithm.
+  `cdh/fprime/` holds the rest of the F´ project: the interface types, the sim-side components, the
+  topology and the binding.
 - **nav takes its configuration and its initial state on F´ ports**, `NavConfig` and `NavInit`,
   which `SimBridge` sends. The initial state is handed over at boot until the `initNavState`
   command exists.
@@ -59,8 +60,8 @@ autocoder.
 - **A flight's end belongs to the scenario**, and later to a ground procedure, never to a fixed
   length. The simulator stops only on time, so the one stopping rule the harness binds is the TST
   definition's duration.
-- **Each flight's `flight.json` records which FSW flew.** `fsw` is the FSW builder's name, and
-  `build` is the host's build identity:
+- **Each flight's `flight.json` records which FSW flew**, beside the facts ADR 0002 rev 1 records
+  there for the judge. `fsw` is the FSW builder's name, and `build` is the host's build identity:
   - for the F´ host, the host, `frameworkVersion` (the F´ tag) and `projectVersion`, read from the
     dictionary's metadata;
   - for the Python host, the host.
