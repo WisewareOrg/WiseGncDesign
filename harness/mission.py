@@ -224,7 +224,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     `sim_ground_period_s` (the FSW's period when the definition has no such mark) until the
     procedure returns, with the vehicle's tracking as its truth, and records the telemetry and the
     command log into the run file. An exception the host or the procedure raised is re-raised
-    whole.
+    whole, and a procedure still waiting when the flight ends fails the case.
 
     Args:
         mission: the mission.
@@ -278,6 +278,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             if failure is None:
                 raise
             raise failure from None
+        ground.ensure_returned()
         datasets |= ground.telemetry_datasets()
         path = sim_run_file(datasets, attrs={"commands": json.dumps(ground.command_log)})
         problems = [] if mission.check is None else mission.check(path)

@@ -382,7 +382,7 @@ def test_a_command_runs_before_the_next_step_decoded_as_f_prime_hands_it_and_ans
 
     gain = float(np.float32(0.1))
     assert module.algorithm.commands == [{"gain": gain, "mode": "fast"}]
-    assert module.responses() == [(7, dictionary.responses["OK"])]
+    assert module.responses() == [(7, dictionary.responses["OK"], None)]
     assert module.responses() == []
     writes = _writes(module)
     assert [(name, t_ns) for name, t_ns, _ in writes] == [
@@ -399,7 +399,9 @@ def test_a_command_runs_before_the_next_step_decoded_as_f_prime_hands_it_and_ans
 def test_a_handler_that_raises_value_error_answers_validation_error_and_writes_nothing(
     dictionary: Dictionary,
 ):
-    """A handler refusing its arguments answers `VALIDATION_ERROR`; the tick goes on to the step.
+    """A handler refusing its arguments answers `VALIDATION_ERROR` with its message as the reason.
+
+    The tick goes on to the step.
 
     Args:
         dictionary: the toy's dictionary.
@@ -410,7 +412,7 @@ def test_a_handler_that_raises_value_error_answers_validation_error_and_writes_n
 
     _send(module, dictionary.encode_command("toy.setGain", {"gain": -1.0, "mode": "slow"}))
 
-    assert module.responses() == [(1, dictionary.responses["VALIDATION_ERROR"])]
+    assert module.responses() == [(1, dictionary.responses["VALIDATION_ERROR"], "a negative gain")]
     assert [name for name, _, _ in _writes(module)] == ["toy.offset"]
 
 
@@ -436,7 +438,7 @@ def test_a_malformed_packet_earns_the_dictionary_s_response_and_runs_nothing(
 
     _send(module, packet[cut])
 
-    assert module.responses() == [(1, dictionary.responses[response])]
+    assert module.responses() == [(1, dictionary.responses[response], None)]
     assert module.algorithm.commands == []
 
 

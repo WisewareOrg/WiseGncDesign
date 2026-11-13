@@ -1,7 +1,7 @@
 """The ground driven tick by tick against a stub link: its waits, its commands and its record.
 
 The stub link holds a toy component's dictionary, generated from FPP alone, and answers and writes
-what each test gives it.
+what each test gives it; the tests that fly Leo500 host a toy algorithm for that component.
 """
 
 import json
@@ -12,10 +12,9 @@ import numpy as np
 import pytest
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
-from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+from gnc_cdh.basilisk import AlgorithmModule
 from gnc_cdh.dictionary import Channel, Dictionary
 from harness.ground import CommandFailed, Ground
-from scenarios.leo import leo500
 
 NS = 1_000_000_000
 """ns per s."""
@@ -78,7 +77,7 @@ class StubLink:
         """
         self.dictionary = dictionary
         self.uplinked: list[tuple[bytes, int]] = []
-        self.answers: list[tuple[int, int]] = []
+        self.answers: list[tuple[int, int, str | None]] = []
         self.writes: list[tuple[int, int, Any]] = []
         self.stops = 0
 
@@ -95,11 +94,11 @@ class StubLink:
         """
         self.uplinked.append((packet, context))
 
-    def responses(self) -> list[tuple[int, int]]:
+    def responses(self) -> list[tuple[int, int, str | None]]:
         """Drains the queued responses.
 
         Returns:
-            `(context, response)` pairs.
+            `(context, response, reason)` triples.
         """
         drained, self.answers = self.answers, []
         return drained
@@ -213,7 +212,10 @@ def test_until_checks_now_then_each_tick_and_times_out_at_its_deadline(dictionar
     assert seen == [0.0]
     _tick(ground, 1)
 
-    with pytest.raises(TimeoutError, match=r"within 2.0 s, at t = 2.0 s") as raised:
+    with pytest.raises(
+        TimeoutError,
+        match=r"at t = 2.0 s waiting until the condition at ground_test.py:\d+ holds, by t = 2.0 s",
+    ) as raised:
         _tick(ground, 2)
 
     assert ground.failure is raised.value
@@ -244,7 +246,7 @@ def test_send_uplinks_the_encoded_command_and_returns_on_its_ok(dictionary: Dict
     _tick(ground, 1)
     assert seen == []
 
-    link.answers.append((1, dictionary.responses["OK"]))
+    link.answers.append((1, dictionary.responses["OK"], None))
     _tick(ground, 2)
 
     assert seen == [2.0]
@@ -256,6 +258,7 @@ def test_send_uplinks_the_encoded_command_and_returns_on_its_ok(dictionary: Dict
             "context": 1,
             "response": "OK",
             "response_t_s": 2.0,
+            "reason": None,
         }
     ]
 
@@ -306,12 +309,12 @@ def test_consecutive_commands_take_fresh_contexts_and_each_resumes_on_its_own_an
         seen.append(ground.now_s)
 
     ground = _ground(link, procedure)
-    link.answers.append((1, dictionary.responses["OK"]))
+    link.answers.append((1, dictionary.responses["OK"], None))
     _tick(ground, 1)
-    link.answers.append((7, dictionary.responses["OK"]))
+    link.answers.append((7, dictionary.responses["OK"], None))
     _tick(ground, 2)
     assert seen == [1.0]
-    link.answers.append((2, dictionary.responses["OK"]))
+    link.answers.append((2, dictionary.responses["OK"], None))
     _tick(ground, 3)
 
     assert seen == [1.0, 3.0]
@@ -339,12 +342,16 @@ def test_a_command_answered_other_than_ok_fails_the_procedure_naming_it(dictiona
         await ground.send("toy.setMode", mode="slow")
 
     ground = _ground(link, procedure)
-    link.answers.append((1, dictionary.responses["VALIDATION_ERROR"]))
+    link.answers.append((1, dictionary.responses["VALIDATION_ERROR"], "not in this mode"))
 
-    with pytest.raises(CommandFailed, match="toy.setMode was answered VALIDATION_ERROR"):
+    with pytest.raises(
+        CommandFailed, match="toy.setMode was answered VALIDATION_ERROR: not in this mode"
+    ) as raised:
         _tick(ground, 1)
 
+    assert raised.value.reason == "not in this mode"
     assert ground.command_log[0]["response"] == "VALIDATION_ERROR"
+    assert ground.command_log[0]["reason"] == "not in this mode"
 
 
 def test_a_command_never_answered_times_out(dictionary: Dictionary):
@@ -364,7 +371,9 @@ def test_a_command_never_answered_times_out(dictionary: Dictionary):
 
     ground = _ground(StubLink(dictionary), procedure)
 
-    with pytest.raises(TimeoutError, match="at t = 1.0 s"):
+    with pytest.raises(
+        TimeoutError, match=r"at t = 1.0 s waiting until toy.setMode is answered, by t = 1.0 s"
+    ):
         _tick(ground, 1)
 
 
@@ -490,10 +499,58 @@ async def _returns(ground: Ground) -> None:
     """
 
 
-def _flown(period_s: float, stops: bool) -> tuple[dict[str, tuple[np.ndarray, str]], Ground]:
-    """The datasets of 120 s of nominal Leo500 flown by the dead reckoner under `leo500`.
+class Toy:
+    """A toy algorithm for the toy component: it writes the time as `offset` every tick."""
+
+    def setMode(self, mode: str) -> dict:
+        """Takes the mode and writes it.
+
+        Args:
+            mode: the mode's constant name.
+
+        Returns:
+            `mode`.
+        """
+        return {"mode": mode}
+
+    def setOffset(self, offset: np.ndarray, gain: float) -> None:
+        """Takes the offset, writing nothing.
+
+        Args:
+            offset: (3,) the offset.
+            gain: the gain.
+        """
+
+    def step(self, t: float) -> dict:
+        """Writes the time.
+
+        Args:
+            t: s, the tick's time.
+
+        Returns:
+            `offset`, `(t, 0, 0)`.
+        """
+        return {"offset": np.array([t, 0.0, 0.0])}
+
+
+async def _commands_the_toy(ground: Ground) -> None:
+    """Waits 60 s, sets the toy's mode and waits for the toy to report it.
 
     Args:
+        ground: the ground running it.
+    """
+    await ground.sleep(60.0)
+    await ground.send("toy.setMode", mode="fast")
+    await ground.until(lambda: ground.tlm("toy.mode") == "fast", timeout_s=5.0)
+
+
+def _flown(
+    dictionary: Dictionary, period_s: float, stops: bool
+) -> tuple[dict[str, tuple[np.ndarray, str]], Ground]:
+    """The datasets of 120 s of nominal Leo500 with the toy as its flight software.
+
+    Args:
+        dictionary: the toy's dictionary.
         period_s: s, the ground's period.
         stops: whether the ground's task stops once the procedure returns.
 
@@ -501,31 +558,81 @@ def _flown(period_s: float, stops: bool) -> tuple[dict[str, tuple[np.ndarray, st
         The run's datasets and the ground's telemetry datasets, and the ground.
     """
     scenario = Leo500()
-    fsw = dead_reckoner(scenario)
+    fsw = AlgorithmModule(Toy(), scenario.vehicle.readers(), instance="toy", dictionary=dictionary)
     stop = scenario.stop_ground if stops else lambda: None
-    ground = Ground(leo500, fsw, scenario.vehicle.tracking(), stop, period_s=period_s)
+    ground = Ground(_commands_the_toy, fsw, scenario.vehicle.tracking(), stop, period_s=period_s)
     datasets = scenario.run(fsw, {}, duration_s=120.0, ground=ground)
     return datasets | ground.telemetry_datasets(), ground
 
 
-def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stops():
+def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stops(
+    dictionary: Dictionary,
+):
     """A ground ticking every second without stopping, every second, or every 10 s, records alike.
 
     Every dataset of the run file, truth and telemetry, is equal row for row. The ground that does
     not stop last ticks at the run's end; one that stops last ticks where its procedure returned,
     at 61 s on a 1 s ground and at 70 s on a 10 s one, which sees the command's answer then.
+
+    Args:
+        dictionary: the toy's dictionary.
     """
-    ticking, ground = _flown(1.0, stops=False)
-    assert ticking["tlm_t/nav.bodyEciPos"][0][[0, -1]].tolist() == [61.0, 120.0]
+    ticking, ground = _flown(dictionary, 1.0, stops=False)
+    assert ticking["tlm_t/toy.offset"][0][[0, -1]].tolist() == [1.0, 120.0]
+    assert ticking["tlm_t/toy.mode"][0].tolist() == [61.0]
     assert ground.now_s == 120.0
 
     for period_s, last_tick_s in ((1.0, 61.0), (10.0, 70.0)):
-        flown, ground = _flown(period_s, stops=True)
+        flown, ground = _flown(dictionary, period_s, stops=True)
         assert ground.now_s == last_tick_s
         assert sorted(flown) == sorted(ticking)
         for name, (values, units) in ticking.items():
             np.testing.assert_array_equal(flown[name][0], values, err_msg=name)
             assert flown[name][1] == units
+
+
+@pytest.mark.parametrize(
+    ("wait", "until"),
+    [
+        ("sleep", r"t = 10\.0 s"),
+        ("until", r"the condition at ground_test\.py:\d+ holds, by t = 10\.0 s"),
+        ("send", r"toy\.setMode is answered, by t = 10\.0 s"),
+    ],
+)
+def test_a_procedure_still_waiting_when_the_flight_ends_fails_naming_its_wait(
+    dictionary: Dictionary, wait: str, until: str
+):
+    """At the end of a flight, a procedure that has not returned names what it waits for.
+
+    A returned procedure passes.
+
+    Args:
+        dictionary: the toy's dictionary.
+        wait: the procedure's wait.
+        until: what the message names it waits for.
+    """
+
+    async def procedure(ground: Ground) -> None:
+        """Waits 10 s in one of three ways.
+
+        Args:
+            ground: the ground running it.
+        """
+        if wait == "sleep":
+            await ground.sleep(10.0)
+        elif wait == "until":
+            await ground.until(lambda: False, timeout_s=10.0)
+        else:
+            await ground.send("toy.setMode", timeout_s=10.0, mode="fast")
+
+    ground = _ground(StubLink(dictionary), procedure)
+    _tick(ground, 1, 2)
+
+    with pytest.raises(TimeoutError, match=rf"ended at t = 2\.0 s .* waiting until {until}$"):
+        ground.ensure_returned()
+
+    finished = _ground(StubLink(dictionary), _returns)
+    finished.ensure_returned()
 
 
 def test_truth_reads_the_tracking_stand_in_now(dictionary: Dictionary):

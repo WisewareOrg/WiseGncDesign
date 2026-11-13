@@ -25,7 +25,8 @@ class AlgorithmModule(sysModel.SysModel):
     The ground reaches the algorithm through the link: `uplink` queues a command packet, and the
     next tick decodes it with the dictionary's types, runs its handler before the step and keeps
     the response. A handler that returns answers `OK`, and one that raises `ValueError` answers
-    `VALIDATION_ERROR`; any other exception is a bug and fails the tick.
+    `VALIDATION_ERROR` with the error's message as the reason; any other exception is a bug and
+    fails the tick.
 
     The algorithm writes telemetry by returning `{channel: value}` from `step` and from each
     handler, as an F´ component calls `tlmWrite_<channel>`. Each entry is one write, tagged with the
@@ -85,7 +86,7 @@ class AlgorithmModule(sysModel.SysModel):
         self._inputs_written = False
         self._t_ns = 0
         self._uplinked: list[tuple[bytes, int]] = []
-        self._responses: list[tuple[int, int]] = []
+        self._responses: list[tuple[int, int, str | None]] = []
         self._log: list[tuple[int, int, Any]] = []
 
     def _role(self, keyword: str) -> str:
@@ -129,11 +130,13 @@ class AlgorithmModule(sysModel.SysModel):
         """
         self._uplinked.append((packet, context))
 
-    def responses(self) -> list[tuple[int, int]]:
+    def responses(self) -> list[tuple[int, int, str | None]]:
         """The command responses since the last call, oldest first.
 
         Returns:
-            `(context, response)`, the response a value of the dictionary's `Fw.CmdResponse`.
+            `(context, response, reason)`: the response a value of the dictionary's
+            `Fw.CmdResponse`, and the message of the `ValueError` a handler refused it with, else
+            `None`.
         """
         drained, self._responses = self._responses, []
         return drained
@@ -209,7 +212,7 @@ class AlgorithmModule(sysModel.SysModel):
         self._t_ns = t_ns
         queued, self._uplinked = self._uplinked, []
         for packet, context in queued:
-            self._responses.append((context, self._dispatch(packet)))
+            self._responses.append((context, *self._dispatch(packet)))
         t = t_ns / _NANOSECONDS_PER_SECOND
         if not self._inputs_written:
             unwritten = sorted(name for name, reader in self._readers if not reader.isWritten())
@@ -223,26 +226,27 @@ class AlgorithmModule(sysModel.SysModel):
         }
         self._write(self._algorithm.step(t=t, **fields))
 
-    def _dispatch(self, packet: bytes) -> int:
+    def _dispatch(self, packet: bytes) -> tuple[int, str | None]:
         """Decodes a command packet and runs its handler.
 
         Args:
             packet: the serialized command packet.
 
         Returns:
-            The `Fw.CmdResponse` value.
+            The `Fw.CmdResponse` value, and the message of the `ValueError` the handler refused the
+            command with, else `None`.
         """
         responses = self.dictionary.responses
         try:
             name, args = self.dictionary.decode_command(packet, self._instance)
         except DecodeError as error:
-            return responses[error.response]
+            return responses[error.response], None
         try:
             writes = getattr(self._algorithm, name)(**args)
-        except ValueError:
-            return responses["VALIDATION_ERROR"]
+        except ValueError as error:
+            return responses["VALIDATION_ERROR"], str(error)
         self._write(writes)
-        return responses["OK"]
+        return responses["OK"], None
 
     def _write(self, writes: Mapping[str, Any] | None) -> None:
         """Logs the telemetry the algorithm returned, tagged with this tick, arrays copied.

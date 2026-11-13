@@ -33,11 +33,13 @@ class Link(Protocol):
         """
         ...
 
-    def responses(self) -> list[tuple[int, int]]:
+    def responses(self) -> list[tuple[int, int, str | None]]:
         """The command responses since the last call, oldest first.
 
         Returns:
-            `(context, response)`, the response a value of the dictionary's `Fw.CmdResponse`.
+            `(context, response, reason)`: the response a value of the dictionary's
+            `Fw.CmdResponse`, and why the flight software refused the command, when it said, else
+            `None`.
         """
         ...
 

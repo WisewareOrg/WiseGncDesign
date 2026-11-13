@@ -25,6 +25,9 @@ GOOD = 0.9e-3
 BAD = 1.5e-3
 PLANNED = 10
 KINDS = {"attitude": "SRS901", "velocity": "SRS902", "position": "SRS903"}
+
+BODY_ECI = Path(__file__).parents[1] / "cdh" / "fprime" / "Interfaces" / "Nav" / "BodyEci.fppi"
+"""nav's estimate channels, which a toy flight software includes to be judged."""
 NODE = "missions/nb/Test_vehicle/test_fsw_alpha"
 NODEID = "missions/nb.py::Test_vehicle::test_fsw_alpha"
 ALL = {"scenario": "TST901", "capabilities": ["SYS901"], "rungs": None}
@@ -569,8 +572,9 @@ def test_a_flown_mission_is_judged_end_to_end(
 
     The flight's `flight.json` and run files come from the simulator's own writers, so a key or
     dataset the writer and the judge disagree on makes this fail. Four cases are the fewest that
-    show p = 0.8 at c = 0.5, and each rung's x is set far above the dead reckoner's error so the
-    verdict rests on the agreement alone.
+    show p = 0.8 at c = 0.5. The flight software is a toy writing nav's estimate channels with a
+    fixed state, and each rung's x is set far above its error so the verdict rests on the
+    agreement alone.
 
     Args:
         project: the project.
@@ -594,24 +598,41 @@ def test_a_flown_mission_is_judged_end_to_end(
         "@pytest.mark.sim_duration_s(2.0)\n"
         "@pytest.mark.sim_runs(4)\n"
         "async def alpha(ground) -> None:\n"
-        "    truth = ground.truth()\n"
-        "    await ground.send(\n"
-        '        "nav.initNavState",\n'
-        "        epoch=ground.now_s,\n"
-        '        attitude=truth["q_BN"],\n'
-        '        position=truth["r_N"],\n'
-        '        velocity=truth["v_N"],\n'
-        "    )\n"
+        "    pass\n"
+    )
+    (root / "Toy.fpp").write_text(
+        "module Toy {\n"
+        "  passive component Toy {\n"
+        f'    include "{BODY_ECI}"\n'
+        "    time get port timeCaller\n"
+        "    telemetry port tlmOut\n"
+        "  }\n"
+        "}\n"
     )
     project.makepyfile(
         test_flights="""
-from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+from pathlib import Path
+
+from gnc_cdh.basilisk import AlgorithmModule
+from gnc_cdh.dictionary import Dictionary
 from harness.mission import Mission, mission_tests, provides
+
+
+class Toy:
+    def step(self, t):
+        return {
+            "bodyEciPos": [7.0e6, 0.0, 0.0],
+            "bodyEciVel": [0.0, 7.5e3, 0.0],
+            "bodyEciAttitude": [1.0, 0.0, 0.0, 0.0],
+        }
 
 
 @provides("SYS901")
 def reckoner(scenario):
-    return dead_reckoner(scenario)
+    model = [Path(__file__).with_name("Toy.fpp")]
+    dictionary = Dictionary.from_component(model, "Toy.Toy", instance="nav")
+    readers = scenario.vehicle.readers()
+    return AlgorithmModule(Toy(), readers, instance="nav", dictionary=dictionary)
 
 
 globals().update(

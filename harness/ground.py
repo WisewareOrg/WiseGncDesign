@@ -7,6 +7,7 @@ time tag, and every command with its response, so one recorder serves every host
 """
 
 from collections.abc import Callable, Coroutine, Generator
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -25,24 +26,41 @@ class CommandFailed(Exception):
     Attributes:
         name: `<instance>.<command>`.
         response: the response's name in the dictionary's `Fw.CmdResponse`.
+        reason: why the flight software refused it, when it said, else `None`.
     """
 
     name: str
     response: str
+    reason: str | None
 
-    def __init__(self, name: str, response: str) -> None:
-        """Holds the command and its response.
+    def __init__(self, name: str, response: str, reason: str | None = None) -> None:
+        """Holds the command, its response and the reason given.
 
         Args:
             name: `<instance>.<command>`.
             response: the response's name.
+            reason: why the flight software refused it, when it said.
         """
-        super().__init__(f"{name} was answered {response}")
-        self.name, self.response = name, response
+        super().__init__(f"{name} was answered {response}" + (f": {reason}" if reason else ""))
+        self.name, self.response, self.reason = name, response, reason
 
 
 class _Tick:
-    """What a procedure awaits to resume at the next tick."""
+    """What a procedure awaits to resume at the next tick.
+
+    Attributes:
+        until: what the procedure waits for, in words, such as `t = 60.0 s`.
+    """
+
+    until: str
+
+    def __init__(self, until: str) -> None:
+        """Holds what the procedure waits for.
+
+        Args:
+            until: what the procedure waits for, in words.
+        """
+        self.until = until
 
     def __await__(self) -> Generator["_Tick", None, None]:
         """Yields once, to the ground's loop.
@@ -65,7 +83,8 @@ class Ground(sysModel.SysModel):
         period_s: s, the period of the task the simulation runs this module in.
         failure: the procedure's exception, kept whole, else `None`.
         command_log: one entry per command sent: `t_s`, `name`, `args`, `context`, `response`
-            (the response's name, `None` until answered) and `response_t_s`.
+            (the response's name, `None` until answered), `response_t_s` and `reason` (why the
+            flight software refused it, when it said, else `None`).
     """
 
     period_s: float
@@ -107,7 +126,8 @@ class Ground(sysModel.SysModel):
         self._coroutine: Coroutine[Any, Any, None] | None = None
         self._now_ns = 0
         self._context = 0
-        self._answers: dict[int, int] = {}
+        self._answers: dict[int, tuple[int, str | None]] = {}
+        self._waiting = _Tick("its first tick")
         self._writes: list[tuple[int, int, Any]] = []
         self._latest: dict[int, Any] = {}
         self.failure = None
@@ -126,26 +146,40 @@ class Ground(sysModel.SysModel):
         """
         wake_ns = self._now_ns + round(duration_s * _NANOSECONDS_PER_SECOND)
         while self._now_ns < wake_ns:
-            await _Tick()
+            await _Tick(f"t = {wake_ns / _NANOSECONDS_PER_SECOND} s")
 
     async def until(self, condition: Callable[[], bool], *, timeout_s: float) -> None:
+        """Waits until `condition` holds, checking now and then at each tick.
+
+        A `TimeoutError` names the condition's line and the time when `condition` still fails at
+        the first tick at or after `timeout_s` from now.
+
+        Args:
+            condition: reads the ground's view of the flight software.
+            timeout_s: s, how long to wait.
+        """
+        code = condition.__code__
+        where = f"{Path(code.co_filename).name}:{code.co_firstlineno}"
+        await self._until(condition, timeout_s, f"the condition at {where} holds")
+
+    async def _until(self, condition: Callable[[], bool], timeout_s: float, what: str) -> None:
         """Waits until `condition` holds, checking now and then at each tick.
 
         Args:
             condition: reads the ground's view of the flight software.
             timeout_s: s, how long to wait.
+            what: what `condition` means, in words, for the messages.
 
         Raises:
-            TimeoutError: naming the time, when `condition` still fails at the first tick at or
-                after `timeout_s` from now.
+            TimeoutError: naming `what` and the time, when `condition` still fails at the first
+                tick at or after `timeout_s` from now.
         """
         deadline_ns = self._now_ns + round(timeout_s * _NANOSECONDS_PER_SECOND)
+        until = f"{what}, by t = {deadline_ns / _NANOSECONDS_PER_SECOND} s"
         while not condition():
             if self._now_ns >= deadline_ns:
-                raise TimeoutError(
-                    f"the condition did not hold within {timeout_s} s, at t = {self.now_s} s"
-                )
-            await _Tick()
+                raise TimeoutError(f"timed out at t = {self.now_s} s waiting until {until}")
+            await _Tick(until)
 
     async def send(self, name: str, *, timeout_s: float = 5.0, **args: Any) -> None:
         """Uplinks a command and waits for its response.
@@ -168,14 +202,16 @@ class Ground(sysModel.SysModel):
             "context": context,
             "response": None,
             "response_t_s": None,
+            "reason": None,
         }
         self.command_log.append(entry)
         self._link.uplink(packet, context)
-        await self.until(lambda: context in self._answers, timeout_s=timeout_s)
+        await self._until(lambda: context in self._answers, timeout_s, f"{name} is answered")
         names = {value: key for key, value in self._link.dictionary.responses.items()}
-        entry["response"], entry["response_t_s"] = names[self._answers.pop(context)], self.now_s
+        response, entry["reason"] = self._answers.pop(context)
+        entry["response"], entry["response_t_s"] = names[response], self.now_s
         if entry["response"] != "OK":
-            raise CommandFailed(name, entry["response"])
+            raise CommandFailed(name, entry["response"], entry["reason"])
 
     def tlm(self, name: str) -> Any:
         """One channel's latest write.
@@ -226,19 +262,34 @@ class Ground(sysModel.SysModel):
         """
         self._now_ns = CurrentSimNanos
         try:
-            self._answers.update(self._link.responses())
+            self._answers.update(
+                (context, (response, reason))
+                for context, response, reason in self._link.responses()
+            )
             writes = self._link.telemetry()
             self._writes += writes
             self._latest.update((channel, payload) for channel, _, payload in writes)
             if self._coroutine is not None:
                 try:
-                    self._coroutine.send(None)
+                    self._waiting = self._coroutine.send(None)
                 except StopIteration:
                     self._coroutine = None
                     self._stop()
         except BaseException as error:
             self.failure = error
             raise
+
+    def ensure_returned(self) -> None:
+        """Checks that the procedure returned within the flight.
+
+        Raises:
+            TimeoutError: naming what the procedure still waited for when the flight ended.
+        """
+        if self._coroutine is not None:
+            raise TimeoutError(
+                f"the flight ended at t = {self.now_s} s with the procedure waiting until"
+                f" {self._waiting.until}"
+            )
 
     def telemetry_datasets(self) -> dict[str, tuple[np.ndarray, str]]:
         """Every telemetry write of the run, as run-file datasets, each channel in one batch.

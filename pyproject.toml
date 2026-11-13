@@ -51,6 +51,11 @@ strict_markers = true
 markers = [
     "sim_ground_period_s(period_s): the ground's period, in s, for a scenario's definition; a whole multiple of the flight software's",
 ]
+# A coroutine never awaited, such as a ground procedure's forgotten `await`, fails its test.
+filterwarnings = [
+    "error:coroutine .* was never awaited:RuntimeWarning",
+    "error:Exception ignored while finalizing coroutine:pytest.PytestUnraisableExceptionWarning",
+]
 # The F´ framework clone and the F´ build cache carry F´'s own tests, which are not this project's.
 addopts = [
     "--import-mode=importlib", "-n", "auto", "--dist", "loadgroup", "-p", "pytester",
