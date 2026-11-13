@@ -1,7 +1,7 @@
 """A Basilisk Python `SysModel` running the WiseFsw F´ deployment in the simulation's process."""
 
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -9,9 +9,8 @@ from typing import Any
 import numpy as np
 from Basilisk.architecture import sysModel
 
-from gnc_cdh import UNITS
 from gnc_cdh.basilisk import AlgorithmModule
-from gnc_cdh.dictionary import Dictionary
+from gnc_cdh.dictionary import Channel, Dictionary
 
 __all__ = ["DICTIONARY", "FprimeModule", "extension"]
 
@@ -20,9 +19,6 @@ _NANOSECONDS_PER_MICROSECOND = 1_000
 
 DICTIONARY = Path(__file__).with_name("WiseFswTopologyDictionary.json")
 """The dictionary F´ generated for the deployment, copied here by `just fsw`."""
-
-_ESTIMATE = {"q_BN": "nav.bodyEciAttitude", "r_BN_N": "nav.bodyEciPos", "v_BN_N": "nav.bodyEciVel"}
-"""The channel each estimate a host records is read from."""
 
 _loaded_stamp: tuple[int, int] | None = None
 """The extension file's inode and modification time, in ns, when this process first loaded it."""
@@ -61,75 +57,108 @@ def extension() -> ModuleType:
 
 
 class FprimeModule(sysModel.SysModel):
-    """Runs the WiseFsw deployment each tick: the clock set, the IMU reading sent, the schedule run.
+    """Runs the WiseFsw deployment each tick, and carries the ground's link to it.
 
-    The deployment is the WiseFsw topology, whose content is the dead reckoner. The channel each
-    estimate is read from, `_ESTIMATE`, is the one dead-reckoner-specific piece of this host.
-    The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
-    and gives the dead reckoner its initial state on its initialization port.
-    Each `UpdateState` after the last tick reads the IMU once, steps the deployment and logs
-    every channel the tick wrote, serialized, by the tick's time in ns; `estimate_datasets`
-    decodes them through the deployment's dictionary.
+    The deployment is one per process, so one module flies at a time. `Reset` boots it at the
+    reset time with the dead reckoner idle. Each `UpdateState` after the last tick sets the clock,
+    runs the uplinked commands through F´'s command dispatcher, sends the IMU reading and runs the
+    schedule. The link's bytes are F´'s own: command packets go up, and the responses and every
+    telemetry write with its F´ time tag come down.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in, the Python
             host's, so the two builds fly at one rate.
+        dictionary: the deployment's dictionary.
+        failure: the exception `Reset` or a tick raised, kept whole, else `None`.
         build: the host's build identity, recorded in a flight's `flight.json`: the host, F´'s
             version and the commit the deployment was built from.
     """
 
     period_s = AlgorithmModule.period_s
+    dictionary: Dictionary
+    failure: BaseException | None
     build: dict[str, str]
 
-    def __init__(
-        self, imu: Any, mu: float, dcm_PB: np.ndarray, initial: Mapping[str, np.ndarray]
-    ) -> None:
+    def __init__(self, imu: Any, mu: float, dcm_PB: np.ndarray) -> None:
         """Holds what `Reset` boots the deployment with.
 
         Args:
             imu: the IMU reader, subscribed by the caller.
             mu: m^3/s^2, the central body's gravitational parameter.
             dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B.
-            initial: the dead reckoner's state at t = 0: `q0_BN` ((4,) quaternion W X Y Z), `r0_N`
-                ((3,) m) and `v0_N` ((3,) m/s), in the shape of a scenario's `initial_state()`.
         """
         super().__init__()
         self._fsw = extension()
         self._imu = imu
         self._mu = float(mu)
         self._dcm_PB = np.asarray(dcm_PB, dtype=float)
-        self._initial = {k: np.asarray(v, dtype=float) for k, v in initial.items()}
-        self._dictionary = Dictionary(DICTIONARY)
+        self.dictionary = Dictionary(DICTIONARY)
+        self.failure = None
         self.build = {
             "host": "gnc_cdh.fprime.FprimeModule",
-            "frameworkVersion": self._dictionary.metadata["frameworkVersion"],
-            "projectVersion": self._dictionary.metadata["projectVersion"],
+            "frameworkVersion": self.dictionary.metadata["frameworkVersion"],
+            "projectVersion": self.dictionary.metadata["projectVersion"],
         }
         self._t_ns = 0
-        self._log: dict[int, Mapping[int, bytes]] = {}
+
+    def uplink(self, packet: bytes, context: int) -> None:
+        """Queues a command packet at F´'s dispatcher, which runs it at the next tick.
+
+        Args:
+            packet: the serialized command packet.
+            context: the ground's number for the command, returned with its response.
+        """
+        self._fsw.uplink(packet, context)
+
+    def responses(self) -> list[tuple[int, int, str | None]]:
+        """The command responses since the last call, oldest first.
+
+        Returns:
+            `(context, response, None)`: the response a value of the dictionary's
+            `Fw.CmdResponse`; F´ gives no reason with it.
+        """
+        return [(context, response, None) for context, response in self._fsw.responses()]
+
+    def telemetry(self) -> list[tuple[int, int, bytes]]:
+        """Every telemetry write since the last call, in the order written.
+
+        Returns:
+            `(channel ID, F´ time tag in ns, value)`, the value serialized as F´ writes it.
+        """
+        return self._fsw.telemetry()
+
+    def values(self, channel: Channel, payloads: Sequence[bytes]) -> np.ndarray:
+        """The values F´ wrote to one channel, decoded in one batch.
+
+        Args:
+            channel: the channel written.
+            payloads: its writes' serialized values, as `telemetry` gave them.
+
+        Returns:
+            As `Channel.decode_many` gives them.
+        """
+        return channel.decode_many(payloads)
 
     def Reset(self, CurrentSimNanos: int) -> None:
-        """Boots the deployment, initializes the dead reckoner and logs the telemetry at t = 0.
+        """Boots the deployment: queued commands run, the link cleared, the dead reckoner idle.
 
         Args:
             CurrentSimNanos: ns, the reset time, as Basilisk passes it.
 
         Raises:
-            RuntimeError: the extension was rebuilt after this process loaded it, or the IMU
-                reader is not subscribed.
+            RuntimeError: naming an extension rebuilt after this process loaded it, or an IMU
+                reader that is not subscribed.
+            BaseException: the reset's exception, kept whole in `failure`.
         """
-        self._fsw = extension()
-        if not self._imu.isLinked():
-            raise RuntimeError("the IMU reader is not subscribed to any message")
-        self._t_ns = CurrentSimNanos
-        self._fsw.boot(mu=self._mu, dcm_PB=self._dcm_PB)
-        self._fsw.initialize_nav(
-            t_ns=self._t_ns,
-            q_BN=self._initial["q0_BN"],
-            r_BN_N=self._initial["r0_N"],
-            v_BN_N=self._initial["v0_N"],
-        )
-        self._log = {self._t_ns: self._latest()}
+        try:
+            self._fsw = extension()
+            if not self._imu.isLinked():
+                raise RuntimeError("the IMU reader is not subscribed to any message")
+            self._t_ns = CurrentSimNanos
+            self._fsw.boot(mu=self._mu, dcm_PB=self._dcm_PB)
+        except BaseException as error:
+            self.failure = error
+            raise
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
         """Steps the deployment to the current time when it lies after the last tick.
@@ -138,71 +167,41 @@ class FprimeModule(sysModel.SysModel):
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
-            RuntimeError: the tick is not at a whole microsecond, or the IMU reader has never
-                been written.
+            BaseException: the tick's exception, kept whole in `failure`: a `RuntimeError` naming
+                a tick that is not at a whole microsecond, an IMU never written, or a queue F´
+                could not empty.
         """
         if not CurrentSimNanos > self._t_ns:
             return
-        if CurrentSimNanos % _NANOSECONDS_PER_MICROSECOND:
+        try:
+            self._tick(CurrentSimNanos)
+        except BaseException as error:
+            self.failure = error
+            raise
+
+    def _tick(self, t_ns: int) -> None:
+        """Steps the deployment to `t_ns` on the IMU's reading.
+
+        Args:
+            t_ns: ns, the tick's time.
+
+        Raises:
+            RuntimeError: the tick is not at a whole microsecond, or the IMU reader has never
+                been written.
+        """
+        if t_ns % _NANOSECONDS_PER_MICROSECOND:
             raise RuntimeError(
-                f"the tick at {CurrentSimNanos} ns is not a whole microsecond,"
+                f"the tick at {t_ns} ns is not a whole microsecond,"
                 " which the deployment's clock cannot hold"
             )
         if not self._imu.isWritten():
-            t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
-            raise RuntimeError(f"the IMU has not been written at t = {t} s")
+            raise RuntimeError(
+                f"the IMU has not been written at t = {t_ns / _NANOSECONDS_PER_SECOND} s"
+            )
         reading = self._imu()
         self._fsw.step(
-            t_ns=CurrentSimNanos,
+            t_ns=t_ns,
             angVelPlatform=np.array(reading.AngVelPlatform, dtype=float),
             accelPlatform=np.array(reading.AccelPlatform, dtype=float),
         )
-        self._t_ns = CurrentSimNanos
-        self._log[CurrentSimNanos] = self._latest()
-
-    def _latest(self) -> dict[int, bytes]:
-        """Drains the deployment's telemetry writes and keeps each channel's last.
-
-        Returns:
-            Channel ID to its last write since the previous drain, serialized.
-        """
-        return {channel: value for channel, _, value in self._fsw.telemetry()}
-
-    def fly(self, run: Callable[[Any, dict[str, tuple[Any, str, str]]], dict]) -> dict:
-        """Flies the scenario through `run` and records the estimate from the telemetry log.
-
-        Args:
-            run: flies the scenario with this host and the datasets to record, as the harness
-                binds it from the scenario and its stopping rule.
-
-        Returns:
-            The run's datasets with the estimate's added.
-        """
-        datasets = run(self, {})
-        datasets.update(self.estimate_datasets(datasets["t_s"][0]))
-        return datasets
-
-    def estimate_datasets(self, t_s: np.ndarray) -> dict[str, tuple[np.ndarray, str]]:
-        """The estimate's run-file datasets at the record times, from the logged telemetry.
-
-        Args:
-            t_s: (N,) s, the record times, each one a tick's time to the nanosecond.
-
-        Returns:
-            `est/q_BN` ((N, 4) quaternion W X Y Z), `est/r_BN_N` ((N, 3) m) and `est/v_BN_N`
-            ((N, 3) m/s).
-
-        Raises:
-            KeyError: naming a record time no tick logged.
-        """
-        rows = []
-        for t in t_s:
-            t_ns = round(float(t) * _NANOSECONDS_PER_SECOND)
-            if t_ns not in self._log:
-                raise KeyError(f"no telemetry was logged at t = {t} s")
-            rows.append(self._log[t_ns])
-        values = {}
-        for name, channel_name in _ESTIMATE.items():
-            channel = self._dictionary.channel(channel_name)
-            values[name] = channel.decode_many([row[channel.id] for row in rows])
-        return {f"est/{name}": (value, UNITS[name]) for name, value in values.items()}
+        self._t_ns = t_ns

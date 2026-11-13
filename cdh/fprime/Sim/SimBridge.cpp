@@ -8,10 +8,6 @@ void SimBridge::configureNav(F64 mu, const Gnc::Matrix3& dcmPB) {
     this->navConfigOut_out(0, mu, dcmPB);
 }
 
-void SimBridge::initializeNav(const Gnc::Quaternion& qBN, const Gnc::Vector3& rBN_N, const Gnc::Vector3& vBN_N) {
-    this->navInitOut_out(0, qBN, rBN_N, vBN_N);
-}
-
 void SimBridge::sendImu(const Gnc::Vector3& angVelPlatform, const Gnc::Vector3& accelPlatform) {
     this->imuOut_out(0, angVelPlatform, accelPlatform);
 }

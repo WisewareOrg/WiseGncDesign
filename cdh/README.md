@@ -6,10 +6,10 @@ its F´ build.
 
 The ground, `harness.ground.Ground`, flies a host that presents the link `gnc_cdh.link.Link`:
 commands up, responses and every telemetry write down, in the form F´ uses. The ground runs the
-scenario's procedure against it and records the flight. `AlgorithmModule` presents the link. The
-F´ host does not, and records its estimate itself, as [The F´ host](#the-f-host) says. The link's
-docstrings say what each method does. Each host also has `build`, its build identity, which the
-harness records in the flight's `flight.json`. The reasoning is in
+scenario's procedure against it and records the flight. `AlgorithmModule` and the F´ host,
+`FprimeModule`, each present it, so one procedure and one set of analyzers fly either build. The
+link's docstrings say what each method does. Each host also has `build`, its build identity,
+which the harness records in the flight's `flight.json`. The reasoning is in
 [ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
 
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
@@ -131,13 +131,13 @@ builds are held to one contract. The reasoning is in
 
 ## The F´ host
 
-`gnc_cdh.fprime.FprimeModule(imu, mu, dcm_PB, initial)` runs the WiseFsw F´ deployment in the
-simulation's process. The deployment's content is the dead reckoner, whose F´ component sits beside
-its notebook. `just fsw` builds the deployment into this package as the extension `_wise_fsw`, with
-the JSON dictionary F´ generates for it alongside. `just pinned` and `just local` run it as part of
-their sync, and `just test`, `just fly` and `just lab` run it first; a host built without it says to
-run `just fsw`. The module takes
-`AlgorithmModule`'s `period_s`, so the two builds fly at one rate.
+`gnc_cdh.fprime.FprimeModule(imu, mu, dcm_PB)` runs the WiseFsw F´ deployment in the
+simulation's process. The deployment's content is the dead reckoner, whose F´ component sits
+beside its notebook, and the module's reset boots it idle with `mu` and the IMU's mounting.
+`just fsw` builds the deployment into this package as the extension `_wise_fsw`, with the JSON
+dictionary F´ generates for it alongside. `just pinned` and `just local` run it as part of their
+sync, and `just test`, `just fly` and `just lab` run it first; a host built without it says to run
+`just fsw`. The module takes `AlgorithmModule`'s `period_s`, so the two builds fly at one rate.
 
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
@@ -146,6 +146,7 @@ drains every telemetry write since the last call, each with its F´ time tag, an
 and leaves nav idle. The reasoning is in
 [ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
 
-The module logs each channel's last write of each tick in F´'s bytes, and decodes them through
-`gnc_cdh.dictionary` once the run is flown. The one piece specific to an algorithm is small and
-named: `_ESTIMATE`, the channel each of the dead reckoner's estimates is read from.
+The module presents the link through these: `uplink` and `telemetry` pass through, `responses`
+gives each response with no reason, since F´ gives none, and `values` decodes a channel's writes
+through `gnc_cdh.dictionary` in one batch. An exception its reset or a tick raises is kept whole in
+`failure`, as `AlgorithmModule` keeps one.

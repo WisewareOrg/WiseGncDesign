@@ -31,17 +31,17 @@ from harness.mission import Mission, mission_tests, provides
 # %% [markdown]
 # ## The F´ flight software
 #
-# `fprime_dead_reckoner` boots the deployment on the scenario's vehicle.
-# The dead reckoner's initial state is handed over at boot, as the Python one's is.
+# `fprime_dead_reckoner` boots the deployment idle on the scenario's vehicle. The scenario's
+# ground procedure gives the dead reckoner its state by command, as it gives the Python one.
 
 
 # %%
 @provides("SYS001")
 def fprime_dead_reckoner(scenario: Scenario) -> FprimeModule:
-    """The F´ dead reckoner, booted at t = 0 from a scenario's initial state, on its vehicle.
+    """The F´ dead reckoner, booted idle on a scenario's vehicle.
 
     Args:
-        scenario: the scenario whose vehicle, `mu` and initial state the deployment takes.
+        scenario: the scenario whose vehicle and `mu` the deployment takes.
 
     Returns:
         The `FprimeModule` running it.
@@ -50,7 +50,6 @@ def fprime_dead_reckoner(scenario: Scenario) -> FprimeModule:
         scenario.vehicle.readers()["imu"],
         mu=scenario.mu_m3_s2["earth"],
         dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB),
-        initial=scenario.initial_state(),
     )
 
 
@@ -91,11 +90,11 @@ globals().update(mission_tests(*MISSIONS))
 # figure, axes = plt.subplots(2, 1, sharex=True, figsize=(8, 6), layout="constrained")
 # for p, f in zip(python, fprime, strict=True):
 #     p, f = p["datasets"], f["datasets"]
-#     t = p["t_s"][0]
-#     attitude = attitude_error_rad(p["est/q_BN"][0], f["est/q_BN"][0])
-#     position = position_error_m(p["est/r_BN_N"][0], f["est/r_BN_N"][0])
-#     axes[0].semilogy(t, attitude, color="C0")
-#     axes[1].semilogy(t, position, color="C1")
+#     q, r = "nav.bodyEciAttitude", "nav.bodyEciPos"
+#     attitude = attitude_error_rad(p[f"tlm/{q}"][0], f[f"tlm/{q}"][0])
+#     position = position_error_m(p[f"tlm/{r}"][0], f[f"tlm/{r}"][0])
+#     axes[0].semilogy(p[f"tlm_t/{q}"][0], attitude, color="C0")
+#     axes[1].semilogy(p[f"tlm_t/{r}"][0], position, color="C1")
 # axes[0].set_ylabel("F´ vs Python attitude (rad)")
 # axes[1].set_ylabel("F´ vs Python position (m)")
 # axes[-1].set_xlabel("t (s)")

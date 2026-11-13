@@ -17,16 +17,11 @@ class ImuDeadReckoner final : public ImuDeadReckonerComponentBase {
     void imuIn_handler(FwIndexType portNum, const Gnc::Vector3& angVelPlatform,
                        const Gnc::Vector3& accelPlatform) override;
     void configureIn_handler(FwIndexType portNum, F64 mu, const Gnc::Matrix3& dcmPB) override;
-    void initializeIn_handler(FwIndexType portNum, const Gnc::Quaternion& qBN, const Gnc::Vector3& rBN_N,
-                              const Gnc::Vector3& vBN_N) override;
     void initNavState_cmdHandler(FwOpcodeType opCode, U32 cmdSeq, F64 epoch, const Gnc::Quaternion& attitude,
                                  const Gnc::Vector3& position, const Gnc::Vector3& velocity) override;
 
     //! The clock's time, in s.
     F64 now();
-
-    //! Holds the state as of t (s), q held with W >= 0, and marks the estimate initialized.
-    void initialize(F64 t, const Gnc::Quaternion& qBN, const Gnc::Vector3& rBN_N, const Gnc::Vector3& vBN_N);
 
     //! Writes every telemetry channel from the held state.
     void writeTelemetry();
