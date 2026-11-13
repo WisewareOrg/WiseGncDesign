@@ -84,6 +84,23 @@ def test_the_estimate_datasets_are_the_logged_ticks_and_refuse_a_time_never_logg
         module.estimate_datasets(np.array([0.25]))
 
 
+def test_a_host_refuses_an_extension_rebuilt_after_the_process_loaded_it(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Once the extension changes on disk, building or resetting a host says restart the kernel.
+
+    Args:
+        monkeypatch: records a different file as the one this process loaded.
+    """
+    built_before = _module()
+    monkeypatch.setattr("gnc_cdh.fprime.module._loaded_stamp", (-1, -1))
+
+    with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
+        _module()
+    with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
+        built_before.Reset(0)
+
+
 def _dictionary() -> dict:
     """The dictionary F´ generated for the deployment.
 

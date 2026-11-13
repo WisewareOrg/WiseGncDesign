@@ -11,7 +11,9 @@ from scipy.spatial.transform import Rotation
 
 from gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
 from gnc_algorithms.mrp import dcm_NB
-from gnc_cdh.fprime import DICTIONARY, _wise_fsw, decoders, telemetry_by_name
+from gnc_cdh.fprime import DICTIONARY, decoders, extension, telemetry_by_name
+
+_wise_fsw = extension()
 
 MU = 3.986004360e14
 """m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""

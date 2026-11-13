@@ -36,8 +36,10 @@ scratch, which needs no network.
 
 `just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
 picked up. That rebuild reuses the existing cache, so after switching branches run `just pinned` or
-`just local` to rebuild it from scratch. Why the F´ build flies inside the simulation, and how, is
-in [ADR 0003 rev 1](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+`just local` to rebuild it from scratch. A process cannot reload the extension, so a notebook
+kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. Why the F´ build flies
+inside the simulation, and how, is in
+[ADR 0003 rev 1](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 ### Requirements and missions
 

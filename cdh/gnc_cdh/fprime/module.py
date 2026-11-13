@@ -1,9 +1,11 @@
 """A Basilisk Python `SysModel` running the WiseFsw F´ deployment in the simulation's process."""
 
 import json
+import os
 import struct
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -12,7 +14,7 @@ from scipy.spatial.transform import Rotation
 
 from gnc_cdh.basilisk import UNITS, AlgorithmModule
 
-__all__ = ["DICTIONARY", "FprimeModule", "decoders", "telemetry_by_name"]
+__all__ = ["DICTIONARY", "FprimeModule", "decoders", "extension", "telemetry_by_name"]
 
 _NANOSECONDS_PER_SECOND = 1e9
 _NANOSECONDS_PER_MICROSECOND = 1_000
@@ -22,6 +24,37 @@ DICTIONARY = Path(__file__).with_name("WiseFswTopologyDictionary.json")
 
 _PRIMITIVES = {"F32": ">f", "F64": ">d", "I8": ">b", "I16": ">h", "I32": ">i", "I64": ">q"}
 _PRIMITIVES |= {"U8": ">B", "U16": ">H", "U32": ">I", "U64": ">Q"}
+
+_loaded_stamp: tuple[int, int] | None = None
+"""The extension file's inode and modification time, in ns, when this process first loaded it."""
+
+
+def extension() -> ModuleType:
+    """The deployment's extension, `_wise_fsw`, the one entry point to it.
+
+    A process cannot reload an extension, so one rebuilt on disk after this process loaded it is
+    refused rather than flown stale. The file is stamped on the first call, so an import of
+    `_wise_fsw` that bypasses this goes unchecked.
+
+    Returns:
+        The extension module.
+
+    Raises:
+        RuntimeError: the extension file changed after this process loaded it.
+    """
+    global _loaded_stamp
+    from gnc_cdh.fprime import _wise_fsw
+
+    status = os.stat(_wise_fsw.__file__)
+    stamp = (status.st_ino, status.st_mtime_ns)
+    if _loaded_stamp is None:
+        _loaded_stamp = stamp
+    if stamp != _loaded_stamp:
+        raise RuntimeError(
+            f"{_wise_fsw.__file__} was rebuilt after this process loaded it;"
+            " restart the kernel to fly the new build"
+        )
+    return _wise_fsw
 
 
 def decoders(dictionary: Mapping[str, Any]) -> dict[int, tuple[str, Any]]:
@@ -108,6 +141,7 @@ class FprimeModule(sysModel.SysModel):
                 (m/s), each (3,), in the shape of a scenario's `initial_state()`.
         """
         super().__init__()
+        self._fsw = extension()
         self._imu = imu
         self._mu = float(mu)
         self._dcm_PB = np.asarray(dcm_PB, dtype=float)
@@ -129,21 +163,21 @@ class FprimeModule(sysModel.SysModel):
             CurrentSimNanos: ns, the reset time, as Basilisk passes it.
 
         Raises:
-            RuntimeError: the IMU reader is not subscribed.
+            RuntimeError: the extension was rebuilt after this process loaded it, or the IMU
+                reader is not subscribed.
         """
-        from gnc_cdh.fprime import _wise_fsw
-
+        self._fsw = extension()
         if not self._imu.isLinked():
             raise RuntimeError("the IMU reader is not subscribed to any message")
         self._t_ns = CurrentSimNanos
-        _wise_fsw.boot(mu=self._mu, dcm_PB=self._dcm_PB)
-        _wise_fsw.initialize_nav(
+        self._fsw.boot(mu=self._mu, dcm_PB=self._dcm_PB)
+        self._fsw.initialize_nav(
             t_ns=self._t_ns,
             sigma_BN=self._initial["sigma0_BN"],
             r_BN_N=self._initial["r0_N"],
             v_BN_N=self._initial["v0_N"],
         )
-        self._log = {self._t_ns: self._written(_wise_fsw)}
+        self._log = {self._t_ns: self._written()}
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
         """Steps the deployment to the current time when it lies after the last tick.
@@ -155,8 +189,6 @@ class FprimeModule(sysModel.SysModel):
             RuntimeError: the tick is not at a whole microsecond, or the IMU reader has never
                 been written.
         """
-        from gnc_cdh.fprime import _wise_fsw
-
         if not CurrentSimNanos > self._t_ns:
             return
         if CurrentSimNanos % _NANOSECONDS_PER_MICROSECOND:
@@ -168,24 +200,21 @@ class FprimeModule(sysModel.SysModel):
             t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
             raise RuntimeError(f"the IMU has not been written at t = {t} s")
         reading = self._imu()
-        _wise_fsw.step(
+        self._fsw.step(
             t_ns=CurrentSimNanos,
             angVelPlatform=np.array(reading.AngVelPlatform, dtype=float),
             accelPlatform=np.array(reading.AccelPlatform, dtype=float),
         )
         self._t_ns = CurrentSimNanos
-        self._log[CurrentSimNanos] = self._written(_wise_fsw)
+        self._log[CurrentSimNanos] = self._written()
 
-    def _written(self, wise_fsw: Any) -> dict[str, Any]:
+    def _written(self) -> dict[str, Any]:
         """Every channel the deployment's last call wrote, decoded and named.
-
-        Args:
-            wise_fsw: the deployment's extension module.
 
         Returns:
             Channel name to value.
         """
-        return telemetry_by_name(self._channels, wise_fsw.telemetry())
+        return telemetry_by_name(self._channels, self._fsw.telemetry())
 
     def fly(self, run: Callable[[Any, dict[str, tuple[Any, str, str]]], dict]) -> dict:
         """Flies the scenario through `run` and records the estimate from the telemetry log.
