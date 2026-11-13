@@ -116,8 +116,9 @@ builds are held to one contract.
 `gnc_cdh.fprime.FprimeModule(imu, mu, dcm_PB, initial)` runs the WiseFsw F´ deployment in the
 simulation's process. The deployment's content is the dead reckoner, whose F´ component sits beside
 its notebook. `just fsw` builds the deployment into this package as the extension `_wise_fsw`, with
-the JSON dictionary F´ generates for it alongside. `just test` and `just fly` run it first; the
-syncs and `just lab` do not, and a host built without it says to run `just fsw`. The module takes
+the JSON dictionary F´ generates for it alongside. `just pinned` and `just local` run it as part of
+their sync, and `just test`, `just fly` and `just lab` run it first; a host built without it says to
+run `just fsw`. The module takes
 `AlgorithmModule`'s `period_s`, so the two builds fly at one rate.
 
 The module logs every channel each tick writes in F´'s bytes, and decodes them through

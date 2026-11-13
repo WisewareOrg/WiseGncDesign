@@ -182,9 +182,9 @@ autocoder.
   `TlmCapture` in place of F´'s downlink, no commands, events or parameters, and passive components
   only. These come up again when the ground link is designed.
 - The `initNavState` command, once it exists, replaces the initialization port.
-- An algorithm flies in Python before an F´ build of it exists, and the Python path, `just _sync`
-  and `just lab` need no compiler. A new channel or command is two edits while prototyping: the
-  `.fpp` line and the Python that writes or handles it.
+- An algorithm flies in Python before an F´ build of it exists, and the Python path needs no
+  compiler or F´ build, only the F´ clone. A new channel or command is two edits while
+  prototyping: the `.fpp` line and the Python that writes or handles it.
 - Generating a Python build's dictionary takes 0.1–0.3 s once per process for each content of its
   model.
 - An F´ release bump arrives as one Renovate update with the tools F´ pins, and a tool pin that

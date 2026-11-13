@@ -29,20 +29,18 @@ Tests sit beside the code they test. The suite needs the simulator installed, fr
 
 ### The F´ build
 
-The Python build needs no F´ build: `just pinned` and `just local` fetch the F´ framework by tag
-into the gitignored `cdh/fprime/lib/`, and a Python build's dictionary is generated from FPP and
-that clone alone, with no compiler.
+`just pinned` and `just local` also build the F´ deployment. Besides `uv.lock`, the build needs the
+system C++ compiler and git. The F´ framework and Eigen are fetched by tag into gitignored folders
+under `cdh/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
+GitLab only the first time, or when a tag changes. Each sync rebuilds the F´ build cache from
+scratch, which needs no network.
 
-`just fsw` builds the F´ deployment, and `just test` and `just fly` run it first, so an edit to C++
-or FPP is picked up. Besides `uv.lock`, the build needs the system C++ compiler and git. Eigen is
-fetched by tag into `cdh/fprime/lib/` on the first build, outside the build cache, so syncing and
-building need network access to GitHub and GitLab only the first time, or when a tag changes. A
-build reuses the existing cache, and a sync discards its configuration, so after switching
-branches run `just pinned` or `just local` and the next build starts from scratch. `just lab` does
-not build F´, and a notebook that flies the F´ build says to run `just fsw` when it was never
-built. A process cannot reload the extension, so a notebook kernel that loaded it refuses to fly
-once it is rebuilt; restart the kernel. The F´ build's tests skip when it is absent. Why the F´
-build flies inside the simulation, and how, is in
+`just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
+picked up. That rebuild reuses the existing cache, so after switching branches run `just pinned` or
+`just local` to rebuild it from scratch. A process cannot reload the extension, so a notebook
+kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. A Python build's
+dictionary is generated from FPP and the F´ clone alone, and the F´ build's tests skip when it is
+absent. Why the F´ build flies inside the simulation, and how, is in
 [ADR 0003 rev 2](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 ### Requirements and missions
