@@ -7,8 +7,7 @@
 ## Revisions
 
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
-  telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build); recording a flight
-  is superseded by ADR 0004 rev 1 (issue 39 scenarios command the flight software).
+  telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
 
 ## Context
@@ -36,15 +35,17 @@ autocoder.
 - **The binding is a small hand-written pybind11 module, with no fprime-python dependency.**
 - **Each F´ component sits beside the algorithm it ports.** The repository root is F´'s project root
   (`cdh/fprime/settings.ini`). An algorithm's component `.fpp`, `.hpp` and `.cpp` sit in its
-  package beside the notebook, the package ADR 0002 rev 2 lays out around each algorithm.
+  package beside the notebook, the package ADR 0002 rev 1 lays out around each algorithm.
   `cdh/fprime/` holds the rest of the F´ project: the interface types, the sim-side components, the
   topology and the binding.
 - **An algorithm takes its configuration on an F´ port**, which `SimBridge` sends at boot, so
   nothing reaches past the F´ model.
 
-### Which build flew
+### Recording a flight
 
-- **Each flight's `flight.json` records which FSW flew**, beside the facts ADR 0002 rev 2 records
+- **A flight's end belongs to the scenario**, never to a fixed length. The simulator stops only on
+  time, so the one stopping rule the harness binds is the TST definition's duration.
+- **Each flight's `flight.json` records which FSW flew**, beside the facts ADR 0002 rev 1 records
   there for the judge. `fsw` is the FSW builder's name, and `build` is the host's build identity:
   - for the F´ host, the host, `frameworkVersion` (the F´ tag) and `projectVersion`, read from the
     dictionary's metadata;
