@@ -301,8 +301,8 @@ class ImuDeadReckoner:
 # ## The flight software
 #
 # `dead_reckoner` builds the estimator at t = 0 from a WiseDynamics scenario's initial state and
-# hosts it on the scenario's vehicle with `gnc_cdh.basilisk`, the dynamics stepping at the
-# scenario's fidelity.
+# hosts it on the scenario's vehicle with `gnc_cdh.basilisk`, the dynamics and the IMU stepping at
+# its period.
 
 
 # %%
