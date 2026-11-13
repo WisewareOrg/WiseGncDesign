@@ -77,7 +77,7 @@ class Ground(sysModel.SysModel):
     The simulation runs the module every `period_s`, a whole multiple of the flight software's
     period, after the flight software at each instant. Once the procedure returns, the module
     calls `stop` and is not run again; the flight goes on, and `telemetry_datasets` takes every
-    write the link still holds. The reasoning is in ADR 0004 rev 1.
+    write the link still holds.
 
     Attributes:
         period_s: s, the period of the task the simulation runs this module in.

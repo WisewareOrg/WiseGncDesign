@@ -1,14 +1,13 @@
 # 0004 — Carry commands and telemetry in F´'s form, from one FPP dictionary
 
 **Status:** accepted
-**Decided:** 2026-11-13 (issue 37 the dictionary; issue 38 commands into the F´ build; issue 39
-scenarios command the flight software)
+**Decided:** 2026-11-13 (issue 37 the dictionary; issue 38 commands into the F´ build)
 **Rev:** 1
 
 ## Revisions
 
 - **rev 1** — 2026-11-13 — first written (issue 37 the dictionary; issue 38 commands into the F´
-  build; issue 39 scenarios command the flight software).
+  build).
 
 ## Context
 
@@ -24,8 +23,6 @@ nothing on a thread of its own (ADR 0003 rev 2).
   each as one.
 - **Telemetry.** The flight software decides what it writes and when. Analysis judges what it
   reports, so no write may be lost or resampled.
-- **The ground.** A scenario waits on time or telemetry and sends commands in response, against
-  either build, and a case reproduces from its seed. Runs must stay fast.
 
 ## Decision
 
@@ -51,21 +48,8 @@ A vector or quaternion is one channel of an array type, written in one write.
 ### Telemetry is pushed
 
 Every telemetry write is logged with the flight software's own time tag at the moment of the write,
-in the order written, and the log is drained. Nothing keeps a latest value, and nothing on the sim
-side samples or decimates telemetry. A Python build logs each write's value as written, an array
-copied, with its channel name checked on its tick, and packs each channel's writes into its type
-in one batch after the run.
-
-### The ground is the one recorder
-
-The ground is a Basilisk module in a process of its own, run after the flight software at each
-instant it shares with it. It runs the scenario's `async` procedure as a coroutine on simulated
-time, resumed at each of its ticks, with no event loop and no wall clock. It drains the link at
-each tick, and once the procedure returns it stops its own task and takes what the link still holds
-after the run. It records every write, `tlm/<instance>.<channel>` with its time tags in
-`tlm_t/<instance>.<channel>`, and the command log, for every build alike; a host records nothing.
-Its period is the scenario's, a whole multiple of the flight software's, the flight software's by
-default.
+in the order written, and the log is drained. Nothing on the sim side samples or decimates
+telemetry.
 
 ## Alternatives considered
 
@@ -106,21 +90,6 @@ default.
   samples. Rejected: the flight software owns its rate.
 - **A packed drain, one buffer per tick in place of one entry per write.** Measured at no wall-clock
   gain per case. Rejected for the simpler log.
-- **A Python build encoding each write on its tick.** A bad value fails on its tick, but it
-  measured 0.35–0.5 s more per case. Rejected for one batch after the run.
-
-### The ground
-
-- **A recording method per host.** Each host records its own flight, so run files are alike across
-  builds only by convention, and every host carries the recording. Rejected for one recorder.
-- **The procedure on OS threads, or asyncio on the wall clock.** A case no longer reproduces from
-  its seed. Rejected for a coroutine on simulated time.
-- **The ground before the flight software at each instant.** A command then runs in the tick it is
-  sent, but the ground sees telemetry a tick old; either order adds one tick, to the uplink or to
-  the downlink. Rejected for the ground after.
-- **The ground at the flight software's period for the whole run.** It costs a Python call every
-  tick after the procedure has nothing left to wait for. Rejected for the scenario's period and a
-  ground that stops once its procedure returns.
 
 ## Consequences
 
@@ -154,18 +123,6 @@ default.
 - Every write reaches whoever drains the log. A channel never written is never reported.
 - A write's tag is the flight software's clock when it is written, so a component writes a value
   only at a time the value holds for.
-- A Python build's value that does not fit its channel fails after the run, naming the channel,
-  not on the tick it was written.
 - Reopened if the per-write log shows in a per-case profile, or downlink is modelled. Downlink is
   then flight software components with flight software configuration on both builds, never a sim
   rate.
-
-### The ground
-
-- A run file reads alike whichever build flew, so one set of analyzers judges both.
-- A command sent at a ground tick runs at the flight software's next tick, and the ground sees its
-  response at its own next tick, so a slower ground answers later but records the same writes.
-- An exception in the procedure or in a host's tick is kept whole and re-raised by the harness,
-  since Basilisk reports it only as a `RuntimeError`.
-- Reopened if a scenario needs the ground between flight software ticks, or a procedure needs to
-  act after the flight's end.

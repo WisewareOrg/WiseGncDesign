@@ -1,13 +1,11 @@
 # 0002 — Fly missions from notebooks against a requirements tree
 
 **Status:** accepted
-**Decided:** 2026-11-13 (issue 39 scenarios command the flight software)
-**Rev:** 2
+**Decided:** 2026-11-11 (issue 29 missions: the spike and its plan)
+**Rev:** 1
 
 ## Revisions
 
-- **rev 2** — 2026-11-13 — a TST definition is a ground procedure that commands the flight
-  software (issue 39 scenarios command the flight software).
 - **rev 1** — 2026-11-11 — first written (issue 29 missions).
 
 ## Context
@@ -40,15 +38,6 @@ follow.
 - **Duration and case count belong to the scenario.** A different duration or case count is a
   different TST. The TST references the code that says how it is flown, by file and `def` line;
   Doorstop does not drive the simulator.
-- **A TST definition is its ground procedure.** The referenced `def` is an `async def` that the
-  ground of
-  [ADR 0004 rev 1](0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md)
-  runs against the flight software from t = 0: it waits on time or telemetry and sends commands,
-  so a scenario that needs the flight software commanded, such as one initializing navigation from
-  tracking, says so in the one place that says how it is flown. Its `sim_` marks are the rest. The
-  procedure's return does not end the flight, whose duration stays the one stopping rule, and an
-  exception in the procedure, such as a command refused or a wait timed out, crashes the case,
-  which the verdict counts as a failure.
 - **Reference hashes are on.** A TST records the hash of the file it references when reviewed, and
   `check-reqs` fails when that file changes, so changing how a scenario is flown re-flags its TST.
   Scenarios share one file, so editing one re-flags every TST that references it.
@@ -147,15 +136,6 @@ was dirty. Run files carry no GNC attributes.
 - **SYS as a mission's wants, with requirements flowed down from it.** Rejected: a capability and the
   wants of one mission are different things, and rungs are shared across capabilities.
 - **TST items owned by missions.** Rejected: a scenario is judged for every mission that flies it.
-- **A procedure apart from the definition**, referenced from it by name or kept in a registry of
-  procedures. It adds a name to keep in step and a second reference per TST, and the TST's hash
-  would no longer cover how the scenario commands the flight software. Rejected for the definition
-  being the procedure.
-- **A failed procedure recorded in the run file and the case judged.** A case whose procedure
-  failed did not fly the scenario its TST states, so judging it judges something else. Rejected for
-  a crash.
-- **The procedure's return ending the flight.** The flight's length would then depend on how the
-  flight software answered. Rejected: the duration is the stopping rule.
 - **`c` on the TST.** Rejected: confidence belongs to the demonstration a rung demands, so it
   belongs to the rung.
 - **`scenario` and `runs` attributes on the TST.** Rejected: the TST references the code that flies
@@ -200,10 +180,7 @@ was dirty. Run files carry no GNC attributes.
 
 - A new FSW is judged by claiming its capabilities; a new vehicle is a field of a mission; a new
   scenario is a TST and the code it references.
-- Editing how a scenario is flown re-flags its TST for review, its procedure included.
-- A scenario's procedure names the commands it sends, so a flight software without them crashes
-  every case of that scenario; such a flight software flies a different TST, whose procedure sends
-  only commands it has.
+- Editing how a scenario is flown re-flags its TST for review.
 - Judging is repeatable and never simulates, and an old session is judged against the tree as it
   stands.
 - A change to an FSW's claims or a mission's filter does not reach existing runs until the flight

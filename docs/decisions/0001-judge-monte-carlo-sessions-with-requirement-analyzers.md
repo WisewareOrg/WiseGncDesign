@@ -23,9 +23,9 @@ be written into one algorithm's test, and a test must be able to claim several r
 
 - **An analyzer is shared by every algorithm.** One analyzer module judges a requirement for every
   Monte Carlo test that claims it, so any algorithm is judged by the same analysis. Which
-  requirements an analyzer judges is decided by ADR 0002 rev 2.
+  requirements an analyzer judges is decided by ADR 0002 rev 1.
 - **A test claims requirements, many-to-many.** The simulator knows nothing of requirements, and a
-  requirement does not list the tests that claim it. How a test claims them is decided by ADR 0002 rev 2.
+  requirement does not list the tests that claim it. How a test claims them is decided by ADR 0002 rev 1.
 - **Judging is a separate pytest run after simulation, over one session.** It reads the runs a
   session holds and never re-simulates, so claiming a requirement for a test that already has runs
   judges them.
@@ -37,7 +37,7 @@ be written into one algorithm's test, and a test must be able to claim several r
 - **Evidence is kept in the session.** The report is written beside the runs it judges, organised
   by test: each claiming test's matrix and a plot per cell, and a rollup of requirement by test.
 
-Where requirements and their limits are stored is decided by ADR 0002 rev 2.
+Where requirements and their limits are stored is decided by ADR 0002 rev 1.
 
 ## Alternatives considered
 

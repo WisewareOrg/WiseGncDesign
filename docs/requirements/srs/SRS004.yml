@@ -16,15 +16,14 @@ references:
 - keyword: def test_velocity_knowledge(
   path: analysis/test_velocity_knowledge.py
   type: file
-reviewed: Rfs4vmi--68pPlaNvNkaVSOjGb4siO9KsF_e49Sr1OE=
+reviewed: b6dp63PApjLG8PPnz2G5xiCrWBqtkQ1yy6SDYQsvNpY=
 status: proposed
 text: |
-  At every estimate the FSW reports in every dispersed run, the velocity knowledge error shall stay
-  within x m/s in at least a share p of runs, demonstrated at confidence c.
+  Over the whole of every dispersed run, the velocity knowledge error shall stay within x m/s in at
+  least a share p of runs, demonstrated at confidence c.
 verification-justification: |
-  Judged from the worst error over each run, at each estimate the FSW wrote, against truth at
-  the time of the write, over the dispersions each scenario models and its duration. It does not
-  establish the error between the estimates the FSW reports, before its first, beyond the run's
-  duration, or under errors no scenario disperses.
+  Judged from the worst error over each run, sampled at the flight software's 1 Hz, over the
+  dispersions each scenario models and its duration. It does not establish the error between
+  samples, beyond the run's duration, or under errors no scenario disperses.
 verification-method: test
 x: 5.0

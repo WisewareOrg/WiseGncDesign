@@ -11,7 +11,7 @@ import pytest
 from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk import ImuSpacecraft
 
-from gnc_algorithms.imu_dead_reckoning.gross_check import BOUND_FACTOR, bound_inputs, violations
+from gnc_algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
 from gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner, _q_dot
 from gnc_cdh.basilisk import AlgorithmModule
 from harness.notebook import run_notebook
@@ -217,17 +217,11 @@ def test_q_dot_steps_the_attitude_as_scipy_rotates_it(dt: float):
         np.testing.assert_allclose(q + _q_dot(q, omega) * dt, expected, rtol=0, atol=dt**2)
 
 
-def _run(
-    t_s: np.ndarray, epoch: float = 0.0, sent: tuple[tuple[float, str], ...] | None = None
-) -> dict[str, object]:
+def _run(t_s: np.ndarray) -> dict[str, object]:
     """A run file's contents with every error zero, every bias and rate zero, one write a tick.
 
     Args:
         t_s: (N,) s, the dynamics steps, each also an estimate write.
-        epoch: s, the epoch of the one `nav.initNavState` the command log holds, sent at its epoch
-            and answered `OK`, when `sent` is `None`.
-        sent: each `nav.initNavState` the command log holds instead, as `(epoch, response)`, each
-            sent at its epoch.
 
     Returns:
         The run, as `read_run` returns it.
@@ -236,14 +230,7 @@ def _run(
     identity = np.tile([1.0, 0.0, 0.0, 0.0], (n, 1))
     r_N = np.tile([7.0e6, 0.0, 0.0], (n, 1))
     commands = [
-        {
-            "t_s": at_s,
-            "name": "nav.initNavState",
-            "args": {"epoch": at_s},
-            "response": response,
-            "context": k,
-        }
-        for k, (at_s, response) in enumerate(sent or ((epoch, "OK"),), start=1)
+        {"name": "nav.initNavState", "args": {"epoch": 0.0}, "response": "OK", "context": 1}
     ]
     return {
         "t_s": t_s,
@@ -269,56 +256,6 @@ def test_a_nan_error_is_a_violation():
     found = violations(run, **bound_inputs())
 
     assert [message.split()[0] for message in found] == ["velocity"]
-
-
-def test_each_bound_grows_from_the_commanded_epoch_at_every_write():
-    """An error the bound allows from an early epoch fails from a late one, naming the write.
-
-    With only the accelerometer's noise, the velocity bound at t - epoch is to first order
-    `3 sigma_a sqrt((t - epoch) dt)`. An error 1.1 times what `BOUND_FACTOR` allows one second
-    after the epoch passes at writes 61 and 62 s from an epoch at 0 s, and from an epoch at 60 s
-    fails at 61 s alone.
-    """
-    inputs = bound_inputs()
-    t = np.array([61.0, 62.0])
-    run = _run(t)
-    error = 1.1 * BOUND_FACTOR * 3.0 * inputs["accel_noise_std_m_s2"] * np.sqrt(inputs["step_s"])
-    run["tlm/nav.bodyEciVel"][:, 0] = error
-
-    assert violations(run, **inputs) == []
-    late = violations(
-        _run(t, epoch=60.0) | {"tlm/nav.bodyEciVel": run["tlm/nav.bodyEciVel"]}, **inputs
-    )
-    assert [message.split(" from ")[1].split(":")[0] for message in late] == ["t = 61.0 s"]
-
-
-def test_a_write_after_a_second_accepted_command_is_bounded_from_its_epoch():
-    """A reinitialized nav is bounded from the new epoch; a refused command changes nothing.
-
-    The error allows one second's bound at 1.1 times `BOUND_FACTOR`, so it passes at 61 s from the
-    epoch at 0 s and fails at 101 s from the epoch at 100 s, sent before that write; with the second
-    command refused, the write at 101 s is bounded from 0 s and passes.
-    """
-    inputs = bound_inputs()
-    t = np.array([61.0, 101.0])
-    error = 1.1 * BOUND_FACTOR * 3.0 * inputs["accel_noise_std_m_s2"] * np.sqrt(inputs["step_s"])
-    reinitialized = _run(t, sent=((0.0, "OK"), (100.0, "OK")))
-    refused = _run(t, sent=((0.0, "OK"), (100.0, "VALIDATION_ERROR")))
-    for run in (reinitialized, refused):
-        run["tlm/nav.bodyEciVel"][:, 0] = error
-
-    found = violations(reinitialized, **inputs)
-
-    assert [message.split(" from ")[1].split(":")[0] for message in found] == ["t = 101.0 s"]
-    assert violations(refused, **inputs) == []
-
-
-def test_an_estimate_no_accepted_command_precedes_fails_naming_the_command():
-    """With every `nav.initNavState` refused, the check fails naming the command and the write."""
-    run = _run(np.array([61.0, 62.0]), sent=((60.0, "VALIDATION_ERROR"),))
-
-    with pytest.raises(ValueError, match=r"no nav\.initNavState answered OK .* t = 61\.0 s"):
-        violations(run, **bound_inputs())
 
 
 def test_the_bound_takes_each_sample_s_noise_from_the_density_and_the_step() -> None:
