@@ -59,8 +59,8 @@ def extension() -> ModuleType:
 class FprimeModule(sysModel.SysModel):
     """Runs the WiseFsw deployment each tick, and carries the ground's link to it.
 
-    The deployment is one per process, so one module flies at a time. `Reset` boots it at the
-    reset time with the dead reckoner idle. Each `UpdateState` after the last tick sets the clock,
+    The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
+    with the dead reckoner idle. Each `UpdateState` after the last tick sets the clock,
     runs the uplinked commands through F´'s command dispatcher, sends the IMU reading and runs the
     schedule. The link's bytes are F´'s own: command packets go up, and the responses and every
     telemetry write with its F´ time tag come down.

@@ -127,7 +127,9 @@ def test_the_python_and_fprime_builds_write_the_same_run_file(case: str, togethe
     """
     python, python_commands = _read(together / PYTHON / case)
     fprime, fprime_commands = _read(together / FPRIME / case)
-    estimate = ("tlm/nav.bodyEciPos", "tlm/nav.bodyEciVel", "tlm/nav.bodyEciAttitude")
+    vectors = ("tlm/nav.bodyEciPos", "tlm/nav.bodyEciVel")
+    attitude = "tlm/nav.bodyEciAttitude"
+    estimate = (*vectors, attitude)
 
     assert sorted(python) == sorted(fprime)
     assert set(estimate) <= set(python)
@@ -136,13 +138,10 @@ def test_the_python_and_fprime_builds_write_the_same_run_file(case: str, togethe
         assert units == fprime[name][1], name
         if name not in estimate:
             np.testing.assert_array_equal(values, fprime[name][0], err_msg=name)
-    for name in estimate[:2]:
+    for name in vectors:
         p, f = python[name][0], fprime[name][0]
         assert p.shape == f.shape, name
         assert np.max(np.linalg.norm(p - f, axis=1) / np.linalg.norm(p, axis=1)) <= TOLERANCE, name
-    p, f = (
-        Rotation.from_quat(run["tlm/nav.bodyEciAttitude"][0], scalar_first=True)
-        for run in (python, fprime)
-    )
+    p, f = (Rotation.from_quat(run[attitude][0], scalar_first=True) for run in (python, fprime))
     assert np.max((p * f.inv()).magnitude()) <= TOLERANCE
     assert python_commands == fprime_commands

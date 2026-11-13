@@ -11,7 +11,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
+from scipy.spatial.transform import Rotation
 
+from gnc_algorithms.imu_dead_reckoning import ImuDeadReckoner
 from gnc_cdh.fprime import DICTIONARY, FprimeModule
 
 pytest.importorskip("gnc_cdh.fprime._wise_fsw", reason="the F´ build is absent; run `just fsw`")
@@ -19,6 +21,9 @@ pytest.importorskip("gnc_cdh.fprime._wise_fsw", reason="the F´ build is absent;
 REPOSITORY = Path(__file__).parents[3]
 
 ONE_SECOND_NS = 1_000_000_000
+
+MU = 3.986004360e14
+"""m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
 
 STATE = {
     "epoch": 0.0,
@@ -35,7 +40,7 @@ def _module() -> FprimeModule:
     Returns:
         The `FprimeModule`.
     """
-    return FprimeModule(messaging.IMUSensorMsgReader(), mu=3.986004360e14, dcm_PB=np.eye(3))
+    return FprimeModule(messaging.IMUSensorMsgReader(), mu=MU, dcm_PB=np.eye(3))
 
 
 @pytest.fixture
@@ -110,6 +115,41 @@ def test_the_link_carries_a_command_up_and_its_response_and_every_write_down(
     payloads = [value for i, _, value in writes if i == attitude.id]
     np.testing.assert_array_equal(module.values(attitude, payloads), [STATE["attitude"]])
     assert module.telemetry() == []
+
+
+def test_the_host_mounts_the_imu_as_it_is_given():
+    """On a mounting that is not the identity, the host's estimate is the notebook's.
+
+    Ten readings are enough for a transposed mounting to show far above rounding.
+    """
+    mounting = Rotation.from_euler("zyx", [10.0, -20.0, 30.0], degrees=True).as_matrix()
+    module = FprimeModule(messaging.IMUSensorMsgReader(), mu=MU, dcm_PB=mounting)
+    imu = messaging.IMUSensorMsg()
+    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
+    module._imu.subscribeTo(imu)
+    module.Reset(0)
+    module.uplink(module.dictionary.encode_command("nav.initNavState", STATE), 1)
+    python = ImuDeadReckoner(mu=MU, dcm_PB=mounting)
+    python.initNavState(**STATE)
+    rng = np.random.default_rng(7)
+
+    for k in range(1, 11):
+        reading = messaging.IMUSensorMsgPayload()
+        reading.AngVelPlatform = (0.02 * rng.normal(size=3)).tolist()
+        reading.AccelPlatform = (1e-3 * rng.normal(size=3)).tolist()
+        imu.write(reading, k * ONE_SECOND_NS, 0)
+        module.UpdateState(k * ONE_SECOND_NS)
+        python.step(
+            t=float(k),
+            AngVelPlatform=np.array(reading.AngVelPlatform),
+            AccelPlatform=np.array(reading.AccelPlatform),
+        )
+
+    channels = module.dictionary.channels_by_id
+    latest = {channels[i].name: channels[i].decode(value) for i, _, value in module.telemetry()}
+    np.testing.assert_allclose(latest["nav.bodyEciAttitude"], python.q_BN, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(latest["nav.bodyEciPos"], python.r_BN_N, rtol=1e-12)
+    np.testing.assert_allclose(latest["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)
 
 
 def test_a_command_f_prime_rejects_is_answered_with_its_response_and_fails_nothing(
