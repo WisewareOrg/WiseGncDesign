@@ -235,27 +235,9 @@ def _step(
 #
 # The estimator plays the F´ instance `nav`. Its contract is `ImuDeadReckoner.fpp` beside this
 # notebook, which both builds compile: the F´ build in C++, and this one through the dictionary
-# `gnc_cdh.dictionary` generates from it. It boots idle, with no state, and takes one command:
-#
-# | `nav.initNavState` | Units | Frame |
-# | --- | --- | --- |
-# | `epoch` | s | the flight software time the state holds at |
-# | `attitude` | quaternion W X Y Z, (4,) | B with respect to N |
-# | `position` | m, (3,) | inertial position, in N |
-# | `velocity` | m/s, (3,) | inertial velocity, in N |
-#
-# `step` takes one IMU reading as plain arrays by keyword, named as the IMU message's fields:
-# `t` (s), `AngVelPlatform` (rad/s, (3,), the rate of B with respect to N in the IMU platform
-# frame P) and `AccelPlatform` (m/s², (3,), non-gravitational acceleration in P).
-#
-# `step` and the command each return the telemetry they write, by channel:
-#
-# | Channel | Units | Frame |
-# | --- | --- | --- |
-# | `navState` | `idle`, `initialized` or `propagated` | |
-# | `bodyEciAttitude` | quaternion W X Y Z, (4,), unit, $q_w \ge 0$ | B with respect to N |
-# | `bodyEciPos` | m, (3,) | inertial position, in N |
-# | `bodyEciVel` | m/s, (3,) | inertial velocity, in N |
+# `gnc_cdh.dictionary` generates from it. It boots idle, with no state, until the command
+# `nav.initNavState` gives it one, and `step` takes one IMU reading. Their docstrings below give
+# the arguments and the telemetry each writes, and the model gives each entry's type.
 #
 # A write is tagged with the flight software's time when it is written, so the estimator writes a
 # value only at a time it holds for: the command writes `navState` alone, since the state it takes

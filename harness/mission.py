@@ -219,12 +219,10 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """The Monte Carlo test flying a mission through one scenario.
 
     The TST item's reference names the scenario's definition, its ground procedure, whose `sim_`
-    marks say how it is flown; the test carries them and the mission's vehicle. The ground runs the
-    procedure against the FSW host for the duration the definition gives, every
-    `sim_ground_period_s` (the FSW's period when the definition has no such mark) until the
-    procedure returns, with the vehicle's tracking as its truth, and records the telemetry and the
-    command log into the run file. An exception the host or the procedure raised is re-raised
-    whole, and a procedure still waiting when the flight ends fails the case.
+    marks say how it is flown; the test carries them and the mission's vehicle. A `Ground` flies
+    the procedure against the FSW host and records the run file. An exception the host or the
+    procedure raised is re-raised whole, and a procedure still waiting when the flight ends fails
+    the case.
 
     Args:
         mission: the mission.

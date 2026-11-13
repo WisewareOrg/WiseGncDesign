@@ -23,17 +23,19 @@ class AlgorithmModule(sysModel.SysModel):
     `instance` is a method of the algorithm, named and parametered as in FPP.
 
     The ground reaches the algorithm through the link: `uplink` queues a command packet, and the
-    next tick decodes it with the dictionary's types, runs its handler before the step and keeps
-    the response. A handler that returns answers `OK`, and one that raises `ValueError` answers
-    `VALIDATION_ERROR` with the error's message as the reason; a packet the dictionary cannot decode
-    gets the response F´'s dispatcher gives it; any other exception is a bug and fails the tick.
+    next tick decodes it with the dictionary's types, so the handler gets what the F´ handler gets
+    (an F32 as F32 holds it, an enum constant by name, an array as an array), runs the handler
+    before the step and keeps the response. A handler that returns answers `OK`, and one that
+    raises `ValueError` answers `VALIDATION_ERROR` with the error's message as the reason; a packet
+    the dictionary cannot decode gets the response F´'s dispatcher gives it; any other exception is
+    a bug and fails the tick.
 
-    The algorithm writes telemetry by returning `{channel: value}` from `step` and from each
-    handler, as an F´ component calls `tlmWrite_<channel>`. Each entry is one write, tagged with the
-    tick's time; its channel name is checked on the tick, an array is copied as written, and the
-    value is held to the channel's type when `values` packs a batch. Each tick after the last
-    reads every input once and calls `step(t=..., **fields)` with `t` in s; the call Basilisk makes
-    at the reset time runs nothing.
+    The algorithm writes telemetry by returning `{channel: value}`, or `None`, from `step` and from
+    each handler, as an F´ component calls `tlmWrite_<channel>`. Each entry is one write, tagged
+    with the tick's time; its channel name is checked on the tick, an array is copied as written,
+    and the value is held to the channel's type when `values` packs a batch. Each tick after the
+    last reads every input once and calls `step(t=..., **fields)` with `t` in s; the call Basilisk
+    makes at the reset time runs nothing.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in: the flight

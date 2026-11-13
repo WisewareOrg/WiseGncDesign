@@ -17,24 +17,10 @@ algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm
 
 `gnc_cdh.basilisk.AlgorithmModule(algorithm, inputs, instance=..., dictionary=...)` hosts an
 algorithm as the F´ instance `instance` would be hosted, held to `dictionary`, on a dict of
-subscribed Basilisk readers, by role. The algorithm's names are its wiring:
-- each keyword of its `step` other than `t` is a message field, read from the one input whose
-  message has a field of that name;
-- each command the dictionary gives the instance is a method of the algorithm, with exactly the
-  command's parameters in order;
-- `step` and each command handler return the telemetry they write, `{channel: value}`, or `None`.
-
-Construction refuses a keyword that no input carries or that two do, and a command the algorithm
-lacks or declares with other parameters.
-
-A command arrives as F´'s bytes and is decoded with the dictionary's types, so a handler gets what
-the F´ handler gets: an F32 as F32 holds it, an enum constant by name, an array as an array.
-`AlgorithmModule`'s docstring says when it runs and how each outcome answers the ground.
-
-Each returned entry is one write, as an F´ component's `tlmWrite_<channel>` is. The module declares
-`period_s` (1 s), so the flight software runs at 1 Hz, and the simulation steps its dynamics and
-samples the IMU at that period at every fidelity. `AlgorithmModule`'s docstrings say how a tick
-runs, how each write is checked and tagged, and what each method refuses.
+subscribed Basilisk readers, by role. Its docstrings say how the algorithm's names wire it to its
+inputs, commands and telemetry, how a tick runs, and what it refuses. It declares `period_s`
+(1 s), so the flight software runs at 1 Hz, and the simulation steps its dynamics and samples the
+IMU at that period at every fidelity.
 
 ## Example: fly the dead reckoner against a simulated spacecraft
 
