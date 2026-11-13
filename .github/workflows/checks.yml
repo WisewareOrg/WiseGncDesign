@@ -57,10 +57,31 @@ jobs:
         with:
           version: "0.13.7"
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
-      # Syncs every group, registers the kernel and builds the F´ deployment the tests fly.
+      # Syncs every group, fetches the F´ clone and registers the kernel.
+      - run: just _sync
+      # Builds the F´ deployment the tests fly, then runs the suite.
+      - run: just test
+      # Everything the build and the suite write must be ignored; the log names what is not.
+      - run: |
+          out="$(git status --porcelain)"
+          echo "$out"
+          test -z "$out"
+
+  python-first:
+    name: python-first
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+      # The Python path with no F´ build: dictionaries come from FPP and the F´ clone alone, and the
+      # F´ build's tests skip.
       - run: just _sync
       - run: uv run --no-sync pytest
-      # Everything the build and the suite write must be ignored; the log names what is not.
       - run: |
           out="$(git status --porcelain)"
           echo "$out"

@@ -1,7 +1,7 @@
 # The F´ release the framework clone is pinned to.
 fprime_tag := "v4.4.2"
 
-# Sync the sim, notebook and F´ groups at their locked versions, register the kernel and build the F´ deployment from scratch.
+# Sync the sim, notebook and F´ groups at their locked versions, fetch the F´ clone and register the kernel; the next `just fsw` builds the F´ deployment from scratch.
 _sync:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -13,7 +13,6 @@ _sync:
     uv sync --locked --group sim --group notebooks --group fprime
     uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
     rm -f cdh/fprime/build-fprime-automatic-native/CMakeCache.txt
-    just fsw
 
 # Build the F´ deployment into gnc_cdh.fprime: its Python extension and its dictionary.
 fsw:
@@ -39,7 +38,7 @@ pinned: _sync
     uv run --no-sync jupytext --sync $(grep -l '^#   jupytext:' algorithms/gnc_algorithms/*/*.py missions/*.py)
 
 # Open JupyterLab in this environment.
-lab: fsw
+lab:
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
     uv run --no-sync jupyter lab
 
