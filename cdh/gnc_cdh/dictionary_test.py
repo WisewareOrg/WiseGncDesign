@@ -257,7 +257,7 @@ def test_serialized_channels_decode_in_one_batch_with_their_units(toy: Dictionar
 
 
 def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
-    """Values a Python algorithm writes come back as the serialized ones do.
+    """Values a Python algorithm writes come back as the serialized ones do, an F32 truncated.
 
     Args:
         toy: the toy's dictionary.
@@ -272,6 +272,7 @@ def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
     assert toy.channel("toy.mode").decode("slow") == "slow"
     assert toy.channel("toy.count").decode(np.uint8(7)) == 7.0
     assert toy.channel("toy.gain").decode(2) == 2.0
+    assert toy.channel("toy.gain").decode(0.1) == float(np.float32(0.1)) != 0.1
 
 
 @pytest.mark.parametrize(
