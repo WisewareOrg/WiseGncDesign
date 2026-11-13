@@ -2,6 +2,13 @@
 
 namespace Sim {
 
+namespace {
+
+constexpr U64 NS_PER_S = 1000000000U;
+constexpr U64 NS_PER_US = 1000U;
+
+}  // namespace
+
 GroundLink::GroundLink(const char* compName) : GroundLinkComponentBase(compName) {}
 
 void GroundLink::uplink(Fw::ComBuffer& packet, U32 context) {
@@ -28,11 +35,11 @@ void GroundLink::clear() {
 void GroundLink::cmdResponseIn_handler(FwIndexType portNum, FwOpcodeType opCode, U32 cmdSeq,
                                        const Fw::CmdResponse& response) {
     // The dispatcher returns the uplink's context in place of its own sequence number.
-    this->m_responses.emplace_back(cmdSeq, static_cast<I32>(response.e));
+    this->m_responses.push_back({cmdSeq, static_cast<I32>(response.e)});
 }
 
 void GroundLink::tlmIn_handler(FwIndexType portNum, FwChanIdType id, Fw::Time& timeTag, Fw::TlmBuffer& val) {
-    const U64 ns = static_cast<U64>(timeTag.getSeconds()) * 1000000000U + static_cast<U64>(timeTag.getUSeconds()) * 1000U;
+    const U64 ns = timeTag.getSeconds() * NS_PER_S + timeTag.getUSeconds() * NS_PER_US;
     const U8* data = val.getBuffAddr();
     this->m_writes.push_back({id, ns, std::vector<U8>(data, data + val.getSize())});
 }

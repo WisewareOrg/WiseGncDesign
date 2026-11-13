@@ -2,7 +2,6 @@
 #ifndef SIM_GROUNDLINK_HPP
 #define SIM_GROUNDLINK_HPP
 
-#include <utility>
 #include <vector>
 
 #include "cdh/fprime/Sim/GroundLinkComponentAc.hpp"
@@ -18,7 +17,10 @@ class GroundLink final : public GroundLinkComponentBase {
         std::vector<U8> value;
     };
     //! One command's response: the ground's context and the Fw::CmdResponse value.
-    using Response = std::pair<U32, I32>;
+    struct Response {
+        U32 context;
+        I32 response;
+    };
 
     explicit GroundLink(const char* compName);
 

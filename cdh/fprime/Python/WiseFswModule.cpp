@@ -110,7 +110,7 @@ PYBIND11_MODULE(_wise_fsw, m) {
         []() {
             py::list responses;
             for (const auto& response : WiseFsw::groundLink.takeResponses()) {
-                responses.append(py::make_tuple(response.first, response.second));
+                responses.append(py::make_tuple(response.context, response.response));
             }
             return responses;
         },

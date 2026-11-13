@@ -191,7 +191,7 @@ def test_the_pump_raises_naming_a_queue_its_bound_leaves_holding_messages():
     _wise_fsw.uplink(WISE_FSW.encode_command("cmdDisp.CMD_NO_OP", {}), 3)
 
     with pytest.raises(
-        RuntimeError, match=r"queue WiseFsw\.cmdDisp still holds 1 messages after 1"
+        RuntimeError, match=r"queue WiseFsw\.cmdDisp did not drain: messages left 1, rounds 1$"
     ):
         _wise_fsw.pump(rounds=1)
     _wise_fsw.pump()

@@ -35,9 +35,9 @@ void Cooperative::pump(int rounds) {
     }
     const Os::Queue* stuck = this->pending();
     if (stuck != nullptr) {
-        throw std::runtime_error("queue " + std::string(stuck->getName().toChar()) + " still holds " +
-                                 std::to_string(stuck->getMessagesAvailable()) + " messages after " +
-                                 std::to_string(rounds) + " rounds");
+        throw std::runtime_error("queue " + std::string(stuck->getName().toChar()) + " did not drain: messages left " +
+                                 std::to_string(stuck->getMessagesAvailable()) + ", rounds " +
+                                 std::to_string(rounds));
     }
 }
 
