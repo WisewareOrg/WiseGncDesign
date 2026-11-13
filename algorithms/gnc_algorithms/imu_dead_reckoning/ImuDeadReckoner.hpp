@@ -17,7 +17,7 @@ class ImuDeadReckoner final : public ImuDeadReckonerComponentBase {
     void imuIn_handler(FwIndexType portNum, const Gnc::Vector3& angVelPlatform,
                        const Gnc::Vector3& accelPlatform) override;
     void configureIn_handler(FwIndexType portNum, F64 mu, const Gnc::Matrix3& dcmPB) override;
-    void initializeIn_handler(FwIndexType portNum, const Gnc::Vector3& sigmaBN, const Gnc::Vector3& rBN_N,
+    void initializeIn_handler(FwIndexType portNum, const Gnc::Quaternion& qBN, const Gnc::Vector3& rBN_N,
                               const Gnc::Vector3& vBN_N) override;
 
     //! The clock's time, in s.
@@ -30,7 +30,8 @@ class ImuDeadReckoner final : public ImuDeadReckonerComponentBase {
     Eigen::Matrix3d m_dcm_BP = Eigen::Matrix3d::Identity();
     NavState m_navState = NavState::idle;
     F64 m_t = 0.0;
-    Eigen::Vector3d m_sigma = Eigen::Vector3d::Zero();
+    //! Body to ECI, unit, W >= 0.
+    Eigen::Quaterniond m_q = Eigen::Quaterniond::Identity();
     Eigen::Vector3d m_r = Eigen::Vector3d::Zero();
     Eigen::Vector3d m_v = Eigen::Vector3d::Zero();
     Eigen::Vector3d m_omega_P = Eigen::Vector3d::Zero();

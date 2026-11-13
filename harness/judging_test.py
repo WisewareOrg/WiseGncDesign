@@ -79,14 +79,16 @@ def write_run(path: Path, error: float, kind: str = "attitude") -> None:
         error: the estimate's error at one sample, in rad, m/s or m.
         kind: "attitude", "velocity" or "position".
     """
-    est = {name: np.zeros((5, 3)) for name in ("sigma_BN", "v_BN_N", "r_BN_N")}
+    identity = np.tile([1.0, 0.0, 0.0, 0.0], (5, 1))
+    est = {"q_BN": identity.copy(), "v_BN_N": np.zeros((5, 3)), "r_BN_N": np.zeros((5, 3))}
     if kind == "attitude":
-        est["sigma_BN"][2, 2] = np.tan(error / 4.0)
+        est["q_BN"][2] = [np.cos(error / 2.0), 0.0, 0.0, np.sin(error / 2.0)]
     else:
         est["v_BN_N" if kind == "velocity" else "r_BN_N"][2, 0] = error
     with h5py.File(path, "w") as f:
         f["t_s"] = np.linspace(0.0, 1.0, 5)
-        for truth in ("sigma_BN", "v_N", "r_N"):
+        f["truth/q_BN"] = identity
+        for truth in ("v_N", "r_N"):
             f[f"truth/{truth}"] = np.zeros((5, 3))
         for name, values in est.items():
             f[f"est/{name}"] = values

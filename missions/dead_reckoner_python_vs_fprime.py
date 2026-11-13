@@ -92,7 +92,7 @@ globals().update(mission_tests(*MISSIONS))
 # for p, f in zip(python, fprime, strict=True):
 #     p, f = p["datasets"], f["datasets"]
 #     t = p["t_s"][0]
-#     attitude = attitude_error_rad(p["est/sigma_BN"][0], f["est/sigma_BN"][0])
+#     attitude = attitude_error_rad(p["est/q_BN"][0], f["est/q_BN"][0])
 #     position = position_error_m(p["est/r_BN_N"][0], f["est/r_BN_N"][0])
 #     axes[0].semilogy(t, attitude, color="C0")
 #     axes[1].semilogy(t, position, color="C1")

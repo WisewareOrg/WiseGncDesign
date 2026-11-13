@@ -8,7 +8,7 @@ the flight software's step and the orbit's mean motion. At t = 0, where the esti
 truth, each error must be under `ERROR_AT_START`.
 
 A run is one run file as `read_run` returns it. Attitude error is graded with SciPy's `Rotation`,
-independently of the dead reckoner's own MRP math.
+independently of the dead reckoner's own quaternion math.
 
 Each bound is a first-order derivation that holds to 4 orbits, where the position error stays
 within about 6% of the orbit radius at the largest drawn bias. With every sensor error zero, the
@@ -164,7 +164,7 @@ def error_growth(
     n = np.sqrt(mu / float(np.linalg.norm(run["truth/r_N"][0])) ** 3)
     return {
         "attitude error [rad]": (
-            attitude_error_rad(run["truth/sigma_BN"], run["est/sigma_BN"]),
+            attitude_error_rad(run["truth/q_BN"], run["est/q_BN"]),
             attitude_bound_rad(
                 t,
                 float(np.linalg.norm(run["draw_gyro_bias_P_rad_s"])),

@@ -10,7 +10,6 @@ import pytest
 from scipy.spatial.transform import Rotation
 
 from gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
-from gnc_algorithms.mrp import dcm_NB
 from gnc_cdh.fprime import DICTIONARY, decoders, extension, telemetry_by_name
 
 _wise_fsw = extension()
@@ -18,7 +17,8 @@ _wise_fsw = extension()
 MU = 3.986004360e14
 """m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
 
-SIGMA0 = np.array([0.1, 0.2, -0.3])
+Q0 = Rotation.from_euler("zyx", [40.0, -25.0, 60.0], degrees=True).as_quat(scalar_first=True)
+"""An attitude, quaternion W X Y Z of the body with respect to ECI, W >= 0."""
 R0 = np.array([6871.0e3, 0.0, 0.0])
 V0 = np.array([0.0, 5.4e3, 5.4e3])
 MOUNTING = Rotation.from_euler("zyx", [10.0, -20.0, 30.0], degrees=True).as_matrix()
@@ -47,11 +47,9 @@ def _assert_matches(python: ImuDeadReckoner) -> None:
         python: the notebook's reckoner, stepped through the same readings.
     """
     tlm = _telemetry()
-    q = [tlm[f"nav.bodyEciAttitude{a}"] for a in "XYZW"]
+    q = np.array([tlm[f"nav.bodyEciAttitude{a}"] for a in "WXYZ"])
     assert tlm["nav.navState"] == "propagated"
-    np.testing.assert_allclose(
-        Rotation.from_quat(q).as_matrix(), dcm_NB(python.sigma_BN), atol=1e-12
-    )
+    np.testing.assert_allclose(q, python.q_BN, rtol=0, atol=1e-12)
     np.testing.assert_allclose(
         [tlm[f"nav.bodyEciPos{a}"] for a in "XYZ"], python.r_BN_N, rtol=1e-12
     )
@@ -69,27 +67,26 @@ def test_a_booted_reckoner_reports_idle_and_no_state():
 
 
 def test_the_attitude_quaternion_takes_body_vectors_into_eci_with_w_nonnegative():
-    """The quaternion's matrix is [NB] of the initial MRP, and its W is not negative."""
+    """The written quaternion is the initial one, and its W is not negative."""
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t_ns=0, sigma_BN=SIGMA0, r_BN_N=R0, v_BN_N=V0)
+    _wise_fsw.initialize_nav(t_ns=0, q_BN=Q0, r_BN_N=R0, v_BN_N=V0)
 
     tlm = _telemetry()
-    q = [tlm[f"nav.bodyEciAttitude{a}"] for a in "XYZW"]
+    q = [tlm[f"nav.bodyEciAttitude{a}"] for a in "WXYZ"]
     assert tlm["nav.navState"] == "initialized"
-    assert q[3] >= 0.0
-    np.testing.assert_allclose(Rotation.from_quat(q).as_matrix(), dcm_NB(SIGMA0), atol=1e-14)
-    np.testing.assert_allclose(Rotation.from_quat(q).as_mrp(), SIGMA0, atol=1e-14)
+    assert q[0] >= 0.0
+    np.testing.assert_array_equal(q, Q0)
 
 
 @pytest.mark.parametrize(
     ("rate_rad_s", "step_ns"),
     [(0.02, NS), (0.5, NS), (0.02, NS // 10)],
-    ids=["slow", "past-the-shadow-switch", "at-10-Hz"],
+    ids=["slow", "past-a-half-turn", "at-10-Hz"],
 )
 def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: float, step_ns: int):
     """Fed the same 600 readings, the two builds agree to rounding.
 
-    The faster rate turns the body past 180 degrees, so both switch to the shadow set; the 10 Hz
+    The faster rate turns the body past 180 degrees, so W changes sign and both flip q; the 10 Hz
     case ticks between whole seconds.
 
     Args:
@@ -98,9 +95,9 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: f
     """
     rng = np.random.default_rng(7)
     readings = [(rate_rad_s * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(600)]
-    python = ImuDeadReckoner(SIGMA0, R0, V0, t0=0.0, mu=MU, dcm_PB=MOUNTING)
+    python = ImuDeadReckoner(Q0, R0, V0, t0=0.0, mu=MU, dcm_PB=MOUNTING)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t_ns=0, sigma_BN=SIGMA0, r_BN_N=R0, v_BN_N=V0)
+    _wise_fsw.initialize_nav(t_ns=0, q_BN=Q0, r_BN_N=R0, v_BN_N=V0)
 
     for k, (omega, accel) in enumerate(readings, start=1):
         python.step(t=k * step_ns / NS, AngVelPlatform=omega, AccelPlatform=accel)
@@ -109,17 +106,17 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: f
     _assert_matches(python)
 
 
-SIGMA_B = np.array([-0.2, 0.05, 0.4])
+Q_B = Rotation.from_euler("zyx", [-70.0, 10.0, -35.0], degrees=True).as_quat(scalar_first=True)
 R_B = np.array([7000.0e3, 100.0e3, -50.0e3])
 V_B = np.array([-200.0, 5.0e3, 5.6e3])
-"""A second flight's initial state, apart from `SIGMA0`, `R0` and `V0` in every component."""
+"""A second flight's initial state, apart from `Q0`, `R0` and `V0` in every component."""
 
 
 def _fly_a_first_flight() -> None:
     """Boots, initializes from the first state and steps to t = 600 s with nonzero readings."""
     rng = np.random.default_rng(3)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t_ns=0, sigma_BN=SIGMA0, r_BN_N=R0, v_BN_N=V0)
+    _wise_fsw.initialize_nav(t_ns=0, q_BN=Q0, r_BN_N=R0, v_BN_N=V0)
     for k in range(1, 61):
         _wise_fsw.step(
             t_ns=10 * k * NS,
@@ -144,10 +141,10 @@ def test_a_second_flight_matches_a_fresh_notebook_reckoner():
     _fly_a_first_flight()
     rng = np.random.default_rng(11)
     readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
-    python = ImuDeadReckoner(SIGMA_B, R_B, V_B, t0=0.0, mu=MU, dcm_PB=MOUNTING)
+    python = ImuDeadReckoner(Q_B, R_B, V_B, t0=0.0, mu=MU, dcm_PB=MOUNTING)
 
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t_ns=0, sigma_BN=SIGMA_B, r_BN_N=R_B, v_BN_N=V_B)
+    _wise_fsw.initialize_nav(t_ns=0, q_BN=Q_B, r_BN_N=R_B, v_BN_N=V_B)
     for k, (omega, accel) in enumerate(readings, start=1):
         python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
         _wise_fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)

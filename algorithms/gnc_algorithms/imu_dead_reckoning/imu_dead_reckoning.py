@@ -23,7 +23,6 @@ from numba import njit
 from wise_dynamics.basilisk import Scenario
 
 from gnc_algorithms.imu_dead_reckoning.gross_check import gross_check
-from gnc_algorithms.mrp import B, dcm_NB, shadow
 from gnc_cdh.basilisk import AlgorithmModule
 from harness.mission import Mission, mission_tests, provides
 
@@ -58,29 +57,37 @@ def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
 # %% [markdown]
 # ## Attitude kinematics
 #
-# Attitude is the modified Rodrigues parameter (MRP) set $\sigma_{BN}$, body frame $B$ with
-# respect to inertial frame $N$ (Schaub & Junkins; see `mrp.py`). Its kinematic differential
-# equation, given the body-frame angular rate $\omega = \omega_{BN}$ expressed in $B$:
+# Attitude is the unit quaternion $q = (q_w, q_x, q_y, q_z)$ of body frame $B$ with respect to
+# inertial frame $N$ (Hamilton, scalar first): it takes body-frame vectors into the inertial frame,
+# $v_N = q \otimes v_B \otimes q^{*}$, and $q$ and $-q$ are the same attitude. Its kinematic
+# differential equation, given the body-frame angular rate $\omega = \omega_{BN}$ expressed in $B$:
 #
-# $$\dot\sigma = \tfrac{1}{4} B(\sigma)\,\omega$$
+# $$\dot q = \tfrac{1}{2}\, q \otimes (0, \omega)$$
 #
-# where $B(\sigma)$ is `mrp.B`. $\sigma$ switches to its shadow set (`mrp.shadow`) whenever
-# $|\sigma| > 1$, so it stays bounded.
+# which, written out with $q_v = (q_x, q_y, q_z)$, is
+#
+# $$\dot q_w = -\tfrac{1}{2}\, q_v \cdot \omega \qquad
+# \dot q_v = \tfrac{1}{2}\left(q_w\,\omega + q_v \times \omega\right)$$
+#
+# The integration drifts $q$ off unit norm at the order of its step error, so the step normalizes
+# it. Numba cannot call SciPy, so the kinematics and the rotation matrix below are written out
+# here; everything outside the step uses SciPy.
 
 
 # %%
 @njit(cache=True)
-def _sigma_dot(sigma: np.ndarray, omega: np.ndarray) -> np.ndarray:
-    """The attitude kinematics, dsigma/dt = 1/4 B(sigma) omega, compiled with numba.
+def _q_dot(q: np.ndarray, omega: np.ndarray) -> np.ndarray:
+    """The attitude kinematics, dq/dt = 1/2 q (x) (0, omega), compiled with numba.
 
     Args:
-        sigma: (3,) MRP of the body frame B with respect to the inertial frame N.
+        q: (4,) quaternion W X Y Z of the body frame B with respect to the inertial frame N.
         omega: (3,) rad/s, the rate of B with respect to N, in B.
 
     Returns:
-        (3,) dsigma/dt, 1/s.
+        (4,) dq/dt, 1/s.
     """
-    return 0.25 * B(sigma) @ omega
+    w, v = q[0], q[1:]
+    return 0.5 * np.concatenate((np.array([-(v @ omega)]), w * omega + np.cross(v, omega)))
 
 
 # %% [markdown]
@@ -89,22 +96,50 @@ def _sigma_dot(sigma: np.ndarray, omega: np.ndarray) -> np.ndarray:
 # Position and velocity, in the inertial frame, integrate the rotated specific-force reading
 # against a point-mass gravity term:
 #
-# $$\dot r = v \qquad \dot v = C_{NB}(\sigma)\,a_B - \mu \frac{r}{|r|^3}$$
+# $$\dot r = v \qquad \dot v = C_{NB}(q)\,a_B - \mu \frac{r}{|r|^3}$$
 #
-# where $C_{NB}(\sigma)$ (`mrp.dcm_NB`) rotates a body-frame vector into the inertial frame,
-# $a_B$ is the accelerometer's body-frame reading of non-gravitational acceleration, and $\mu$
-# is the gravitational parameter, supplied by the host so truth and estimate share one constant.
+# where $C_{NB}(q)$ rotates a body-frame vector into the inertial frame,
+#
+# $$C_{NB}(q) = \begin{pmatrix}
+# 1 - 2(q_y^2 + q_z^2) & 2(q_x q_y - q_w q_z) & 2(q_x q_z + q_w q_y) \\
+# 2(q_x q_y + q_w q_z) & 1 - 2(q_x^2 + q_z^2) & 2(q_y q_z - q_w q_x) \\
+# 2(q_x q_z - q_w q_y) & 2(q_y q_z + q_w q_x) & 1 - 2(q_x^2 + q_y^2)
+# \end{pmatrix}$$
+#
+# $a_B$ is the accelerometer's body-frame reading of non-gravitational acceleration, and $\mu$ is
+# the gravitational parameter, supplied by the host so truth and estimate share one constant.
+
+
+# %%
+@njit(cache=True)
+def _dcm_NB(q: np.ndarray) -> np.ndarray:
+    """The DCM [NB] of a quaternion, rotating a body-frame vector into the inertial frame.
+
+    Args:
+        q: (4,) quaternion W X Y Z of the body frame B with respect to the inertial frame N.
+
+    Returns:
+        (3, 3) [NB], so that v_N = [NB] v_B.
+    """
+    w, x, y, z = q
+    return np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
+        ]
+    )
 
 
 # %%
 @njit(cache=True)
 def _translational_rates(
-    sigma: np.ndarray, v: np.ndarray, r: np.ndarray, accel: np.ndarray, mu: float
+    q: np.ndarray, v: np.ndarray, r: np.ndarray, accel: np.ndarray, mu: float
 ) -> tuple[np.ndarray, np.ndarray]:
-    """The translational kinematics, dr/dt = v and dv/dt = C_NB(sigma) a_B - mu r/|r|^3.
+    """The translational kinematics, dr/dt = v and dv/dt = C_NB(q) a_B - mu r/|r|^3.
 
     Args:
-        sigma: (3,) MRP of the body frame B with respect to the inertial frame N.
+        q: (4,) quaternion W X Y Z of the body frame B with respect to the inertial frame N.
         v: (3,) m/s, inertial velocity in N.
         r: (3,) m, inertial position in N.
         accel: (3,) m/s^2, the accelerometer reading a_B, non-gravitational acceleration in B.
@@ -113,13 +148,13 @@ def _translational_rates(
     Returns:
         dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
     """
-    return v, dcm_NB(sigma) @ accel - _gravity(r, mu)
+    return v, _dcm_NB(q) @ accel - _gravity(r, mu)
 
 
 # %% [markdown]
 # ## One step
 #
-# One `step()` call advances $x = (\sigma, r, v)$ by one RK4 step of size $h$ = `dt = sample.t -
+# One `step()` call advances $x = (q, r, v)$ by one RK4 step of size $h$ = `dt = sample.t -
 # state.t`, with the readings held constant across the step: the sensor delivers raw rates and
 # accelerations, not pre-integrated angles. The step applies, in order:
 #
@@ -135,8 +170,9 @@ def _translational_rates(
 #
 #    $$x_{n+1} = x_n + \tfrac{h}{6}\left(k_1 + 2 k_2 + 2 k_3 + k_4\right)$$
 #
-# 3. the shadow switch, after the update (`mrp.shadow`): if $|\sigma_{n+1}| > 1$, then
-#    $\sigma_{n+1} \leftarrow -\sigma_{n+1} / |\sigma_{n+1}|^2$.
+# 3. the normalization, after the update, and the sign that keeps $q_w \ge 0$:
+#    $q_{n+1} \leftarrow \pm q_{n+1} / |q_{n+1}|$. The stages integrate $q$ as it stands, unit or
+#    not.
 #
 # All three states share the same four stages, so an attitude error at any stage biases that
 # stage's rotated acceleration, the coupling between attitude and navigation error this module
@@ -149,7 +185,7 @@ def _translational_rates(
 # %%
 @njit(cache=True)
 def _step(
-    sigma: np.ndarray,
+    q: np.ndarray,
     r: np.ndarray,
     v: np.ndarray,
     omega_P: np.ndarray,
@@ -160,11 +196,11 @@ def _step(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """One RK4 step of the state over `dt`, compiled with numba on its first call and cached.
 
-    The readings are rotated into the body frame B and held across the step; sigma switches to its
-    shadow set when |sigma| > 1 after it.
+    The readings are rotated into the body frame B and held across the step; q is normalized after
+    it, with W >= 0.
 
     Args:
-        sigma: (3,) MRP of B with respect to the inertial frame N.
+        q: (4,) quaternion W X Y Z of B with respect to the inertial frame N.
         r: (3,) m, inertial position in N.
         v: (3,) m/s, inertial velocity in N.
         omega_P: (3,) rad/s, the gyro reading, rate of B with respect to N in the IMU platform
@@ -175,53 +211,54 @@ def _step(
         mu: m^3/s^2, the central body's gravitational parameter.
 
     Returns:
-        The stepped sigma (MRP, |sigma| <= 1), r (m, in N) and v (m/s, in N), each (3,).
+        The stepped q (unit, W >= 0), r (m, in N) and v (m/s, in N).
     """
     omega = dcm_BP @ omega_P
     accel = dcm_BP @ accel_P
 
     def derivs(
-        sigma: np.ndarray, r: np.ndarray, v: np.ndarray
+        q: np.ndarray, r: np.ndarray, v: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """The state's time derivative, the readings held.
 
         Args:
-            sigma: (3,) MRP of the body frame B with respect to the inertial frame N.
+            q: (4,) quaternion W X Y Z of the body frame B with respect to the inertial frame N.
             r: (3,) m, inertial position in N.
             v: (3,) m/s, inertial velocity in N.
 
         Returns:
-            dsigma/dt ((3,), 1/s), dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
+            dq/dt ((4,), 1/s), dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
         """
-        r_dot, v_dot = _translational_rates(sigma, v, r, accel, mu)
-        return _sigma_dot(sigma, omega), r_dot, v_dot
+        r_dot, v_dot = _translational_rates(q, v, r, accel, mu)
+        return _q_dot(q, omega), r_dot, v_dot
 
-    k1 = derivs(sigma, r, v)
-    k2 = derivs(sigma + 0.5 * dt * k1[0], r + 0.5 * dt * k1[1], v + 0.5 * dt * k1[2])
-    k3 = derivs(sigma + 0.5 * dt * k2[0], r + 0.5 * dt * k2[1], v + 0.5 * dt * k2[2])
-    k4 = derivs(sigma + dt * k3[0], r + dt * k3[1], v + dt * k3[2])
+    k1 = derivs(q, r, v)
+    k2 = derivs(q + 0.5 * dt * k1[0], r + 0.5 * dt * k1[1], v + 0.5 * dt * k1[2])
+    k3 = derivs(q + 0.5 * dt * k2[0], r + 0.5 * dt * k2[1], v + 0.5 * dt * k2[2])
+    k4 = derivs(q + dt * k3[0], r + dt * k3[1], v + dt * k3[2])
 
-    sigma_new = sigma + (dt / 6.0) * (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0])
+    q_new = q + (dt / 6.0) * (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0])
     r_new = r + (dt / 6.0) * (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1])
     v_new = v + (dt / 6.0) * (k1[2] + 2.0 * k2[2] + 2.0 * k3[2] + k4[2])
-    if np.linalg.norm(sigma_new) > 1.0:
-        sigma_new = shadow(sigma_new)
-    return sigma_new, r_new, v_new
+    q_new = q_new / np.linalg.norm(q_new)
+    if q_new[0] < 0.0:
+        q_new = -q_new
+    return q_new, r_new, v_new
 
 
 # %% [markdown]
 # ## Interface
 #
 # `step` takes one IMU reading as plain arrays by keyword, named as the IMU message's fields, and
-# returns the new state as plain arrays named in Basilisk's navigation convention; the estimator
-# holds its state as the same arrays:
+# returns the new state as plain arrays, the estimate the host records under these names; the
+# estimator holds its state as the same arrays:
 #
 # | Name | Units | Frame |
 # | --- | --- | --- |
 # | `t` (in) | s | |
 # | `AngVelPlatform` (in) | rad/s, (3,) | rate of B with respect to N, in the IMU platform frame P |
 # | `AccelPlatform` (in) | m/s², (3,) | non-gravitational acceleration, in P |
-# | `sigma_BN` (out) | MRP, (3,), \|σ\| ≤ 1 | B with respect to N |
+# | `q_BN` (out) | quaternion W X Y Z, (4,), unit, $q_w \ge 0$ | B with respect to N |
 # | `r_BN_N` (out) | m, (3,) | inertial position, in N |
 # | `v_BN_N` (out) | m/s, (3,) | inertial velocity, in N |
 #
@@ -232,9 +269,8 @@ def _step(
 # %% [markdown]
 # ## The estimator
 #
-# `ImuDeadReckoner` holds its state as `t`, `sigma_BN`, `r_BN_N` and `v_BN_N` and advances it
-# one IMU reading at a time. `step` switches $\sigma$ to the shadow set after the RK4 update, so
-# the held state always has $|\sigma| \le 1$.
+# `ImuDeadReckoner` holds its state as `t`, `q_BN`, `r_BN_N` and `v_BN_N` and advances it one IMU
+# reading at a time. `step` normalizes $q$ after the RK4 update and keeps $q_w \ge 0$.
 
 
 # %%
@@ -243,7 +279,7 @@ class ImuDeadReckoner:
 
     def __init__(
         self,
-        sigma0_BN: np.ndarray,
+        q0_BN: np.ndarray,
         r0_N: np.ndarray,
         v0_N: np.ndarray,
         t0: float,
@@ -253,7 +289,7 @@ class ImuDeadReckoner:
         """Holds the initial state, `mu` and the mounting.
 
         Args:
-            sigma0_BN: (3,) MRP of B with respect to N at `t0`.
+            q0_BN: (4,) quaternion W X Y Z of B with respect to N at `t0`.
             r0_N: (3,) m, inertial position in N at `t0`.
             v0_N: (3,) m/s, inertial velocity in N at `t0`.
             t0: s, the time the initial state applies at.
@@ -263,7 +299,7 @@ class ImuDeadReckoner:
         self._mu = float(mu)
         self._dcm_BP = np.ascontiguousarray(np.asarray(dcm_PB, dtype=float).T)
         self.t = float(t0)
-        self.sigma_BN = np.asarray(sigma0_BN, dtype=float)
+        self.q_BN = np.asarray(q0_BN, dtype=float)
         self.r_BN_N = np.asarray(r0_N, dtype=float)
         self.v_BN_N = np.asarray(v0_N, dtype=float)
 
@@ -280,11 +316,11 @@ class ImuDeadReckoner:
                 in P.
 
         Returns:
-            `sigma_BN` (MRP, |sigma| <= 1), `r_BN_N` (m, in N) and `v_BN_N` (m/s, in N), each
-            a (3,) array, the same arrays the estimator holds.
+            `q_BN` ((4,) W X Y Z, unit, W >= 0), `r_BN_N` ((3,) m, in N) and `v_BN_N` ((3,) m/s,
+            in N), the same arrays the estimator holds.
         """
-        self.sigma_BN, self.r_BN_N, self.v_BN_N = _step(
-            self.sigma_BN,
+        self.q_BN, self.r_BN_N, self.v_BN_N = _step(
+            self.q_BN,
             self.r_BN_N,
             self.v_BN_N,
             AngVelPlatform,
@@ -294,7 +330,7 @@ class ImuDeadReckoner:
             self._mu,
         )
         self.t = float(t)
-        return {"sigma_BN": self.sigma_BN, "r_BN_N": self.r_BN_N, "v_BN_N": self.v_BN_N}
+        return {"q_BN": self.q_BN, "r_BN_N": self.r_BN_N, "v_BN_N": self.v_BN_N}
 
 
 # %% [markdown]
@@ -320,7 +356,7 @@ def dead_reckoner(scenario: Scenario) -> AlgorithmModule:
     """
     initial = scenario.initial_state()
     algorithm = ImuDeadReckoner(
-        initial["sigma0_BN"],
+        initial["q0_BN"],
         initial["r0_N"],
         initial["v0_N"],
         t0=0.0,
@@ -377,7 +413,7 @@ globals().update(mission_tests(MISSION))
 # t = data[0]["t_s"]
 # errors = {
 #     "attitude error (rad)": [
-#         attitude_error_rad(d["truth/sigma_BN"], d["est/sigma_BN"]) for d in data
+#         attitude_error_rad(d["truth/q_BN"], d["est/q_BN"]) for d in data
 #     ],
 #     "velocity error (m/s)": [velocity_error_m_s(d["truth/v_N"], d["est/v_BN_N"]) for d in data],
 #     "position error (m)": [position_error_m(d["truth/r_N"], d["est/r_BN_N"]) for d in data],

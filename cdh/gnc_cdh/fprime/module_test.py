@@ -16,7 +16,7 @@ from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from gnc_algorithms.imu_dead_reckoning import dead_reckoner
-from gnc_cdh.basilisk import UNITS
+from gnc_cdh import UNITS
 from gnc_cdh.fprime import DICTIONARY, FprimeModule, decoders
 
 REPOSITORY = Path(__file__).parents[3]
@@ -27,7 +27,9 @@ MOUNTING = Rotation.from_euler("zyx", [10.0, -20.0, 30.0], degrees=True).as_matr
 """A mounting [PB] that is not the identity, so a transposed mounting shows."""
 
 INITIAL = {
-    "sigma0_BN": np.array([0.1, 0.2, -0.3]),
+    "q0_BN": Rotation.from_euler("zyx", [40.0, -25.0, 60.0], degrees=True).as_quat(
+        scalar_first=True
+    ),
     "r0_N": np.array([6871.0e3, 0.0, 0.0]),
     "v0_N": np.array([0.0, 5.4e3, 5.4e3]),
 }
@@ -74,8 +76,8 @@ def test_the_estimate_datasets_are_the_logged_ticks_and_refuse_a_time_never_logg
 
     datasets = module.estimate_datasets(np.array([0.0, 0.1, 0.2, 0.3]))
 
-    assert sorted(datasets) == ["est/r_BN_N", "est/sigma_BN", "est/v_BN_N"]
-    np.testing.assert_allclose(datasets["est/sigma_BN"][0][0], INITIAL["sigma0_BN"], atol=1e-15)
+    assert sorted(datasets) == ["est/q_BN", "est/r_BN_N", "est/v_BN_N"]
+    np.testing.assert_array_equal(datasets["est/q_BN"][0][0], INITIAL["q0_BN"])
     np.testing.assert_array_equal(datasets["est/r_BN_N"][0][0], INITIAL["r0_N"])
     assert datasets["est/r_BN_N"][1] == "m"
     positions = datasets["est/r_BN_N"][0]
@@ -202,8 +204,8 @@ def _flown(host: str) -> dict:
 def test_both_hosts_record_the_same_truth_est_names_units_and_estimate():
     """Flown on one mounting and one scenario, the hosts' run-file datasets agree.
 
-    The truth is equal, the `est/*` names equal with the units of `UNITS`, [NB] to 1e-12 and the
-    position and velocity to a relative 1e-12.
+    The truth is equal, the `est/*` names equal with the units of `UNITS`, the quaternion to 1e-12
+    and the position and velocity to a relative 1e-12.
     """
     python, fprime = _flown("python"), _flown("fprime")
 
@@ -215,10 +217,9 @@ def test_both_hosts_record_the_same_truth_est_names_units_and_estimate():
         assert python[name][1] == fprime[name][1]
     names = sorted(name for name in python if name.startswith("est/"))
     assert names == sorted(name for name in fprime if name.startswith("est/"))
-    assert {"est/sigma_BN", "est/r_BN_N", "est/v_BN_N"} <= set(names)
+    assert {"est/q_BN", "est/r_BN_N", "est/v_BN_N"} <= set(names)
     for name in names:
         assert python[name][1] == fprime[name][1] == UNITS[name.removeprefix("est/")]
-    attitude = [Rotation.from_mrp(d["est/sigma_BN"][0]).as_matrix() for d in (python, fprime)]
-    np.testing.assert_allclose(attitude[1], attitude[0], rtol=0, atol=1e-12)
+    np.testing.assert_allclose(fprime["est/q_BN"][0], python["est/q_BN"][0], rtol=0, atol=1e-12)
     for name in ("est/r_BN_N", "est/v_BN_N"):
         np.testing.assert_allclose(fprime[name][0], python[name][0], rtol=1e-12)
