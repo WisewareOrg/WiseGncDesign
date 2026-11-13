@@ -17,12 +17,10 @@ def test_the_dcm_is_scipy_s_rotation_matrix():
 
 
 def test_the_product_is_scipy_s_composition():
-    """The product p (x) q is the rotation q then p, as SciPy composes them, to its sign."""
+    """The product p (x) q is the rotation q then p, as SciPy composes them, sign included."""
     for p, q in zip(QUATERNIONS, QUATERNIONS[::-1], strict=True):
         composed = Rotation.from_quat(p, scalar_first=True) * Rotation.from_quat(
             q, scalar_first=True
         )
         expected = composed.as_quat(scalar_first=True, canonical=False)
-        product = multiply(p, q)
-        sign = np.sign(product @ expected)
-        np.testing.assert_allclose(product, sign * expected, rtol=0, atol=1e-15)
+        np.testing.assert_allclose(multiply(p, q), expected, rtol=0, atol=1e-15)
