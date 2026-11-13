@@ -25,8 +25,8 @@ class AlgorithmModule(sysModel.SysModel):
     The ground reaches the algorithm through the link: `uplink` queues a command packet, and the
     next tick decodes it with the dictionary's types, runs its handler before the step and keeps
     the response. A handler that returns answers `OK`, and one that raises `ValueError` answers
-    `VALIDATION_ERROR` with the error's message as the reason; any other exception is a bug and
-    fails the tick.
+    `VALIDATION_ERROR` with the error's message as the reason; a packet the dictionary cannot decode
+    gets the response F´'s dispatcher gives it; any other exception is a bug and fails the tick.
 
     The algorithm writes telemetry by returning `{channel: value}` from `step` and from each
     handler, as an F´ component calls `tlmWrite_<channel>`. Each entry is one write, tagged with the

@@ -28,11 +28,8 @@ Construction refuses a keyword that no input carries or that two do, and a comma
 lacks or declares with other parameters.
 
 A command arrives as F´'s bytes and is decoded with the dictionary's types, so a handler gets what
-the F´ handler gets: an F32 as F32 holds it, an enum constant by name, an array as an array. It
-runs at the next tick, before the step. A handler that returns answers `OK`; one that raises
-`ValueError` answers `VALIDATION_ERROR`, and its message reaches the ground's `CommandFailed` and
-command log as the reason; a packet the dictionary cannot decode gets the response F´'s dispatcher
-gives it; any other exception is a bug and fails the case.
+the F´ handler gets: an F32 as F32 holds it, an enum constant by name, an array as an array.
+`AlgorithmModule`'s docstring says when it runs and how each outcome answers the ground.
 
 Each returned entry is one write, as an F´ component's `tlmWrite_<channel>` is. The module declares
 `period_s` (1 s), so the flight software runs at 1 Hz, and the simulation steps its dynamics and
