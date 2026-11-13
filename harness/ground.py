@@ -6,7 +6,6 @@ again. The module also records every telemetry write the link reports, with the 
 time tag, and every command with its response, so one recorder serves every host.
 """
 
-import json
 from collections.abc import Callable, Coroutine, Generator
 from typing import Any
 
@@ -111,8 +110,8 @@ class Ground(sysModel.SysModel):
         self._answers: dict[int, int] = {}
         self._writes: list[tuple[int, int, Any]] = []
         self._latest: dict[int, Any] = {}
-        self.failure: BaseException | None = None
-        self.command_log: list[dict[str, Any]] = []
+        self.failure = None
+        self.command_log = []
 
     @property
     def now_s(self) -> float:
@@ -165,7 +164,7 @@ class Ground(sysModel.SysModel):
         entry = {
             "t_s": self.now_s,
             "name": name,
-            "args": json.loads(json.dumps(args, default=lambda value: np.asarray(value).tolist())),
+            "args": {param: np.asarray(value).tolist() for param, value in args.items()},
             "context": context,
             "response": None,
             "response_t_s": None,

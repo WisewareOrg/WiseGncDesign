@@ -54,4 +54,4 @@ async def initialize_nav_from_tracking(ground: Ground, *, after_s: float) -> Non
         position=truth["r_N"],
         velocity=truth["v_N"],
     )
-    await ground.until(lambda: ground.tlm("nav.navState") != "idle", timeout_s=5.0)
+    await ground.until(lambda: ground.tlm("nav.navState") not in (None, "idle"), timeout_s=5.0)

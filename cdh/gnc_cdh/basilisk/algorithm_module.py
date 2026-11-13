@@ -81,7 +81,7 @@ class AlgorithmModule(sysModel.SysModel):
         self._ids = {
             name: dictionary.channel(f"{instance}.{name}").id for name in entries["channels"]
         }
-        self.failure: BaseException | None = None
+        self.failure = None
         self._inputs_written = False
         self._t_ns = 0
         self._uplinked: list[tuple[bytes, int]] = []

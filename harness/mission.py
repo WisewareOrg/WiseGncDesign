@@ -14,7 +14,7 @@ import os
 import re
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -258,7 +258,9 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_test_directory: the test's directory in the session.
 
         Raises:
-            failure: the exception the flight software or the procedure kept, re-raised whole.
+            failure: the exception the flight software or the procedure kept, re-raised whole in
+                place of what the run raised.
+            BaseException: what the run raised, when neither kept an exception.
         """
         fsw = mission.fsw(sim_scenario)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
@@ -271,10 +273,11 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         )
         try:
             datasets = sim_scenario.run(fsw, {}, duration_s=sim_duration_s, ground=ground)
-        finally:
+        except BaseException:
             failure = fsw.failure or ground.failure
-            if failure is not None:
-                raise failure
+            if failure is None:
+                raise
+            raise failure from None
         datasets |= ground.telemetry_datasets()
         path = sim_run_file(datasets, attrs={"commands": json.dumps(ground.command_log)})
         problems = [] if mission.check is None else mission.check(path)
@@ -289,7 +292,9 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
 
 
 @functools.cache
-def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[..., None]:
+def _definition(
+    reference: tuple[tuple[str, str], ...], root: Path
+) -> Callable[[Ground], Coroutine[Any, Any, None]]:
     """The scenario definition a TST item's reference names.
 
     A module already loaded, or loading, from the referenced file supplies it, so a notebook can
@@ -303,7 +308,7 @@ def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[
         root: the project root the reference's `path` is relative to.
 
     Returns:
-        The definition, whose `pytestmark` holds its `sim_` marks.
+        The definition, the scenario's ground procedure, whose `pytestmark` holds its `sim_` marks.
 
     Raises:
         ValueError: the file references a definition it has not yet defined, because a mission

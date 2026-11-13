@@ -429,12 +429,12 @@ globals().update(mission_tests(MISSION))
 # runs = load_runs(Test_imu_spacecraft.test_dead_reckoner_leo500)
 # data = [{name: values for name, (values, _) in run["datasets"].items()} for run in runs]
 # metrics = {
-#     "attitude error (rad)": ("truth/q_BN", "nav.bodyEciAttitude", attitude_error_rad),
-#     "velocity error (m/s)": ("truth/v_N", "nav.bodyEciVel", velocity_error_m_s),
-#     "position error (m)": ("truth/r_N", "nav.bodyEciPos", position_error_m),
+#     "attitude error (rad)": ("nav.bodyEciAttitude", "truth/q_BN", attitude_error_rad),
+#     "velocity error (m/s)": ("nav.bodyEciVel", "truth/v_N", velocity_error_m_s),
+#     "position error (m)": ("nav.bodyEciPos", "truth/r_N", position_error_m),
 # }
 # figure, axes = plt.subplots(3, 1, sharex=True, figsize=(8, 8), layout="constrained")
-# for ax, (label, (truth, channel, error)) in zip(axes, metrics.items(), strict=True):
+# for ax, (label, (channel, truth, error)) in zip(axes, metrics.items(), strict=True):
 #     for d in data:
 #         t = d[f"tlm_t/{channel}"]
 #         ax.plot(t, error(at(d, truth, t), d[f"tlm/{channel}"]), color="C0", alpha=0.1)
