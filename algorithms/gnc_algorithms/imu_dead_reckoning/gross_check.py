@@ -132,22 +132,6 @@ def position_bound_m(
     )
 
 
-def commanded_epoch(run: Mapping[str, np.ndarray]) -> float:
-    """The epoch, in s, of the state the ground gave nav: its first `initNavState` answered `OK`.
-
-    Args:
-        run: one run, as `read_run` returns it, its command log in the root attribute `commands`.
-
-    Returns:
-        The command's `epoch` argument, s.
-    """
-    return next(
-        command["args"]["epoch"]
-        for command in json.loads(str(run["commands"]))
-        if command["name"] == "nav.initNavState" and command["response"] == "OK"
-    )
-
-
 def error_growth(
     run: Mapping[str, np.ndarray],
     gyro_noise_std_rad_s: float,
@@ -158,10 +142,10 @@ def error_growth(
     """Each of a run's errors at every estimate nav wrote, beside its growth bound.
 
     Each error is the written estimate's against truth at the write's time. Each bound grows from
-    the commanded epoch, `commanded_epoch`, and takes the run's drawn biases,
-    `draw_gyro_bias_P_rad_s` and `draw_accel_bias_P_m_s2`; the largest change of its true body
-    rate, `truth/omega_BN_B`; and its mean motion `n = sqrt(mu / |r0|^3)`, from `truth/r_N` at
-    t = 0.
+    the epoch of the first `nav.initNavState` answered `OK` in the run's command log, `commands`,
+    and takes the run's drawn biases, `draw_gyro_bias_P_rad_s` and `draw_accel_bias_P_m_s2`; the
+    largest change of its true body rate, `truth/omega_BN_B`; and its mean motion
+    `n = sqrt(mu / |r0|^3)`, from `truth/r_N` at t = 0.
 
     Args:
         run: one run, as `read_run` returns it.
@@ -174,7 +158,11 @@ def error_growth(
         `{metric: (t, error, bound)}` for `"attitude error [rad]"`, `"velocity error [m/s]"` and
         `"position error [m]"`, each a triple of (M,) arrays over the estimate's writes, `t` in s.
     """
-    epoch = commanded_epoch(run)
+    epoch = next(
+        command["args"]["epoch"]
+        for command in json.loads(str(run["commands"]))
+        if command["name"] == "nav.initNavState" and command["response"] == "OK"
+    )
     omega_dot = np.linalg.norm(np.diff(run["truth/omega_BN_B"], axis=0), axis=1) / np.diff(
         run["t_s"]
     )
