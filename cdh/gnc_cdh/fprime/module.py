@@ -44,7 +44,7 @@ def extension() -> ModuleType:
     """
     global _loaded_stamp
     try:
-        from gnc_cdh.fprime import _wise_fsw
+        import gnc_cdh.fprime._wise_fsw as _wise_fsw
     except ModuleNotFoundError as error:
         raise ModuleNotFoundError("the F´ deployment is not built; run `just fsw`") from error
 

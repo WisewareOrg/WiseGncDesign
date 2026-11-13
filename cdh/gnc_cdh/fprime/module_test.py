@@ -5,6 +5,7 @@ Skipped without the deployment `just fsw` builds.
 
 import functools
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -84,6 +85,18 @@ def test_the_estimate_datasets_are_the_logged_ticks_and_refuse_a_time_never_logg
     assert len({tuple(row) for row in positions}) == len(positions)
     with pytest.raises(KeyError, match="no telemetry was logged at t = 0.25 s"):
         module.estimate_datasets(np.array([0.25]))
+
+
+def test_a_host_without_the_f_prime_build_says_to_build_it(monkeypatch: pytest.MonkeyPatch):
+    """With no extension to import, building a host names the recipe that builds it.
+
+    Args:
+        monkeypatch: hides the extension from the import system.
+    """
+    monkeypatch.setitem(sys.modules, "gnc_cdh.fprime._wise_fsw", None)
+
+    with pytest.raises(ModuleNotFoundError, match="not built; run `just fsw`"):
+        _module()
 
 
 def test_a_host_refuses_an_extension_rebuilt_after_the_process_loaded_it(
