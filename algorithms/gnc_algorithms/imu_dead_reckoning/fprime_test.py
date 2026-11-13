@@ -56,6 +56,23 @@ def test_the_python_build_and_the_fprime_build_hold_nav_to_one_contract():
     assert python.entries("nav") == WISE_FSW.entries("nav")
 
 
+def _python(q: np.ndarray, r: np.ndarray, v: np.ndarray, epoch: float = 0.0) -> ImuDeadReckoner:
+    """The notebook's reckoner at `MOUNTING`, given its state as of `epoch` by command.
+
+    Args:
+        q: (4,) quaternion W X Y Z of the body with respect to ECI.
+        r: (3,) m, position in ECI.
+        v: (3,) m/s, velocity in ECI.
+        epoch: s, the time the state holds at.
+
+    Returns:
+        The reckoner.
+    """
+    python = ImuDeadReckoner(mu=MU, dcm_PB=MOUNTING)
+    python.initNavState(epoch=epoch, attitude=q, position=r, velocity=v)
+    return python
+
+
 def _assert_matches(python: ImuDeadReckoner) -> None:
     """The deployment's latest telemetry is a propagated state that agrees with `python`'s.
 
@@ -110,7 +127,7 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: f
     """
     rng = np.random.default_rng(7)
     readings = [(rate_rad_s * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(600)]
-    python = ImuDeadReckoner(Q0, R0, V0, t0=0.0, mu=MU, dcm_PB=MOUNTING)
+    python = _python(Q0, R0, V0)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     _wise_fsw.initialize_nav(t_ns=0, q_BN=Q0, r_BN_N=R0, v_BN_N=V0)
 
@@ -128,7 +145,7 @@ def test_init_nav_state_starts_the_reckoner_at_its_epoch():
     """
     rng = np.random.default_rng(5)
     readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
-    python = ImuDeadReckoner(Q0, R0, V0, t0=60.0, mu=MU, dcm_PB=MOUNTING)
+    python = _python(Q0, R0, V0, epoch=60.0)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     for k in range(1, 61):
         _wise_fsw.step(t_ns=k * NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
@@ -178,7 +195,7 @@ def test_a_second_flight_matches_a_fresh_notebook_reckoner():
     _fly_a_first_flight()
     rng = np.random.default_rng(11)
     readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
-    python = ImuDeadReckoner(Q_B, R_B, V_B, t0=0.0, mu=MU, dcm_PB=MOUNTING)
+    python = _python(Q_B, R_B, V_B)
 
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     _wise_fsw.initialize_nav(t_ns=0, q_BN=Q_B, r_BN_N=R_B, v_BN_N=V_B)

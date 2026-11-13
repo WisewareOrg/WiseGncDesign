@@ -12,9 +12,10 @@ The repository's parts are laid out under Development.
 ### Layout
 
 ```text
-harness/       mission.py, requirements_tree.py, judging.py (a pytest plugin), notebook.py, runs.py
+harness/       mission.py, ground.py, requirements_tree.py, judging.py (a pytest plugin),
+               notebook.py, runs.py
 analysis/      one analyzer per metric: its limits, error math and plot
-scenarios/     how each scenario a TST item references is flown
+scenarios/     how each scenario a TST item references is flown: its ground procedure and marks
 algorithms/gnc_algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
                                     re-exporting the notebook
 algorithms/gnc_algorithms/quaternion.py   the quaternion math numba-compiled algorithms share
@@ -56,7 +57,7 @@ A mission is a vehicle, an FSW builder and the scenarios to fly, defined as a va
 The builder claims its capabilities with `@provides("SYS...")`, and a flight is judged on the rungs
 its scenario links to that sit under those capabilities. `mission_tests` turns missions into Monte
 Carlo tests: a class per vehicle holding a test per FSW and scenario. The reasoning is in
-[ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
+[ADR 0002 rev 2](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
 
 ### Notebooks
 
@@ -96,7 +97,7 @@ judges, over the active session. `judge()` in a notebook does the same and retur
 per rung and a column per flight. A failing rung lists each failing case with the command that
 re-simulates it. The report lands in the session's `report/` and is rebuilt on every judging; start
 at `report/matrix.md`. How a verdict is reached is in
-[ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md) and
+[ADR 0002 rev 2](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md) and
 [ADR 0001 rev 2](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
 
 ### Recipes and CI

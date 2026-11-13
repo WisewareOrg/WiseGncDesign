@@ -80,18 +80,24 @@ def write_run(path: Path, error: float, kind: str = "attitude") -> None:
         kind: "attitude", "velocity" or "position".
     """
     identity = np.tile([1.0, 0.0, 0.0, 0.0], (5, 1))
-    est = {"q_BN": identity.copy(), "v_BN_N": np.zeros((5, 3)), "r_BN_N": np.zeros((5, 3))}
+    tlm = {
+        "nav.bodyEciAttitude": identity.copy(),
+        "nav.bodyEciVel": np.zeros((5, 3)),
+        "nav.bodyEciPos": np.zeros((5, 3)),
+    }
     if kind == "attitude":
-        est["q_BN"][2] = [np.cos(error / 2.0), 0.0, 0.0, np.sin(error / 2.0)]
+        tlm["nav.bodyEciAttitude"][2] = [np.cos(error / 2.0), 0.0, 0.0, np.sin(error / 2.0)]
     else:
-        est["v_BN_N" if kind == "velocity" else "r_BN_N"][2, 0] = error
+        tlm["nav.bodyEciVel" if kind == "velocity" else "nav.bodyEciPos"][2, 0] = error
+    t_s = np.linspace(0.0, 1.0, 5)
     with h5py.File(path, "w") as f:
-        f["t_s"] = np.linspace(0.0, 1.0, 5)
+        f["t_s"] = t_s
         f["truth/q_BN"] = identity
         for truth in ("v_N", "r_N"):
             f[f"truth/{truth}"] = np.zeros((5, 3))
-        for name, values in est.items():
-            f[f"est/{name}"] = values
+        for name, values in tlm.items():
+            f[f"tlm/{name}"] = values
+            f[f"tlm_t/{name}"] = t_s
 
 
 def write_cases(
@@ -585,10 +591,17 @@ def test_a_flown_mission_is_judged_end_to_end(
     (root / "scenarios" / "alpha.py").write_text(
         "import pytest\n\n\n"
         '@pytest.mark.sim_scenario("leo500")\n'
-        "@pytest.mark.sim_duration_s(1.0)\n"
+        "@pytest.mark.sim_duration_s(2.0)\n"
         "@pytest.mark.sim_runs(4)\n"
-        "def alpha() -> None:\n"
-        "    pass\n"
+        "async def alpha(ground) -> None:\n"
+        "    truth = ground.truth()\n"
+        "    await ground.send(\n"
+        '        "nav.initNavState",\n'
+        "        epoch=ground.now_s,\n"
+        '        attitude=truth["q_BN"],\n'
+        '        position=truth["r_N"],\n'
+        '        velocity=truth["v_N"],\n'
+        "    )\n"
     )
     project.makepyfile(
         test_flights="""

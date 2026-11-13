@@ -4,24 +4,25 @@ header: |
   Scenario: leo500
 level: 1.1
 links:
-- SRS001: IYgvILxrz15zVcOwJKNI8VMFu2ECvpZAM6FyRrBjrsg=
-- SRS002: _XF2UPocNTGKCjEwJIa3S0ZYeJo8--6o8KLRzS6gfiU=
-- SRS003: sO1Svn6e559NgaidpAd7Y73RycxuaH40dXUb0sq4yKo=
-- SRS004: DDygX4AoMX3KMI_WXmY0_M5gcpOGA_TK5hpikwEyssQ=
-- SRS005: 8o0dKBAZ0V4O2nH-WO3bTJjy4nwzXeTAo9fW2AhsacU=
+- SRS001: ItdFJgz8PMf2-rTe_R15LZ3SQBLegKnb88HCirtCvjY=
+- SRS002: xWhlx2nDHZP-aEoo8wp9gXlynm48NZLlinnJLgSXT08=
+- SRS003: HB3BDC0zdhb1a_-_R3WvjnzaXBajpvBIzbM807gVE58=
+- SRS004: eFGvqNZ_nfIYIDRrEuHwYCyscnvSahcZN1E1caHljKs=
+- SRS005: C8YIWaovQRfkFJ7HwTOJrMgp9a7WdwQji57zGffQWpg=
 normative: true
 rationale: ''
 ref: ''
 references:
 - keyword: def leo500(
   path: scenarios/leo.py
-  sha: fb5087cb44a8b2d76c9c4d9f71dd480b4ad2d3a1b5e4f946baa4f2bf1a8d2721
+  sha: 7845fa05f0bba3cef1bb72fa1d36566e42a73bc678e9ff664222165c8d3c7a62
   type: file
-reviewed: yy0rT5DhEUsU7fxH1IhcOZdspLT2Olom9LSsR5j3QNs=
+reviewed: Pn5qgJS3DUJGywiU44z31l_i-hEJM1HuOeGuqVTYVgo=
 status: proposed
 text: |
   A mission's FSW boots in the leo500 scenario on the mission's vehicle and runs for 5700 s, once
-  per dispersed case.
+  per dispersed case. 60 s after boot the ground gives nav its state from tracking with
+  `nav.initNavState`, and waits for nav to report it is no longer idle.
 verification-justification: |
   Settles each linked rung, for each mission flying it, over this scenario's dispersions and
   duration. Leaves unproven any other scenario, and any rung needing more cases than it flies.

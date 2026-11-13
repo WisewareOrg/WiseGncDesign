@@ -16,14 +16,15 @@ references:
 - keyword: def test_attitude_knowledge(
   path: analysis/test_attitude_knowledge.py
   type: file
-reviewed: cSk7Z6FMvSysvu-YD8IhGZQYRAyPlkmISrZ2II1SlDQ=
+reviewed: e_yMVh4t-I3ZgFjZEhXSgrpZbvkrPntxLcJ-GMOkvdE=
 status: proposed
 text: |
-  Over the whole of every dispersed run, the attitude knowledge error shall stay within x degrees in at
-  least a share p of runs, demonstrated at confidence c.
+  At every estimate the FSW reports in every dispersed run, the attitude knowledge error shall stay
+  within x degrees in at least a share p of runs, demonstrated at confidence c.
 verification-justification: |
-  Judged from the worst error over each run, sampled at the flight software's 1 Hz, over the
-  dispersions each scenario models and its duration. It does not establish the error between
-  samples, beyond the run's duration, or under errors no scenario disperses.
+  Judged from the worst error over each run, at each estimate the FSW wrote, against truth at
+  the time of the write, over the dispersions each scenario models and its duration. It does not
+  establish the error between the estimates the FSW reports, before its first, beyond the run's
+  duration, or under errors no scenario disperses.
 verification-method: test
 x: 5.0

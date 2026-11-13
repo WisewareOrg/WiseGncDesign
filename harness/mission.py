@@ -23,6 +23,7 @@ import pytest
 from wise_dynamics.basilisk.vehicles import VEHICLES
 
 from harness import requirements_tree
+from harness.ground import Ground
 
 
 def provides(*capability_ids: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -217,9 +218,13 @@ def _merge_json(path: Path, mapping: dict[str, Any]) -> None:
 def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """The Monte Carlo test flying a mission through one scenario.
 
-    The TST item's reference names the scenario's definition, whose `sim_` marks say how it is
-    flown; the test carries them and the mission's vehicle. The FSW host records its own estimate
-    through `fly`, which flies the scenario for the duration the definition gives.
+    The TST item's reference names the scenario's definition, its ground procedure, whose `sim_`
+    marks say how it is flown; the test carries them and the mission's vehicle. The ground runs the
+    procedure against the FSW host for the duration the definition gives, every
+    `sim_ground_period_s` (the FSW's period when the definition has no such mark) until the
+    procedure returns, with the vehicle's tracking as its truth, and records the telemetry and the
+    command log into the run file. An exception the host or the procedure raised is re-raised
+    whole.
 
     Args:
         mission: the mission.
@@ -230,6 +235,10 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """
     reference = requirements_tree.items("TST")[scenario_id]["references"][0]
     definition = _definition(tuple(reference.items()), requirements_tree.ROOT)
+    ground_period_s = next(
+        (mark.args[0] for mark in definition.pytestmark if mark.name == "sim_ground_period_s"),
+        None,
+    )
 
     @pytest.mark.sim_vehicle(mission.vehicle)
     def test(
@@ -247,11 +256,28 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_duration_s: s, the case's simulated duration.
             sim_run_file: writes the case's run file.
             sim_test_directory: the test's directory in the session.
+
+        Raises:
+            failure: what the flight software or the procedure raised, kept whole, in place of
+                the `RuntimeError` Basilisk reports it as.
         """
         fsw = mission.fsw(sim_scenario)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
-        datasets = fsw.fly(functools.partial(sim_scenario.run, duration_s=sim_duration_s))
-        path = sim_run_file(datasets)
+        ground = Ground(
+            definition,
+            fsw,
+            sim_scenario.vehicle.tracking(),
+            sim_scenario.stop_ground,
+            period_s=ground_period_s,
+        )
+        try:
+            datasets = sim_scenario.run(fsw, {}, duration_s=sim_duration_s, ground=ground)
+        finally:
+            failure = fsw.failure or ground.failure
+            if failure is not None:
+                raise failure
+        datasets |= ground.telemetry_datasets()
+        path = sim_run_file(datasets, attrs={"commands": json.dumps(ground.command_log)})
         problems = [] if mission.check is None else mission.check(path)
         if problems:
             pytest.fail("\n".join(problems), pytrace=False)

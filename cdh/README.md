@@ -4,66 +4,88 @@
 `gnc_algorithms` in a simulator: `gnc_cdh.basilisk` hosts its Python build, and `gnc_cdh.fprime`
 its F´ build.
 
-Each host implements `fly(run) -> datasets`, which the harness calls to fly a case and record the
-estimate, and `build`, the host's build identity, which the harness records in the flight's
-`flight.json`. The contract and its reasoning are in
-[ADR 0003 rev 2](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+A host the ground flies presents the link `gnc_cdh.link.Link`, in the form F´ uses: `uplink`
+queues a command packet for the next tick, `responses` drains each command's response under the
+ground's context, `telemetry` drains every telemetry write with the flight software's time tag,
+and `values` turns one channel's payloads into values in one batch. `failure` keeps an exception
+the host's tick raised, whole, for the harness to re-raise, since Basilisk reports it only as a
+`RuntimeError`. The ground, `harness.ground.Ground`, runs a scenario's procedure against the link
+and is the one recorder of a flight, so a run file reads alike whichever host flew it.
+`AlgorithmModule` presents the link; the F´ host records its estimate itself, as
+[The F´ host](#the-f-host) says. Each host also has `build`, its build identity, which the harness
+records in the flight's `flight.json`. The reasoning is in
+[ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
 
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
-algorithm's `step` as plain arrays, and logs the arrays it returns, by name. Frames and mountings
-belong to the algorithm.
+algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm.
 
-`gnc_cdh.basilisk.AlgorithmModule(algorithm, inputs)` hosts an algorithm built at the simulation's
-start time on a dict of subscribed Basilisk readers, by role. The algorithm's names are its wiring:
+`gnc_cdh.basilisk.AlgorithmModule(algorithm, inputs, instance=..., dictionary=...)` hosts an
+algorithm as the F´ instance `instance` would be hosted, held to `dictionary`, on a dict of
+subscribed Basilisk readers, by role. The algorithm's names are its wiring:
 - each keyword of its `step` other than `t` is a message field, read from the one input whose
   message has a field of that name;
-- its outputs are its public attributes other than `t`, each an estimate `gnc_cdh.UNITS` names:
-  `q_BN` (quaternion W X Y Z), `r_BN_N` (m) and `v_BN_N` (m/s).
+- each command the dictionary gives the instance is a method of the algorithm, with exactly the
+  command's parameters in order;
+- `step` and each command handler return the telemetry they write, `{channel: value}`, or `None`.
 
-Construction refuses a keyword that no input carries or that two do, and an output `gnc_cdh.UNITS`
-does not name. Basilisk has no navigation message that carries a quaternion, so the host records
-the estimate itself, as the F´ host does.
+Construction refuses a keyword that no input carries or that two do, and a command the algorithm
+lacks or declares with other parameters.
+
+A command arrives as F´'s bytes and is decoded with the dictionary's types, so a handler gets what
+the F´ handler gets: an F32 as F32 holds it, an enum constant by name, an array as an array. It
+runs at the next tick, before the step. A handler that returns answers `OK`; one that raises
+`ValueError` answers `VALIDATION_ERROR`; a packet the dictionary cannot decode gets the response
+F´'s dispatcher gives it; any other exception is a bug and fails the case.
+
+Each returned entry is one write, as an F´ component's `tlmWrite_<channel>` is, tagged with the
+tick's time. Its channel name is checked on the tick, an array is copied as written, and the value
+is held to the channel's type when the ground packs each channel in one batch after the run.
 
 The module declares `period_s` (1 s), the period of the task the simulation runs it in, so the
 flight software runs at 1 Hz, and the simulation steps its dynamics and samples the IMU at that
-period at every fidelity. `Reset` logs the algorithm's outputs as it holds them. Each
-`UpdateState` after the algorithm's `t` reads every input once, steps the algorithm and logs what it
-returns, by the tick's time. `fly` adds the log at the record times to the run file as
-`est/<output>`. Each docstring gives what it refuses.
+period at every fidelity. Each `UpdateState` after the module's last tick runs the queued commands,
+then reads every input once and steps the algorithm. Each docstring gives what it refuses.
 
-## Example: boot the dead reckoner against a simulated spacecraft
+## Example: fly the dead reckoner against a simulated spacecraft
 
 This example runs in a notebook or at a prompt, with the `sim` group installed
 (`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
-at its nominal configuration, and boots the dead reckoner on that vehicle. It then runs one minute,
-with the dynamics, the IMU and the dead reckoner all stepping at 1 Hz, and compares the estimate
-with the vehicle's truth:
+at its nominal configuration, and boots the dead reckoner idle on that vehicle. A ground procedure
+gives nav its state from tracking at t = 0, and the run lasts one minute, with the dynamics, the IMU
+and the dead reckoner all stepping at 1 Hz. The ground stops once the procedure returns, and its
+record, which takes every write the link still holds, is then compared with the vehicle's truth:
 
 ```python
 >>> import numpy as np
 >>> from wise_dynamics.basilisk import ImuSpacecraft
 >>> from wise_dynamics.basilisk.scenarios.leo500 import Leo500
->>> from gnc_algorithms.imu_dead_reckoning import ImuDeadReckoner
->>> from gnc_cdh.basilisk import AlgorithmModule
+>>> from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+>>> from harness.ground import Ground
 >>> scenario = Leo500()
->>> vehicle = scenario.vehicle
->>> isinstance(vehicle, ImuSpacecraft)
+>>> isinstance(scenario.vehicle, ImuSpacecraft)
 True
->>> initial = scenario.initial_state()
->>> algorithm = ImuDeadReckoner(
-...     initial["q0_BN"],
-...     initial["r0_N"],
-...     initial["v0_N"],
-...     t0=0.0,
-...     mu=Leo500.mu_m3_s2["earth"],
-...     dcm_PB=np.eye(3),
-... )
->>> fsw = AlgorithmModule(algorithm, vehicle.readers())
->>> datasets = scenario.run(fsw, {}, duration_s=60.0)
->>> fsw.algorithm.t
-60.0
+>>> fsw = dead_reckoner(scenario)
+>>> async def procedure(ground):
+...     truth = ground.truth()
+...     await ground.send(
+...         "nav.initNavState",
+...         epoch=ground.now_s,
+...         attitude=truth["q_BN"],
+...         position=truth["r_N"],
+...         velocity=truth["v_N"],
+...     )
+>>> ground = Ground(procedure, fsw, scenario.vehicle.tracking(), scenario.stop_ground)
+>>> datasets = scenario.run(fsw, {}, duration_s=60.0, ground=ground)
+>>> ground.command_log[0]["response"]
+'OK'
+>>> written = ground.telemetry_datasets()
+>>> written["tlm/nav.navState"][0][:3].tolist()
+['initialized', 'propagated', 'propagated']
+>>> times = written["tlm_t/nav.bodyEciPos"][0]
+>>> float(times[0]), float(times[-1]), len(times)
+(1.0, 60.0, 60)
 >>> truth_r_N, _ = datasets["truth/r_N"]
->>> bool(np.linalg.norm(fsw.algorithm.r_BN_N - truth_r_N[-1]) < 1.0)
+>>> bool(np.linalg.norm(written["tlm/nav.bodyEciPos"][0][-1] - truth_r_N[-1]) < 1.0)
 True
 
 ```
@@ -72,9 +94,11 @@ True
 
 ## Adding an algorithm
 
-Write the algorithm in `gnc_algorithms`. Its `step(t=..., **inputs)` takes plain arrays by keyword,
-each named as the message field it reads, and returns plain named arrays; it holds `t` and each
-output as an attribute. An output `gnc_cdh.UNITS` does not name gets its units added there.
+Write the algorithm in `gnc_algorithms`, with its component model, `<Name>.fpp`, beside its
+notebook: the commands and telemetry it implements, and no input ports. Its `step(t=..., **inputs)`
+takes plain arrays by keyword, each named as the message field it reads; it has a method per
+command; and both return the telemetry they write. Its builder hosts it with the dictionary
+`Dictionary.from_component` generates from that model.
 
 ## The dictionary
 

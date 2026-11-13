@@ -7,7 +7,8 @@
 ## Revisions
 
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
-  telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
+  telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build); recording a flight
+  is superseded by ADR 0004 rev 1 (issue 39 scenarios command the flight software).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
 
 ## Context
@@ -35,21 +36,15 @@ autocoder.
 - **The binding is a small hand-written pybind11 module, with no fprime-python dependency.**
 - **Each F´ component sits beside the algorithm it ports.** The repository root is F´'s project root
   (`cdh/fprime/settings.ini`). An algorithm's component `.fpp`, `.hpp` and `.cpp` sit in its
-  package beside the notebook, the package ADR 0002 rev 1 lays out around each algorithm.
+  package beside the notebook, the package ADR 0002 rev 2 lays out around each algorithm.
   `cdh/fprime/` holds the rest of the F´ project: the interface types, the sim-side components, the
   topology and the binding.
 - **An algorithm takes its configuration on an F´ port**, which `SimBridge` sends at boot, so
   nothing reaches past the F´ model.
 
-### Recording a flight
+### Which build flew
 
-- **Each host implements one recording method, `fly(run) -> datasets`.** The harness binds the
-  scenario and its stopping rule into `run`. The host calls `run` with itself and the datasets it
-  records, and adds whatever it records after the run. A host never sees the scenario or a
-  duration, and the harness imports no host by type.
-- **A flight's end belongs to the scenario**, never to a fixed length. The simulator stops only on
-  time, so the one stopping rule the harness binds is the TST definition's duration.
-- **Each flight's `flight.json` records which FSW flew**, beside the facts ADR 0002 rev 1 records
+- **Each flight's `flight.json` records which FSW flew**, beside the facts ADR 0002 rev 2 records
   there for the judge. `fsw` is the FSW builder's name, and `build` is the host's build identity:
   - for the F´ host, the host, `frameworkVersion` (the F´ tag) and `projectVersion`, read from the
     dictionary's metadata;
@@ -97,13 +92,6 @@ autocoder.
   side and compared.
 - **An algorithm's configuration set by public C++ methods the binding calls directly.** The call
   is outside any port, so the binding reaches past the F´ model. Rejected for ports.
-- **Each host logging its own estimate.** It moves the Python build's recording off Basilisk's
-  recorders, which no need asks for. Rejected.
-- **A duration parameter on the recording method.** Rejected: a flight is not defined by a fixed
-  simulated length.
-- **`fly(scenario, stop)`** and **a stop value type.** Rejected for `fly(run)`: the harness binds
-  the scenario and its stopping rule into one callable, and the host never sees the scenario or its
-  stopping rule.
 - **The build identity in run-file attributes.** Rejected: it would need the simulator changed.
 - **The repository commit alone as the build identity.** Rejected: it cannot tell two builds of one
   commit apart.
@@ -116,7 +104,6 @@ autocoder.
 
 - The two builds fly the same missions, scenarios and cases and are judged alike, so they compare
   case by case. Parity tests hold them to rounding.
-- A further host implements `fly` and `build`, and the harness needs no change for it.
 - Two builds of one algorithm are told apart in the judge's session even at one repository commit.
   A stale extension shows as a `projectVersion` that differs from the run file's
   `versions_caller_commit`.

@@ -28,8 +28,8 @@ import pytest
 @pytest.mark.sim_scenario("leo500")
 @pytest.mark.sim_duration_s({duration})
 @pytest.mark.sim_runs(1)
-def alpha() -> None:
-    pass
+async def alpha(ground) -> None:
+    {body}
 """
 
 
@@ -296,7 +296,7 @@ def project(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> pytes
     write_tree(pytester.path)
     monkeypatch.setattr(requirements_tree, "ROOT", pytester.path)
     pytester.mkdir("scenarios")
-    (pytester.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=1.0))
+    (pytester.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=1.0, body="pass"))
     return pytester
 
 
@@ -451,7 +451,7 @@ def reckoner(scenario):
 
 def check(path):
     with h5py.File(path, "r") as f:
-        if "est" not in f or "truth" not in f:
+        if "tlm" not in f or "truth" not in f:
             return ["not the case's run file"]
     return []
 
@@ -524,7 +524,7 @@ def test_a_scenario_file_that_raised_on_import_is_imported_afresh_once_fixed(
     with pytest.raises(RuntimeError, match="alpha is broken"):
         mission_tests(mission)
 
-    (scenarios / "alpha.py").write_text(ALPHA.format(duration=1.0))
+    (scenarios / "alpha.py").write_text(ALPHA.format(duration=1.0, body="pass"))
     [vehicle_class] = mission_tests(mission).values()
     assert [name for name in vars(vehicle_class) if name.startswith("test_")] == [
         "test_build_alpha"
@@ -569,13 +569,14 @@ def alpha():
 
 
 STUB_HOST = """
-import numpy as np
 from Basilisk.architecture import sysModel
 
 
 class StubHost(sysModel.SysModel):
     period_s = 1.0
     build = {"host": "stub", "revision": "r1"}
+    dictionary = None
+    failure = None
 
     def Reset(self, CurrentSimNanos):
         pass
@@ -583,29 +584,31 @@ class StubHost(sysModel.SysModel):
     def UpdateState(self, CurrentSimNanos):
         pass
 
-    def fly(self, run):
-        datasets = run(self, {})
-        n = len(datasets["t_s"][0])
-        datasets["est/stub_scalar"] = (np.full(n, 3.0), "m")
-        datasets["est/stub_vector"] = (np.full((n, 3), -2.0), "m/s")
-        return datasets
+    def uplink(self, packet, context):
+        raise AssertionError("no command is sent")
+
+    def responses(self):
+        return []
+
+    def telemetry(self):
+        return []
 """
 
 
-def test_a_flight_records_through_the_hosts_fly_with_the_scenarios_stopping_rule(
+def test_a_flight_runs_the_procedure_on_the_host_s_link_for_the_scenario_s_duration(
     project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
-    """A host that is neither built-in type flies through its own `fly`, which the harness binds.
+    """A host that is neither built-in type flies through the ground, which records the run.
 
-    The stub's `fly` calls `run(self, {})` and adds fixed `est/*` arrays. The run file holds
-    exactly those beside the truth, and ends at the TST definition's `sim_duration_s`, so the
-    harness bound the stopping rule. `flight.json` names the builder and the stub's `build`.
+    The stub host presents a link and writes nothing. The run file holds the truth and an empty
+    command log, no telemetry, and ends at the TST definition's `sim_duration_s`, so the harness
+    bound the stopping rule. `flight.json` names the builder and the stub's `build`.
 
     Args:
         project: the project.
         fly_in_a_subprocess: runs the project in a subprocess.
     """
-    (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=20.0))
+    (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=20.0, body="pass"))
     project.makepyfile(
         test_flights=STUB_HOST
         + """
@@ -628,10 +631,8 @@ globals().update(
     result.assert_outcomes(passed=1)
     [path] = project.path.rglob("run_0000.h5")
     with h5py.File(path, "r") as f:
-        assert sorted(f["est"]) == ["stub_scalar", "stub_vector"]
-        assert (f["est/stub_scalar"][:] == 3.0).all()
-        assert (f["est/stub_vector"][:] == -2.0).all()
-        assert f["est/stub_scalar"].attrs["units"] == "m"
+        assert "tlm" not in f
+        assert json.loads(f.attrs["commands"]) == []
         assert "r_N" in f["truth"]
         assert f["t_s"][-1] == 20.0
     [flight] = project.path.rglob("flight.json")
@@ -642,6 +643,138 @@ globals().update(
         "fsw": "stub_fsw",
         "build": {"host": "stub", "revision": "r1"},
     }
+
+
+@pytest.mark.parametrize(
+    ("period_s", "outcome"), [(10.0, {"passed": 1}), (1.5, {"failed": 1})], ids=["10-s", "1.5-s"]
+)
+def test_the_definition_s_ground_period_mark_sets_the_ground_s_period(
+    project: pytest.Pytester,
+    fly_in_a_subprocess: Callable[..., pytest.RunResult],
+    period_s: float,
+    outcome: dict[str, int],
+) -> None:
+    """`sim_ground_period_s` sets the ground's period; one the FSW's 1 s cannot divide fails.
+
+    Args:
+        project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
+        period_s: s, the mark's period.
+        outcome: the case's outcome.
+    """
+    definition = ALPHA.format(duration=20.0, body=f"assert ground.period_s == {period_s}")
+    (project.path / "scenarios" / "alpha.py").write_text(
+        definition.replace(
+            "@pytest.mark.sim_runs(1)",
+            f"@pytest.mark.sim_runs(1)\n@pytest.mark.sim_ground_period_s({period_s})",
+        )
+    )
+    project.makepyfile(
+        test_flights=STUB_HOST
+        + """
+from harness.mission import Mission, mission_tests, provides
+
+
+@provides("SYS901")
+def stub_fsw(scenario):
+    return StubHost()
+
+
+globals().update(
+    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
+)
+"""
+    )
+
+    result = fly_in_a_subprocess(project)
+
+    result.assert_outcomes(**outcome)
+    if "failed" in outcome:
+        result.stdout.fnmatch_lines(
+            ["*1.5 s is not a whole multiple of the flight software's 1.0 s*"]
+        )
+
+
+def test_a_procedure_s_exception_fails_the_case_as_itself(
+    project: pytest.Pytester,
+    fly_in_a_subprocess: Callable[..., pytest.RunResult],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A procedure waiting for what never comes fails the case with its own `TimeoutError`.
+
+    Args:
+        project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
+        monkeypatch: widens the subprocess's summary line to hold the exception.
+    """
+    (project.path / "scenarios" / "alpha.py").write_text(
+        ALPHA.format(duration=20.0, body="await ground.until(lambda: False, timeout_s=3.0)")
+    )
+    project.makepyfile(
+        test_flights=STUB_HOST
+        + """
+from harness.mission import Mission, mission_tests, provides
+
+
+@provides("SYS901")
+def stub_fsw(scenario):
+    return StubHost()
+
+
+globals().update(
+    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
+)
+"""
+    )
+
+    monkeypatch.setenv("COLUMNS", "200")
+    result = fly_in_a_subprocess(project)
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["FAILED *TimeoutError: the condition did not hold within 3.0 s*"])
+    assert list(project.path.rglob("run_0000.h5")) == []
+
+
+def test_an_exception_in_the_flight_software_fails_the_case_as_itself(
+    project: pytest.Pytester,
+    fly_in_a_subprocess: Callable[..., pytest.RunResult],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bug in the hosted algorithm's `step` fails the case with that exception, not Basilisk's.
+
+    Args:
+        project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
+        monkeypatch: widens the subprocess's summary line to hold the exception.
+    """
+    project.makepyfile(
+        test_flights="""
+from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+from harness.mission import Mission, mission_tests, provides
+
+
+def broken(**readings):
+    raise ZeroDivisionError("the step's own bug")
+
+
+@provides("SYS901")
+def reckoner(scenario):
+    fsw = dead_reckoner(scenario)
+    fsw.algorithm.step = broken
+    return fsw
+
+
+globals().update(
+    mission_tests(Mission(vehicle="imu_spacecraft", fsw=reckoner, scenarios=("TST901",)))
+)
+"""
+    )
+
+    monkeypatch.setenv("COLUMNS", "200")
+    result = fly_in_a_subprocess(project)
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["FAILED *ZeroDivisionError: the step's own bug*"])
 
 
 def test_a_later_cases_base_write_keeps_the_build_an_earlier_case_merged(
@@ -657,7 +790,7 @@ def test_a_later_cases_base_write_keeps_the_build_an_earlier_case_merged(
         fly_in_a_subprocess: runs the project in a subprocess.
     """
     (project.path / "scenarios" / "alpha.py").write_text(
-        ALPHA.format(duration=1.0).replace("sim_runs(1)", "sim_runs(2)")
+        ALPHA.format(duration=1.0, body="pass").replace("sim_runs(1)", "sim_runs(2)")
     )
     project.makepyfile(
         test_flights=STUB_HOST
