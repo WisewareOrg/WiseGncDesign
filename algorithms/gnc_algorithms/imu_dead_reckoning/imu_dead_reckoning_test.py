@@ -281,3 +281,10 @@ def test_a_longer_step_lowers_each_sample_s_noise(monkeypatch: pytest.MonkeyPatc
 def test_the_notebook_runs_end_to_end() -> None:
     """Every cell of the algorithm notebook runs, the notebook-only cells included."""
     run_notebook(Path(__file__).with_name("imu_dead_reckoning.py"))
+
+
+@pytest.mark.xdist_group("notebooks")
+def test_the_parity_notebook_runs_end_to_end() -> None:
+    """Every cell of the parity notebook runs, so the two builds agree case by case."""
+    pytest.importorskip("gnc_cdh.fprime._wise_fsw", reason="the F´ build is absent; run `just fsw`")
+    run_notebook(Path(__file__).with_name("parity.py"))
