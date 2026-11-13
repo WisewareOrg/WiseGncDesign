@@ -49,7 +49,7 @@ dev-mode-dirs = [".", "algorithms", "cdh", "analysis"]
 testpaths = ["algorithms", "cdh", "harness", "missions"]
 strict_markers = true
 markers = [
-    "sim_ground_period_s(period_s): the ground's period, in s, for a scenario's definition; a whole multiple of the flight software's",
+    "sim_ground_period_s(period_s): the ground's period, in s, for a scenario's definition",
 ]
 # A coroutine never awaited, such as a ground procedure's forgotten `await`, fails its test.
 filterwarnings = [
