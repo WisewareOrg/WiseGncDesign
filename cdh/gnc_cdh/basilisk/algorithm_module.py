@@ -198,21 +198,9 @@ class AlgorithmModule(sysModel.SysModel):
             return
         try:
             self._t_ns = CurrentSimNanos
-            responses = self.dictionary.responses
             queued, self._uplinked = self._uplinked, []
             for packet, context in queued:
-                try:
-                    name, args = self.dictionary.decode_command(packet, self._instance)
-                except DecodeError as error:
-                    self._responses.append((context, responses[error.response], None))
-                    continue
-                try:
-                    writes = getattr(self._algorithm, name)(**args)
-                except ValueError as error:
-                    self._responses.append((context, responses["VALIDATION_ERROR"], str(error)))
-                    continue
-                self._write(writes)
-                self._responses.append((context, responses["OK"], None))
+                self._responses.append((context, *self._dispatch(packet)))
             t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
             if not self._inputs_written:
                 unwritten = sorted(name for name, reader in self._readers if not reader.isWritten())
@@ -228,6 +216,28 @@ class AlgorithmModule(sysModel.SysModel):
         except BaseException as error:
             self.failure = error
             raise
+
+    def _dispatch(self, packet: bytes) -> tuple[int, str | None]:
+        """Decodes a command packet and runs its handler.
+
+        Args:
+            packet: the serialized command packet.
+
+        Returns:
+            The `Fw.CmdResponse` value, and the message of the `ValueError` the handler refused the
+            command with, else `None`.
+        """
+        responses = self.dictionary.responses
+        try:
+            name, args = self.dictionary.decode_command(packet, self._instance)
+        except DecodeError as error:
+            return responses[error.response], None
+        try:
+            writes = getattr(self._algorithm, name)(**args)
+        except ValueError as error:
+            return responses["VALIDATION_ERROR"], str(error)
+        self._write(writes)
+        return responses["OK"], None
 
     def _write(self, writes: Mapping[str, Any] | None) -> None:
         """Logs the telemetry the algorithm returned, tagged with this tick, arrays copied.

@@ -151,20 +151,31 @@ class Ground(sysModel.SysModel):
     async def until(self, condition: Callable[[], bool], *, timeout_s: float) -> None:
         """Waits until `condition` holds, checking now and then at each tick.
 
+        A `TimeoutError` names the condition by its file and line, and the time when `condition`
+        still fails at the first tick at or after `timeout_s` from now.
+
         Args:
             condition: reads the ground's view of the flight software.
             timeout_s: s, how long to wait.
-
-        Raises:
-            TimeoutError: naming the condition by its file and line, and the time, when `condition`
-                still fails at the first tick at or after `timeout_s` from now.
         """
         code = condition.__code__
+        named = f"at {Path(code.co_filename).name}:{code.co_firstlineno}"
+        await self._until(condition, timeout_s, f"the condition {named} holds")
+
+    async def _until(self, condition: Callable[[], bool], timeout_s: float, what: str) -> None:
+        """Waits until `condition` holds, checking now and then at each tick.
+
+        Args:
+            condition: reads the ground's view of the flight software.
+            timeout_s: s, how long to wait.
+            what: what `condition` means, in words, for the messages.
+
+        Raises:
+            TimeoutError: naming `what` and the time, when `condition` still fails at the first
+                tick at or after `timeout_s` from now.
+        """
         deadline_ns = self._now_ns + round(timeout_s * _NANOSECONDS_PER_SECOND)
-        until = (
-            f"the condition at {Path(code.co_filename).name}:{code.co_firstlineno} holds,"
-            f" by t = {deadline_ns / _NANOSECONDS_PER_SECOND} s"
-        )
+        until = f"{what}, by t = {deadline_ns / _NANOSECONDS_PER_SECOND} s"
         while not condition():
             if self._now_ns >= deadline_ns:
                 raise TimeoutError(f"timed out at t = {self.now_s} s waiting until {until}")
@@ -179,8 +190,6 @@ class Ground(sysModel.SysModel):
             **args: the command's arguments by parameter name.
 
         Raises:
-            TimeoutError: naming the command and the time, when no response has come by the first
-                tick at or after `timeout_s` from now.
             CommandFailed: the response is not `OK`.
         """
         packet = self._link.dictionary.encode_command(name, args)
@@ -197,12 +206,7 @@ class Ground(sysModel.SysModel):
         }
         self.command_log.append(entry)
         self._link.uplink(packet, context)
-        deadline_ns = self._now_ns + round(timeout_s * _NANOSECONDS_PER_SECOND)
-        until = f"{name} is answered, by t = {deadline_ns / _NANOSECONDS_PER_SECOND} s"
-        while context not in self._answers:
-            if self._now_ns >= deadline_ns:
-                raise TimeoutError(f"timed out at t = {self.now_s} s waiting until {until}")
-            await _Tick(until)
+        await self._until(lambda: context in self._answers, timeout_s, f"{name} is answered")
         names = {value: key for key, value in self._link.dictionary.responses.items()}
         response, entry["reason"] = self._answers.pop(context)
         entry["response"], entry["response_t_s"] = names[response], self.now_s
