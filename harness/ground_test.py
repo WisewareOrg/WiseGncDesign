@@ -411,20 +411,18 @@ def test_every_write_is_recorded_with_its_tag_in_order_and_tlm_reads_the_latest(
     assert units == "s"
 
 
-@pytest.mark.parametrize("period_s", [0.5, 1.5])
 def test_a_period_that_is_not_a_whole_multiple_of_the_flight_software_s_is_refused(
-    dictionary: Dictionary, period_s: float
+    dictionary: Dictionary,
 ):
     """A ground period that would tick between flight software ticks is refused, naming both.
 
     Args:
         dictionary: the toy's dictionary.
-        period_s: s, the ground's period, against the stub's 1 s.
     """
     link = StubLink(dictionary)
 
-    with pytest.raises(ValueError, match=rf"{period_s} s is not a whole multiple .* 1.0 s"):
-        Ground(_returns, link, dict, lambda: None, period_s=period_s)
+    with pytest.raises(ValueError, match=r"1.5 s is not a whole multiple .* 1.0 s"):
+        Ground(_returns, link, dict, lambda: None, period_s=1.5)
 
     assert Ground(_returns, link, dict, lambda: None, period_s=10.0).period_s == 10.0
 

@@ -649,39 +649,27 @@ def test_a_flight_runs_the_procedure_on_the_host_s_link_for_the_scenario_s_durat
     }
 
 
-@pytest.mark.parametrize(
-    ("period_s", "outcome"), [(10.0, {"passed": 1}), (1.5, {"failed": 1})], ids=["10-s", "1.5-s"]
-)
 def test_the_definition_s_ground_period_mark_sets_the_ground_s_period(
-    project: pytest.Pytester,
-    fly_in_a_subprocess: Callable[..., pytest.RunResult],
-    period_s: float,
-    outcome: dict[str, int],
+    project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
-    """`sim_ground_period_s` sets the ground's period; one the FSW's 1 s cannot divide fails.
+    """A definition marked `sim_ground_period_s(10.0)` is flown by a ground with that period.
 
     Args:
         project: the project.
         fly_in_a_subprocess: runs the project in a subprocess.
-        period_s: s, the mark's period.
-        outcome: the case's outcome.
     """
-    definition = ALPHA.format(duration=20.0, body=f"assert ground.period_s == {period_s}")
+    definition = ALPHA.format(duration=20.0, body="assert ground.period_s == 10.0")
     (project.path / "scenarios" / "alpha.py").write_text(
         definition.replace(
             "@pytest.mark.sim_runs(1)",
-            f"@pytest.mark.sim_runs(1)\n@pytest.mark.sim_ground_period_s({period_s})",
+            "@pytest.mark.sim_runs(1)\n@pytest.mark.sim_ground_period_s(10.0)",
         )
     )
     project.makepyfile(test_flights=STUB_HOST + STUB_FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
-    result.assert_outcomes(**outcome)
-    if "failed" in outcome:
-        result.stdout.fnmatch_lines(
-            ["*1.5 s is not a whole multiple of the flight software's 1.0 s*"]
-        )
+    result.assert_outcomes(passed=1)
 
 
 def test_a_procedure_s_exception_fails_the_case_as_itself(

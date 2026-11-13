@@ -156,15 +156,15 @@ class Ground(sysModel.SysModel):
             timeout_s: s, how long to wait.
 
         Raises:
-            TimeoutError: naming the condition, by its line or else its `repr`, and the time, when
-                `condition` still fails at the first tick at or after `timeout_s` from now.
+            TimeoutError: naming the condition by its file and line, and the time, when `condition`
+                still fails at the first tick at or after `timeout_s` from now.
         """
-        code = getattr(condition, "__code__", None)
-        named = (
-            f"at {Path(code.co_filename).name}:{code.co_firstlineno}" if code else repr(condition)
-        )
+        code = condition.__code__
         deadline_ns = self._now_ns + round(timeout_s * _NANOSECONDS_PER_SECOND)
-        until = f"the condition {named} holds, by t = {deadline_ns / _NANOSECONDS_PER_SECOND} s"
+        until = (
+            f"the condition at {Path(code.co_filename).name}:{code.co_firstlineno} holds,"
+            f" by t = {deadline_ns / _NANOSECONDS_PER_SECOND} s"
+        )
         while not condition():
             if self._now_ns >= deadline_ns:
                 raise TimeoutError(f"timed out at t = {self.now_s} s waiting until {until}")

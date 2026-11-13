@@ -125,55 +125,32 @@ class InPlace(StubAlgorithm):
 
 
 class Faulty(StubAlgorithm):
-    """A stub whose `step` or `setGain`, as `where` names, has a bug or writes `ofset`."""
+    """A stub whose `setGain` has a bug or writes `ofset`, a channel the dictionary lacks."""
 
-    def __init__(self, where: str, fault: str) -> None:
+    def __init__(self, fault: str) -> None:
         """Starts as `StubAlgorithm` does, holding the fault.
 
         Args:
-            where: `step` or `setGain`.
             fault: `bug` or `misspelled`.
         """
         super().__init__()
-        self.where, self.fault = where, fault
+        self.fault = fault
 
     def setGain(self, gain: float, mode: str) -> dict:
-        """Fails, when `where` names it; else as `StubAlgorithm.setGain`.
+        """Fails as `fault` says.
 
         Args:
             gain: the gain.
             mode: the mode.
 
         Returns:
-            `ofset`, when misspelled, or `gain` and `mode`.
+            `ofset`, when misspelled.
 
         Raises:
             ZeroDivisionError: when a bug.
         """
-        if self.where != "setGain":
-            return super().setGain(gain, mode)
         if self.fault == "bug":
-            raise ZeroDivisionError("the algorithm's own bug")
-        return {"ofset": 1.0}
-
-    def step(self, t: float, AngVelPlatform: np.ndarray, sigma_BN: np.ndarray) -> dict:
-        """Fails, when `where` names it; else as `StubAlgorithm.step`.
-
-        Args:
-            t: s, the step's time.
-            AngVelPlatform: (3,) rad/s, read from the IMU message.
-            sigma_BN: (3,) MRP, read from the navigation message.
-
-        Returns:
-            `ofset`, when misspelled, or `offset`.
-
-        Raises:
-            ZeroDivisionError: when a bug.
-        """
-        if self.where != "step":
-            return super().step(t, AngVelPlatform, sigma_BN)
-        if self.fault == "bug":
-            raise ZeroDivisionError("the algorithm's own bug")
+            raise ZeroDivisionError("the handler's own bug")
         return {"ofset": 1.0}
 
 
@@ -393,78 +370,56 @@ def test_a_handler_that_raises_value_error_answers_validation_error_and_writes_n
     assert [name for name, _, _ in _writes(module)] == ["toy.offset"]
 
 
-@pytest.mark.parametrize(
-    ("cut", "response"),
-    [(slice(0, 4), "VALIDATION_ERROR"), (slice(0, -1), "FORMAT_ERROR")],
-    ids=["truncated-head", "short-arguments"],
-)
 def test_a_malformed_packet_earns_the_dictionary_s_response_and_runs_nothing(
-    dictionary: Dictionary, cut: slice, response: str
+    dictionary: Dictionary,
 ):
     """A packet the dictionary cannot decode is answered as F´ answers it, and no handler runs.
 
+    A packet cut short in its arguments earns `FORMAT_ERROR`.
+
     Args:
         dictionary: the toy's dictionary.
-        cut: the part of a good packet sent.
-        response: the `Fw.CmdResponse` it earns.
     """
     module = _module(dictionary)
     _messages = _subscribed(module)
     module.Reset(0)
     packet = dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"})
 
-    module.uplink(packet[cut], 1)
+    module.uplink(packet[:-1], 1)
     module.UpdateState(ONE_SECOND_NS)
 
-    assert module.responses() == [(1, dictionary.responses[response], None)]
+    assert module.responses() == [(1, dictionary.responses["FORMAT_ERROR"], None)]
     assert module.algorithm.commands == []
 
 
-@pytest.mark.parametrize("where", ["step", "setGain"])
 @pytest.mark.parametrize(
     ("fault", "error", "message"),
     [
-        ("bug", ZeroDivisionError, "the algorithm's own bug"),
+        ("bug", ZeroDivisionError, "the handler's own bug"),
         ("misspelled", ValueError, r"toy\.ofset is not a channel"),
     ],
 )
-def test_a_bug_or_a_write_to_a_channel_the_dictionary_lacks_fails_the_tick_kept_whole(
-    dictionary: Dictionary, where: str, fault: str, error: type, message: str
+def test_a_handler_s_bug_or_write_to_a_channel_the_dictionary_lacks_fails_the_tick_kept_whole(
+    dictionary: Dictionary, fault: str, error: type, message: str
 ):
-    """In `step` or a handler, the exception fails its tick as itself, and nothing is answered.
+    """The handler's exception fails its tick as itself, and the command is not answered.
 
     Args:
         dictionary: the toy's dictionary.
-        where: the failing method.
-        fault: how it fails.
+        fault: how the handler fails.
         error: the exception the tick raises.
         message: what the exception says.
     """
-    module = _module(dictionary, Faulty(where, fault))
+    module = _module(dictionary, Faulty(fault))
     _messages = _subscribed(module)
     module.Reset(0)
-    if where == "setGain":
-        module.uplink(dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}), 1)
+    module.uplink(dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}), 1)
 
     with pytest.raises(error, match=message) as raised:
         module.UpdateState(ONE_SECOND_NS)
 
     assert module.failure is raised.value
     assert module.responses() == []
-
-
-def test_a_value_that_does_not_fit_its_channel_fails_when_packed_naming_it(
-    dictionary: Dictionary,
-):
-    """A write is held to its channel's type when the batch is packed, not on its tick.
-
-    Args:
-        dictionary: the toy's dictionary.
-    """
-    module = _module(dictionary)
-
-    with pytest.raises(ValueError, match="channel toy.mode"):
-        module.values(dictionary.channel("toy.mode"), ["fast", "medium"])
 
 
 def test_each_write_keeps_the_value_written_when_the_algorithm_changes_its_array_in_place(

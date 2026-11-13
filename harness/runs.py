@@ -18,16 +18,15 @@ def read_run(path: str | Path) -> dict[str, np.ndarray]:
     Returns:
         Each dataset by its path: `t_s` (s, (N,)) and `truth/*` and `imu/*` ((N, 3), or (N, 4)
         for a quaternion such as `truth/q_BN`) at every dynamics step; `tlm/<instance>.<channel>`
-        (one row per write, strings for an enum channel) and `tlm_t/<instance>.<channel>` (s, each
-        write's flight software time); and each root attribute by its name, such as
-        `draw_gyro_bias_P_rad_s` and `commands`, the ground's command log as JSON.
+        (one row per write) and `tlm_t/<instance>.<channel>` (s, each write's flight software
+        time); and each root attribute by its name, such as `draw_gyro_bias_P_rad_s` and
+        `commands`, the ground's command log as JSON.
     """
     with h5py.File(path, "r") as f:
         run = {name: np.asarray(value) for name, value in f.attrs.items()}
         for group in f.values():
             for name, dataset in group.items() if isinstance(group, h5py.Group) else ():
-                strings = h5py.check_string_dtype(dataset.dtype) is not None
-                run[f"{group.name[1:]}/{name}"] = (dataset.asstr() if strings else dataset)[()]
+                run[f"{group.name[1:]}/{name}"] = dataset[()]
         run["t_s"] = f["t_s"][()]
     return run
 
