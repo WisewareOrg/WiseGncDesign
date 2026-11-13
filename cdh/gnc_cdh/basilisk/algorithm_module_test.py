@@ -68,7 +68,7 @@ class UnreadKeyword(StubAlgorithm):
 
 
 class UnknownOutput(StubAlgorithm):
-    """A stub holding an output, `value`, that no estimate is named."""
+    """A stub holding an output, `value`, that is not an estimate `gnc_cdh.UNITS` names."""
 
     def __init__(self) -> None:
         """Starts as `StubAlgorithm` does, plus `value` ((3,))."""
@@ -251,9 +251,9 @@ def test_construction_names_a_keyword_two_inputs_carry():
         AlgorithmModule(StubAlgorithm(), readers)
 
 
-def test_construction_names_an_output_no_estimate_is_named():
+def test_construction_names_an_output_that_is_not_an_estimate():
     """An output name that `gnc_cdh.UNITS` does not name is refused by name."""
-    with pytest.raises(ValueError, match=r"no estimate is named \['value'\]"):
+    with pytest.raises(ValueError, match=r"outputs \['value'\] are not estimates"):
         _module(UnknownOutput())
 
 

@@ -58,14 +58,13 @@ def _propagate(
     return reckoner
 
 
-# Past a rotation of $\pi$ the quaternion's $q_w$ would turn negative; the step keeps $q_w \ge 0$
-# and $|q| = 1$, and the attitude still matches the axis-angle rotation $R(\omega t\,\hat e)$ of a
-# constant rate $\omega$ about $\hat e$, as SciPy computes it.
-def test_a_rotation_past_180_degrees_stays_unit_with_w_nonnegative():
-    """A rotation past 180 degrees keeps q unit with W >= 0, on the axis-angle attitude.
+# Past a rotation of $\pi$ the quaternion's $q_w$ would turn negative; the step keeps $q_w \ge 0$,
+# and the attitude still matches the axis-angle rotation $R(\omega t\,\hat e)$ of a constant rate
+# $\omega$ about $\hat e$, as SciPy computes it.
+def test_a_rotation_past_180_degrees_keeps_w_nonnegative_on_the_axis_angle_attitude():
+    """A rotation past 180 degrees ends with W >= 0, within 1e-5 rad of SciPy's rotation.
 
-    A 1 rad/s rate about body x for 1.2 pi s ends with |q| = 1 to 1e-15 and W >= 0, within 1e-5 rad
-    of SciPy's rotation.
+    A 1 rad/s rate about body x for 1.2 pi s, in 4000 steps.
     """
     omega = 1.0  # rad/s
     axis = np.array([1.0, 0.0, 0.0])
@@ -73,10 +72,27 @@ def test_a_rotation_past_180_degrees_stays_unit_with_w_nonnegative():
 
     state = _propagate(omega * axis, _ZERO3, total_t, n_steps=4000)
 
-    assert abs(np.linalg.norm(state.q_BN) - 1.0) <= 1e-15
     assert state.q_BN[0] >= 0.0
     estimate = Rotation.from_quat(state.q_BN, scalar_first=True)
     assert (estimate * Rotation.from_rotvec(omega * total_t * axis).inv()).magnitude() <= 1e-5
+
+
+# RK4 on $\dot q = \tfrac12 q \otimes (0, \omega)$ drifts $|q|$ off 1 at sixth order in the step's
+# angle, so a coarse step shows whether the step normalizes; a fine one would hide it.
+def test_a_coarse_step_keeps_q_unit():
+    """Twenty 0.5 s steps at 1 rad/s leave |q| = 1 to 1e-15."""
+    state = _propagate(np.array([0.0, 0.6, 0.8]), _ZERO3, total_t=10.0, n_steps=20)
+
+    assert abs(np.linalg.norm(state.q_BN) - 1.0) <= 1e-15
+
+
+def test_an_initial_quaternion_with_w_negative_is_held_with_w_nonnegative():
+    """Built from -q with W < 0, the reckoner holds q."""
+    q = Rotation.from_rotvec([0.3, -0.2, 0.1]).as_quat(scalar_first=True)
+
+    reckoner = ImuDeadReckoner(-q, _AWAY_FROM_ORIGIN, _ZERO3, t0=0.0, mu=0.0, dcm_PB=_IDENTITY)
+
+    np.testing.assert_array_equal(reckoner.q_BN, q)
 
 
 # With gravity alone ($a_B = 0$), a circular orbit of radius $r_0$ has the mean motion

@@ -53,7 +53,7 @@ class AlgorithmModule(sysModel.SysModel):
         self._names = tuple(n for n in vars(algorithm) if not n.startswith("_") and n != "t")
         unnamed = sorted(n for n in self._names if n not in UNITS)
         if unnamed:
-            raise ValueError(f"no estimate is named {unnamed}")
+            raise ValueError(f"outputs {unnamed} are not estimates gnc_cdh.UNITS names")
         self._readers = tuple(self._inputs.items())
         self._inputs_written = False
         self._log: dict[int, dict[str, np.ndarray]] = {}
