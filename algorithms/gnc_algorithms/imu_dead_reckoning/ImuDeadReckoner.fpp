@@ -12,9 +12,6 @@ module Gnc {
     @ Boots the estimator idle with its configuration
     sync input port configureIn: Gnc.NavConfig
 
-    @ Gives the estimator its state at the current time
-    sync input port initializeIn: Gnc.NavInit
-
     @ The deployment's clock
     time get port timeCaller
 

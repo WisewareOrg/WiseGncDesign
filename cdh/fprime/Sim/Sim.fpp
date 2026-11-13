@@ -19,8 +19,6 @@ module Sim {
   passive component SimBridge {
     @ The navigation filter's configuration
     output port navConfigOut: Gnc.NavConfig
-    @ The navigation state to start from
-    output port navInitOut: Gnc.NavInit
     @ The IMU reading of this tick
     output port imuOut: Gnc.ImuReading
     @ The schedule, standing in for a timer and rate group

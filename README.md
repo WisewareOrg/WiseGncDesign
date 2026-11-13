@@ -63,10 +63,11 @@ Carlo tests: a class per vehicle holding a test per FSW and scenario. The reason
 
 An algorithm notebook, `algorithms/gnc_algorithms/<name>/<name>.py`, holds the algorithm's
 derivation and implementation, then its mission, then cells that run in the notebook only and judge
-and plot. A mission notebook in `missions/` plans missions instead, such as one algorithm on several
-vehicles. Each is a jupytext percent-format `.py`, the source of truth, paired with an `.ipynb`
-beside it that git ignores. The `.py` records no kernel; the `.ipynb` keeps the kernel chosen on the
-machine, and a headless run uses the registered `wise-gnc-design` kernel.
+and plot. An algorithm with an F´ build also has `parity.py` beside it, which flies both builds and
+holds them to parity case by case. A mission notebook in `missions/` plans missions instead, such
+as one algorithm on several vehicles. Each is a jupytext percent-format `.py`, the source of truth,
+paired with an `.ipynb` beside it that git ignores. The `.py` records no kernel; the `.ipynb` keeps
+the kernel chosen on the machine, and a headless run uses the registered `wise-gnc-design` kernel.
 
 To work in a notebook, run `just pinned` or `just local`, which sync the environment, register the
 kernel and create the `.ipynb` files, then `just lab` and open the `.ipynb` on the `WiseGncDesign`

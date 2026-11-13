@@ -17,11 +17,7 @@ assert NOTEBOOKS, "no mission notebooks found beside this file"
 def test_a_mission_notebook_runs_end_to_end(notebook: Path) -> None:
     """Every cell runs, the notebook-only cells that judge and plot included.
 
-    A notebook that flies the F´ host is skipped: the F´ host does not present the ground link.
-
     Args:
         notebook: the mission notebook's percent-format file.
     """
-    if "gnc_cdh.fprime" in notebook.read_text():
-        pytest.skip("the F´ host does not present the ground link")
     run_notebook(notebook)

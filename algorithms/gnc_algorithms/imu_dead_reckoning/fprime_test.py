@@ -80,13 +80,15 @@ def test_a_booted_reckoner_reports_idle_and_no_state():
 
 @pytest.mark.parametrize("sign", [1.0, -1.0], ids=["w-positive", "w-negative"])
 def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(sign: float):
-    """Initialized from q or -q, the deployment writes q, whose W is not negative.
+    """Commanded q or -q as of a step's time, the deployment writes q, whose W is not negative.
 
     Args:
         sign: the sign the initial quaternion is given with.
     """
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t_ns=0, q_BN=sign * Q0, r_BN_N=R0, v_BN_N=V0)
+    state = {"epoch": 1.0, "attitude": sign * Q0, "position": R0, "velocity": V0}
+    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
+    _wise_fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
     tlm = _telemetry()
     assert tlm["nav.navState"] == "initialized"
@@ -113,7 +115,8 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: f
     python = ImuDeadReckoner(mu=MU, dcm_PB=MOUNTING)
     python.initNavState(epoch=0.0, attitude=Q0, position=R0, velocity=V0)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t_ns=0, q_BN=Q0, r_BN_N=R0, v_BN_N=V0)
+    state = {"epoch": 0.0, "attitude": Q0, "position": R0, "velocity": V0}
+    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
 
     for k, (omega, accel) in enumerate(readings, start=1):
         python.step(t=k * step_ns / NS, AngVelPlatform=omega, AccelPlatform=accel)
@@ -152,10 +155,11 @@ V_B = np.array([-200.0, 5.0e3, 5.6e3])
 
 
 def _fly_a_first_flight() -> None:
-    """Boots, initializes from the first state and steps to t = 600 s with nonzero readings."""
+    """Boots, commands the first state and steps to t = 600 s with nonzero readings."""
     rng = np.random.default_rng(3)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t_ns=0, q_BN=Q0, r_BN_N=R0, v_BN_N=V0)
+    state = {"epoch": 0.0, "attitude": Q0, "position": R0, "velocity": V0}
+    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
     for k in range(1, 61):
         _wise_fsw.step(
             t_ns=10 * k * NS,
@@ -184,7 +188,8 @@ def test_a_second_flight_matches_a_fresh_notebook_reckoner():
     python.initNavState(epoch=0.0, attitude=Q_B, position=R_B, velocity=V_B)
 
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t_ns=0, q_BN=Q_B, r_BN_N=R_B, v_BN_N=V_B)
+    state = {"epoch": 0.0, "attitude": Q_B, "position": R_B, "velocity": V_B}
+    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
     for k, (omega, accel) in enumerate(readings, start=1):
         python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
         _wise_fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
