@@ -3,6 +3,7 @@
 Skipped without the deployment `just fsw` builds.
 """
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -11,13 +12,21 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
-from gnc_cdh.fprime import FprimeModule
+from gnc_cdh.fprime import DICTIONARY, FprimeModule
 
 pytest.importorskip("gnc_cdh.fprime._wise_fsw", reason="the F´ build is absent; run `just fsw`")
 
 REPOSITORY = Path(__file__).parents[3]
 
 ONE_SECOND_NS = 1_000_000_000
+
+STATE = {
+    "epoch": 0.0,
+    "attitude": [1.0, 0.0, 0.0, 0.0],
+    "position": [6871.0e3, 0.0, 0.0],
+    "velocity": [0.0, 5.4e3, 5.4e3],
+}
+"""`nav.initNavState`'s arguments: a state at t = 0."""
 
 
 def _module() -> FprimeModule:
@@ -78,14 +87,8 @@ def test_the_link_carries_a_command_up_and_its_response_and_every_write_down(
     module = _module()
     module._imu.subscribeTo(imu)
     module.Reset(0)
-    state = {
-        "epoch": 0.0,
-        "attitude": [1.0, 0.0, 0.0, 0.0],
-        "position": [6871.0e3, 0.0, 0.0],
-        "velocity": [0.0, 5.4e3, 5.4e3],
-    }
 
-    module.uplink(module.dictionary.encode_command("nav.initNavState", state), 5)
+    module.uplink(module.dictionary.encode_command("nav.initNavState", STATE), 5)
     assert module.responses() == []
     module.UpdateState(ONE_SECOND_NS)
     writes = module.telemetry()
@@ -103,7 +106,31 @@ def test_the_link_carries_a_command_up_and_its_response_and_every_write_down(
     nav_state = module.dictionary.channel("nav.navState")
     payloads = [value for i, _, value in writes if i == nav_state.id]
     assert module.values(nav_state, payloads).tolist() == ["initialized", "propagated"]
+    attitude = module.dictionary.channel("nav.bodyEciAttitude")
+    payloads = [value for i, _, value in writes if i == attitude.id]
+    np.testing.assert_array_equal(module.values(attitude, payloads), [STATE["attitude"]])
     assert module.telemetry() == []
+
+
+def test_a_command_f_prime_rejects_is_answered_with_its_response_and_fails_nothing(
+    imu: messaging.IMUSensorMsg,
+):
+    """A packet with an opcode no instance has is answered `INVALID_OPCODE`, with no reason.
+
+    Args:
+        imu: the IMU message the host reads.
+    """
+    module = _module()
+    module._imu.subscribeTo(imu)
+    module.Reset(0)
+    packet = module.dictionary.encode_command("nav.initNavState", STATE)
+    unknown = max(c["opcode"] for c in json.loads(DICTIONARY.read_text())["commands"]) + 1
+
+    module.uplink(packet[:2] + unknown.to_bytes(4, "big") + packet[6:], 9)
+    module.UpdateState(ONE_SECOND_NS)
+
+    assert module.responses() == [(9, module.dictionary.responses["INVALID_OPCODE"], None)]
+    assert module.failure is None
 
 
 def test_a_host_without_the_f_prime_build_says_to_build_it(monkeypatch: pytest.MonkeyPatch):

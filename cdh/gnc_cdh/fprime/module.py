@@ -167,9 +167,7 @@ class FprimeModule(sysModel.SysModel):
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
-            BaseException: the tick's exception, kept whole in `failure`: a `RuntimeError` naming
-                a tick that is not at a whole microsecond, an IMU never written, or a queue F´
-                could not empty.
+            BaseException: the tick's exception, kept whole in `failure`.
         """
         if not CurrentSimNanos > self._t_ns:
             return

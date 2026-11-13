@@ -81,7 +81,7 @@ def _read(path: Path) -> tuple[dict[str, tuple[np.ndarray, str]], str]:
 
 
 @pytest.fixture(scope="module")
-def after_case_0(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def together(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Cases 0 and 1 of each build, flown in one process.
 
     Args:
@@ -94,19 +94,18 @@ def after_case_0(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.mark.parametrize("build", BUILDS)
-def test_a_case_flies_the_same_alone_and_after_another(
-    build: str, after_case_0: Path, tmp_path: Path
-):
+def test_a_case_flies_the_same_alone_and_after_another(build: str, together: Path, tmp_path: Path):
     """Case 1 alone and case 1 after case 0 in one process write identical run files.
 
     Args:
         build: the build's test name.
-        after_case_0: the flights of both cases in one process.
+        together: the flights of both cases in one process.
         tmp_path: the output root of the flight alone.
     """
     alone, alone_commands = _read(_fly(tmp_path, f"{build}[1]") / build / "run_0001.h5")
-    after, after_commands = _read(after_case_0 / build / "run_0001.h5")
+    after, after_commands = _read(together / build / "run_0001.h5")
 
+    assert alone
     assert sorted(alone) == sorted(after)
     for name, (values, units) in alone.items():
         np.testing.assert_array_equal(values, after[name][0], err_msg=name)
@@ -116,7 +115,7 @@ def test_a_case_flies_the_same_alone_and_after_another(
 
 @pytest.mark.skipif(not FPRIME_BUILT, reason="the F´ build is absent; run `just fsw`")
 @pytest.mark.parametrize("case", ["run_0000.h5", "run_0001.h5"])
-def test_the_python_and_fprime_builds_write_the_same_run_file(case: str, after_case_0: Path):
+def test_the_python_and_fprime_builds_write_the_same_run_file(case: str, together: Path):
     """Case for case, the builds write the same datasets, units, write times and commands.
 
     Every dataset is equal but the estimate's values, which agree to `TOLERANCE`: position and
@@ -124,10 +123,10 @@ def test_the_python_and_fprime_builds_write_the_same_run_file(case: str, after_c
 
     Args:
         case: the case's run file.
-        after_case_0: the flights of both builds.
+        together: the flights of both builds.
     """
-    python, python_commands = _read(after_case_0 / PYTHON / case)
-    fprime, fprime_commands = _read(after_case_0 / FPRIME / case)
+    python, python_commands = _read(together / PYTHON / case)
+    fprime, fprime_commands = _read(together / FPRIME / case)
     estimate = ("tlm/nav.bodyEciPos", "tlm/nav.bodyEciVel", "tlm/nav.bodyEciAttitude")
 
     assert sorted(python) == sorted(fprime)
