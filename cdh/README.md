@@ -4,16 +4,12 @@
 `gnc_algorithms` in a simulator: `gnc_cdh.basilisk` hosts its Python build, and `gnc_cdh.fprime`
 its F´ build.
 
-A host the ground flies presents the link `gnc_cdh.link.Link`, in the form F´ uses: `uplink`
-queues a command packet for the next tick, `responses` drains each command's response under the
-ground's context, `telemetry` drains every telemetry write with the flight software's time tag,
-and `values` turns one channel's payloads into values in one batch. `failure` keeps an exception
-the host's tick raised, whole, for the harness to re-raise, since Basilisk reports it only as a
-`RuntimeError`. The ground, `harness.ground.Ground`, runs a scenario's procedure against the link
-and is the one recorder of a flight, so a run file reads alike whichever host flew it.
-`AlgorithmModule` presents the link; the F´ host records its estimate itself, as
-[The F´ host](#the-f-host) says. Each host also has `build`, its build identity, which the harness
-records in the flight's `flight.json`. The reasoning is in
+The ground, `harness.ground.Ground`, flies a host that presents the link `gnc_cdh.link.Link`:
+commands up, responses and every telemetry write down, in the form F´ uses. The ground runs the
+scenario's procedure against it and records the flight. `AlgorithmModule` presents the link. The
+F´ host does not, and records its estimate itself, as [The F´ host](#the-f-host) says. The link's
+docstrings say what each method does. Each host also has `build`, its build identity, which the
+harness records in the flight's `flight.json`. The reasoning is in
 [ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
 
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
@@ -37,14 +33,10 @@ runs at the next tick, before the step. A handler that returns answers `OK`; one
 `ValueError` answers `VALIDATION_ERROR`; a packet the dictionary cannot decode gets the response
 F´'s dispatcher gives it; any other exception is a bug and fails the case.
 
-Each returned entry is one write, as an F´ component's `tlmWrite_<channel>` is, tagged with the
-tick's time. Its channel name is checked on the tick, an array is copied as written, and the value
-is held to the channel's type when the ground packs each channel in one batch after the run.
-
-The module declares `period_s` (1 s), the period of the task the simulation runs it in, so the
-flight software runs at 1 Hz, and the simulation steps its dynamics and samples the IMU at that
-period at every fidelity. Each `UpdateState` after the module's last tick runs the queued commands,
-then reads every input once and steps the algorithm. Each docstring gives what it refuses.
+Each returned entry is one write, as an F´ component's `tlmWrite_<channel>` is. The module declares
+`period_s` (1 s), so the flight software runs at 1 Hz, and the simulation steps its dynamics and
+samples the IMU at that period at every fidelity. `AlgorithmModule`'s docstrings say how a tick
+runs, how each write is checked and tagged, and what each method refuses.
 
 ## Example: fly the dead reckoner against a simulated spacecraft
 
@@ -52,8 +44,8 @@ This example runs in a notebook or at a prompt, with the `sim` group installed
 (`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
 at its nominal configuration, and boots the dead reckoner idle on that vehicle. A ground procedure
 gives nav its state from tracking at t = 0, and the run lasts one minute, with the dynamics, the IMU
-and the dead reckoner all stepping at 1 Hz. The ground stops once the procedure returns, and its
-record, which takes every write the link still holds, is then compared with the vehicle's truth:
+and the dead reckoner all stepping at 1 Hz. The ground's record is then compared with the
+vehicle's truth:
 
 ```python
 >>> import numpy as np

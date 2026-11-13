@@ -16,7 +16,8 @@ class Link(Protocol):
     Attributes:
         period_s: s, the period the host's flight software ticks at.
         dictionary: the dictionary the build is held to.
-        failure: the exception the host's tick raised, kept whole, else `None`.
+        failure: the exception the host's tick raised, kept whole for the harness to re-raise in
+            place of the `RuntimeError` Basilisk reports it as, else `None`.
     """
 
     period_s: float

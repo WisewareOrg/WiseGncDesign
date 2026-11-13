@@ -202,7 +202,8 @@ was dirty. Run files carry no GNC attributes.
   scenario is a TST and the code it references.
 - Editing how a scenario is flown re-flags its TST for review, its procedure included.
 - A scenario's procedure names the commands it sends, so a flight software without them crashes
-  every case of that scenario, and flies a sibling TST instead.
+  every case of that scenario; such a flight software flies a different TST, whose procedure sends
+  only commands it has.
 - Judging is repeatable and never simulates, and an old session is judged against the tree as it
   stands.
 - A change to an FSW's claims or a mission's filter does not reach existing runs until the flight

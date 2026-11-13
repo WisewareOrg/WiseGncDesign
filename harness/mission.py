@@ -258,8 +258,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_test_directory: the test's directory in the session.
 
         Raises:
-            failure: what the flight software or the procedure raised, kept whole, in place of
-                the `RuntimeError` Basilisk reports it as.
+            failure: the exception the flight software or the procedure kept, re-raised whole.
         """
         fsw = mission.fsw(sim_scenario)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})

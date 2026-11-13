@@ -185,9 +185,9 @@ class AlgorithmModule(sysModel.SysModel):
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
-            BaseException: the tick's exception, kept whole in `failure`, since Basilisk reports
-                it only as a `RuntimeError`: naming an input never written, a channel the instance
-                does not have, or whatever a handler or `step` raised.
+            BaseException: the tick's exception, kept whole in `failure`: naming an input never
+                written, a channel the instance does not have, or whatever a handler or `step`
+                raised.
         """
         if not CurrentSimNanos > self._t_ns:
             return

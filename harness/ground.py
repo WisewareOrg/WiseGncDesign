@@ -58,10 +58,9 @@ class Ground(sysModel.SysModel):
     """Runs a scenario's procedure against a flight software link, and records what crosses it.
 
     The simulation runs the module every `period_s`, a whole multiple of the flight software's
-    period, after the flight software at each instant, so a command sent at one tick runs at the
-    flight software's next, and the procedure sees telemetry written at the instant it looks. Once
-    the procedure returns, the module calls `stop` and is not run again; the flight goes on, and
-    `telemetry_datasets` takes every write the link still holds, so the record loses nothing.
+    period, after the flight software at each instant. Once the procedure returns, the module
+    calls `stop` and is not run again; the flight goes on, and `telemetry_datasets` takes every
+    write the link still holds. The reasoning is in ADR 0004 rev 1.
 
     Attributes:
         period_s: s, the period of the task the simulation runs this module in.
@@ -224,8 +223,7 @@ class Ground(sysModel.SysModel):
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
-            BaseException: the procedure's exception, kept whole in `failure`, since Basilisk
-                reports it only as a `RuntimeError`.
+            BaseException: the procedure's exception, kept whole in `failure`.
         """
         self._now_ns = CurrentSimNanos
         try:
