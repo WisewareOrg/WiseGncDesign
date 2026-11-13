@@ -11,8 +11,8 @@
 
 ## Context
 
-An algorithm flies in Python before any F´ build of it exists, and one ground commands either
-build and records its telemetry. The F´ build runs inside Basilisk with nothing on a thread of its
+An algorithm flies in Python before any F´ build of it exists. A single ground sends commands to
+either build and records the telemetry either build writes. The F´ build runs inside Basilisk with nothing on a thread of its
 own (ADR 0003 rev 2).
 
 - **Commands.** The ground commands both builds in F´'s packet format, and the F´ build should
