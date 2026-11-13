@@ -158,6 +158,16 @@ def test_every_write_comes_down_once_in_order_with_its_f_prime_time():
     assert _writes() == []
 
 
+def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond():
+    """A tick at 1.500007 s tags its write with that time in ns, microseconds included."""
+    _boot()
+    t_ns = NS + 500_000_000 + 7_000
+
+    _step(t_ns)
+
+    assert _writes() == [("nav.navState", t_ns, "idle")]
+
+
 def test_boot_leaves_nothing_of_the_previous_case():
     """A case that ends with a command queued and its link undrained leaves nothing to the next.
 
