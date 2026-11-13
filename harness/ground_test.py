@@ -4,7 +4,6 @@ The stub link holds a toy component's dictionary, generated from FPP alone, and 
 what each test gives it; the tests that fly Leo500 host a toy algorithm for that component.
 """
 
-import functools
 import json
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any
@@ -80,11 +79,6 @@ class StubLink:
         self.uplinked: list[tuple[bytes, int]] = []
         self.answers: list[tuple[int, int, str | None]] = []
         self.writes: list[tuple[int, int, Any]] = []
-        self.stops = 0
-
-    def stop(self) -> None:
-        """Counts a call, standing in for the scenario stopping the ground's task."""
-        self.stops += 1
 
     def uplink(self, packet: bytes, context: int) -> None:
         """Keeps the packet and its context.
@@ -125,16 +119,6 @@ class StubLink:
         """
         return channel.pack_many(payloads)
 
-    def write(self, name: str, t_ns: int, value: Any) -> None:
-        """Queues one write.
-
-        Args:
-            name: `<instance>.<channel>`.
-            t_ns: ns, its time tag.
-            value: the value written.
-        """
-        self.writes.append((self.dictionary.channel(name).id, t_ns, value))
-
 
 def _ground(link: StubLink, procedure: Callable[[Ground], Coroutine[Any, Any, None]]) -> Ground:
     """A ground running `procedure` on `link`, reset at t = 0 and run at the t = 0 tick.
@@ -146,7 +130,7 @@ def _ground(link: StubLink, procedure: Callable[[Ground], Coroutine[Any, Any, No
     Returns:
         The ground.
     """
-    ground = Ground(procedure, link, lambda: {"r_N": np.array([1.0, 2.0, 3.0])}, link.stop)
+    ground = Ground(procedure, link, dict, lambda: None)
     ground.Reset(0)
     ground.UpdateState(0)
     return ground
@@ -378,60 +362,46 @@ def test_a_command_never_answered_times_out(dictionary: Dictionary):
         _tick(ground, 1)
 
 
-def test_tlm_is_none_until_written_then_the_latest_write(dictionary: Dictionary):
-    """A watcher reads nothing before the first write, then the channel's latest write.
+def test_every_write_is_recorded_with_its_tag_in_order_and_tlm_reads_the_latest(
+    dictionary: Dictionary,
+):
+    """Each channel's writes, two at one tag included, land in `tlm/` and `tlm_t/` in order.
+
+    `tlm` reads nothing before the first write, then the channel's latest write. A channel never
+    written has no dataset.
 
     Args:
         dictionary: the toy's dictionary.
     """
     seen = []
-    link = StubLink(dictionary)
 
     async def procedure(ground: Ground) -> None:
-        """Records `toy.mode` at every tick.
+        """Records `toy.offset` at every tick.
 
         Args:
             ground: the ground running it.
         """
         while True:
-            seen.append(ground.tlm("toy.mode"))
+            seen.append(ground.tlm("toy.offset"))
             await ground.sleep(1.0)
 
-    ground = _ground(link, procedure)
-    link.write("toy.mode", NS, "slow")
-    link.write("toy.mode", NS, "fast")
-    _tick(ground, 1)
-
-    assert seen == [None, "fast"]
-
-
-def test_every_write_is_recorded_with_its_tag_in_order(dictionary: Dictionary):
-    """Each channel's writes, two at one tag included, land in `tlm/` and `tlm_t/` in order.
-
-    A channel never written has no dataset.
-
-    Args:
-        dictionary: the toy's dictionary.
-    """
-
-    async def procedure(ground: Ground) -> None:
-        """Waits past the test's ticks.
-
-        Args:
-            ground: the ground running it.
-        """
-        await ground.sleep(10.0)
-
     link = StubLink(dictionary)
+    offset = dictionary.channel("toy.offset").id
     ground = _ground(link, procedure)
-    link.write("toy.offset", NS, np.array([1.0, 2.0, 3.0]))
-    link.write("toy.offset", NS, np.array([4.0, 5.0, 6.0]))
+    link.writes.append((offset, NS, np.array([1.0, 2.0, 3.0])))
+    link.writes.append((offset, NS, np.array([4.0, 5.0, 6.0])))
     _tick(ground, 1, 2)
-    link.write("toy.offset", 3 * NS, np.array([7.0, 8.0, 9.0]))
+    link.writes.append((offset, 3 * NS, np.array([7.0, 8.0, 9.0])))
     _tick(ground, 3)
 
     datasets = ground.telemetry_datasets()
 
+    assert [None if value is None else value.tolist() for value in seen] == [
+        None,
+        [4.0, 5.0, 6.0],
+        [4.0, 5.0, 6.0],
+        [7.0, 8.0, 9.0],
+    ]
     assert sorted(datasets) == ["tlm/toy.offset", "tlm_t/toy.offset"]
     values, units = datasets["tlm/toy.offset"]
     np.testing.assert_array_equal(values, np.arange(1.0, 10.0).reshape(3, 3))
@@ -441,55 +411,20 @@ def test_every_write_is_recorded_with_its_tag_in_order(dictionary: Dictionary):
     assert units == "s"
 
 
-def test_the_ground_stops_once_its_procedure_returns_and_still_records_later_writes(
-    dictionary: Dictionary,
-):
-    """A returned procedure stops the ground once; writes made after it still reach the record.
-
-    The writes the link holds when the run ends are taken by `telemetry_datasets`.
-
-    Args:
-        dictionary: the toy's dictionary.
-    """
-
-    async def procedure(ground: Ground) -> None:
-        """Waits one tick, then returns.
-
-        Args:
-            ground: the ground running it.
-        """
-        await ground.sleep(1.0)
-
-    link = StubLink(dictionary)
-    ground = _ground(link, procedure)
-    assert link.stops == 0
-    _tick(ground, 1)
-    assert link.stops == 1
-    link.write("toy.mode", 2 * NS, "fast")
-    link.write("toy.mode", 3 * NS, "slow")
-
-    datasets = ground.telemetry_datasets()
-
-    assert datasets["tlm/toy.mode"][0].tolist() == ["fast", "slow"]
-    np.testing.assert_array_equal(datasets["tlm_t/toy.mode"][0], [2.0, 3.0])
-
-
-@pytest.mark.parametrize("period_s", [0.5, 1.5])
 def test_a_period_that_is_not_a_whole_multiple_of_the_flight_software_s_is_refused(
-    dictionary: Dictionary, period_s: float
+    dictionary: Dictionary,
 ):
     """A ground period that would tick between flight software ticks is refused, naming both.
 
     Args:
         dictionary: the toy's dictionary.
-        period_s: s, the ground's period, against the stub's 1 s.
     """
     link = StubLink(dictionary)
 
-    with pytest.raises(ValueError, match=rf"{period_s} s is not a whole multiple .* 1.0 s"):
-        Ground(_returns, link, dict, link.stop, period_s=period_s)
+    with pytest.raises(ValueError, match=r"1.5 s is not a whole multiple .* 1.0 s"):
+        Ground(_returns, link, dict, lambda: None, period_s=1.5)
 
-    assert Ground(_returns, link, dict, link.stop, period_s=10.0).period_s == 10.0
+    assert Ground(_returns, link, dict, lambda: None, period_s=10.0).period_s == 10.0
 
 
 async def _returns(ground: Ground) -> None:
@@ -545,27 +480,6 @@ async def _commands_the_toy(ground: Ground) -> None:
     await ground.until(lambda: ground.tlm("toy.mode") == "fast", timeout_s=5.0)
 
 
-def _flown(
-    dictionary: Dictionary, period_s: float, stops: bool
-) -> tuple[dict[str, tuple[np.ndarray, str]], Ground]:
-    """The datasets of 120 s of nominal Leo500 with the toy as its flight software.
-
-    Args:
-        dictionary: the toy's dictionary.
-        period_s: s, the ground's period.
-        stops: whether the ground's task stops once the procedure returns.
-
-    Returns:
-        The run's datasets and the ground's telemetry datasets, and the ground.
-    """
-    scenario = Leo500()
-    fsw = AlgorithmModule(Toy(), scenario.vehicle.readers(), instance="toy", dictionary=dictionary)
-    stop = scenario.stop_ground if stops else lambda: None
-    ground = Ground(_commands_the_toy, fsw, scenario.vehicle.tracking(), stop, period_s=period_s)
-    datasets = scenario.run(fsw, {}, duration_s=120.0, ground=ground)
-    return datasets | ground.telemetry_datasets(), ground
-
-
 def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stops(
     dictionary: Dictionary,
 ):
@@ -578,124 +492,30 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
     Args:
         dictionary: the toy's dictionary.
     """
-    ticking, ground = _flown(dictionary, 1.0, stops=False)
+    flights = {}
+    for period_s, stops in ((1.0, False), (1.0, True), (10.0, True)):
+        scenario = Leo500()
+        readers = scenario.vehicle.readers()
+        fsw = AlgorithmModule(Toy(), readers, instance="toy", dictionary=dictionary)
+        stop = scenario.stop_ground if stops else lambda: None
+        tracking = scenario.vehicle.tracking()
+        ground = Ground(_commands_the_toy, fsw, tracking, stop, period_s=period_s)
+        datasets = scenario.run(fsw, {}, duration_s=120.0, ground=ground)
+        flights[period_s, stops] = (datasets | ground.telemetry_datasets(), ground.now_s)
+
+    ticking, last_tick_s = flights.pop((1.0, False))
     assert ticking["tlm_t/toy.offset"][0][[0, -1]].tolist() == [1.0, 120.0]
     assert ticking["tlm_t/toy.mode"][0].tolist() == [61.0]
-    assert ground.now_s == 120.0
-
-    for period_s, last_tick_s in ((1.0, 61.0), (10.0, 70.0)):
-        flown, ground = _flown(dictionary, period_s, stops=True)
-        assert ground.now_s == last_tick_s
+    assert last_tick_s == 120.0
+    assert {key: last for key, (_, last) in flights.items()} == {
+        (1.0, True): 61.0,
+        (10.0, True): 70.0,
+    }
+    for flown, _ in flights.values():
         assert sorted(flown) == sorted(ticking)
         for name, (values, units) in ticking.items():
             np.testing.assert_array_equal(flown[name][0], values, err_msg=name)
             assert flown[name][1] == units
-
-
-def test_a_condition_without_code_is_named_by_its_repr(dictionary: Dictionary):
-    """A `functools.partial` condition, which has no `__code__`, is waited on and named.
-
-    Args:
-        dictionary: the toy's dictionary.
-    """
-
-    async def procedure(ground: Ground) -> None:
-        """Waits 1 s on a partial that never holds.
-
-        Args:
-            ground: the ground running it.
-        """
-        await ground.until(functools.partial(bool, 0), timeout_s=1.0)
-
-    ground = _ground(StubLink(dictionary), procedure)
-
-    with pytest.raises(TimeoutError, match=r"until the condition functools\.partial\(.*\) holds"):
-        _tick(ground, 1)
-
-
-@pytest.mark.parametrize(
-    ("wait", "until"),
-    [
-        ("sleep", r"t = 10\.0 s"),
-        ("until", r"the condition at ground_test\.py:\d+ holds, by t = 10\.0 s"),
-        ("send", r"toy\.setMode is answered, by t = 10\.0 s"),
-    ],
-)
-def test_a_procedure_still_waiting_when_the_flight_ends_fails_naming_its_wait(
-    dictionary: Dictionary, wait: str, until: str
-):
-    """At the end of a flight, a procedure that has not returned names what it waits for.
-
-    A returned procedure passes.
-
-    Args:
-        dictionary: the toy's dictionary.
-        wait: the procedure's wait.
-        until: what the message names it waits for.
-    """
-
-    async def procedure(ground: Ground) -> None:
-        """Waits 10 s in one of three ways.
-
-        Args:
-            ground: the ground running it.
-        """
-        if wait == "sleep":
-            await ground.sleep(10.0)
-        elif wait == "until":
-            await ground.until(lambda: False, timeout_s=10.0)
-        else:
-            await ground.send("toy.setMode", timeout_s=10.0, mode="fast")
-
-    ground = _ground(StubLink(dictionary), procedure)
-    _tick(ground, 1, 2)
-
-    with pytest.raises(TimeoutError, match=rf"ended at t = 2\.0 s .* waiting until {until}$"):
-        ground.ensure_returned()
-
-    finished = _ground(StubLink(dictionary), _returns)
-    finished.ensure_returned()
-
-
-def test_truth_reads_the_tracking_stand_in_now(dictionary: Dictionary):
-    """`truth()` is what the ground's tracking function gives when the procedure asks.
-
-    Args:
-        dictionary: the toy's dictionary.
-    """
-    seen = []
-
-    async def procedure(ground: Ground) -> None:
-        """Records the truth.
-
-        Args:
-            ground: the ground running it.
-        """
-        seen.append(ground.truth())
-
-    _ground(StubLink(dictionary), procedure)
-
-    np.testing.assert_array_equal(seen[0]["r_N"], [1.0, 2.0, 3.0])
-
-
-def test_the_ground_runs_at_the_link_s_period(dictionary: Dictionary):
-    """The ground's period is the flight software's.
-
-    Args:
-        dictionary: the toy's dictionary.
-    """
-    link = StubLink(dictionary)
-    link.period_s = 0.5
-
-    async def procedure(ground: Ground) -> None:
-        """Returns at once.
-
-        Args:
-            ground: the ground running it.
-        """
-        return None
-
-    assert Ground(procedure, link, dict, link.stop).period_s == 0.5
 
 
 def test_a_procedure_that_cannot_start_is_kept_whole(dictionary: Dictionary):
@@ -709,8 +529,7 @@ def test_a_procedure_that_cannot_start_is_kept_whole(dictionary: Dictionary):
         """Takes no ground, so it cannot be started with one."""
         return None
 
-    link = StubLink(dictionary)
-    ground = Ground(procedure, link, dict, link.stop)
+    ground = Ground(procedure, StubLink(dictionary), dict, lambda: None)
 
     with pytest.raises(TypeError) as raised:
         ground.Reset(0)

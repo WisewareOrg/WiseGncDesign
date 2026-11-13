@@ -23,17 +23,19 @@ class AlgorithmModule(sysModel.SysModel):
     `instance` is a method of the algorithm, named and parametered as in FPP.
 
     The ground reaches the algorithm through the link: `uplink` queues a command packet, and the
-    next tick decodes it with the dictionary's types, runs its handler before the step and keeps
-    the response. A handler that returns answers `OK`, and one that raises `ValueError` answers
-    `VALIDATION_ERROR` with the error's message as the reason; a packet the dictionary cannot decode
-    gets the response F´'s dispatcher gives it; any other exception is a bug and fails the tick.
+    next tick decodes it with the dictionary's types, so the handler gets what the F´ handler gets
+    (an F32 as F32 holds it, an enum constant by name, an array as an array), runs the handler
+    before the step and keeps the response. A handler that returns answers `OK`, and one that
+    raises `ValueError` answers `VALIDATION_ERROR` with the error's message as the reason; a packet
+    the dictionary cannot decode gets the response F´'s dispatcher gives it; any other exception is
+    a bug and fails the tick.
 
-    The algorithm writes telemetry by returning `{channel: value}` from `step` and from each
-    handler, as an F´ component calls `tlmWrite_<channel>`. Each entry is one write, tagged with the
-    tick's time; its channel name is checked on the tick, an array is copied as written, and the
-    value is held to the channel's type when `values` packs a batch. Each tick after the last
-    reads every input once and calls `step(t=..., **fields)` with `t` in s; the call Basilisk makes
-    at the reset time runs nothing.
+    The algorithm writes telemetry by returning `{channel: value}`, or `None`, from `step` and from
+    each handler, as an F´ component calls `tlmWrite_<channel>`. Each entry is one write, tagged
+    with the tick's time; its channel name is checked on the tick, an array is copied as written,
+    and the value is held to the channel's type when `values` packs a batch. Each tick after the
+    last reads every input once and calls `step(t=..., **fields)` with `t` in s; the call Basilisk
+    makes at the reset time runs nothing.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in: the flight
@@ -188,65 +190,44 @@ class AlgorithmModule(sysModel.SysModel):
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
-            BaseException: the tick's exception, kept whole in `failure`: naming an input never
-                written, a channel the instance does not have, or whatever a handler or `step`
-                raised.
+            RuntimeError: naming any input never written, kept whole in `failure`.
+            BaseException: the tick's exception, kept whole in `failure`: naming a channel the
+                instance does not have, or whatever a handler or `step` raised.
         """
         if not CurrentSimNanos > self._t_ns:
             return
         try:
-            self._tick(CurrentSimNanos)
+            self._t_ns = CurrentSimNanos
+            responses = self.dictionary.responses
+            queued, self._uplinked = self._uplinked, []
+            for packet, context in queued:
+                try:
+                    name, args = self.dictionary.decode_command(packet, self._instance)
+                except DecodeError as error:
+                    self._responses.append((context, responses[error.response], None))
+                    continue
+                try:
+                    writes = getattr(self._algorithm, name)(**args)
+                except ValueError as error:
+                    self._responses.append((context, responses["VALIDATION_ERROR"], str(error)))
+                    continue
+                self._write(writes)
+                self._responses.append((context, responses["OK"], None))
+            t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
+            if not self._inputs_written:
+                unwritten = sorted(name for name, reader in self._readers if not reader.isWritten())
+                if unwritten:
+                    raise RuntimeError(f"inputs {unwritten} have not been written at t = {t} s")
+                self._inputs_written = True
+            payloads = {name: reader() for name, reader in self._readers}
+            fields = {
+                keyword: np.array(getattr(payloads[role], keyword), dtype=float)
+                for role, keyword in self._reads
+            }
+            self._write(self._algorithm.step(t=t, **fields))
         except BaseException as error:
             self.failure = error
             raise
-
-    def _tick(self, t_ns: int) -> None:
-        """Runs one tick: the queued commands, then the step.
-
-        Args:
-            t_ns: ns, the tick's time.
-
-        Raises:
-            RuntimeError: naming any input never written.
-        """
-        self._t_ns = t_ns
-        queued, self._uplinked = self._uplinked, []
-        for packet, context in queued:
-            self._responses.append((context, *self._dispatch(packet)))
-        t = t_ns / _NANOSECONDS_PER_SECOND
-        if not self._inputs_written:
-            unwritten = sorted(name for name, reader in self._readers if not reader.isWritten())
-            if unwritten:
-                raise RuntimeError(f"inputs {unwritten} have not been written at t = {t} s")
-            self._inputs_written = True
-        payloads = {name: reader() for name, reader in self._readers}
-        fields = {
-            keyword: np.array(getattr(payloads[role], keyword), dtype=float)
-            for role, keyword in self._reads
-        }
-        self._write(self._algorithm.step(t=t, **fields))
-
-    def _dispatch(self, packet: bytes) -> tuple[int, str | None]:
-        """Decodes a command packet and runs its handler.
-
-        Args:
-            packet: the serialized command packet.
-
-        Returns:
-            The `Fw.CmdResponse` value, and the message of the `ValueError` the handler refused the
-            command with, else `None`.
-        """
-        responses = self.dictionary.responses
-        try:
-            name, args = self.dictionary.decode_command(packet, self._instance)
-        except DecodeError as error:
-            return responses[error.response], None
-        try:
-            writes = getattr(self._algorithm, name)(**args)
-        except ValueError as error:
-            return responses["VALIDATION_ERROR"], str(error)
-        self._write(writes)
-        return responses["OK"], None
 
     def _write(self, writes: Mapping[str, Any] | None) -> None:
         """Logs the telemetry the algorithm returned, tagged with this tick, arrays copied.

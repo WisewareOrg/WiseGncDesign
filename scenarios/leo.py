@@ -4,9 +4,8 @@ A TST item says in words what a scenario evaluates, and its reference names one 
 definitions. A definition is the scenario's ground procedure, an `async def` the ground runs from
 t = 0 against the flight software, and its `sim_` marks are the rest of how it is flown:
 `mission_tests` puts them on each test it generates, beside the mission's vehicle, and
-`sim_ground_period_s`, when present, is the ground's period, the flight software's otherwise. A
-different procedure, duration, case count or WiseDynamics scenario is a different definition,
-referenced by a different TST item.
+`sim_ground_period_s` sets the ground's period. A different procedure, duration, case count or
+WiseDynamics scenario is a different definition, referenced by a different TST item.
 """
 
 import pytest

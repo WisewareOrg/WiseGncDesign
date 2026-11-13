@@ -52,27 +52,11 @@ def _propagate(
     Returns:
         The stepped `ImuDeadReckoner`, holding `t`, `q_BN`, `r_BN_N` and `v_BN_N`.
     """
-    reckoner = _commanded(q0, r0, v0, mu=mu)
+    reckoner = ImuDeadReckoner(mu=mu, dcm_PB=_IDENTITY)
+    reckoner.initNavState(epoch=0.0, attitude=q0, position=r0, velocity=v0)
     dt = total_t / n_steps
     for i in range(1, n_steps + 1):
         reckoner.step(t=i * dt, AngVelPlatform=AngVelPlatform, AccelPlatform=AccelPlatform)
-    return reckoner
-
-
-def _commanded(q0: np.ndarray, r0: np.ndarray, v0: np.ndarray, mu: float = 0.0) -> ImuDeadReckoner:
-    """A dead reckoner, mounted at identity, given its state as of t = 0 by command.
-
-    Args:
-        q0: (4,) quaternion W X Y Z, the attitude of the body frame with respect to N.
-        r0: (3,) m, the inertial position in N.
-        v0: (3,) m/s, the inertial velocity in N.
-        mu: m^3/s^2, the gravitational parameter.
-
-    Returns:
-        The `ImuDeadReckoner`, initialized.
-    """
-    reckoner = ImuDeadReckoner(mu=mu, dcm_PB=_IDENTITY)
-    reckoner.initNavState(epoch=0.0, attitude=q0, position=r0, velocity=v0)
     return reckoner
 
 
@@ -139,7 +123,8 @@ def test_a_commanded_quaternion_with_w_negative_is_held_with_w_nonnegative():
     """Commanded with -q, W < 0, the reckoner holds q."""
     q = Rotation.from_rotvec([0.3, -0.2, 0.1]).as_quat(scalar_first=True)
 
-    reckoner = _commanded(-q, _AWAY_FROM_ORIGIN, _ZERO3)
+    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+    reckoner.initNavState(epoch=0.0, attitude=-q, position=_AWAY_FROM_ORIGIN, velocity=_ZERO3)
 
     np.testing.assert_array_equal(reckoner.q_BN, q)
 
@@ -187,7 +172,8 @@ def test_the_kinematics_match_the_dcm_derivative_for_a_nonaligned_rate():
     """
     q0 = Rotation.from_rotvec([0.4, 0.0, 0.0]).as_quat(scalar_first=True)
     omega = np.array([0.0, 0.0, 0.3])
-    reckoner = _commanded(q0, _AWAY_FROM_ORIGIN, _ZERO3)
+    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+    reckoner.initNavState(epoch=0.0, attitude=q0, position=_AWAY_FROM_ORIGIN, velocity=_ZERO3)
     dt = 1e-5
 
     state = reckoner.step(t=dt, AngVelPlatform=omega, AccelPlatform=_ZERO3)
@@ -217,22 +203,16 @@ def test_q_dot_steps_the_attitude_as_scipy_rotates_it(dt: float):
         np.testing.assert_allclose(q + _q_dot(q, omega) * dt, expected, rtol=0, atol=dt**2)
 
 
-def _run(t_s: np.ndarray) -> dict[str, object]:
-    """A run file's contents with every error zero, every bias and rate zero, one write a tick.
-
-    Args:
-        t_s: (N,) s, the dynamics steps, each also an estimate write.
-
-    Returns:
-        The run, as `read_run` returns it.
-    """
+def test_a_nan_error_is_a_violation():
+    """A diverged estimate, whose error is NaN, fails the gross check instead of passing it."""
+    t_s = np.array([1.0, 2.0, 3.0])
     n = len(t_s)
     identity = np.tile([1.0, 0.0, 0.0, 0.0], (n, 1))
     r_N = np.tile([7.0e6, 0.0, 0.0], (n, 1))
     commands = [
         {"name": "nav.initNavState", "args": {"epoch": 0.0}, "response": "OK", "context": 1}
     ]
-    return {
+    run = {
         "t_s": t_s,
         "commands": np.asarray(json.dumps(commands)),
         "truth/q_BN": identity,
@@ -246,11 +226,6 @@ def _run(t_s: np.ndarray) -> dict[str, object]:
         "draw_gyro_bias_P_rad_s": np.zeros(3),
         "draw_accel_bias_P_m_s2": np.zeros(3),
     }
-
-
-def test_a_nan_error_is_a_violation():
-    """A diverged estimate, whose error is NaN, fails the gross check instead of passing it."""
-    run = _run(np.array([1.0, 2.0, 3.0]))
     run["tlm/nav.bodyEciVel"][2, 0] = np.nan
 
     found = violations(run, **bound_inputs())

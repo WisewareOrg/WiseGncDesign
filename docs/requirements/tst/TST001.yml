@@ -15,9 +15,9 @@ ref: ''
 references:
 - keyword: def leo500(
   path: scenarios/leo.py
-  sha: dd7d65cf4eca881bdda56d23f0ba26c9ac124cf1e38b1721d49373fcb0d203a8
+  sha: 053979b09e999b13afa9649afe94e472a470586747cb759871072b178c59dae9
   type: file
-reviewed: BTeFDajam3c1jBlQfHOJUtZL4LnaISj0U_KIApO3qQo=
+reviewed: x2oxoY9ZbHxOBmEEfkNQzt0f4z_Jx6Y6wSLGobXxuLw=
 status: proposed
 text: |
   A mission's FSW boots in the leo500 scenario on the mission's vehicle and runs for 5700 s, once
