@@ -23,6 +23,7 @@ from numba import njit
 from wise_dynamics.basilisk import Scenario
 
 from gnc_algorithms.imu_dead_reckoning.gross_check import gross_check
+from gnc_algorithms.quaternion import dcm_NB, q_dot
 from gnc_cdh.basilisk import AlgorithmModule
 from harness.mission import Mission, mission_tests, provides
 
@@ -70,24 +71,9 @@ def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
 # \dot q_v = \tfrac{1}{2}\left(q_w\,\omega + q_v \times \omega\right)$$
 #
 # The integration drifts $q$ off unit norm at the order of its step error, so the step normalizes
-# it. Numba cannot call SciPy, so the kinematics and the rotation matrix below are written out
-# here; everything outside the step uses SciPy.
-
-
-# %%
-@njit(cache=True)
-def _q_dot(q: np.ndarray, omega: np.ndarray) -> np.ndarray:
-    """The attitude kinematics, dq/dt = 1/2 q (x) (0, omega), compiled with numba.
-
-    Args:
-        q: (4,) quaternion W X Y Z of the body frame B with respect to the inertial frame N.
-        omega: (3,) rad/s, the rate of B with respect to N, in B.
-
-    Returns:
-        (4,) dq/dt, 1/s.
-    """
-    w, v = q[0], q[1:]
-    return 0.5 * np.concatenate((np.array([-(v @ omega)]), w * omega + np.cross(v, omega)))
+# it. Numba cannot call SciPy, so the step calls the kinematics, and the rotation matrix below,
+# from `gnc_algorithms.quaternion`, which tests them against SciPy; everything outside the step
+# uses SciPy.
 
 
 # %% [markdown]
@@ -112,27 +98,6 @@ def _q_dot(q: np.ndarray, omega: np.ndarray) -> np.ndarray:
 
 # %%
 @njit(cache=True)
-def _dcm_NB(q: np.ndarray) -> np.ndarray:
-    """The DCM [NB] of a quaternion, rotating a body-frame vector into the inertial frame.
-
-    Args:
-        q: (4,) quaternion W X Y Z of the body frame B with respect to the inertial frame N.
-
-    Returns:
-        (3, 3) [NB], so that v_N = [NB] v_B.
-    """
-    w, x, y, z = q
-    return np.array(
-        [
-            [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
-            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
-            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
-        ]
-    )
-
-
-# %%
-@njit(cache=True)
 def _translational_rates(
     q: np.ndarray, v: np.ndarray, r: np.ndarray, accel: np.ndarray, mu: float
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -148,7 +113,7 @@ def _translational_rates(
     Returns:
         dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
     """
-    return v, _dcm_NB(q) @ accel - _gravity(r, mu)
+    return v, dcm_NB(q) @ accel - _gravity(r, mu)
 
 
 # %% [markdown]
@@ -230,7 +195,7 @@ def _step(
             dq/dt ((4,), 1/s), dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
         """
         r_dot, v_dot = _translational_rates(q, v, r, accel, mu)
-        return _q_dot(q, omega), r_dot, v_dot
+        return q_dot(q, omega), r_dot, v_dot
 
     k1 = derivs(q, r, v)
     k2 = derivs(q + 0.5 * dt * k1[0], r + 0.5 * dt * k1[1], v + 0.5 * dt * k1[2])
