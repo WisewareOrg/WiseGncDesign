@@ -5,7 +5,7 @@ The Monte Carlo's pass/fail criterion for the IMU dead reckoner.
 Each of the estimate's errors against truth, attitude, velocity and position, at every estimate
 the dead reckoner wrote, must stay under `BOUND_FACTOR` times a growth bound derived from the run's
 drawn IMU bias, the IMU's noise sigma, the flight software's step and the orbit's mean motion,
-since the epoch of the state the ground commanded.
+since the epoch of the state the ground last gave nav before each write.
 
 A run is one run file as `read_run` returns it. Attitude error is graded with SciPy's `Rotation`,
 independently of the dead reckoner's own quaternion math.
@@ -132,20 +132,35 @@ def position_bound_m(
     )
 
 
-def commanded_epoch(run: Mapping[str, np.ndarray]) -> float:
-    """The epoch, in s, of the state the ground gave nav: its first `initNavState` answered `OK`.
+def commanded_epochs(run: Mapping[str, np.ndarray], t_s: np.ndarray) -> np.ndarray:
+    """The epoch each estimate write propagates from: the last `nav.initNavState` before it.
+
+    A command answered `OK` takes effect at the flight software's first tick after the ground sent
+    it, so a write is bounded from the latest such command sent before the write's time.
 
     Args:
         run: one run, as `read_run` returns it, its command log in the root attribute `commands`.
+        t_s: (M,) s, the writes' times.
 
     Returns:
-        The command's `epoch` argument, s.
+        (M,) s, each write's epoch, the command's `epoch` argument.
+
+    Raises:
+        ValueError: naming the first write that no `nav.initNavState` answered `OK` precedes.
     """
-    return next(
-        command["args"]["epoch"]
+    accepted = [
+        (command["t_s"], command["args"]["epoch"])
         for command in json.loads(str(run["commands"]))
         if command["name"] == "nav.initNavState" and command["response"] == "OK"
-    )
+    ]
+    sent, epochs = np.array(accepted, dtype=float).reshape(-1, 2).T
+    latest = np.searchsorted(sent, t_s, side="left") - 1
+    if (latest < 0).any():
+        first = t_s[np.flatnonzero(latest < 0)[0]]
+        raise ValueError(
+            f"no nav.initNavState answered OK precedes the estimate written at t = {first} s"
+        )
+    return epochs[latest]
 
 
 def error_growth(
@@ -158,10 +173,10 @@ def error_growth(
     """Each of a run's errors at every estimate nav wrote, beside its growth bound.
 
     Each error is the written estimate's against truth at the write's time. Each bound grows from
-    the commanded epoch, `commanded_epoch`, and takes the run's drawn biases,
-    `draw_gyro_bias_P_rad_s` and `draw_accel_bias_P_m_s2`; the largest change of its true body
-    rate, `truth/omega_BN_B`; and its mean motion `n = sqrt(mu / |r0|^3)`, from `truth/r_N` at
-    t = 0.
+    the epoch of the state the write propagates from, `commanded_epochs`, and takes the run's
+    drawn biases, `draw_gyro_bias_P_rad_s` and `draw_accel_bias_P_m_s2`; the largest change of
+    its true body rate, `truth/omega_BN_B`; and its mean motion `n = sqrt(mu / |r0|^3)`, from
+    `truth/r_N` at t = 0.
 
     Args:
         run: one run, as `read_run` returns it.
@@ -174,7 +189,6 @@ def error_growth(
         `{metric: (t, error, bound)}` for `"attitude error [rad]"`, `"velocity error [m/s]"` and
         `"position error [m]"`, each a triple of (M,) arrays over the estimate's writes, `t` in s.
     """
-    epoch = commanded_epoch(run)
     omega_dot = np.linalg.norm(np.diff(run["truth/omega_BN_B"], axis=0), axis=1) / np.diff(
         run["t_s"]
     )
@@ -206,7 +220,11 @@ def error_growth(
     growths = {}
     for name, (channel, truth, error, bound) in metrics.items():
         t = run[f"tlm_t/{channel}"]
-        growths[name] = (t, error(at(run, truth, t), run[f"tlm/{channel}"]), bound(t - epoch))
+        growths[name] = (
+            t,
+            error(at(run, truth, t), run[f"tlm/{channel}"]),
+            bound(t - commanded_epochs(run, t)),
+        )
     return growths
 
 
