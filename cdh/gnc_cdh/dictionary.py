@@ -79,7 +79,9 @@ def _tag() -> str:
 
 @dataclass(frozen=True)
 class _Type:
-    """How a dictionary type serializes: a primitive, an enum, or an array of primitives.
+    """How a dictionary type serializes.
+
+    A primitive, an enum, or an array of primitives or of such arrays.
 
     Attributes:
         name: the type's qualified name.

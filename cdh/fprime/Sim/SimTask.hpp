@@ -1,4 +1,4 @@
-// An Os::Task with no thread: start() only marks it started, and Sim::Cooperative runs its routine.
+// An Os::Task with no thread: start() launches nothing, and Sim::Cooperative runs its routine.
 #ifndef SIM_SIMTASK_HPP
 #define SIM_SIMTASK_HPP
 
