@@ -49,7 +49,7 @@ autocoder.
   `Fw.CmdResponse`. Every telemetry write is logged with its F´ time tag, in the order written,
   and draining the log returns the writes since the last drain; nothing keeps a latest value. The
   binding's `uplink`, `telemetry` and `responses` are the link's calls. `boot` runs the commands
-  still queued, clears the link, then configures nav idle, so a case keeps nothing of the one
+  left queued, clears the link, then configures nav idle, so a case keeps nothing of the one
   before it.
 - **The binding is a small hand-written pybind11 module, with no fprime-python dependency.**
   fprime-python is reconsidered only once it fixes time, telemetry and build cost.
@@ -62,8 +62,7 @@ autocoder.
   state by command**, `initNavState(epoch, attitude, position, velocity)` from the shared group
   `InitNavState`. The handler holds the state as of the epoch, with W >= 0, and writes `navState`
   alone, since the estimate it holds is the epoch's, not the current time's. Until the F´ build
-  flies on the ground link, a flight still hands nav its initial state at boot on the `NavInit`
-  port.
+  flies on the ground link, a flight hands nav its initial state at boot on the `NavInit` port.
 
 ### The dictionary
 
@@ -140,9 +139,9 @@ autocoder.
     unproven, since whether two F´ extensions can load in one process is not known;
   - distinct instance names per algorithm in one `WiseFsw`, which breaks a role being an instance
     name;
-  - a rebuild per switch, which is the behaviour today.
+  - a rebuild per switch, which needs nothing new.
 
-  The tripwire is the second F´ port. Nothing is built for it now.
+  The tripwire is the second F´ port, and nothing is built for it before then.
 
 ## Alternatives considered
 

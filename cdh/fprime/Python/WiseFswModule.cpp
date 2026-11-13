@@ -48,7 +48,7 @@ PYBIND11_MODULE(_wise_fsw, m) {
             WiseFsw::simBridge.configureNav(mu, matrix3(dcm_PB));
         },
         py::arg("mu"), py::arg("dcm_PB"),
-        "Boots the deployment at t = 0 s: the commands still queued run, the link is cleared, and the dead "
+        "Boots the deployment at t = 0 s: the commands left queued run, the link is cleared, and the dead "
         "reckoner is idle with mu (m^3/s^2) and the IMU's mounting [PB].");
 
     m.def(
