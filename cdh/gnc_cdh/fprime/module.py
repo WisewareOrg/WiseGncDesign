@@ -66,7 +66,7 @@ class FprimeModule(sysModel.SysModel):
     The deployment is the WiseFsw topology, whose content is the dead reckoner. The channel each
     estimate is read from, `_ESTIMATE`, is the one dead-reckoner-specific piece of this host.
     The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
-    and gives the dead reckoner its initial state, handed over directly rather than by command.
+    and gives the dead reckoner its initial state on its initialization port.
     Each `UpdateState` after the last tick reads the IMU once, steps the deployment and logs
     every channel the tick wrote, serialized, by the tick's time in ns; `estimate_datasets`
     decodes them through the deployment's dictionary.

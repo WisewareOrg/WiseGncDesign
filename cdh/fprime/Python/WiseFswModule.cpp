@@ -58,7 +58,7 @@ PYBIND11_MODULE(_wise_fsw, m) {
             WiseFsw::simBridge.initializeNav(quaternion(q_BN), vector3(r_BN_N), vector3(v_BN_N));
         },
         py::arg("t_ns"), py::arg("q_BN"), py::arg("r_BN_N"), py::arg("v_BN_N"),
-        "Gives the dead reckoner its state at t_ns (ns), directly rather than by command.");
+        "Gives the dead reckoner its state at t_ns (ns) on its initialization port.");
 
     m.def(
         "uplink",
