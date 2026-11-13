@@ -7,9 +7,9 @@
 ## Revisions
 
 - **rev 2** — 2026-11-13 — the dictionary: a role's entries in shared FPP groups, array channels,
-  and a Python build's dictionary generated from FPP alone (issue 37 nav contract); commands through
-  F´'s own dispatcher on a task with no thread, and `GroundLink` logging every telemetry write
-  (issue 38 commands into the F´ build).
+  and a Python build's dictionary generated from FPP alone (issue 37 the Python-first dictionary);
+  commands through F´'s own dispatcher on a task with no thread, and `GroundLink` logging every
+  telemetry write (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
 
 ## Context
@@ -20,7 +20,7 @@ scenarios, cases and judging as the notebook, so the two builds compare case by 
 arbitrates, schedules and runs the dynamics: no FSW telemetry or command is a Basilisk message. The
 ground link that follows needs the F´ boundary to exist first.
 
-Two spikes flew an F´ v4.4.2 build of the IMU dead reckoner inside Basilisk. The first wraps the
+Two spikes flew an F´ v4.4.2 build of one algorithm inside Basilisk. The first wraps the
 deployment in a hand-written pybind11 binding. The second replaced that binding with fprime-python's
 autocoder.
 
@@ -41,29 +41,28 @@ autocoder.
   thread and reports itself cooperative, so F´ gives it the one-step routine that returns on an
   empty queue. `Sim::Cooperative` registers every task and queue, and the tick pumps the tasks round
   by round until no queue holds a message. A command uplinked before a step runs at that step,
-  before the IMU reading and the schedule. A queue still holding messages after the pump's bound,
-  1000 rounds, raises an error naming it, so a component that keeps requeueing crashes the case
-  instead of hanging it.
+  before the sensor readings and the schedule. A queue still holding messages after the pump's
+  bound, 1000 rounds, raises an error naming it, so a component that keeps requeueing crashes the
+  case instead of hanging it.
 - **`GroundLink` carries the link in F´'s form.** Command packets go up to the dispatcher under a
   context the ground picks, and each response comes back as that context and its
   `Fw.CmdResponse`. Every telemetry write is logged with its F´ time tag, in the order written,
   and draining the log returns the writes since the last drain; nothing keeps a latest value. The
   binding's `uplink`, `telemetry` and `responses` are the link's calls. `boot` runs the commands
-  left queued, clears the link, then configures nav idle, so a case keeps nothing of the one
-  before it.
+  left queued, clears the link, then sends each component its configuration, which leaves it idle,
+  so a case keeps nothing of the one before it.
+- **A write is tagged with the FSW time at the moment it is made.** A component therefore writes a
+  value only at a time it holds for; a command that sets a state as of an earlier time writes no
+  estimate until a step propagates it.
 - **The binding is a small hand-written pybind11 module, with no fprime-python dependency.**
   fprime-python is reconsidered only once it fixes time, telemetry and build cost.
 - **Each F´ component sits beside the algorithm it ports.** The repository root is F´'s project root
-  (`cdh/fprime/settings.ini`). The dead reckoner's `ImuDeadReckoner.fpp`, `.hpp` and `.cpp` sit in
-  its package beside the notebook, the package ADR 0002 rev 1 lays out around each algorithm.
+  (`cdh/fprime/settings.ini`). An algorithm's component `.fpp`, `.hpp` and `.cpp` sit in its
+  package beside the notebook, the package ADR 0002 rev 1 lays out around each algorithm.
   `cdh/fprime/` holds the rest of the F´ project: the interface types, the sim-side components, the
   topology and the binding.
-- **nav takes its configuration on an F´ port**, `NavConfig`, which `SimBridge` sends, **and its
-  state by command**, `initNavState(epoch, attitude, position, velocity)` from the shared group
-  `InitNavState`. The handler holds the state as of the epoch, with W >= 0, and writes `navState`
-  alone, since the estimate it holds is the epoch's, not the current time's. A flight hands nav its
-  initial state at boot on the `NavInit` port, which is removed when the F´ host flies on the
-  link.
+- **An algorithm takes its configuration on an F´ port**, which `SimBridge` sends at boot, so
+  nothing reaches past the F´ model. What the ground sets during a flight arrives by command.
 
 ### The dictionary
 
@@ -75,12 +74,11 @@ autocoder.
   as `None`, a string or a wrong shape, fails naming the channel.
 - **A role's shared entries are `.fppi` groups under `cdh/fprime/Interfaces/<Role>/`, which a
   component includes.** Each entry is defined in one place, so two algorithms filling a role cannot
-  drift apart on it. nav's groups are `NavState` and `BodyEci`.
-- **A vector is one array channel.** `bodyEciPos` and `bodyEciVel` are `Gnc.Vector3`, and
-  `bodyEciAttitude` is a `Gnc.Quaternion`, each one write, so no reader rebuilds a vector by name
-  and a quaternion cannot be split across ticks.
+  drift apart on it.
+- **A vector is one array channel**, such as a `Gnc.Vector3` or a `Gnc.Quaternion`, written in
+  one write, so no reader rebuilds a vector by name and a quaternion cannot be split across ticks.
 - **A role is an instance name.** Entries are named `<instance>.<entry>`, the deployment prefix
-  dropped, so a contract reads `nav.bodyEciPos` whichever build flew. A command has one owning
+  dropped, so a contract reads `<role>.<entry>` whichever build flew. A command has one owning
   instance.
 - **A Python build's dictionary is generated from FPP alone.** The algorithm's component `.fpp`
   sits beside its notebook from the start, declaring its entries with no C++.
@@ -92,8 +90,8 @@ autocoder.
 - **A drift check holds the two builds to one contract.** A ported algorithm's F´ test asserts that
   its Python build's entries equal WiseFsw's for its instance, IDs and opcodes aside. It also fails
   when the model changed and the F´ build was not rebuilt.
-- **The dead reckoner's channel-to-estimate mapping is the one named, algorithm-specific piece** of
-  the F´ host, `_ESTIMATE` in `gnc_cdh.fprime`.
+- **The F´ host's one algorithm-specific piece is named**: `_ESTIMATE` in `gnc_cdh.fprime`, the
+  channel each estimate the host records is read from.
 
 ### Recording a flight
 
@@ -129,13 +127,14 @@ autocoder.
 ### Not decided here
 
 - The ground: a ground station as its own process, and each host flying on the link.
-- **One F´ topology holds a single `nav`.** The deployment is one per process, with one `nav`
-  instance, and its sim side is specific to the dead reckoner: `SimBridge`'s ports, the binding's
-  `boot` and `step`, and `FprimeModule`'s constructor. Porting an algorithm adds its component, its
-  ports, its CMake, the topology instance and a builder, and no more only when it reuses the dead
-  reckoner's sensors and configuration. One with other sensors or configuration also changes
-  `Sim.fpp`, `SimBridge`, the binding and `FprimeModule`. A second F´ nav algorithm has to replace
-  the first, which breaks the first one's parity and drift checks. The options:
+- **One F´ topology per process holds one instance per role.** Because a role is an instance
+  name, a second F´ implementation of a role has to replace the first in the topology, which
+  breaks the first one's parity and drift checks. The sim side is written for the sensors and
+  configuration of the algorithm it hosts: `SimBridge`'s ports, the binding's `boot` and `step`,
+  and `FprimeModule`'s constructor. Porting an algorithm adds its component, its ports, its CMake,
+  the topology instance and a builder, and no more only when it reuses those sensors and that
+  configuration. An algorithm with different sensors or configuration also changes `Sim.fpp`,
+  `SimBridge`, the binding and `FprimeModule`. The options:
   - one F´ deployment per ported algorithm, mirroring the Python build's generated deployment;
     unproven, since whether two F´ extensions can load in one process is not known;
   - distinct instance names per algorithm in one `WiseFsw`, which breaks a role being an instance
@@ -159,9 +158,10 @@ autocoder.
 - **`TlmCapture` kept, holding each channel's latest value, with the uplink added to `SimBridge`.**
   A latest-value table lets whoever reads it choose the telemetry rate, and drops every write
   between reads. Rejected for one component on the ground's side that logs every write.
-- **Clearing the dispatcher's command tracking at boot, by `CMD_CLEAR_TRACKING`.** nav's handler is
-  sync and the pump runs every queue empty, so tracking holds nothing across a boot and no test can
-  fail without the clear. Rejected until a command handler is async, which is the tripwire for it.
+- **Clearing the dispatcher's command tracking at boot, by `CMD_CLEAR_TRACKING`.** Every command
+  handler is sync and the pump runs every queue empty, so tracking holds nothing across a boot, and
+  no test can fail without the clear. Rejected until a command handler is async, which is the
+  tripwire for it.
 - **FSW telemetry in Basilisk message structs.** It limits the FSW to fields Basilisk happens to
   define, and puts Basilisk inside the FSW's interface. Rejected: telemetry stays on the F´ side.
 - **fprime-python's autocoder in place of the hand-written binding.** The second spike measured it
@@ -170,7 +170,7 @@ autocoder.
   - a Monte Carlo case took 0.85 s, against 0.76 s;
   - it saved no code: 647 lines of hand-written glue, against 665;
   - a Python handler gets a copy of `Fw::Time` and no setter is bound, so a Python clock cannot
-    serve time, and nav never propagated;
+    serve time, and the algorithm never propagated;
   - `Fw::TlmBuffer` and the port-count methods are unbound;
   - the process segfaults at exit unless the deployment is torn down first;
   - only Python components can be reached from Python, which forces the design;
@@ -180,7 +180,7 @@ autocoder.
   and to fly.
 - **F´ in a repository of its own.** Rejected: each algorithm and its F´ build are written side by
   side and compared.
-- **A generic F´ host, with the dead reckoner's mapping moved beside the algorithm.** Rejected:
+- **A generic F´ host, with the channel-to-estimate mapping moved beside the algorithm.** Rejected:
   generality with one consumer. The mapping stays one named piece of the host.
 - **Each vector component as a scalar channel.** Every reader rebuilds the vector by name and
   checks that its parts were written together, and a quaternion over four channels is not one
@@ -195,7 +195,7 @@ autocoder.
 - **Resolving the framework files each call with `fpp-locate-defs` and `fpp-depend`.** It costs
   1.2 s once and 0.28 s per call. Rejected for a fixed list of framework files, which fails loudly,
   naming the undefined symbol, when a model reaches outside it.
-- **nav's configuration and initial state set by public C++ methods the binding calls directly.**
+- **An algorithm's configuration set by public C++ methods the binding calls directly.**
   The call is outside any port, so the binding reaches past the F´ model. Rejected for ports.
 - **Each host logging its own estimate.** It moves the Python build's recording off Basilisk's
   recorders, which no need asks for. Rejected.
