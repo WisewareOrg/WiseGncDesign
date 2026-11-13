@@ -14,7 +14,7 @@ import os
 import re
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -23,6 +23,7 @@ import pytest
 from wise_dynamics.basilisk.vehicles import VEHICLES
 
 from harness import requirements_tree
+from harness.ground import Ground
 
 
 def provides(*capability_ids: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -217,9 +218,11 @@ def _merge_json(path: Path, mapping: dict[str, Any]) -> None:
 def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """The Monte Carlo test flying a mission through one scenario.
 
-    The TST item's reference names the scenario's definition, whose `sim_` marks say how it is
-    flown; the test carries them and the mission's vehicle. The FSW host records its own estimate
-    through `fly`, which flies the scenario for the duration the definition gives.
+    The TST item's reference names the scenario's definition, its ground procedure, whose `sim_`
+    marks say how it is flown; the test carries them and the mission's vehicle. A `Ground` flies
+    the procedure against the FSW host and records the run file. An exception the host or the
+    procedure raised is re-raised whole, and a procedure still waiting when the flight ends fails
+    the case.
 
     Args:
         mission: the mission.
@@ -230,6 +233,10 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """
     reference = requirements_tree.items("TST")[scenario_id]["references"][0]
     definition = _definition(tuple(reference.items()), requirements_tree.ROOT)
+    ground_period_s = next(
+        (mark.args[0] for mark in definition.pytestmark if mark.name == "sim_ground_period_s"),
+        None,
+    )
 
     @pytest.mark.sim_vehicle(mission.vehicle)
     def test(
@@ -247,11 +254,31 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_duration_s: s, the case's simulated duration.
             sim_run_file: writes the case's run file.
             sim_test_directory: the test's directory in the session.
+
+        Raises:
+            failure: the exception the flight software or the procedure kept, re-raised whole in
+                place of what the run raised.
+            BaseException: what the run raised, when neither kept an exception.
         """
         fsw = mission.fsw(sim_scenario)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
-        datasets = fsw.fly(functools.partial(sim_scenario.run, duration_s=sim_duration_s))
-        path = sim_run_file(datasets)
+        ground = Ground(
+            definition,
+            fsw,
+            sim_scenario.vehicle.tracking(),
+            sim_scenario.stop_ground,
+            period_s=ground_period_s,
+        )
+        try:
+            datasets = sim_scenario.run(fsw, {}, duration_s=sim_duration_s, ground=ground)
+        except BaseException:
+            failure = fsw.failure or ground.failure
+            if failure is None:
+                raise
+            raise failure from None
+        ground.ensure_returned()
+        datasets |= ground.telemetry_datasets()
+        path = sim_run_file(datasets, attrs={"commands": json.dumps(ground.command_log)})
         problems = [] if mission.check is None else mission.check(path)
         if problems:
             pytest.fail("\n".join(problems), pytrace=False)
@@ -264,7 +291,9 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
 
 
 @functools.cache
-def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[..., None]:
+def _definition(
+    reference: tuple[tuple[str, str], ...], root: Path
+) -> Callable[[Ground], Coroutine[Any, Any, None]]:
     """The scenario definition a TST item's reference names.
 
     A module already loaded, or loading, from the referenced file supplies it, so a notebook can
@@ -278,7 +307,7 @@ def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[
         root: the project root the reference's `path` is relative to.
 
     Returns:
-        The definition, whose `pytestmark` holds its `sim_` marks.
+        The definition, the scenario's ground procedure, whose `pytestmark` holds its `sim_` marks.
 
     Raises:
         ValueError: the file references a definition it has not yet defined, because a mission

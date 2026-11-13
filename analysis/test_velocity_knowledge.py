@@ -1,4 +1,4 @@
-"""Velocity knowledge: the worst velocity error over a run stays within x in a share p of runs.
+"""Velocity knowledge: the worst velocity error a run reports stays within x in a share p of runs.
 
 Judges every SRS rung in the requirements tree that references this file, each with its own
 x (m/s), p and c.
@@ -12,7 +12,7 @@ from matplotlib.figure import Figure
 from wise_dynamics.sessions import CaseResults
 
 from harness.requirements_tree import limit, rungs
-from harness.runs import read_run
+from harness.runs import at, read_run
 
 
 def velocity_error_m_s(v_truth_N: np.ndarray, v_est_N: np.ndarray) -> np.ndarray:
@@ -36,6 +36,8 @@ def test_velocity_knowledge(
 ) -> None:
     """Find the worst velocity error of every claiming run, plot them, and judge the requirement.
 
+    Each run's error is taken at every estimate nav wrote, against truth at the write's time.
+
     Args:
         requirement_id: the rung judged.
         claimed_runs: the results of the tests claiming an ID.
@@ -47,7 +49,8 @@ def test_velocity_knowledge(
         worst[nodeid] = {}
         for case, path in results.runs.items():
             run = read_run(path)
-            error = velocity_error_m_s(run["truth/v_N"], run["est/v_BN_N"])
+            t = run["tlm_t/nav.bodyEciVel"]
+            error = velocity_error_m_s(at(run, "truth/v_N", t), run["tlm/nav.bodyEciVel"])
             worst[nodeid][case] = float(np.max(error))
         figure = Figure(layout="constrained")
         axes = figure.subplots()

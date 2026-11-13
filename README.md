@@ -12,9 +12,10 @@ The repository's parts are laid out under Development.
 ### Layout
 
 ```text
-harness/       mission.py, requirements_tree.py, judging.py (a pytest plugin), notebook.py, runs.py
+harness/       mission.py, ground.py, requirements_tree.py, judging.py (a pytest plugin),
+               notebook.py, runs.py
 analysis/      one analyzer per metric: its limits, error math and plot
-scenarios/     how each scenario a TST item references is flown
+scenarios/     how each scenario a TST item references is flown: its ground procedure and marks
 algorithms/gnc_algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
                                     re-exporting the notebook
 algorithms/gnc_algorithms/quaternion.py   the quaternion math numba-compiled algorithms share

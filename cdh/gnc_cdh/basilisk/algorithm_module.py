@@ -1,14 +1,14 @@
-"""A Basilisk Python `SysModel` hosting one algorithm, wired by its names."""
+"""A Basilisk Python `SysModel` hosting one algorithm as an F´ component instance, on the link."""
 
 import inspect
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import Any
 
 import numpy as np
 from Basilisk.architecture import sysModel
 
-from gnc_cdh import UNITS
+from gnc_cdh.dictionary import Channel, DecodeError, Dictionary
 
 __all__ = ["AlgorithmModule"]
 
@@ -16,47 +16,80 @@ _NANOSECONDS_PER_SECOND = 1e9
 
 
 class AlgorithmModule(sysModel.SysModel):
-    """Hosts one algorithm inside a Basilisk task, wired by the names the algorithm uses.
+    """Hosts one algorithm inside a Basilisk task, as the F´ instance `instance` would be hosted.
 
     Each keyword of the algorithm's `step` other than `t` is a message field, read from the one
-    input reader whose message has a field of that name. The algorithm's outputs are its public
-    attributes other than `t`, each an estimate named in `gnc_cdh.UNITS`. `Reset` logs the outputs
-    as the algorithm holds them. Each `UpdateState` at a time after the algorithm's `t` reads every
-    input once, calls `step(t=..., **fields)` with `t` in s, and logs the arrays it returns, by the
-    tick's time in ns. `fly` records the log as the estimate. The call Basilisk makes at the reset
-    time itself leaves the state as built.
+    input reader whose message has a field of that name. Every command the dictionary gives
+    `instance` is a method of the algorithm, named and parametered as in FPP.
+
+    The ground reaches the algorithm through the link: `uplink` queues a command packet, and the
+    next tick decodes it with the dictionary's types, so the handler gets what the F´ handler gets
+    (an F32 as F32 holds it, an enum constant by name, an array as an array), runs the handler
+    before the step and keeps the response. A handler that returns answers `OK`, and one that
+    raises `ValueError` answers `VALIDATION_ERROR` with the error's message as the reason; a packet
+    the dictionary cannot decode gets the response F´'s dispatcher gives it; any other exception is
+    a bug and fails the tick.
+
+    The algorithm writes telemetry by returning `{channel: value}`, or `None`, from `step` and from
+    each handler, as an F´ component calls `tlmWrite_<channel>`. Each entry is one write, tagged
+    with the tick's time; its channel name is checked on the tick, an array is copied as written,
+    and the value is held to the channel's type when `values` packs a batch. Each tick after the
+    last reads every input once and calls `step(t=..., **fields)` with `t` in s; the call Basilisk
+    makes at the reset time runs nothing.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in: the flight
             software runs at 1 Hz.
+        dictionary: the dictionary the algorithm is held to.
+        failure: the exception a tick raised, kept whole, else `None`.
     """
 
     period_s = 1.0
+    dictionary: Dictionary
+    failure: BaseException | None
 
-    def __init__(self, algorithm: Any, inputs: Mapping[str, Any]) -> None:
-        """Resolves the algorithm's keywords against `inputs` and checks its outputs.
+    def __init__(
+        self, algorithm: Any, inputs: Mapping[str, Any], *, instance: str, dictionary: Dictionary
+    ) -> None:
+        """Resolves the algorithm's keywords against `inputs` and its methods against `dictionary`.
 
         Args:
-            algorithm: the algorithm, built at the simulation's start time, holding `t` (s) and
-                its outputs as attributes.
+            algorithm: the algorithm.
             inputs: reader by input role, each subscribed by the caller.
+            instance: the F´ instance name the algorithm plays, such as `nav`.
+            dictionary: the dictionary to hold it to.
 
         Raises:
             ValueError: naming a `step` keyword that no input's message carries or more than one
-                does, or an output that `gnc_cdh.UNITS` does not name.
+                does, or a command the algorithm lacks or declares with other parameters.
         """
         super().__init__()
         self._algorithm = algorithm
+        self._instance = instance
+        self.dictionary = dictionary
         self._inputs = MappingProxyType(dict(inputs))
         keywords = [k for k in inspect.signature(algorithm.step).parameters if k != "t"]
         self._reads = tuple((self._role(keyword), keyword) for keyword in keywords)
-        self._names = tuple(n for n in vars(algorithm) if not n.startswith("_") and n != "t")
-        unnamed = sorted(n for n in self._names if n not in UNITS)
-        if unnamed:
-            raise ValueError(f"outputs {unnamed} are not estimates gnc_cdh.UNITS names")
         self._readers = tuple(self._inputs.items())
+        entries = dictionary.entries(instance)
+        for name, params in entries["commands"].items():
+            handler = getattr(algorithm, name, None)
+            found = list(inspect.signature(handler).parameters) if callable(handler) else None
+            wanted = [param for param, _ in params]
+            if found != wanted:
+                raise ValueError(
+                    f"{instance}.{name} takes {wanted}; the algorithm has "
+                    f"{'no such method' if found is None else found}"
+                )
+        self._ids = {
+            name: dictionary.channel(f"{instance}.{name}").id for name in entries["channels"]
+        }
+        self.failure = None
         self._inputs_written = False
-        self._log: dict[int, dict[str, np.ndarray]] = {}
+        self._t_ns = 0
+        self._uplinked: list[tuple[bytes, int]] = []
+        self._responses: list[tuple[int, int, str | None]] = []
+        self._log: list[tuple[int, int, Any]] = []
 
     def _role(self, keyword: str) -> str:
         """The input role whose message carries the field `keyword`.
@@ -90,89 +123,133 @@ class AlgorithmModule(sysModel.SysModel):
         """The hosted algorithm, for inspection."""
         return self._algorithm
 
+    def uplink(self, packet: bytes, context: int) -> None:
+        """Queues a command packet, which runs at the next tick.
+
+        Args:
+            packet: the serialized command packet.
+            context: the ground's number for the command, returned with its response.
+        """
+        self._uplinked.append((packet, context))
+
+    def responses(self) -> list[tuple[int, int, str | None]]:
+        """The command responses since the last call, oldest first.
+
+        Returns:
+            `(context, response, reason)`: the response a value of the dictionary's
+            `Fw.CmdResponse`, and the message of the `ValueError` a handler refused it with, else
+            `None`.
+        """
+        drained, self._responses = self._responses, []
+        return drained
+
+    def telemetry(self) -> list[tuple[int, int, Any]]:
+        """Every telemetry write since the last call, in the order written.
+
+        Returns:
+            `(channel ID, time tag in ns, value)`, the value as the algorithm wrote it.
+        """
+        drained, self._log = self._log, []
+        return drained
+
+    def values(self, channel: Channel, payloads: Sequence[Any]) -> np.ndarray:
+        """The values the algorithm wrote to one channel, packed in one batch.
+
+        Args:
+            channel: the channel written.
+            payloads: its writes' values, as `telemetry` gave them.
+
+        Returns:
+            As `Channel.pack_many` gives them.
+        """
+        return channel.pack_many(payloads)
+
     def Reset(self, CurrentSimNanos: int) -> None:
-        """Logs the algorithm's outputs as it holds them.
+        """Takes the reset time as the last tick.
 
         Args:
             CurrentSimNanos: ns, the reset time, as Basilisk passes it.
 
         Raises:
-            RuntimeError: naming any input whose reader is not subscribed.
+            RuntimeError: naming any input whose reader is not subscribed, kept whole in
+                `failure`.
         """
+        self._t_ns = CurrentSimNanos
         unlinked = sorted(name for name, reader in self._readers if not reader.isLinked())
-        if unlinked:
-            raise RuntimeError(f"inputs {unlinked} are not subscribed to any message")
-        self._log = {CurrentSimNanos: self._logged(vars(self._algorithm))}
+        try:
+            if unlinked:
+                raise RuntimeError(f"inputs {unlinked} are not subscribed to any message")
+        except RuntimeError as error:
+            self.failure = error
+            raise
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
-        """Steps the algorithm to the current time when it lies after the algorithm's `t`.
+        """Runs the queued commands, then the step, when the time lies after the last tick.
 
         Args:
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
-            RuntimeError: naming any input never written.
+            RuntimeError: naming any input never written, kept whole in `failure`.
+            BaseException: the tick's exception, kept whole in `failure`: naming a channel the
+                instance does not have, or whatever a handler or `step` raised.
         """
-        t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
-        if not t > self._algorithm.t:
+        if not CurrentSimNanos > self._t_ns:
             return
+        try:
+            self._t_ns = CurrentSimNanos
+            queued, self._uplinked = self._uplinked, []
+            for packet, context in queued:
+                self._responses.append((context, *self._dispatch(packet)))
+            t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
+            if not self._inputs_written:
+                unwritten = sorted(name for name, reader in self._readers if not reader.isWritten())
+                if unwritten:
+                    raise RuntimeError(f"inputs {unwritten} have not been written at t = {t} s")
+                self._inputs_written = True
+            payloads = {name: reader() for name, reader in self._readers}
+            fields = {
+                keyword: np.array(getattr(payloads[role], keyword), dtype=float)
+                for role, keyword in self._reads
+            }
+            self._write(self._algorithm.step(t=t, **fields))
+        except BaseException as error:
+            self.failure = error
+            raise
 
-        if not self._inputs_written:
-            unwritten = sorted(name for name, reader in self._readers if not reader.isWritten())
-            if unwritten:
-                raise RuntimeError(f"inputs {unwritten} have not been written at t = {t} s")
-            self._inputs_written = True
-        payloads = {name: reader() for name, reader in self._readers}
-        fields = {
-            keyword: np.array(getattr(payloads[role], keyword), dtype=float)
-            for role, keyword in self._reads
-        }
-        self._log[CurrentSimNanos] = self._logged(self._algorithm.step(t=t, **fields))
-
-    def fly(self, run: Callable[[Any, dict[str, tuple[Any, str, str]]], dict]) -> dict:
-        """Flies the scenario through `run` and records the estimate from the log.
+    def _dispatch(self, packet: bytes) -> tuple[int, str | None]:
+        """Decodes a command packet and runs its handler.
 
         Args:
-            run: flies the scenario with this host and the datasets to record, as the harness
-                binds it from the scenario and its stopping rule.
+            packet: the serialized command packet.
 
         Returns:
-            The run's datasets with the estimate's added.
+            The `Fw.CmdResponse` value, and the message of the `ValueError` the handler refused the
+            command with, else `None`.
         """
-        datasets = run(self, {})
-        datasets.update(self.estimate_datasets(datasets["t_s"][0]))
-        return datasets
+        responses = self.dictionary.responses
+        try:
+            name, args = self.dictionary.decode_command(packet, self._instance)
+        except DecodeError as error:
+            return responses[error.response], None
+        try:
+            writes = getattr(self._algorithm, name)(**args)
+        except ValueError as error:
+            return responses["VALIDATION_ERROR"], str(error)
+        self._write(writes)
+        return responses["OK"], None
 
-    def estimate_datasets(self, t_s: np.ndarray) -> dict[str, tuple[np.ndarray, str]]:
-        """The estimate's run-file datasets at the record times, from the log.
+    def _write(self, writes: Mapping[str, Any] | None) -> None:
+        """Logs the telemetry the algorithm returned, tagged with this tick, arrays copied.
 
         Args:
-            t_s: (N,) s, the record times, each one a tick's time to the nanosecond.
-
-        Returns:
-            `est/<output>` for each output, its rows at `t_s`, with its units.
+            writes: channel name to value, or `None` for no write.
 
         Raises:
-            KeyError: naming a record time no tick logged.
+            ValueError: naming a channel the instance does not have.
         """
-        rows = []
-        for t in t_s:
-            t_ns = round(float(t) * _NANOSECONDS_PER_SECOND)
-            if t_ns not in self._log:
-                raise KeyError(f"no estimate was logged at t = {t} s")
-            rows.append(self._log[t_ns])
-        return {
-            f"est/{name}": (np.array([row[name] for row in rows]), UNITS[name])
-            for name in self._names
-        }
-
-    def _logged(self, values: Mapping[str, Any]) -> dict[str, np.ndarray]:
-        """A copy of each output's array, as the log keeps it.
-
-        Args:
-            values: output name to its array, and possibly other names.
-
-        Returns:
-            Output name to a copy of its array.
-        """
-        return {name: np.array(values[name], dtype=float) for name in self._names}
+        for name, value in (writes or {}).items():
+            if name not in self._ids:
+                raise ValueError(f"{self._instance}.{name} is not a channel of the dictionary")
+            written = value.copy() if isinstance(value, np.ndarray) else value
+            self._log.append((self._ids[name], self._t_ns, written))

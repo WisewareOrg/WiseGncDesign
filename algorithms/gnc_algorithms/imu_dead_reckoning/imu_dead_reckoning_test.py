@@ -3,6 +3,7 @@
 Flight conditions with closed forms check the algorithm alone, with no simulator.
 """
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -51,11 +52,43 @@ def _propagate(
     Returns:
         The stepped `ImuDeadReckoner`, holding `t`, `q_BN`, `r_BN_N` and `v_BN_N`.
     """
-    reckoner = ImuDeadReckoner(q0, r0, v0, t0=0.0, mu=mu, dcm_PB=_IDENTITY)
+    reckoner = ImuDeadReckoner(mu=mu, dcm_PB=_IDENTITY)
+    reckoner.initNavState(epoch=0.0, attitude=q0, position=r0, velocity=v0)
     dt = total_t / n_steps
     for i in range(1, n_steps + 1):
         reckoner.step(t=i * dt, AngVelPlatform=AngVelPlatform, AccelPlatform=AccelPlatform)
     return reckoner
+
+
+def test_it_boots_idle_and_writes_only_navstate_until_commanded():
+    """Booted, each step writes `navState` idle and nothing else, holding no state."""
+    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+
+    written = reckoner.step(t=1.0, AngVelPlatform=_ZERO3, AccelPlatform=_ZERO3)
+
+    assert written == {"navState": "idle"}
+    assert not hasattr(reckoner, "q_BN")
+
+
+def test_the_command_writes_navstate_alone_and_the_next_step_propagates_from_its_epoch():
+    """`initNavState` writes only `navState`; the step after it propagates from the epoch.
+
+    At rest with mu = 0, a state at epoch 60 s with velocity v is at r0 + v (61 - 60) at t = 61 s.
+    """
+    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+    velocity = np.array([1.0, 2.0, 3.0])
+
+    commanded = reckoner.initNavState(
+        epoch=60.0, attitude=_Q_IDENTITY, position=_AWAY_FROM_ORIGIN, velocity=velocity
+    )
+    stepped = reckoner.step(t=61.0, AngVelPlatform=_ZERO3, AccelPlatform=_ZERO3)
+
+    assert commanded == {"navState": "initialized"}
+    assert list(stepped) == ["navState", "bodyEciPos", "bodyEciVel", "bodyEciAttitude"]
+    assert stepped["navState"] == "propagated"
+    np.testing.assert_allclose(stepped["bodyEciPos"], _AWAY_FROM_ORIGIN + velocity, rtol=1e-15)
+    np.testing.assert_array_equal(stepped["bodyEciVel"], velocity)
+    np.testing.assert_array_equal(stepped["bodyEciAttitude"], _Q_IDENTITY)
 
 
 # Past a rotation of $\pi$ the quaternion's $q_w$ would turn negative; the step keeps $q_w \ge 0$,
@@ -86,11 +119,12 @@ def test_a_coarse_step_keeps_q_unit():
     assert abs(np.linalg.norm(state.q_BN) - 1.0) <= 1e-15
 
 
-def test_an_initial_quaternion_with_w_negative_is_held_with_w_nonnegative():
-    """Built from -q with W < 0, the reckoner holds q."""
+def test_a_commanded_quaternion_with_w_negative_is_held_with_w_nonnegative():
+    """Commanded with -q, W < 0, the reckoner holds q."""
     q = Rotation.from_rotvec([0.3, -0.2, 0.1]).as_quat(scalar_first=True)
 
-    reckoner = ImuDeadReckoner(-q, _AWAY_FROM_ORIGIN, _ZERO3, t0=0.0, mu=0.0, dcm_PB=_IDENTITY)
+    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+    reckoner.initNavState(epoch=0.0, attitude=-q, position=_AWAY_FROM_ORIGIN, velocity=_ZERO3)
 
     np.testing.assert_array_equal(reckoner.q_BN, q)
 
@@ -138,13 +172,14 @@ def test_the_kinematics_match_the_dcm_derivative_for_a_nonaligned_rate():
     """
     q0 = Rotation.from_rotvec([0.4, 0.0, 0.0]).as_quat(scalar_first=True)
     omega = np.array([0.0, 0.0, 0.3])
-    reckoner = ImuDeadReckoner(q0, _AWAY_FROM_ORIGIN, _ZERO3, t0=0.0, mu=0.0, dcm_PB=_IDENTITY)
+    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+    reckoner.initNavState(epoch=0.0, attitude=q0, position=_AWAY_FROM_ORIGIN, velocity=_ZERO3)
     dt = 1e-5
 
     state = reckoner.step(t=dt, AngVelPlatform=omega, AccelPlatform=_ZERO3)
 
     c0 = Rotation.from_quat(q0, scalar_first=True).as_matrix().T
-    c1 = Rotation.from_quat(state["q_BN"], scalar_first=True).as_matrix().T
+    c1 = Rotation.from_quat(state["bodyEciAttitude"], scalar_first=True).as_matrix().T
     np.testing.assert_allclose(
         (c1 - c0) / dt,
         -np.cross(omega[:, None], c0, axis=0),
@@ -170,23 +205,28 @@ def test_q_dot_steps_the_attitude_as_scipy_rotates_it(dt: float):
 
 def test_a_nan_error_is_a_violation():
     """A diverged estimate, whose error is NaN, fails the gross check instead of passing it."""
-    zeros = np.zeros((3, 3))
-    identity = np.tile([1.0, 0.0, 0.0, 0.0], (3, 1))
-    r_N = np.tile([7.0e6, 0.0, 0.0], (3, 1))
-    v_est_N = zeros.copy()
-    v_est_N[2, 0] = np.nan
+    t_s = np.array([1.0, 2.0, 3.0])
+    n = len(t_s)
+    identity = np.tile([1.0, 0.0, 0.0, 0.0], (n, 1))
+    r_N = np.tile([7.0e6, 0.0, 0.0], (n, 1))
+    commands = [
+        {"name": "nav.initNavState", "args": {"epoch": 0.0}, "response": "OK", "context": 1}
+    ]
     run = {
-        "t_s": np.array([0.0, 1.0, 2.0]),
+        "t_s": t_s,
+        "commands": np.asarray(json.dumps(commands)),
         "truth/q_BN": identity,
-        "est/q_BN": identity,
-        "truth/omega_BN_B": zeros,
-        "truth/v_N": zeros,
-        "est/v_BN_N": v_est_N,
+        "truth/omega_BN_B": np.zeros((n, 3)),
+        "truth/v_N": np.zeros((n, 3)),
         "truth/r_N": r_N,
-        "est/r_BN_N": r_N,
+        "tlm/nav.bodyEciAttitude": identity.copy(),
+        "tlm/nav.bodyEciVel": np.zeros((n, 3)),
+        "tlm/nav.bodyEciPos": r_N.copy(),
+        **{f"tlm_t/nav.bodyEci{name}": t_s for name in ("Attitude", "Vel", "Pos")},
         "draw_gyro_bias_P_rad_s": np.zeros(3),
         "draw_accel_bias_P_m_s2": np.zeros(3),
     }
+    run["tlm/nav.bodyEciVel"][2, 0] = np.nan
 
     found = violations(run, **bound_inputs())
 

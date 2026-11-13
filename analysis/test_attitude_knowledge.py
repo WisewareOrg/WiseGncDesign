@@ -1,4 +1,4 @@
-"""Attitude knowledge: the worst attitude error over a run stays within x in a share p of runs.
+"""Attitude knowledge: the worst attitude error a run reports stays within x in a share p of runs.
 
 Judges every SRS rung in the requirements tree that references this file, each with its own
 x (degrees), p and c.
@@ -13,7 +13,7 @@ from scipy.spatial.transform import Rotation
 from wise_dynamics.sessions import CaseResults
 
 from harness.requirements_tree import limit, rungs
-from harness.runs import read_run
+from harness.runs import at, read_run
 
 
 def attitude_error_rad(q_truth_BN: np.ndarray, q_est_BN: np.ndarray) -> np.ndarray:
@@ -40,6 +40,8 @@ def test_attitude_knowledge(
 ) -> None:
     """Find the worst attitude error of every claiming run, plot them, and judge the requirement.
 
+    Each run's error is taken at every estimate nav wrote, against truth at the write's time.
+
     Args:
         requirement_id: the rung judged.
         claimed_runs: the results of the tests claiming an ID.
@@ -51,7 +53,8 @@ def test_attitude_knowledge(
         worst[nodeid] = {}
         for case, path in results.runs.items():
             run = read_run(path)
-            error = attitude_error_rad(run["truth/q_BN"], run["est/q_BN"])
+            t = run["tlm_t/nav.bodyEciAttitude"]
+            error = attitude_error_rad(at(run, "truth/q_BN", t), run["tlm/nav.bodyEciAttitude"])
             worst[nodeid][case] = float(np.max(error))
         figure = Figure(layout="constrained")
         axes = figure.subplots()

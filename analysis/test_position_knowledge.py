@@ -1,4 +1,4 @@
-"""Position knowledge: the worst position error over a run stays within x in a share p of runs.
+"""Position knowledge: the worst position error a run reports stays within x in a share p of runs.
 
 Judges every SRS rung in the requirements tree that references this file, each with its own
 x (m), p and c.
@@ -12,7 +12,7 @@ from matplotlib.figure import Figure
 from wise_dynamics.sessions import CaseResults
 
 from harness.requirements_tree import limit, rungs
-from harness.runs import read_run
+from harness.runs import at, read_run
 
 
 def position_error_m(r_truth_N: np.ndarray, r_est_N: np.ndarray) -> np.ndarray:
@@ -36,6 +36,8 @@ def test_position_knowledge(
 ) -> None:
     """Find the worst position error of every claiming run, plot them, and judge the requirement.
 
+    Each run's error is taken at every estimate nav wrote, against truth at the write's time.
+
     Args:
         requirement_id: the rung judged.
         claimed_runs: the results of the tests claiming an ID.
@@ -47,7 +49,8 @@ def test_position_knowledge(
         worst[nodeid] = {}
         for case, path in results.runs.items():
             run = read_run(path)
-            error = position_error_m(run["truth/r_N"], run["est/r_BN_N"])
+            t = run["tlm_t/nav.bodyEciPos"]
+            error = position_error_m(at(run, "truth/r_N", t), run["tlm/nav.bodyEciPos"])
             worst[nodeid][case] = float(np.max(error))
         figure = Figure(layout="constrained")
         axes = figure.subplots()

@@ -34,7 +34,7 @@ fprime = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-tools==4.4.0", "ninja==1
 
 [tool.uv.sources]
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "c1df00f11d235168a55d6e3a010beae907debcc5" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "6a5132304ec63068c7829d5c3f5922c2983db165" }
 
 [build-system]
 requires = ["hatchling"]
@@ -48,6 +48,14 @@ dev-mode-dirs = [".", "algorithms", "cdh", "analysis"]
 [tool.pytest.ini_options]
 testpaths = ["algorithms", "cdh", "harness", "missions"]
 strict_markers = true
+markers = [
+    "sim_ground_period_s(period_s): the ground's period, in s, for a scenario's definition",
+]
+# A coroutine never awaited, such as a ground procedure's forgotten `await`, fails its test.
+filterwarnings = [
+    "error:coroutine .* was never awaited:RuntimeWarning",
+    "error:Exception ignored while finalizing coroutine:pytest.PytestUnraisableExceptionWarning",
+]
 # The F´ framework clone and the F´ build cache carry F´'s own tests, which are not this project's.
 addopts = [
     "--import-mode=importlib", "-n", "auto", "--dist", "loadgroup", "-p", "pytester",

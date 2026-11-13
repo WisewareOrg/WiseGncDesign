@@ -48,8 +48,8 @@ A vector or quaternion is one channel of an array type, written in one write.
 ### Telemetry is pushed
 
 Every telemetry write is logged with the flight software's own time tag at the moment of the write,
-in the order written, and the log is drained. Nothing keeps a latest value, and nothing on the sim
-side samples or decimates telemetry.
+in the order written, and the log is drained. Nothing on the sim side samples or decimates
+telemetry.
 
 ## Alternatives considered
 

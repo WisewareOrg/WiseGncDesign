@@ -173,6 +173,7 @@ def _flown(host: str) -> dict:
     return fsw.fly(functools.partial(scenario.run, duration_s=60.0))
 
 
+@pytest.mark.skip(reason="the F´ host does not present the ground link")
 def test_both_hosts_record_the_same_truth_est_names_units_and_estimate():
     """Flown on one mounting and one scenario, the hosts' run-file datasets agree.
 

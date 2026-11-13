@@ -110,7 +110,8 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: f
     """
     rng = np.random.default_rng(7)
     readings = [(rate_rad_s * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(600)]
-    python = ImuDeadReckoner(Q0, R0, V0, t0=0.0, mu=MU, dcm_PB=MOUNTING)
+    python = ImuDeadReckoner(mu=MU, dcm_PB=MOUNTING)
+    python.initNavState(epoch=0.0, attitude=Q0, position=R0, velocity=V0)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     _wise_fsw.initialize_nav(t_ns=0, q_BN=Q0, r_BN_N=R0, v_BN_N=V0)
 
@@ -128,7 +129,8 @@ def test_init_nav_state_starts_the_reckoner_at_its_epoch():
     """
     rng = np.random.default_rng(5)
     readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
-    python = ImuDeadReckoner(Q0, R0, V0, t0=60.0, mu=MU, dcm_PB=MOUNTING)
+    python = ImuDeadReckoner(mu=MU, dcm_PB=MOUNTING)
+    python.initNavState(epoch=60.0, attitude=Q0, position=R0, velocity=V0)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     for k in range(1, 61):
         _wise_fsw.step(t_ns=k * NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
@@ -178,7 +180,8 @@ def test_a_second_flight_matches_a_fresh_notebook_reckoner():
     _fly_a_first_flight()
     rng = np.random.default_rng(11)
     readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
-    python = ImuDeadReckoner(Q_B, R_B, V_B, t0=0.0, mu=MU, dcm_PB=MOUNTING)
+    python = ImuDeadReckoner(mu=MU, dcm_PB=MOUNTING)
+    python.initNavState(epoch=0.0, attitude=Q_B, position=R_B, velocity=V_B)
 
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     _wise_fsw.initialize_nav(t_ns=0, q_BN=Q_B, r_BN_N=R_B, v_BN_N=V_B)
