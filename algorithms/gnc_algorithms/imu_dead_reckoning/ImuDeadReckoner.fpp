@@ -21,31 +21,8 @@ module Gnc {
     @ Telemetry out
     telemetry port tlmOut
 
-    @ The state of the estimate
-    telemetry navState: Gnc.NavState
-
-    @ Position of the body in ECI, x
-    telemetry bodyEciPosX: F64 format "{} m"
-    @ Position of the body in ECI, y
-    telemetry bodyEciPosY: F64 format "{} m"
-    @ Position of the body in ECI, z
-    telemetry bodyEciPosZ: F64 format "{} m"
-
-    @ Velocity of the body in ECI, x
-    telemetry bodyEciVelX: F64 format "{} m/s"
-    @ Velocity of the body in ECI, y
-    telemetry bodyEciVelY: F64 format "{} m/s"
-    @ Velocity of the body in ECI, z
-    telemetry bodyEciVelZ: F64 format "{} m/s"
-
-    @ Attitude quaternion taking body vectors into ECI, scalar part, W >= 0
-    telemetry bodyEciAttitudeW: F64
-    @ Attitude quaternion taking body vectors into ECI, x
-    telemetry bodyEciAttitudeX: F64
-    @ Attitude quaternion taking body vectors into ECI, y
-    telemetry bodyEciAttitudeY: F64
-    @ Attitude quaternion taking body vectors into ECI, z
-    telemetry bodyEciAttitudeZ: F64
+    include "../../../cdh/fprime/Interfaces/Nav/NavState.fppi"
+    include "../../../cdh/fprime/Interfaces/Nav/BodyEci.fppi"
 
   }
 

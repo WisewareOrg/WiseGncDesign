@@ -7,7 +7,7 @@ its F´ build.
 Each host implements `fly(run) -> datasets`, which the harness calls to fly a case and record the
 estimate, and `build`, the host's build identity, which the harness records in the flight's
 `flight.json`. The contract and its reasoning are in
-[ADR 0003 rev 1](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+[ADR 0003 rev 2](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
 algorithm's `step` as plain arrays, and logs the arrays it returns, by name. Frames and mountings
@@ -76,18 +76,53 @@ Write the algorithm in `gnc_algorithms`. Its `step(t=..., **inputs)` takes plain
 each named as the message field it reads, and returns plain named arrays; it holds `t` and each
 output as an attribute. An output `gnc_cdh.UNITS` does not name gets its units added there.
 
+## The dictionary
+
+`gnc_cdh.dictionary.Dictionary` reads an F´ JSON dictionary, F´'s published form of the FPP
+model, and names its entries `<instance>.<entry>` with the deployment prefix dropped. It encodes
+and decodes commands in F´'s packet format and channels in F´'s bytes. A channel's type is a
+primitive, an enum or an array, such as `nav.bodyEciPos`, a `Gnc.Vector3`. `Channel.decode_many`
+decodes a batch of writes as F´ serialized them, and `Channel.pack_many` packs a batch a Python
+algorithm wrote into the same array; a written value that F´ would not pack into the channel's
+type fails, naming the channel.
+
+A role's shared entries are `.fppi` groups under `cdh/fprime/Interfaces/<Role>/`, which a
+component's `.fpp` includes; the instance name is the role, so nav's entries are `nav.*` in every
+build. A Python build's dictionary comes from FPP alone. `Dictionary.from_component(model,
+component, instance=...)` instances the component alone and runs `fpp-to-dict` in a temporary
+directory, against the F´ framework clone `just pinned` or `just local` fetches. Nothing is
+compiled, nothing is written in the tree, and each content of the model is generated once per
+process:
+
+```python
+>>> from pathlib import Path
+>>> import gnc_algorithms.imu_dead_reckoning as reckoner
+>>> from gnc_cdh.dictionary import Dictionary
+>>> model = [Path(reckoner.__file__).with_name("ImuDeadReckoner.fpp")]
+>>> nav = Dictionary.from_component(model, "Gnc.ImuDeadReckoner", instance="nav")
+>>> position = nav.channel("nav.bodyEciPos")
+>>> position.units
+'m'
+>>> position.pack_many([[6871.0e3, 0.0, 0.0], [6871.0e3, 1.0, 0.0]]).shape
+(2, 3)
+
+```
+
+An F´ port's tests assert that its Python build's entries equal WiseFsw's, IDs aside, so the two
+builds are held to one contract.
+
 ## The F´ host
 
 `gnc_cdh.fprime.FprimeModule(imu, mu, dcm_PB, initial)` runs the WiseFsw F´ deployment in the
 simulation's process. The deployment's content is the dead reckoner, whose F´ component sits beside
 its notebook. `just fsw` builds the deployment into this package as the extension `_wise_fsw`, with
 the JSON dictionary F´ generates for it alongside. `just pinned` and `just local` run it as part of
-their sync, and `just test`, `just fly` and `just lab` run it first. The module takes
+their sync, and `just test`, `just fly` and `just lab` run it first; a host built without it says to
+run `just fsw`. The module takes
 `AlgorithmModule`'s `period_s`, so the two builds fly at one rate.
 
-`gnc_cdh.fprime` decodes every telemetry channel generically from F´'s generated dictionary, so the
-C&DH and the ground learn fields through the dictionary. The one piece specific to an algorithm is
-small and named: the dead reckoner's channel-to-estimate mapping, in
-`FprimeModule.estimate_datasets`. It becomes configuration once the shared dictionary is designed.
-The reasoning is in
-[ADR 0003 rev 1](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+The module logs every channel each tick writes in F´'s bytes, and decodes them through
+`gnc_cdh.dictionary` once the run is flown. The one piece specific to an algorithm is small and
+named: `_ESTIMATE`, the channel each of the dead reckoner's estimates is read from. The reasoning is
+in
+[ADR 0003 rev 2](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).

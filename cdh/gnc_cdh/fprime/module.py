@@ -1,8 +1,6 @@
 """A Basilisk Python `SysModel` running the WiseFsw F´ deployment in the simulation's process."""
 
-import json
 import os
-import struct
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import ModuleType
@@ -13,8 +11,9 @@ from Basilisk.architecture import sysModel
 
 from gnc_cdh import UNITS
 from gnc_cdh.basilisk import AlgorithmModule
+from gnc_cdh.dictionary import Dictionary
 
-__all__ = ["DICTIONARY", "FprimeModule", "decoders", "extension", "telemetry_by_name"]
+__all__ = ["DICTIONARY", "FprimeModule", "extension"]
 
 _NANOSECONDS_PER_SECOND = 1e9
 _NANOSECONDS_PER_MICROSECOND = 1_000
@@ -22,8 +21,8 @@ _NANOSECONDS_PER_MICROSECOND = 1_000
 DICTIONARY = Path(__file__).with_name("WiseFswTopologyDictionary.json")
 """The dictionary F´ generated for the deployment, copied here by `just fsw`."""
 
-_PRIMITIVES = {"F32": ">f", "F64": ">d", "I8": ">b", "I16": ">h", "I32": ">i", "I64": ">q"}
-_PRIMITIVES |= {"U8": ">B", "U16": ">H", "U32": ">I", "U64": ">Q"}
+_ESTIMATE = {"q_BN": "nav.bodyEciAttitude", "r_BN_N": "nav.bodyEciPos", "v_BN_N": "nav.bodyEciVel"}
+"""The channel each estimate a host records is read from."""
 
 _loaded_stamp: tuple[int, int] | None = None
 """The extension file's inode and modification time, in ns, when this process first loaded it."""
@@ -40,10 +39,14 @@ def extension() -> ModuleType:
         The extension module.
 
     Raises:
+        ModuleNotFoundError: the extension is not built.
         RuntimeError: the extension file changed after this process loaded it.
     """
     global _loaded_stamp
-    from gnc_cdh.fprime import _wise_fsw
+    try:
+        import gnc_cdh.fprime._wise_fsw as _wise_fsw
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError("the F´ deployment is not built; run `just fsw`") from error
 
     status = os.stat(_wise_fsw.__file__)
     stamp = (status.st_ino, status.st_mtime_ns)
@@ -57,66 +60,16 @@ def extension() -> ModuleType:
     return _wise_fsw
 
 
-def decoders(dictionary: Mapping[str, Any]) -> dict[int, tuple[str, Any]]:
-    """Each telemetry channel's name and decoder, by channel ID, from an F´ JSON dictionary.
-
-    A channel is named `<instance>.<channel>`, its deployment prefix dropped. F´ serializes
-    big-endian; an enum decodes to its constant's name.
-
-    Args:
-        dictionary: the parsed F´ JSON dictionary.
-
-    Returns:
-        Channel ID to `(name, decode)`, `decode` taking the serialized bytes to the value.
-
-    Raises:
-        ValueError: naming a channel whose type is neither a primitive nor an enum.
-    """
-    enums = {t["qualifiedName"]: t for t in dictionary["typeDefinitions"] if t["kind"] == "enum"}
-    channels: dict[int, tuple[str, Any]] = {}
-    for channel in dictionary["telemetryChannels"]:
-        name = channel["name"].split(".", 1)[1]
-        type_name = channel["type"]["name"]
-        if type_name in _PRIMITIVES:
-            fmt = _PRIMITIVES[type_name]
-            channels[channel["id"]] = (name, lambda raw, fmt=fmt: struct.unpack(fmt, raw)[0])
-        elif type_name in enums:
-            enum = enums[type_name]
-            fmt = _PRIMITIVES[enum["representationType"]["name"]]
-            names = {c["value"]: c["name"] for c in enum["enumeratedConstants"]}
-            channels[channel["id"]] = (
-                name,
-                lambda raw, fmt=fmt, names=names: names[struct.unpack(fmt, raw)[0]],
-            )
-        else:
-            raise ValueError(f"channel {channel['name']} has type {type_name}, not decoded")
-    return channels
-
-
-def telemetry_by_name(
-    channels: Mapping[int, tuple[str, Any]], raw: Mapping[int, bytes]
-) -> dict[str, Any]:
-    """One call's raw telemetry, decoded and named.
-
-    Args:
-        channels: the decoder table `decoders` builds.
-        raw: channel ID to serialized value, as the extension's `telemetry()` returns it.
-
-    Returns:
-        Channel name to value.
-    """
-    return {channels[cid][0]: channels[cid][1](value) for cid, value in raw.items()}
-
-
 class FprimeModule(sysModel.SysModel):
     """Runs the WiseFsw deployment each tick: the clock set, the IMU reading sent, the schedule run.
 
-    The deployment is the WiseFsw topology, whose content is the dead reckoner. The channel to
-    estimate mapping in `estimate_datasets` is the one dead-reckoner-specific piece of this host.
+    The deployment is the WiseFsw topology, whose content is the dead reckoner. The channel each
+    estimate is read from, `_ESTIMATE`, is the one dead-reckoner-specific piece of this host.
     The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
     and gives the dead reckoner its initial state, handed over directly rather than by command.
     Each `UpdateState` after the last tick reads the IMU once, steps the deployment and logs
-    every channel the tick wrote, by the tick's time in ns.
+    every channel the tick wrote, serialized, by the tick's time in ns; `estimate_datasets`
+    decodes them through the deployment's dictionary.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in, the Python
@@ -146,15 +99,14 @@ class FprimeModule(sysModel.SysModel):
         self._mu = float(mu)
         self._dcm_PB = np.asarray(dcm_PB, dtype=float)
         self._initial = {k: np.asarray(v, dtype=float) for k, v in initial.items()}
-        dictionary = json.loads(DICTIONARY.read_text())
-        self._channels = decoders(dictionary)
+        self._dictionary = Dictionary(DICTIONARY)
         self.build = {
             "host": "gnc_cdh.fprime.FprimeModule",
-            "frameworkVersion": dictionary["metadata"]["frameworkVersion"],
-            "projectVersion": dictionary["metadata"]["projectVersion"],
+            "frameworkVersion": self._dictionary.metadata["frameworkVersion"],
+            "projectVersion": self._dictionary.metadata["projectVersion"],
         }
         self._t_ns = 0
-        self._log: dict[int, dict[str, Any]] = {}
+        self._log: dict[int, Mapping[int, bytes]] = {}
 
     def Reset(self, CurrentSimNanos: int) -> None:
         """Boots the deployment, initializes the dead reckoner and logs the telemetry at t = 0.
@@ -177,7 +129,7 @@ class FprimeModule(sysModel.SysModel):
             r_BN_N=self._initial["r0_N"],
             v_BN_N=self._initial["v0_N"],
         )
-        self._log = {self._t_ns: self._written()}
+        self._log = {self._t_ns: self._fsw.telemetry()}
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
         """Steps the deployment to the current time when it lies after the last tick.
@@ -206,15 +158,7 @@ class FprimeModule(sysModel.SysModel):
             accelPlatform=np.array(reading.AccelPlatform, dtype=float),
         )
         self._t_ns = CurrentSimNanos
-        self._log[CurrentSimNanos] = self._written()
-
-    def _written(self) -> dict[str, Any]:
-        """Every channel the deployment's last call wrote, decoded and named.
-
-        Returns:
-            Channel name to value.
-        """
-        return telemetry_by_name(self._channels, self._fsw.telemetry())
+        self._log[CurrentSimNanos] = self._fsw.telemetry()
 
     def fly(self, run: Callable[[Any, dict[str, tuple[Any, str, str]]], dict]) -> dict:
         """Flies the scenario through `run` and records the estimate from the telemetry log.
@@ -249,9 +193,8 @@ class FprimeModule(sysModel.SysModel):
             if t_ns not in self._log:
                 raise KeyError(f"no telemetry was logged at t = {t} s")
             rows.append(self._log[t_ns])
-        values = {
-            "q_BN": np.array([[row[f"nav.bodyEciAttitude{a}"] for a in "WXYZ"] for row in rows]),
-            "r_BN_N": np.array([[row[f"nav.bodyEciPos{a}"] for a in "XYZ"] for row in rows]),
-            "v_BN_N": np.array([[row[f"nav.bodyEciVel{a}"] for a in "XYZ"] for row in rows]),
-        }
+        values = {}
+        for name, channel_name in _ESTIMATE.items():
+            channel = self._dictionary.channel(channel_name)
+            values[name] = channel.decode_many([row[channel.id] for row in rows])
         return {f"est/{name}": (value, UNITS[name]) for name, value in values.items()}

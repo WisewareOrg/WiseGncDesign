@@ -1,11 +1,13 @@
 # 0003 — Fly the F´ flight software inside the Basilisk process
 
 **Status:** accepted
-**Decided:** 2026-11-12 (issue 31: the two spikes and their discovery)
-**Rev:** 1
+**Decided:** 2026-11-12 (issue 31: the two spikes and their discovery; issue 37: the dictionary)
+**Rev:** 2
 
 ## Revisions
 
+- **rev 2** — 2026-11-12 — the dictionary: a role's entries in shared FPP groups, array channels,
+  and a Python build's dictionary generated from FPP alone (issue 37 nav contract).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
 
 ## Context
@@ -45,11 +47,32 @@ autocoder.
 ### The dictionary
 
 - **The FPP model is the dictionary's source, and F´'s generated JSON dictionary is its published
-  form.** Python reads the JSON. The host decodes every telemetry channel generically from it, so
-  the C&DH and the ground learn fields through the dictionary.
+  form.** Python reads the JSON through one module, `gnc_cdh.dictionary`, which encodes and decodes
+  commands and channels in F´'s bytes. It codes primitives, enums, and arrays of primitives or of
+  such arrays; a channel of any other type fails the dictionary's load, naming the channel. A value
+  a Python algorithm writes is packed into its channel's type, so one that F´ would not pack, such
+  as `None`, a string or a wrong shape, fails naming the channel.
+- **A role's shared entries are `.fppi` groups under `cdh/fprime/Interfaces/<Role>/`, which a
+  component includes.** Each entry is defined in one place, so two algorithms filling a role cannot
+  drift apart on it. nav's groups are `NavState` and `BodyEci`.
+- **A vector is one array channel.** `bodyEciPos` and `bodyEciVel` are `Gnc.Vector3`, and
+  `bodyEciAttitude` is a `Gnc.Quaternion`, each one write, so no reader rebuilds a vector by name
+  and a quaternion cannot be split across ticks.
+- **A role is an instance name.** Entries are named `<instance>.<entry>`, the deployment prefix
+  dropped, so a contract reads `nav.bodyEciPos` whichever build flew. A command has one owning
+  instance.
+- **A Python build's dictionary is generated from FPP alone.** The algorithm's component `.fpp`
+  sits beside its notebook from the start, declaring its entries with no C++.
+  `Dictionary.from_component` instances that component alone in a deployment it writes only into
+  the temporary directory `fpp-to-dict` runs in. It needs the F´ source clone and no compiler or F´
+  build, and writes nothing into the tree. It is generated once per process for each content of
+  its inputs. The Python build never reads WiseFsw's dictionary, so it does not depend on the F´
+  build.
+- **A drift check holds the two builds to one contract.** A ported algorithm's F´ test asserts that
+  its Python build's entries equal WiseFsw's for its instance, IDs and opcodes aside. It also fails
+  when the model changed and the F´ build was not rebuilt.
 - **The dead reckoner's channel-to-estimate mapping is the one named, algorithm-specific piece** of
-  the host, in `FprimeModule.estimate_datasets`. It becomes configuration once the shared dictionary
-  is designed.
+  the F´ host, `_ESTIMATE` in `gnc_cdh.fprime`.
 
 ### Recording a flight
 
@@ -86,8 +109,6 @@ autocoder.
 
 - The ground link: commands, a ground station as its own process, and whether F´'s own command and
   telemetry components or passive stand-ins carry them.
-- A dictionary contract shared across algorithms, and how it maps onto F´'s per-instance channel
-  names.
 
 ## Alternatives considered
 
@@ -114,8 +135,20 @@ autocoder.
 - **F´ in a repository of its own.** Rejected: each algorithm and its F´ build are written side by
   side and compared.
 - **A generic F´ host, with the dead reckoner's mapping moved beside the algorithm.** Rejected:
-  generality with one consumer. The mapping stays one named piece of the host until the shared
-  dictionary is designed.
+  generality with one consumer. The mapping stays one named piece of the host.
+- **Each vector component as a scalar channel.** Every reader rebuilds the vector by name and
+  checks that its parts were written together, and a quaternion over four channels is not one
+  write. Rejected for array channels.
+- **A Python build flying against WiseFsw's dictionary.** It makes the Python build depend on the F´
+  build. Rejected.
+- **An algorithm declaring its entries in Python, with FPP generated at port time.** The contract's
+  source switches at port time, a Python-to-FPP generator must map types, units and enums, and drift
+  is found at port time instead of being impossible. Rejected for FPP from the start.
+- **The generated deployment written beside the algorithm.** It is a file in the tree that parallel
+  test workers race to write. Rejected for the temporary directory.
+- **Resolving the framework files each call with `fpp-locate-defs` and `fpp-depend`.** It costs
+  1.2 s once and 0.28 s per call. Rejected for a fixed list of framework files, which fails loudly,
+  naming the undefined symbol, when a model reaches outside it.
 - **nav's configuration and initial state set by public C++ methods the binding calls directly.**
   The call is outside any port, so the binding reaches past the F´ model. Rejected for ports.
 - **Each host logging its own estimate.** It moves the Python build's recording off Basilisk's
@@ -149,5 +182,10 @@ autocoder.
   `TlmCapture` in place of F´'s downlink, no commands, events or parameters, and passive components
   only. These come up again when the ground link is designed.
 - The `initNavState` command, once it exists, replaces the initialization port.
+- An algorithm flies in Python before an F´ build of it exists, and the Python path needs no
+  compiler or F´ build, only the F´ clone. A new channel or command is two edits while
+  prototyping: the `.fpp` line and the Python that writes or handles it.
+- Generating a Python build's dictionary takes 0.1–0.3 s once per process for each content of its
+  model.
 - An F´ release bump arrives as one Renovate update with the tools F´ pins, and a tool pin that
   drifts from F´'s fails `cdh/fprime/pins_test.py`.

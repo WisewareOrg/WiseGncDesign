@@ -1,12 +1,11 @@
 """The F´ host's refusals and its run-file datasets, against messages written by hand.
 
-Needs the deployment `just fsw` builds.
+Skipped without the deployment `just fsw` builds.
 """
 
 import functools
-import json
-import struct
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -17,7 +16,9 @@ from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from gnc_algorithms.imu_dead_reckoning import dead_reckoner
 from gnc_cdh import UNITS
-from gnc_cdh.fprime import DICTIONARY, FprimeModule, decoders
+from gnc_cdh.fprime import FprimeModule
+
+pytest.importorskip("gnc_cdh.fprime._wise_fsw", reason="the F´ build is absent; run `just fsw`")
 
 REPOSITORY = Path(__file__).parents[3]
 
@@ -86,6 +87,18 @@ def test_the_estimate_datasets_are_the_logged_ticks_and_refuse_a_time_never_logg
         module.estimate_datasets(np.array([0.25]))
 
 
+def test_a_host_without_the_f_prime_build_says_to_build_it(monkeypatch: pytest.MonkeyPatch):
+    """With no extension to import, building a host names the recipe that builds it.
+
+    Args:
+        monkeypatch: hides the extension from the import system.
+    """
+    monkeypatch.setitem(sys.modules, "gnc_cdh.fprime._wise_fsw", None)
+
+    with pytest.raises(ModuleNotFoundError, match="not built; run `just fsw`"):
+        _module()
+
+
 def test_a_host_refuses_an_extension_rebuilt_after_the_process_loaded_it(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -101,47 +114,6 @@ def test_a_host_refuses_an_extension_rebuilt_after_the_process_loaded_it(
         _module()
     with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
         built_before.Reset(0)
-
-
-def _dictionary() -> dict:
-    """The dictionary F´ generated for the deployment.
-
-    Returns:
-        The parsed JSON.
-    """
-    return json.loads(DICTIONARY.read_text())
-
-
-def test_decoders_cover_every_channel_of_the_generated_dictionary():
-    """Every channel the deployment declares has a decoder, named and typed as declared."""
-    dictionary = _dictionary()
-    channels = decoders(dictionary)
-
-    assert dictionary["telemetryChannels"]
-    assert sorted(channels) == sorted(c["id"] for c in dictionary["telemetryChannels"])
-    assert sorted(name for name, _ in channels.values()) == sorted(
-        c["name"].split(".", 1)[1] for c in dictionary["telemetryChannels"]
-    )
-    by_name = {name: decode for name, decode in channels.values()}
-    assert by_name["nav.bodyEciPosX"](struct.pack(">d", 6871.0e3)) == 6871.0e3
-    states = next(t for t in dictionary["typeDefinitions"] if t["qualifiedName"] == "Gnc.NavState")
-    for constant in states["enumeratedConstants"]:
-        raw = struct.pack(">i", constant["value"])
-        assert by_name["nav.navState"](raw) == constant["name"]
-
-
-def test_decoders_refuse_a_channel_of_a_type_they_cannot_decode_and_accept_a_primitive():
-    """A channel retyped to a struct raises, naming channel and type; one retyped to F32 decodes."""
-    dictionary = _dictionary()
-    channel = dictionary["telemetryChannels"][1]
-    dictionary["telemetryChannels"][1] = channel | {
-        "type": {"name": "Gnc.Vector3", "kind": "qualifiedIdentifier"}
-    }
-    with pytest.raises(ValueError, match=rf"{channel['name']}.*Gnc\.Vector3"):
-        decoders(dictionary)
-
-    dictionary["telemetryChannels"][1] = channel | {"type": {"name": "F32", "kind": "float"}}
-    assert decoders(dictionary)[channel["id"]][1](struct.pack(">f", 0.5)) == 0.5
 
 
 @pytest.mark.parametrize("excess_ns", [1, 500, 999])

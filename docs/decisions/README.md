@@ -42,7 +42,7 @@ decision and its reasoning, not who ruled it.
 |---|---|---|---|
 | [0001](0001-judge-monte-carlo-sessions-with-requirement-analyzers.md) | 2 | 2026-11-11 | Judge Monte Carlo sessions with requirement analyzers |
 | [0002](0002-fly-missions-from-notebooks-against-a-requirements-tree.md) | 1 | 2026-11-11 | Fly missions from notebooks against a requirements tree |
-| [0003](0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md) | 1 | 2026-11-12 | Fly the F´ flight software inside the Basilisk process |
+| [0003](0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md) | 2 | 2026-11-12 | Fly the F´ flight software inside the Basilisk process |
 
 ## Revisions
 

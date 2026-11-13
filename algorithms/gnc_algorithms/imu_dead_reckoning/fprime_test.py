@@ -1,17 +1,19 @@
 """The F´ build of the dead reckoner against the notebook's, driven directly with no simulator.
 
-Needs the deployment `just fsw` builds.
+Skipped without the deployment `just fsw` builds.
 """
 
-import json
+from pathlib import Path
 
 import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
 from gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
-from gnc_cdh.fprime import DICTIONARY, decoders, extension, telemetry_by_name
+from gnc_cdh.dictionary import Dictionary
+from gnc_cdh.fprime import DICTIONARY, extension
 
+pytest.importorskip("gnc_cdh.fprime._wise_fsw", reason="the F´ build is absent; run `just fsw`")
 _wise_fsw = extension()
 
 MU = 3.986004360e14
@@ -27,8 +29,8 @@ MOUNTING = Rotation.from_euler("zyx", [10.0, -20.0, 30.0], degrees=True).as_matr
 NS = 1_000_000_000
 """ns per s."""
 
-CHANNELS = decoders(json.loads(DICTIONARY.read_text()))
-"""The decoder of every channel in the generated dictionary."""
+WISE_FSW = Dictionary(DICTIONARY)
+"""The deployment's dictionary, which the build generated."""
 
 
 def _telemetry() -> dict[str, object]:
@@ -37,7 +39,20 @@ def _telemetry() -> dict[str, object]:
     Returns:
         Channel name, `<instance>.<channel>`, to its decoded value.
     """
-    return telemetry_by_name(CHANNELS, _wise_fsw.telemetry())
+    channels = WISE_FSW.channels_by_id
+    return {channels[i].name: channels[i].decode(raw) for i, raw in _wise_fsw.telemetry().items()}
+
+
+def test_the_python_build_and_the_fprime_build_hold_nav_to_one_contract():
+    """The Python build's dictionary, from the `.fpp` alone, states WiseFsw's nav, IDs aside.
+
+    It also fails when the `.fpp` or a group it includes changed and F´ was not rebuilt.
+    """
+    model = [Path(__file__).with_name("ImuDeadReckoner.fpp")]
+    python = Dictionary.from_component(model, "Gnc.ImuDeadReckoner", instance="nav")
+
+    assert python.entries("nav")["channels"]
+    assert python.entries("nav") == WISE_FSW.entries("nav")
 
 
 def _assert_matches(python: ImuDeadReckoner) -> None:
@@ -47,16 +62,11 @@ def _assert_matches(python: ImuDeadReckoner) -> None:
         python: the notebook's reckoner, stepped through the same readings.
     """
     tlm = _telemetry()
-    q = np.array([tlm[f"nav.bodyEciAttitude{a}"] for a in "WXYZ"])
     assert tlm["nav.navState"] == "propagated"
-    assert q[0] >= 0.0
-    np.testing.assert_allclose(q, python.q_BN, rtol=0, atol=1e-12)
-    np.testing.assert_allclose(
-        [tlm[f"nav.bodyEciPos{a}"] for a in "XYZ"], python.r_BN_N, rtol=1e-12
-    )
-    np.testing.assert_allclose(
-        [tlm[f"nav.bodyEciVel{a}"] for a in "XYZ"], python.v_BN_N, rtol=1e-12
-    )
+    assert tlm["nav.bodyEciAttitude"][0] >= 0.0
+    np.testing.assert_allclose(tlm["nav.bodyEciAttitude"], python.q_BN, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(tlm["nav.bodyEciPos"], python.r_BN_N, rtol=1e-12)
+    np.testing.assert_allclose(tlm["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)
 
 
 def test_a_booted_reckoner_reports_idle_and_no_state():
@@ -79,7 +89,7 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(sign: f
 
     tlm = _telemetry()
     assert tlm["nav.navState"] == "initialized"
-    np.testing.assert_array_equal([tlm[f"nav.bodyEciAttitude{a}"] for a in "WXYZ"], Q0)
+    np.testing.assert_array_equal(tlm["nav.bodyEciAttitude"], Q0)
 
 
 @pytest.mark.parametrize(

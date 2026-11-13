@@ -117,16 +117,9 @@ void ImuDeadReckoner::writeTelemetry() {
         return;
     }
     const Quaterniond& q = this->m_q;
-    this->tlmWrite_bodyEciPosX(this->m_r.x());
-    this->tlmWrite_bodyEciPosY(this->m_r.y());
-    this->tlmWrite_bodyEciPosZ(this->m_r.z());
-    this->tlmWrite_bodyEciVelX(this->m_v.x());
-    this->tlmWrite_bodyEciVelY(this->m_v.y());
-    this->tlmWrite_bodyEciVelZ(this->m_v.z());
-    this->tlmWrite_bodyEciAttitudeW(q.w());
-    this->tlmWrite_bodyEciAttitudeX(q.x());
-    this->tlmWrite_bodyEciAttitudeY(q.y());
-    this->tlmWrite_bodyEciAttitudeZ(q.z());
+    this->tlmWrite_bodyEciPos(Gnc::Vector3({this->m_r.x(), this->m_r.y(), this->m_r.z()}));
+    this->tlmWrite_bodyEciVel(Gnc::Vector3({this->m_v.x(), this->m_v.y(), this->m_v.z()}));
+    this->tlmWrite_bodyEciAttitude(Gnc::Quaternion({q.w(), q.x(), q.y(), q.z()}));
 }
 
 }  // namespace Gnc

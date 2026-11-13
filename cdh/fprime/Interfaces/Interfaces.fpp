@@ -28,6 +28,9 @@ module Gnc {
     vBN_N: Vector3 @< m/s, velocity in ECI
   )
 
+  @ A command's response: F´'s own enumeration, put in every dictionary
+  dictionary type CommandResponse = Fw.CmdResponse
+
   @ The state of the navigation estimate
   enum NavState {
     idle
