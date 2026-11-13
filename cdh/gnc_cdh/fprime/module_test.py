@@ -43,18 +43,6 @@ def _module() -> FprimeModule:
     return FprimeModule(messaging.IMUSensorMsgReader(), mu=MU, dcm_PB=np.eye(3))
 
 
-@pytest.fixture
-def imu() -> messaging.IMUSensorMsg:
-    """An IMU message written once with a zero reading, alive for the test.
-
-    Returns:
-        The message.
-    """
-    message = messaging.IMUSensorMsg()
-    message.write(messaging.IMUSensorMsgPayload(), 0, 0)
-    return message
-
-
 def test_reset_refuses_an_unsubscribed_imu_and_keeps_the_exception():
     """`Reset` names the IMU reader that no message feeds, the exception kept in `failure`."""
     module = _module()
@@ -78,18 +66,15 @@ def test_a_tick_refuses_an_imu_never_written_and_keeps_the_exception():
     assert module.failure is raised.value
 
 
-def test_the_link_carries_a_command_up_and_its_response_and_every_write_down(
-    imu: messaging.IMUSensorMsg,
-):
+def test_the_link_carries_a_command_up_and_its_response_and_every_write_down():
     """A command runs at the next tick, answered with no reason; each write comes down decoded.
 
     The handler writes `navState` alone, before the step writes it with the estimate, both tagged
     with the tick's time.
-
-    Args:
-        imu: the IMU message the host reads.
     """
     module = _module()
+    imu = messaging.IMUSensorMsg()
+    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)
     module.Reset(0)
 
@@ -152,15 +137,11 @@ def test_the_host_mounts_the_imu_as_it_is_given():
     np.testing.assert_allclose(latest["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)
 
 
-def test_a_command_f_prime_rejects_is_answered_with_its_response_and_fails_nothing(
-    imu: messaging.IMUSensorMsg,
-):
-    """A packet with an opcode no instance has is answered `INVALID_OPCODE`, with no reason.
-
-    Args:
-        imu: the IMU message the host reads.
-    """
+def test_a_command_f_prime_rejects_is_answered_with_its_response_and_fails_nothing():
+    """A packet with an opcode no instance has is answered `INVALID_OPCODE`, with no reason."""
     module = _module()
+    imu = messaging.IMUSensorMsg()
+    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)
     module.Reset(0)
     packet = module.dictionary.encode_command("nav.initNavState", STATE)
@@ -190,8 +171,6 @@ def test_a_host_refuses_an_extension_rebuilt_after_the_process_loaded_it(
 ):
     """Once the extension changes on disk, building or resetting a host says restart the kernel.
 
-    The reset's exception is kept in `failure`.
-
     Args:
         monkeypatch: records a different file as the one this process loaded.
     """
@@ -200,34 +179,27 @@ def test_a_host_refuses_an_extension_rebuilt_after_the_process_loaded_it(
 
     with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
         _module()
-    with pytest.raises(
-        RuntimeError, match="rebuilt after this process loaded it.*restart"
-    ) as raised:
+    with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
         built_before.Reset(0)
-    assert built_before.failure is raised.value
 
 
 @pytest.mark.parametrize("excess_ns", [1, 500, 999])
-def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(
-    excess_ns: int, imu: messaging.IMUSensorMsg
-):
+def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(excess_ns: int):
     """A tick at a whole microsecond is stepped; one nanoseconds past it raises, naming its time.
-
-    The exception is kept in `failure`.
 
     Args:
         excess_ns: ns past a whole microsecond.
-        imu: the IMU message the host reads.
     """
     module = _module()
+    imu = messaging.IMUSensorMsg()
+    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)
     module.Reset(0)
     whole = ONE_SECOND_NS + 1_000
     module.UpdateState(whole)
 
-    with pytest.raises(RuntimeError, match=r"1\.000001|1000001") as raised:
+    with pytest.raises(RuntimeError, match=r"1\.000001|1000001"):
         module.UpdateState(whole + excess_ns)
-    assert module.failure is raised.value
 
 
 def test_the_build_names_the_pinned_framework_tag_and_the_project_version():

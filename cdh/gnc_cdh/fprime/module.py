@@ -161,45 +161,34 @@ class FprimeModule(sysModel.SysModel):
             raise
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
-        """Steps the deployment to the current time when it lies after the last tick.
+        """Steps the deployment on the IMU's reading, when the time lies after the last tick.
 
         Args:
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
 
         Raises:
+            RuntimeError: the tick is not at a whole microsecond, or the IMU reader has never
+                been written, kept whole in `failure`.
             BaseException: the tick's exception, kept whole in `failure`.
         """
         if not CurrentSimNanos > self._t_ns:
             return
         try:
-            self._tick(CurrentSimNanos)
+            if CurrentSimNanos % _NANOSECONDS_PER_MICROSECOND:
+                raise RuntimeError(
+                    f"the tick at {CurrentSimNanos} ns is not a whole microsecond,"
+                    " which the deployment's clock cannot hold"
+                )
+            if not self._imu.isWritten():
+                t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
+                raise RuntimeError(f"the IMU has not been written at t = {t} s")
+            reading = self._imu()
+            self._fsw.step(
+                t_ns=CurrentSimNanos,
+                angVelPlatform=np.array(reading.AngVelPlatform, dtype=float),
+                accelPlatform=np.array(reading.AccelPlatform, dtype=float),
+            )
+            self._t_ns = CurrentSimNanos
         except BaseException as error:
             self.failure = error
             raise
-
-    def _tick(self, t_ns: int) -> None:
-        """Steps the deployment to `t_ns` on the IMU's reading.
-
-        Args:
-            t_ns: ns, the tick's time.
-
-        Raises:
-            RuntimeError: the tick is not at a whole microsecond, or the IMU reader has never
-                been written.
-        """
-        if t_ns % _NANOSECONDS_PER_MICROSECOND:
-            raise RuntimeError(
-                f"the tick at {t_ns} ns is not a whole microsecond,"
-                " which the deployment's clock cannot hold"
-            )
-        if not self._imu.isWritten():
-            raise RuntimeError(
-                f"the IMU has not been written at t = {t_ns / _NANOSECONDS_PER_SECOND} s"
-            )
-        reading = self._imu()
-        self._fsw.step(
-            t_ns=t_ns,
-            angVelPlatform=np.array(reading.AngVelPlatform, dtype=float),
-            accelPlatform=np.array(reading.AccelPlatform, dtype=float),
-        )
-        self._t_ns = t_ns
