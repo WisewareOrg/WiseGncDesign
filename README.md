@@ -41,7 +41,9 @@ picked up. That rebuild reuses the existing cache, so after switching branches r
 kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. A Python build's
 dictionary is generated from FPP and the F´ clone alone, and the F´ build's tests skip when it is
 absent. Why the F´ build flies inside the simulation, and how, is in
-[ADR 0003 rev 2](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+[ADR 0003 rev 2](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md);
+how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
+[ADR 0004 rev 1](docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
 
 ### Requirements and missions
 

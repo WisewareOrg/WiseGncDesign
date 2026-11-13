@@ -21,7 +21,7 @@ module Gnc {
     dcmPB: Matrix3 @< the IMU's mounting [PB], v_P = [PB] v_B
   )
 
-  @ A navigation state to start from, at the current time, given directly rather than by command
+  @ A navigation state to start from, at the current time
   port NavInit(
     qBN: Quaternion @< the body frame with respect to ECI, taking body vectors into ECI
     rBN_N: Vector3 @< m, position in ECI

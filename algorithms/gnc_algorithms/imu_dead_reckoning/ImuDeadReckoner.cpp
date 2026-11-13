@@ -61,15 +61,28 @@ void ImuDeadReckoner::configureIn_handler(FwIndexType portNum, F64 mu, const Gnc
     this->m_accel_P.setZero();
 }
 
-void ImuDeadReckoner::initializeIn_handler(FwIndexType portNum, const Gnc::Quaternion& qBN, const Gnc::Vector3& rBN_N,
-                                           const Gnc::Vector3& vBN_N) {
-    this->m_t = this->now();
+void ImuDeadReckoner::initialize(F64 t, const Gnc::Quaternion& qBN, const Gnc::Vector3& rBN_N,
+                                 const Gnc::Vector3& vBN_N) {
+    this->m_t = t;
     const F64 sign = qBN[0] < 0.0 ? -1.0 : 1.0;
     this->m_q = Quaterniond(sign * qBN[0], sign * qBN[1], sign * qBN[2], sign * qBN[3]);
     this->m_r = vector(rBN_N);
     this->m_v = vector(vBN_N);
     this->m_navState = NavState::initialized;
+}
+
+void ImuDeadReckoner::initializeIn_handler(FwIndexType portNum, const Gnc::Quaternion& qBN, const Gnc::Vector3& rBN_N,
+                                           const Gnc::Vector3& vBN_N) {
+    this->initialize(this->now(), qBN, rBN_N, vBN_N);
     this->writeTelemetry();
+}
+
+void ImuDeadReckoner::initNavState_cmdHandler(FwOpcodeType opCode, U32 cmdSeq, F64 epoch,
+                                              const Gnc::Quaternion& attitude, const Gnc::Vector3& position,
+                                              const Gnc::Vector3& velocity) {
+    this->initialize(epoch, attitude, position, velocity);
+    this->tlmWrite_navState(this->m_navState);
+    this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::OK);
 }
 
 void ImuDeadReckoner::imuIn_handler(FwIndexType portNum, const Gnc::Vector3& angVelPlatform,

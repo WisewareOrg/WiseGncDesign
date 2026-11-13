@@ -34,13 +34,13 @@ WISE_FSW = Dictionary(DICTIONARY)
 
 
 def _telemetry() -> dict[str, object]:
-    """The latest value of every channel, by name.
+    """Drains the telemetry writes and keeps each channel's last, by name.
 
     Returns:
-        Channel name, `<instance>.<channel>`, to its decoded value.
+        Channel name, `<instance>.<channel>`, to its last value written since the previous drain.
     """
     channels = WISE_FSW.channels_by_id
-    return {channels[i].name: channels[i].decode(raw) for i, raw in _wise_fsw.telemetry().items()}
+    return {channels[i].name: channels[i].decode(raw) for i, _, raw in _wise_fsw.telemetry()}
 
 
 def test_the_python_build_and_the_fprime_build_hold_nav_to_one_contract():
@@ -52,6 +52,7 @@ def test_the_python_build_and_the_fprime_build_hold_nav_to_one_contract():
     python = Dictionary.from_component(model, "Gnc.ImuDeadReckoner", instance="nav")
 
     assert python.entries("nav")["channels"]
+    assert python.entries("nav")["commands"]
     assert python.entries("nav") == WISE_FSW.entries("nav")
 
 
@@ -117,6 +118,28 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: f
         python.step(t=k * step_ns / NS, AngVelPlatform=omega, AccelPlatform=accel)
         _wise_fsw.step(t_ns=k * step_ns, angVelPlatform=omega, accelPlatform=accel)
 
+    _assert_matches(python)
+
+
+def test_init_nav_state_starts_the_reckoner_at_its_epoch():
+    """Commanded with a state as of t = 60 s, the deployment agrees with a notebook started at 60 s.
+
+    The command runs at the step to 61 s, which propagates from the epoch.
+    """
+    rng = np.random.default_rng(5)
+    readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
+    python = ImuDeadReckoner(Q0, R0, V0, t0=60.0, mu=MU, dcm_PB=MOUNTING)
+    _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
+    for k in range(1, 61):
+        _wise_fsw.step(t_ns=k * NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+    state = {"epoch": 60.0, "attitude": Q0, "position": R0, "velocity": V0}
+    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
+
+    for k, (omega, accel) in enumerate(readings, start=61):
+        python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
+        _wise_fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
+
+    assert _wise_fsw.responses() == [(1, WISE_FSW.responses["OK"])]
     _assert_matches(python)
 
 

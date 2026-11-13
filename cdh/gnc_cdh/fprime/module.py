@@ -66,7 +66,7 @@ class FprimeModule(sysModel.SysModel):
     The deployment is the WiseFsw topology, whose content is the dead reckoner. The channel each
     estimate is read from, `_ESTIMATE`, is the one dead-reckoner-specific piece of this host.
     The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
-    and gives the dead reckoner its initial state, handed over directly rather than by command.
+    and gives the dead reckoner its initial state on its initialization port.
     Each `UpdateState` after the last tick reads the IMU once, steps the deployment and logs
     every channel the tick wrote, serialized, by the tick's time in ns; `estimate_datasets`
     decodes them through the deployment's dictionary.
@@ -129,7 +129,7 @@ class FprimeModule(sysModel.SysModel):
             r_BN_N=self._initial["r0_N"],
             v_BN_N=self._initial["v0_N"],
         )
-        self._log = {self._t_ns: self._fsw.telemetry()}
+        self._log = {self._t_ns: self._latest()}
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
         """Steps the deployment to the current time when it lies after the last tick.
@@ -158,7 +158,15 @@ class FprimeModule(sysModel.SysModel):
             accelPlatform=np.array(reading.AccelPlatform, dtype=float),
         )
         self._t_ns = CurrentSimNanos
-        self._log[CurrentSimNanos] = self._fsw.telemetry()
+        self._log[CurrentSimNanos] = self._latest()
+
+    def _latest(self) -> dict[int, bytes]:
+        """Drains the deployment's telemetry writes and keeps each channel's last.
+
+        Returns:
+            Channel ID to its last write since the previous drain, serialized.
+        """
+        return {channel: value for channel, _, value in self._fsw.telemetry()}
 
     def fly(self, run: Callable[[Any, dict[str, tuple[Any, str, str]]], dict]) -> dict:
         """Flies the scenario through `run` and records the estimate from the telemetry log.
