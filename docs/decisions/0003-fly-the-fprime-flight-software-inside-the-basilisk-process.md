@@ -7,7 +7,7 @@
 ## Revisions
 
 - **rev 2** — 2026-11-13 — the dictionary: a role's entries in shared FPP groups, array channels,
-  and a Python build's dictionary generated from FPP alone (issue 37 the Python-first dictionary);
+  and a Python build's dictionary generated from FPP alone (issue 37 the dictionary);
   commands through F´'s own dispatcher on a task with no thread, and `GroundLink` logging every
   telemetry write (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
