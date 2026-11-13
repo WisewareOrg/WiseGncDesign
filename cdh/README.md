@@ -128,8 +128,3 @@ and `_wise_fsw.responses()` returns each response under its context. `_wise_fsw.
 drains every telemetry write since the last call, each with its F´ time tag, and `boot` clears both
 and leaves nav idle. The reasoning is in
 [ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
-
-The module presents the link through these: `uplink` and `telemetry` pass through, `responses`
-gives each response with no reason, since F´ gives none, and `values` decodes a channel's writes
-through `gnc_cdh.dictionary` in one batch. An exception its reset or a tick raises is kept whole in
-`failure`, as `AlgorithmModule` keeps one.
