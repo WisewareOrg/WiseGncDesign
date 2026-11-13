@@ -11,7 +11,7 @@ from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk import ImuSpacecraft
 
 from gnc_algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
-from gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
+from gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner, _q_dot
 from gnc_cdh.basilisk import AlgorithmModule
 from harness.notebook import run_notebook
 
@@ -151,6 +151,21 @@ def test_the_kinematics_match_the_dcm_derivative_for_a_nonaligned_rate():
         atol=1e-3,
         err_msg="quaternion kinematics differ from the DCM derivative identity",
     )
+
+
+@pytest.mark.parametrize("dt", [1e-3, 1e-4])
+def test_q_dot_steps_the_attitude_as_scipy_rotates_it(dt: float):
+    """A step q + dq/dt dt agrees with q rotated by omega dt in B, to first order in dt.
+
+    Args:
+        dt: s, the step, whose square bounds the agreement.
+    """
+    omega = np.array([0.3, -0.2, 0.5])
+    for q in Rotation.random(200, random_state=5).as_quat(scalar_first=True):
+        rotated = Rotation.from_quat(q, scalar_first=True) * Rotation.from_rotvec(omega * dt)
+        expected = rotated.as_quat(scalar_first=True, canonical=False)
+        expected *= np.sign(expected @ q)
+        np.testing.assert_allclose(q + _q_dot(q, omega) * dt, expected, rtol=0, atol=dt**2)
 
 
 def test_a_nan_error_is_a_violation():

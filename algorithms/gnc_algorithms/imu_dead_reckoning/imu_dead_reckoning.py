@@ -23,7 +23,7 @@ from numba import njit
 from wise_dynamics.basilisk import Scenario
 
 from gnc_algorithms.imu_dead_reckoning.gross_check import gross_check
-from gnc_algorithms.quaternion import dcm_NB, q_dot
+from gnc_algorithms.quaternion import dcm_NB, multiply
 from gnc_cdh.basilisk import AlgorithmModule
 from harness.mission import Mission, mission_tests, provides
 
@@ -71,9 +71,24 @@ def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
 # \dot q_v = \tfrac{1}{2}\left(q_w\,\omega + q_v \times \omega\right)$$
 #
 # The integration drifts $q$ off unit norm at the order of its step error, so the step normalizes
-# it. Numba cannot call SciPy, so the step calls the kinematics, and the rotation matrix below,
-# from `gnc_algorithms.quaternion`, which tests them against SciPy; everything outside the step
-# uses SciPy.
+# it. Numba cannot call SciPy, so the step takes the Hamilton product $\otimes$, and the rotation
+# matrix below, from `gnc_algorithms.quaternion`, which tests them against SciPy; everything
+# outside the step uses SciPy.
+
+
+# %%
+@njit(cache=True)
+def _q_dot(q: np.ndarray, omega: np.ndarray) -> np.ndarray:
+    """The attitude kinematics, dq/dt = 1/2 q (x) (0, omega), compiled with numba.
+
+    Args:
+        q: (4,) quaternion W X Y Z of the body frame B with respect to the inertial frame N.
+        omega: (3,) rad/s, the rate of B with respect to N, in B.
+
+    Returns:
+        (4,) dq/dt, 1/s.
+    """
+    return 0.5 * multiply(q, np.concatenate((np.zeros(1), omega)))
 
 
 # %% [markdown]
@@ -195,7 +210,7 @@ def _step(
             dq/dt ((4,), 1/s), dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
         """
         r_dot, v_dot = _translational_rates(q, v, r, accel, mu)
-        return q_dot(q, omega), r_dot, v_dot
+        return _q_dot(q, omega), r_dot, v_dot
 
     k1 = derivs(q, r, v)
     k2 = derivs(q + 0.5 * dt * k1[0], r + 0.5 * dt * k1[1], v + 0.5 * dt * k1[2])
