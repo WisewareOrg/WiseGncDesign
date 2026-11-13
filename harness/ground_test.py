@@ -4,6 +4,7 @@ The stub link holds a toy component's dictionary, generated from FPP alone, and 
 what each test gives it.
 """
 
+import json
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any
 
@@ -29,6 +30,7 @@ module Toy {
 
   passive component Toy {
     sync command setMode(mode: Mode)
+    sync command setOffset(offset: Gnc.Vector3, gain: F32)
     telemetry mode: Mode
     telemetry offset: Gnc.Vector3 format "{} m"
     time get port timeCaller
@@ -258,6 +260,68 @@ def test_send_uplinks_the_encoded_command_and_returns_on_its_ok(dictionary: Dict
     ]
 
 
+def test_the_command_log_holds_array_and_numpy_arguments_as_plain_json(dictionary: Dictionary):
+    """An array and a numpy scalar argument are logged as a list and a float, as JSON writes them.
+
+    Args:
+        dictionary: the toy's dictionary.
+    """
+    link = StubLink(dictionary)
+
+    async def procedure(ground: Ground) -> None:
+        """Sends `setOffset` with an array and an F32.
+
+        Args:
+            ground: the ground running it.
+        """
+        await ground.send("toy.setOffset", offset=np.array([1.0, 2.0, 3.0]), gain=np.float32(0.25))
+
+    ground = _ground(link, procedure)
+
+    logged = json.loads(json.dumps(ground.command_log))
+    assert logged[0]["args"] == {"offset": [1.0, 2.0, 3.0], "gain": 0.25}
+    assert type(ground.command_log[0]["args"]["gain"]) is float
+
+
+def test_consecutive_commands_take_fresh_contexts_and_each_resumes_on_its_own_answer(
+    dictionary: Dictionary,
+):
+    """Two sends uplink under contexts 1 and 2; an answer under another context resumes neither.
+
+    Args:
+        dictionary: the toy's dictionary.
+    """
+    seen = []
+    link = StubLink(dictionary)
+
+    async def procedure(ground: Ground) -> None:
+        """Sends `setMode` twice, recording the time after each.
+
+        Args:
+            ground: the ground running it.
+        """
+        await ground.send("toy.setMode", mode="fast")
+        seen.append(ground.now_s)
+        await ground.send("toy.setMode", mode="slow")
+        seen.append(ground.now_s)
+
+    ground = _ground(link, procedure)
+    link.answers.append((1, dictionary.responses["OK"]))
+    _tick(ground, 1)
+    link.answers.append((7, dictionary.responses["OK"]))
+    _tick(ground, 2)
+    assert seen == [1.0]
+    link.answers.append((2, dictionary.responses["OK"]))
+    _tick(ground, 3)
+
+    assert seen == [1.0, 3.0]
+    assert [context for _, context in link.uplinked] == [1, 2]
+    assert [(e["context"], e["response"], e["response_t_s"]) for e in ground.command_log] == [
+        (1, "OK", 1.0),
+        (2, "OK", 3.0),
+    ]
+
+
 def test_a_command_answered_other_than_ok_fails_the_procedure_naming_it(dictionary: Dictionary):
     """A `VALIDATION_ERROR` raises `CommandFailed` naming the command and the response.
 
@@ -426,7 +490,7 @@ async def _returns(ground: Ground) -> None:
     """
 
 
-def _flown(period_s: float, stops: bool) -> dict[str, tuple[np.ndarray, str]]:
+def _flown(period_s: float, stops: bool) -> tuple[dict[str, tuple[np.ndarray, str]], Ground]:
     """The datasets of 120 s of nominal Leo500 flown by the dead reckoner under `leo500`.
 
     Args:
@@ -434,25 +498,30 @@ def _flown(period_s: float, stops: bool) -> dict[str, tuple[np.ndarray, str]]:
         stops: whether the ground's task stops once the procedure returns.
 
     Returns:
-        The run's datasets and the ground's telemetry datasets.
+        The run's datasets and the ground's telemetry datasets, and the ground.
     """
     scenario = Leo500()
     fsw = dead_reckoner(scenario)
     stop = scenario.stop_ground if stops else lambda: None
     ground = Ground(leo500, fsw, scenario.vehicle.tracking(), stop, period_s=period_s)
     datasets = scenario.run(fsw, {}, duration_s=120.0, ground=ground)
-    return datasets | ground.telemetry_datasets()
+    return datasets | ground.telemetry_datasets(), ground
 
 
 def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stops():
     """A ground ticking every second without stopping, every second, or every 10 s, records alike.
 
-    Every dataset of the run file, truth and telemetry, is equal row for row.
+    Every dataset of the run file, truth and telemetry, is equal row for row. The ground that does
+    not stop last ticks at the run's end; one that stops last ticks where its procedure returned,
+    at 61 s on a 1 s ground and at 70 s on a 10 s one, which sees the command's answer then.
     """
-    ticking = _flown(1.0, stops=False)
+    ticking, ground = _flown(1.0, stops=False)
     assert ticking["tlm_t/nav.bodyEciPos"][0][[0, -1]].tolist() == [61.0, 120.0]
+    assert ground.now_s == 120.0
 
-    for flown in (_flown(1.0, stops=True), _flown(10.0, stops=True)):
+    for period_s, last_tick_s in ((1.0, 61.0), (10.0, 70.0)):
+        flown, ground = _flown(period_s, stops=True)
+        assert ground.now_s == last_tick_s
         assert sorted(flown) == sorted(ticking)
         for name, (values, units) in ticking.items():
             np.testing.assert_array_equal(flown[name][0], values, err_msg=name)

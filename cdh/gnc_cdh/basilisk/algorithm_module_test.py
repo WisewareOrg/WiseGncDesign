@@ -158,6 +158,38 @@ class Broken(StubAlgorithm):
         raise ZeroDivisionError("the step's own bug")
 
 
+class BrokenHandler(StubAlgorithm):
+    """A stub whose `setGain` has a bug."""
+
+    def setGain(self, gain: float, mode: str) -> None:
+        """Fails as a bug in a handler does.
+
+        Args:
+            gain: the gain.
+            mode: the mode.
+
+        Raises:
+            KeyError: always.
+        """
+        raise KeyError("the handler's own bug")
+
+
+class MisspelledHandler(StubAlgorithm):
+    """A stub whose `setGain` writes a channel the dictionary does not have."""
+
+    def setGain(self, gain: float, mode: str) -> dict:
+        """Writes `gian`.
+
+        Args:
+            gain: the gain.
+            mode: the mode.
+
+        Returns:
+            `gian`.
+        """
+        return {"gian": gain}
+
+
 class NoHandler:
     """A stub with no method for the toy's command."""
 
@@ -406,6 +438,41 @@ def test_a_malformed_packet_earns_the_dictionary_s_response_and_runs_nothing(
 
     assert module.responses() == [(1, dictionary.responses[response])]
     assert module.algorithm.commands == []
+
+
+def test_a_handler_s_bug_fails_the_tick_kept_whole_and_is_not_answered(dictionary: Dictionary):
+    """A handler raising anything but `ValueError` fails its tick as itself, with no response.
+
+    Args:
+        dictionary: the toy's dictionary.
+    """
+    module = _module(dictionary, BrokenHandler())
+    _messages = _subscribed(module)
+    module.Reset(0)
+
+    with pytest.raises(KeyError, match="the handler's own bug") as raised:
+        _send(module, dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}))
+
+    assert module.failure is raised.value
+    assert module.responses() == []
+
+
+def test_a_handler_s_write_to_a_channel_the_dictionary_lacks_fails_naming_it(
+    dictionary: Dictionary,
+):
+    """A handler's write of `gian` raises at its tick, as a step's would.
+
+    Args:
+        dictionary: the toy's dictionary.
+    """
+    module = _module(dictionary, MisspelledHandler())
+    _messages = _subscribed(module)
+    module.Reset(0)
+
+    with pytest.raises(ValueError, match=r"toy\.gian is not a channel") as raised:
+        _send(module, dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}))
+
+    assert module.failure is raised.value
 
 
 def test_a_write_to_a_channel_the_dictionary_lacks_fails_on_its_tick_naming_it(

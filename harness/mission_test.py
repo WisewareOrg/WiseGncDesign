@@ -592,6 +592,9 @@ class StubHost(sysModel.SysModel):
 
     def telemetry(self):
         return []
+
+    def values(self, channel, payloads):
+        raise AssertionError("nothing is written")
 """
 
 
