@@ -17,6 +17,7 @@ analysis/      one analyzer per metric: its limits, error math and plot
 scenarios/     how each scenario a TST item references is flown
 algorithms/gnc_algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
                                     re-exporting the notebook
+algorithms/gnc_algorithms/quaternion.py   the quaternion math numba-compiled algorithms share
 missions/      notebooks that plan missions, and the test running them
 cdh/           gnc_cdh, the Python and F´ hosts and a worked example; fprime/, the F´ project
 docs/          requirements/ (Doorstop tree), decisions/ (ADRs)

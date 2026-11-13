@@ -10,9 +10,9 @@ from typing import Any
 
 import numpy as np
 from Basilisk.architecture import sysModel
-from scipy.spatial.transform import Rotation
 
-from gnc_cdh.basilisk import UNITS, AlgorithmModule
+from gnc_cdh import UNITS
+from gnc_cdh.basilisk import AlgorithmModule
 
 __all__ = ["DICTIONARY", "FprimeModule", "decoders", "extension", "telemetry_by_name"]
 
@@ -137,8 +137,8 @@ class FprimeModule(sysModel.SysModel):
             imu: the IMU reader, subscribed by the caller.
             mu: m^3/s^2, the central body's gravitational parameter.
             dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B.
-            initial: the dead reckoner's state at t = 0: `sigma0_BN` (MRP), `r0_N` (m) and `v0_N`
-                (m/s), each (3,), in the shape of a scenario's `initial_state()`.
+            initial: the dead reckoner's state at t = 0: `q0_BN` ((4,) quaternion W X Y Z), `r0_N`
+                ((3,) m) and `v0_N` ((3,) m/s), in the shape of a scenario's `initial_state()`.
         """
         super().__init__()
         self._fsw = extension()
@@ -173,7 +173,7 @@ class FprimeModule(sysModel.SysModel):
         self._fsw.boot(mu=self._mu, dcm_PB=self._dcm_PB)
         self._fsw.initialize_nav(
             t_ns=self._t_ns,
-            sigma_BN=self._initial["sigma0_BN"],
+            q_BN=self._initial["q0_BN"],
             r_BN_N=self._initial["r0_N"],
             v_BN_N=self._initial["v0_N"],
         )
@@ -233,13 +233,12 @@ class FprimeModule(sysModel.SysModel):
     def estimate_datasets(self, t_s: np.ndarray) -> dict[str, tuple[np.ndarray, str]]:
         """The estimate's run-file datasets at the record times, from the logged telemetry.
 
-        The attitude quaternion becomes `sigma_BN`, the MRP whose [NB] is the quaternion's matrix.
-
         Args:
             t_s: (N,) s, the record times, each one a tick's time to the nanosecond.
 
         Returns:
-            `est/sigma_BN` (MRP), `est/r_BN_N` (m) and `est/v_BN_N` (m/s), each (N, 3).
+            `est/q_BN` ((N, 4) quaternion W X Y Z), `est/r_BN_N` ((N, 3) m) and `est/v_BN_N`
+            ((N, 3) m/s).
 
         Raises:
             KeyError: naming a record time no tick logged.
@@ -250,9 +249,8 @@ class FprimeModule(sysModel.SysModel):
             if t_ns not in self._log:
                 raise KeyError(f"no telemetry was logged at t = {t} s")
             rows.append(self._log[t_ns])
-        quaternion = [[row[f"nav.bodyEciAttitude{a}"] for a in "XYZW"] for row in rows]
         values = {
-            "sigma_BN": Rotation.from_quat(quaternion).as_mrp(),
+            "q_BN": np.array([[row[f"nav.bodyEciAttitude{a}"] for a in "WXYZ"] for row in rows]),
             "r_BN_N": np.array([[row[f"nav.bodyEciPos{a}"] for a in "XYZ"] for row in rows]),
             "v_BN_N": np.array([[row[f"nav.bodyEciVel{a}"] for a in "XYZ"] for row in rows]),
         }

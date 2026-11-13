@@ -16,17 +16,19 @@ from harness.requirements_tree import limit, rungs
 from harness.runs import read_run
 
 
-def attitude_error_rad(sigma_truth_BN: np.ndarray, sigma_est_BN: np.ndarray) -> np.ndarray:
+def attitude_error_rad(q_truth_BN: np.ndarray, q_est_BN: np.ndarray) -> np.ndarray:
     """The principal angle between truth's attitude and the estimate's at each sample.
 
     Args:
-        sigma_truth_BN: (N, 3) MRP of the body frame B with respect to the inertial frame N.
-        sigma_est_BN: (N, 3) the estimate of the same.
+        q_truth_BN: (N, 4) quaternion W X Y Z of the body frame B with respect to the inertial
+            frame N.
+        q_est_BN: (N, 4) the estimate of the same.
 
     Returns:
         (N,) rad, the magnitude of the rotation from the estimated attitude to the true one.
     """
-    truth, estimate = Rotation.from_mrp(sigma_truth_BN), Rotation.from_mrp(sigma_est_BN)
+    truth = Rotation.from_quat(q_truth_BN, scalar_first=True)
+    estimate = Rotation.from_quat(q_est_BN, scalar_first=True)
     return (truth * estimate.inv()).magnitude()
 
 
@@ -49,7 +51,7 @@ def test_attitude_knowledge(
         worst[nodeid] = {}
         for case, path in results.runs.items():
             run = read_run(path)
-            error = attitude_error_rad(run["truth/sigma_BN"], run["est/sigma_BN"])
+            error = attitude_error_rad(run["truth/q_BN"], run["est/q_BN"])
             worst[nodeid][case] = float(np.max(error))
         figure = Figure(layout="constrained")
         axes = figure.subplots()

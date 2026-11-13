@@ -68,12 +68,32 @@ class UnreadKeyword(StubAlgorithm):
 
 
 class UnknownOutput(StubAlgorithm):
-    """A stub holding an output, `value`, that no standard message carries."""
+    """A stub holding an output, `value`, that is not an estimate `gnc_cdh.UNITS` names."""
 
     def __init__(self) -> None:
         """Starts as `StubAlgorithm` does, plus `value` ((3,))."""
         super().__init__()
         self.value = np.zeros(3)
+
+
+class InPlace(StubAlgorithm):
+    """A stub that steps its outputs by writing into the arrays it holds."""
+
+    def step(self, t: float, AngVelPlatform: np.ndarray, sigma_BN: np.ndarray) -> dict:
+        """Steps the outputs in place.
+
+        Args:
+            t: s, the step's time.
+            AngVelPlatform: (3,) rad/s, read from the IMU message.
+            sigma_BN: (3,) MRP, read from the navigation message.
+
+        Returns:
+            `r_BN_N` and `v_BN_N`, the arrays the stub holds.
+        """
+        self.t = t
+        self.r_BN_N[:] = t * STEPPED
+        self.v_BN_N[:] = -t * STEPPED
+        return {"r_BN_N": self.r_BN_N, "v_BN_N": self.v_BN_N}
 
 
 def _imu_message(angvel: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> messaging.IMUSensorMsg:
@@ -164,37 +184,41 @@ def test_each_step_keyword_is_read_from_the_message_carrying_that_field():
     np.testing.assert_array_equal(step["sigma_BN"], [0.4, 0.5, 0.6])
 
 
-def test_each_output_goes_to_the_standard_message_carrying_its_name():
-    """`r_BN_N` and `v_BN_N` go to `nav_trans`, the only message created."""
-    module = _module()
-
-    assert sorted(module.output_messages) == ["nav_trans"]
-    assert set(module.outputs) == {"r_BN_N", "v_BN_N"}
-
-
-def test_reset_writes_the_initial_state_to_every_output():
-    """`Reset` writes the algorithm's `r_BN_N` and `v_BN_N` as it holds them."""
-    module = _module()
-    _messages = _subscribed(module)
-
-    module.Reset(0)
-
-    payload = module.output_messages["nav_trans"].read()
-    np.testing.assert_array_equal(payload.r_BN_N, [0.5, 0.5, 0.5])
-    np.testing.assert_array_equal(payload.v_BN_N, [-0.5, -0.5, -0.5])
-
-
-def test_a_step_writes_the_returned_arrays_to_every_output():
-    """A step writes the arrays `step` returns to their message fields."""
+def test_reset_and_each_step_log_the_estimate_by_the_tick_s_time():
+    """The estimate is the outputs as held at the reset, then as each step returns them."""
     module = _module()
     _messages = _subscribed(module)
 
     module.Reset(0)
     module.UpdateState(ONE_SECOND_NS)
 
-    payload = module.output_messages["nav_trans"].read()
-    np.testing.assert_array_equal(payload.r_BN_N, STEPPED)
-    np.testing.assert_array_equal(payload.v_BN_N, -STEPPED)
+    datasets = module.estimate_datasets(np.array([0.0, 1.0]))
+    assert sorted(datasets) == ["est/r_BN_N", "est/v_BN_N"]
+    np.testing.assert_array_equal(datasets["est/r_BN_N"][0], [[0.5, 0.5, 0.5], STEPPED])
+    np.testing.assert_array_equal(datasets["est/v_BN_N"][0], [[-0.5, -0.5, -0.5], -STEPPED])
+    assert (datasets["est/r_BN_N"][1], datasets["est/v_BN_N"][1]) == ("m", "m/s")
+
+
+def test_the_log_keeps_each_tick_s_values_when_the_algorithm_changes_its_arrays_in_place():
+    """An algorithm that steps by mutating its arrays still leaves each tick's values in the log."""
+    module = _module(InPlace())
+    _messages = _subscribed(module)
+
+    module.Reset(0)
+    module.UpdateState(ONE_SECOND_NS)
+
+    rows = module.estimate_datasets(np.array([0.0, 1.0]))["est/r_BN_N"][0]
+    np.testing.assert_array_equal(rows, [[0.5, 0.5, 0.5], STEPPED])
+
+
+def test_the_estimate_names_a_record_time_no_tick_logged():
+    """A record time between ticks is refused by its time."""
+    module = _module()
+    _messages = _subscribed(module)
+    module.Reset(0)
+
+    with pytest.raises(KeyError, match="no estimate was logged at t = 0.5 s"):
+        module.estimate_datasets(np.array([0.5]))
 
 
 def test_the_call_at_the_reset_time_does_not_step():
@@ -227,18 +251,16 @@ def test_construction_names_a_keyword_two_inputs_carry():
         AlgorithmModule(StubAlgorithm(), readers)
 
 
-def test_construction_names_an_output_no_standard_message_carries():
-    """An output name that no standard message has as a field is refused by name."""
-    with pytest.raises(ValueError, match=r"carries the outputs \['value'\]"):
+def test_construction_names_an_output_that_is_not_an_estimate():
+    """An output name that `gnc_cdh.UNITS` does not name is refused by name."""
+    with pytest.raises(ValueError, match=r"outputs \['value'\] are not estimates"):
         _module(UnknownOutput())
 
 
-def test_the_message_tables_are_read_only():
-    """Neither the input readers nor the output messages can be replaced."""
+def test_the_input_table_is_read_only():
+    """The input readers cannot be replaced."""
     module = _module()
 
-    with pytest.raises(TypeError):
-        module.output_messages["extra"] = messaging.NavAttMsg()
     with pytest.raises(TypeError):
         module.inputs["extra"] = messaging.NavAttMsgReader()
 
@@ -265,12 +287,10 @@ def test_a_step_names_an_input_never_written():
         module.UpdateState(ONE_SECOND_NS)
 
 
-def test_a_task_at_the_module_period_writes_the_outputs_at_whole_seconds():
-    """Run 3.5 s in a task every `period_s`, the outputs are last written at 3 s."""
+def test_a_task_at_the_module_period_logs_the_estimate_at_whole_seconds():
+    """Run 3.5 s in a task every `period_s`, the estimate is logged at 0, 1, 2 and 3 s only."""
     module = _module()
     _messages = _subscribed(module)
-    nav_trans = messaging.NavTransMsgReader()
-    nav_trans.subscribeTo(module.output_messages["nav_trans"])
     sim = SimulationBaseClass.SimBaseClass()
     sim.CreateNewProcess("process").addTask(
         sim.CreateNewTask("task", macros.sec2nano(module.period_s))
@@ -281,8 +301,10 @@ def test_a_task_at_the_module_period_writes_the_outputs_at_whole_seconds():
     sim.ConfigureStopTime(macros.sec2nano(3.5))
     sim.ExecuteSimulation()
 
-    assert nav_trans.timeWritten() == 3 * ONE_SECOND_NS
-    np.testing.assert_array_equal(nav_trans().r_BN_N, 3 * STEPPED)
+    rows = module.estimate_datasets(np.array([0.0, 1.0, 2.0, 3.0]))["est/r_BN_N"][0]
+    np.testing.assert_array_equal(rows[1:], [STEPPED, 2 * STEPPED, 3 * STEPPED])
+    with pytest.raises(KeyError):
+        module.estimate_datasets(np.array([3.5]))
     assert module.algorithm.t == 3.0
 
 

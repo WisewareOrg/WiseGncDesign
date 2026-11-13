@@ -13,7 +13,8 @@ def read_run(path: str | Path) -> dict[str, np.ndarray]:
         path: the run file.
 
     Returns:
-        Each dataset by its path, `t_s` (s, (N,)) and `truth/*`, `est/*` and `imu/*` ((N, 3)),
+        Each dataset by its path, `t_s` (s, (N,)) and `truth/*`, `est/*` and `imu/*` ((N, 3), or
+        (N, 4) for a quaternion such as `truth/q_BN`),
         and each root attribute by its name, such as `draw_gyro_bias_P_rad_s`.
     """
     with h5py.File(path, "r") as f:

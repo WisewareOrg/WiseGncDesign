@@ -6,22 +6,13 @@ from types import MappingProxyType
 from typing import Any
 
 import numpy as np
-from Basilisk.architecture import messaging, sysModel
+from Basilisk.architecture import sysModel
 
-from gnc_cdh.basilisk.fields import estimate_fields
+from gnc_cdh import UNITS
 
-__all__ = ["STANDARD_MESSAGES", "AlgorithmModule"]
+__all__ = ["AlgorithmModule"]
 
 _NANOSECONDS_PER_SECOND = 1e9
-
-STANDARD_MESSAGES: Mapping[str, tuple[type, tuple[str, ...]]] = MappingProxyType(
-    {
-        "nav_att": (messaging.NavAttMsg, ("sigma_BN", "omega_BN_B")),
-        "nav_trans": (messaging.NavTransMsg, ("r_BN_N", "v_BN_N")),
-    }
-)
-"""Basilisk's standard output messages, by the name the module gives each: its message type and
-the standard fields it carries."""
 
 
 class AlgorithmModule(sysModel.SysModel):
@@ -29,11 +20,11 @@ class AlgorithmModule(sysModel.SysModel):
 
     Each keyword of the algorithm's `step` other than `t` is a message field, read from the one
     input reader whose message has a field of that name. The algorithm's outputs are its public
-    attributes other than `t`, each a standard field that one of `STANDARD_MESSAGES` carries.
-    `Reset` writes the outputs as the algorithm holds them. Each `UpdateState` at a time after the
-    algorithm's `t` reads every input once, calls `step(t=..., **fields)` with `t` in s, and writes
-    the arrays it returns. The call Basilisk makes at the reset time itself leaves the state as
-    built.
+    attributes other than `t`, each an estimate named in `gnc_cdh.UNITS`. `Reset` logs the outputs
+    as the algorithm holds them. Each `UpdateState` at a time after the algorithm's `t` reads every
+    input once, calls `step(t=..., **fields)` with `t` in s, and logs the arrays it returns, by the
+    tick's time in ns. `fly` records the log as the estimate. The call Basilisk makes at the reset
+    time itself leaves the state as built.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in: the flight
@@ -43,7 +34,7 @@ class AlgorithmModule(sysModel.SysModel):
     period_s = 1.0
 
     def __init__(self, algorithm: Any, inputs: Mapping[str, Any]) -> None:
-        """Resolves the algorithm's keywords against `inputs` and its outputs against messages.
+        """Resolves the algorithm's keywords against `inputs` and checks its outputs.
 
         Args:
             algorithm: the algorithm, built at the simulation's start time, holding `t` (s) and
@@ -52,7 +43,7 @@ class AlgorithmModule(sysModel.SysModel):
 
         Raises:
             ValueError: naming a `step` keyword that no input's message carries or more than one
-                does, or an output that no entry of `STANDARD_MESSAGES` carries.
+                does, or an output that `gnc_cdh.UNITS` does not name.
         """
         super().__init__()
         self._algorithm = algorithm
@@ -60,20 +51,12 @@ class AlgorithmModule(sysModel.SysModel):
         keywords = [k for k in inspect.signature(algorithm.step).parameters if k != "t"]
         self._reads = tuple((self._role(keyword), keyword) for keyword in keywords)
         self._names = tuple(n for n in vars(algorithm) if not n.startswith("_") and n != "t")
-        carriers = {
-            field: name for name, (_, fields) in STANDARD_MESSAGES.items() for field in fields
-        }
-        uncarried = sorted(n for n in self._names if n not in carriers)
-        if uncarried:
-            raise ValueError(f"no standard message carries the outputs {uncarried}")
-        self._carriers = {n: carriers[n] for n in self._names}
-        used = sorted(set(self._carriers.values()))
-        self._outputs = MappingProxyType({name: STANDARD_MESSAGES[name][0]() for name in used})
-        payloads = {name: type(m.zeroMsgPayload)() for name, m in self._outputs.items()}
-        self._writes = tuple((payloads[carriers[n]], n) for n in self._names)
-        self._sends = tuple((self._outputs[name].write, p) for name, p in payloads.items())
+        unnamed = sorted(n for n in self._names if n not in UNITS)
+        if unnamed:
+            raise ValueError(f"outputs {unnamed} are not estimates gnc_cdh.UNITS names")
         self._readers = tuple(self._inputs.items())
         self._inputs_written = False
+        self._log: dict[int, dict[str, np.ndarray]] = {}
 
     def _role(self, keyword: str) -> str:
         """The input role whose message carries the field `keyword`.
@@ -103,22 +86,12 @@ class AlgorithmModule(sysModel.SysModel):
         return self._inputs
 
     @property
-    def output_messages(self) -> Mapping[str, Any]:
-        """Output message by name, the standard messages this module writes."""
-        return self._outputs
-
-    @property
-    def outputs(self) -> Mapping[str, Any]:
-        """Output message by output name: the standard message each output is written to."""
-        return MappingProxyType({name: self._outputs[self._carriers[name]] for name in self._names})
-
-    @property
     def algorithm(self) -> Any:
         """The hosted algorithm, for inspection."""
         return self._algorithm
 
     def Reset(self, CurrentSimNanos: int) -> None:
-        """Writes the algorithm's outputs as it holds them.
+        """Logs the algorithm's outputs as it holds them.
 
         Args:
             CurrentSimNanos: ns, the reset time, as Basilisk passes it.
@@ -129,9 +102,7 @@ class AlgorithmModule(sysModel.SysModel):
         unlinked = sorted(name for name, reader in self._readers if not reader.isLinked())
         if unlinked:
             raise RuntimeError(f"inputs {unlinked} are not subscribed to any message")
-        self._write_outputs(
-            {name: getattr(self._algorithm, name) for name in self._names}, CurrentSimNanos
-        )
+        self._log = {CurrentSimNanos: self._logged(vars(self._algorithm))}
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
         """Steps the algorithm to the current time when it lies after the algorithm's `t`.
@@ -156,30 +127,52 @@ class AlgorithmModule(sysModel.SysModel):
             keyword: np.array(getattr(payloads[role], keyword), dtype=float)
             for role, keyword in self._reads
         }
-        self._write_outputs(self._algorithm.step(t=t, **fields), CurrentSimNanos)
+        self._log[CurrentSimNanos] = self._logged(self._algorithm.step(t=t, **fields))
 
     def fly(self, run: Callable[[Any, dict[str, tuple[Any, str, str]]], dict]) -> dict:
-        """Flies the scenario through `run` and records the estimate from the messages written.
+        """Flies the scenario through `run` and records the estimate from the log.
 
         Args:
             run: flies the scenario with this host and the datasets to record, as the harness
                 binds it from the scenario and its stopping rule.
 
         Returns:
-            The run's datasets.
+            The run's datasets with the estimate's added.
         """
-        return run(self, estimate_fields(self))
+        datasets = run(self, {})
+        datasets.update(self.estimate_datasets(datasets["t_s"][0]))
+        return datasets
 
-    def _write_outputs(self, values: Mapping[str, Any], CurrentSimNanos: int) -> None:
-        """Copies each output's array into its message field and writes every output message.
+    def estimate_datasets(self, t_s: np.ndarray) -> dict[str, tuple[np.ndarray, str]]:
+        """The estimate's run-file datasets at the record times, from the log.
 
         Args:
-            values: output name to its array.
-            CurrentSimNanos: ns, the time the messages are written at.
+            t_s: (N,) s, the record times, each one a tick's time to the nanosecond.
+
+        Returns:
+            `est/<output>` for each output, its rows at `t_s`, with its units.
+
+        Raises:
+            KeyError: naming a record time no tick logged.
         """
-        for payload, name in self._writes:
-            value = values[name]
-            setattr(payload, name, value.tolist() if isinstance(value, np.ndarray) else value)
-        module_id = self.moduleID
-        for write, payload in self._sends:
-            write(payload, CurrentSimNanos, module_id)
+        rows = []
+        for t in t_s:
+            t_ns = round(float(t) * _NANOSECONDS_PER_SECOND)
+            if t_ns not in self._log:
+                raise KeyError(f"no estimate was logged at t = {t} s")
+            rows.append(self._log[t_ns])
+        return {
+            f"est/{name}": (np.array([row[name] for row in rows]), UNITS[name])
+            for name in self._names
+        }
+
+    def _logged(self, values: Mapping[str, Any]) -> dict[str, np.ndarray]:
+        """A copy of each output's array, as the log keeps it.
+
+        Args:
+            values: output name to its array, and possibly other names.
+
+        Returns:
+            Output name to a copy of its array.
+        """
+        return {name: np.array(values[name], dtype=float) for name in self._names}

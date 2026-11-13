@@ -14,7 +14,7 @@ class SimBridge final : public SimBridgeComponentBase {
     void configureNav(F64 mu, const Gnc::Matrix3& dcmPB);
 
     //! Sends the navigation filter the state to start from at the current time.
-    void initializeNav(const Gnc::Vector3& sigmaBN, const Gnc::Vector3& rBN_N, const Gnc::Vector3& vBN_N);
+    void initializeNav(const Gnc::Quaternion& qBN, const Gnc::Vector3& rBN_N, const Gnc::Vector3& vBN_N);
 
     //! Sends one IMU reading to the deployment.
     void sendImu(const Gnc::Vector3& angVelPlatform, const Gnc::Vector3& accelPlatform);

@@ -10,26 +10,26 @@ estimate, and `build`, the host's build identity, which the harness records in t
 [ADR 0003 rev 1](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
-algorithm's `step` as plain arrays, and the arrays it returns into messages, by name. Frames,
-mountings and units belong to the algorithm.
+algorithm's `step` as plain arrays, and logs the arrays it returns, by name. Frames and mountings
+belong to the algorithm.
 
 `gnc_cdh.basilisk.AlgorithmModule(algorithm, inputs)` hosts an algorithm built at the simulation's
 start time on a dict of subscribed Basilisk readers, by role. The algorithm's names are its wiring:
 - each keyword of its `step` other than `t` is a message field, read from the one input whose
   message has a field of that name;
-- its outputs are its public attributes other than `t`, each named in Basilisk's navigation
-  convention and written to the standard message that carries a field of that name.
+- its outputs are its public attributes other than `t`, each an estimate `gnc_cdh.UNITS` names:
+  `q_BN` (quaternion W X Y Z), `r_BN_N` (m) and `v_BN_N` (m/s).
 
-`STANDARD_MESSAGES` is the host's one table of those messages: `nav_att`, a `NavAttMsg` carrying
-`sigma_BN` and `omega_BN_B`, and `nav_trans`, a `NavTransMsg` carrying `r_BN_N` and `v_BN_N`.
-Construction refuses a keyword that no input carries or that two do, and an output no standard
-message carries.
+Construction refuses a keyword that no input carries or that two do, and an output `gnc_cdh.UNITS`
+does not name. Basilisk has no navigation message that carries a quaternion, so the host records
+the estimate itself, as the F´ host does.
 
 The module declares `period_s` (1 s), the period of the task the simulation runs it in, so the
 flight software runs at 1 Hz, and the simulation steps its dynamics and samples the IMU at that
-period at every fidelity. `Reset` writes the algorithm's outputs as it holds them. Each
-`UpdateState` after the algorithm's `t` reads every input once, steps the algorithm and writes what
-it returns. Each docstring gives what it refuses.
+period at every fidelity. `Reset` logs the algorithm's outputs as it holds them. Each
+`UpdateState` after the algorithm's `t` reads every input once, steps the algorithm and logs what it
+returns, by the tick's time. `fly` adds the log at the record times to the run file as
+`est/<output>`. Each docstring gives what it refuses.
 
 ## Example: boot the dead reckoner against a simulated spacecraft
 
@@ -51,7 +51,7 @@ with the vehicle's truth:
 True
 >>> initial = scenario.initial_state()
 >>> algorithm = ImuDeadReckoner(
-...     initial["sigma0_BN"],
+...     initial["q0_BN"],
 ...     initial["r0_N"],
 ...     initial["v0_N"],
 ...     t0=0.0,
@@ -59,8 +59,6 @@ True
 ...     dcm_PB=np.eye(3),
 ... )
 >>> fsw = AlgorithmModule(algorithm, vehicle.readers())
->>> sorted(fsw.output_messages)
-['nav_att', 'nav_trans']
 >>> datasets = scenario.run(fsw, {}, duration_s=60.0)
 >>> fsw.algorithm.t
 60.0
@@ -76,8 +74,7 @@ True
 
 Write the algorithm in `gnc_algorithms`. Its `step(t=..., **inputs)` takes plain arrays by keyword,
 each named as the message field it reads, and returns plain named arrays; it holds `t` and each
-output as an attribute, named in Basilisk's navigation convention. An output that no entry of
-`STANDARD_MESSAGES` carries gets that message added there.
+output as an attribute. An output `gnc_cdh.UNITS` does not name gets its units added there.
 
 ## The F´ host
 

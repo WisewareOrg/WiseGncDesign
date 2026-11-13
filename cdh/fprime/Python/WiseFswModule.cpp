@@ -17,6 +17,10 @@ Gnc::Vector3 vector3(const Eigen::Vector3d& v) {
     return Gnc::Vector3({v.x(), v.y(), v.z()});
 }
 
+Gnc::Quaternion quaternion(const Eigen::Vector4d& q) {
+    return Gnc::Quaternion({q[0], q[1], q[2], q[3]});
+}
+
 Gnc::Matrix3 matrix3(const Eigen::Matrix3d& m) {
     return Gnc::Matrix3({Gnc::Vector3({m(0, 0), m(0, 1), m(0, 2)}), Gnc::Vector3({m(1, 0), m(1, 1), m(1, 2)}),
                          Gnc::Vector3({m(2, 0), m(2, 1), m(2, 2)})});
@@ -45,12 +49,12 @@ PYBIND11_MODULE(_wise_fsw, m) {
 
     m.def(
         "initialize_nav",
-        [](U64 t_ns, const Eigen::Vector3d& sigma_BN, const Eigen::Vector3d& r_BN_N, const Eigen::Vector3d& v_BN_N) {
+        [](U64 t_ns, const Eigen::Vector4d& q_BN, const Eigen::Vector3d& r_BN_N, const Eigen::Vector3d& v_BN_N) {
             WiseFsw::tlmCapture.clear();
             WiseFsw::simTime.set(t_ns);
-            WiseFsw::simBridge.initializeNav(vector3(sigma_BN), vector3(r_BN_N), vector3(v_BN_N));
+            WiseFsw::simBridge.initializeNav(quaternion(q_BN), vector3(r_BN_N), vector3(v_BN_N));
         },
-        py::arg("t_ns"), py::arg("sigma_BN"), py::arg("r_BN_N"), py::arg("v_BN_N"),
+        py::arg("t_ns"), py::arg("q_BN"), py::arg("r_BN_N"), py::arg("v_BN_N"),
         "Gives the dead reckoner its state at t_ns (ns); telemetry() then holds what that wrote. The state "
         "is given directly rather than by command.");
 
