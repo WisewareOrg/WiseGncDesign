@@ -26,10 +26,10 @@ Vector4d wxyz(const Quaterniond& q) {
 //! dq/dt = 1/2 q (x) (0, omega), dr/dt = v, dv/dt = [NB](q) accel - mu r / |r|^3, [NB] of q as it stands.
 Derivative derivative(const Vector4d& q, const Vector3d& r, const Vector3d& v, const Vector3d& omega,
                       const Vector3d& accel, F64 mu) {
-    const Quaterniond qq = quaternion(q);
-    const Quaterniond qdot = qq * Quaterniond(0.0, omega.x(), omega.y(), omega.z());
+    const Quaterniond rotation = quaternion(q);
+    const Quaterniond qdot = rotation * Quaterniond(0.0, omega.x(), omega.y(), omega.z());
     const F64 rNorm = r.norm();
-    return {0.5 * wxyz(qdot), v, qq.toRotationMatrix() * accel - mu * r / (rNorm * rNorm * rNorm)};
+    return {0.5 * wxyz(qdot), v, rotation.toRotationMatrix() * accel - mu * r / (rNorm * rNorm * rNorm)};
 }
 
 Vector3d vector(const Gnc::Vector3& v) {
@@ -64,7 +64,8 @@ void ImuDeadReckoner::configureIn_handler(FwIndexType portNum, F64 mu, const Gnc
 void ImuDeadReckoner::initializeIn_handler(FwIndexType portNum, const Gnc::Quaternion& qBN, const Gnc::Vector3& rBN_N,
                                            const Gnc::Vector3& vBN_N) {
     this->m_t = this->now();
-    this->m_q = Quaterniond(qBN[0], qBN[1], qBN[2], qBN[3]);
+    const F64 sign = qBN[0] < 0.0 ? -1.0 : 1.0;
+    this->m_q = Quaterniond(sign * qBN[0], sign * qBN[1], sign * qBN[2], sign * qBN[3]);
     this->m_r = vector(rBN_N);
     this->m_v = vector(vBN_N);
     this->m_navState = NavState::initialized;

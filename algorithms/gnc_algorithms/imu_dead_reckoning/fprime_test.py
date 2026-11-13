@@ -63,6 +63,7 @@ def _assert_matches(python: ImuDeadReckoner) -> None:
     """
     tlm = _telemetry()
     assert tlm["nav.navState"] == "propagated"
+    assert tlm["nav.bodyEciAttitude"][0] >= 0.0
     np.testing.assert_allclose(tlm["nav.bodyEciAttitude"], python.q_BN, rtol=0, atol=1e-12)
     np.testing.assert_allclose(tlm["nav.bodyEciPos"], python.r_BN_N, rtol=1e-12)
     np.testing.assert_allclose(tlm["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)
@@ -76,16 +77,19 @@ def test_a_booted_reckoner_reports_idle_and_no_state():
     assert _telemetry() == {"nav.navState": "idle"}
 
 
-def test_the_attitude_quaternion_takes_body_vectors_into_eci_with_w_nonnegative():
-    """The written quaternion is the initial one, and its W is not negative."""
+@pytest.mark.parametrize("sign", [1.0, -1.0], ids=["w-positive", "w-negative"])
+def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(sign: float):
+    """Initialized from q or -q, the deployment writes q, whose W is not negative.
+
+    Args:
+        sign: the sign the initial quaternion is given with.
+    """
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    _wise_fsw.initialize_nav(t_ns=0, q_BN=Q0, r_BN_N=R0, v_BN_N=V0)
+    _wise_fsw.initialize_nav(t_ns=0, q_BN=sign * Q0, r_BN_N=R0, v_BN_N=V0)
 
     tlm = _telemetry()
-    q = tlm["nav.bodyEciAttitude"]
     assert tlm["nav.navState"] == "initialized"
-    assert q[0] >= 0.0
-    np.testing.assert_array_equal(q, Q0)
+    np.testing.assert_array_equal(tlm["nav.bodyEciAttitude"], Q0)
 
 
 @pytest.mark.parametrize(

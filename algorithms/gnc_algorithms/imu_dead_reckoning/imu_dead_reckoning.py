@@ -289,7 +289,7 @@ class ImuDeadReckoner:
         """Holds the initial state, `mu` and the mounting.
 
         Args:
-            q0_BN: (4,) quaternion W X Y Z of B with respect to N at `t0`.
+            q0_BN: (4,) quaternion W X Y Z of B with respect to N at `t0`, held with W >= 0.
             r0_N: (3,) m, inertial position in N at `t0`.
             v0_N: (3,) m/s, inertial velocity in N at `t0`.
             t0: s, the time the initial state applies at.
@@ -299,7 +299,8 @@ class ImuDeadReckoner:
         self._mu = float(mu)
         self._dcm_BP = np.ascontiguousarray(np.asarray(dcm_PB, dtype=float).T)
         self.t = float(t0)
-        self.q_BN = np.asarray(q0_BN, dtype=float)
+        q0 = np.asarray(q0_BN, dtype=float)
+        self.q_BN = -q0 if q0[0] < 0.0 else q0
         self.r_BN_N = np.asarray(r0_N, dtype=float)
         self.v_BN_N = np.asarray(v0_N, dtype=float)
 
