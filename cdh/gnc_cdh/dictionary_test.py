@@ -289,8 +289,9 @@ def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
         ("toy.gain", [0.5]),
         ("toy.offset", [np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0, 6.0])]),
         ("toy.offset", [struct.pack(">2d", 1.0, 2.0)]),
+        ("toy.offset", [struct.pack(">2d", 1.0, 2.0), struct.pack(">4d", 3.0, 4.0, 5.0, 6.0)]),
     ],
-    ids=["number", "numpy-array", "wrong-length"],
+    ids=["number", "numpy-array", "wrong-length", "misaligned"],
 )
 def test_decode_many_takes_whole_serialized_values_only(
     toy: Dictionary, channel: str, serialized: list

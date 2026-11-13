@@ -199,16 +199,13 @@ class Channel:
             As `pack_many` gives it.
 
         Raises:
-            ValueError: naming the channel, for a write that is not bytes, writes that are not
-                whole values of its type, or an enum value that is no constant.
+            ValueError: naming the channel, for a write that is not bytes of one value of its type,
+                or an enum value that is no constant.
         """
-        if not all(isinstance(value, bytes) for value in serialized):
-            raise ValueError(f"channel {self.name} decodes bytes only")
-        try:
-            raw = np.frombuffer(b"".join(serialized), self._type.dtype)
-        except ValueError as error:
-            raise ValueError(f"channel {self.name} cannot decode its writes: {error}") from error
-        return self._values(raw)
+        size = self._type.dtype.itemsize
+        if not all(isinstance(value, bytes) and len(value) == size for value in serialized):
+            raise ValueError(f"channel {self.name} decodes {size}-byte writes only")
+        return self._values(np.frombuffer(b"".join(serialized), self._type.dtype))
 
     def pack_many(self, written: Sequence[Any]) -> np.ndarray:
         """Every write's value in one array, from the values a Python algorithm wrote.
