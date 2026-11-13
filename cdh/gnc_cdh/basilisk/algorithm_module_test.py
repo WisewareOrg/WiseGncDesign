@@ -137,19 +137,6 @@ class Faulty(StubAlgorithm):
         super().__init__()
         self.where, self.fault = where, fault
 
-    def _fail(self) -> dict:
-        """Fails as `fault` says.
-
-        Returns:
-            `ofset`, a channel the dictionary lacks, when misspelled.
-
-        Raises:
-            ZeroDivisionError: when a bug.
-        """
-        if self.fault == "bug":
-            raise ZeroDivisionError("the algorithm's own bug")
-        return {"ofset": 1.0}
-
     def setGain(self, gain: float, mode: str) -> dict:
         """Fails, when `where` names it; else as `StubAlgorithm.setGain`.
 
@@ -158,9 +145,16 @@ class Faulty(StubAlgorithm):
             mode: the mode.
 
         Returns:
-            The fault, or `gain` and `mode`.
+            `ofset`, when misspelled, or `gain` and `mode`.
+
+        Raises:
+            ZeroDivisionError: when a bug.
         """
-        return self._fail() if self.where == "setGain" else super().setGain(gain, mode)
+        if self.where != "setGain":
+            return super().setGain(gain, mode)
+        if self.fault == "bug":
+            raise ZeroDivisionError("the algorithm's own bug")
+        return {"ofset": 1.0}
 
     def step(self, t: float, AngVelPlatform: np.ndarray, sigma_BN: np.ndarray) -> dict:
         """Fails, when `where` names it; else as `StubAlgorithm.step`.
@@ -171,11 +165,16 @@ class Faulty(StubAlgorithm):
             sigma_BN: (3,) MRP, read from the navigation message.
 
         Returns:
-            The fault, or `offset`.
+            `ofset`, when misspelled, or `offset`.
+
+        Raises:
+            ZeroDivisionError: when a bug.
         """
-        if self.where == "step":
-            return self._fail()
-        return super().step(t, AngVelPlatform, sigma_BN)
+        if self.where != "step":
+            return super().step(t, AngVelPlatform, sigma_BN)
+        if self.fault == "bug":
+            raise ZeroDivisionError("the algorithm's own bug")
+        return {"ofset": 1.0}
 
 
 class NoHandler:
@@ -322,18 +321,6 @@ def _writes(module: AlgorithmModule) -> list[tuple[str, int, object]]:
     ]
 
 
-def _send(module: AlgorithmModule, packet: bytes, context: int = 1) -> None:
-    """Uplinks a packet and runs the next tick, at 1 s.
-
-    Args:
-        module: the host, reset at t = 0.
-        packet: the command packet.
-        context: the ground's number for it.
-    """
-    module.uplink(packet, context)
-    module.UpdateState(ONE_SECOND_NS)
-
-
 def test_each_step_keyword_is_read_from_the_message_carrying_that_field(dictionary: Dictionary):
     """A step receives `t` in s and each keyword from the input whose message has that field.
 
@@ -366,7 +353,8 @@ def test_a_command_runs_before_the_next_step_decoded_as_f_prime_hands_it_and_ans
     _messages = _subscribed(module)
     module.Reset(0)
 
-    _send(module, dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}), 7)
+    module.uplink(dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}), 7)
+    module.UpdateState(ONE_SECOND_NS)
 
     gain = float(np.float32(0.1))
     assert module.algorithm.commands == [{"gain": gain, "mode": "fast"}]
@@ -398,7 +386,8 @@ def test_a_handler_that_raises_value_error_answers_validation_error_and_writes_n
     _messages = _subscribed(module)
     module.Reset(0)
 
-    _send(module, dictionary.encode_command("toy.setGain", {"gain": -1.0, "mode": "slow"}))
+    module.uplink(dictionary.encode_command("toy.setGain", {"gain": -1.0, "mode": "slow"}), 1)
+    module.UpdateState(ONE_SECOND_NS)
 
     assert module.responses() == [(1, dictionary.responses["VALIDATION_ERROR"], "a negative gain")]
     assert [name for name, _, _ in _writes(module)] == ["toy.offset"]
@@ -424,7 +413,8 @@ def test_a_malformed_packet_earns_the_dictionary_s_response_and_runs_nothing(
     module.Reset(0)
     packet = dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"})
 
-    _send(module, packet[cut])
+    module.uplink(packet[cut], 1)
+    module.UpdateState(ONE_SECOND_NS)
 
     assert module.responses() == [(1, dictionary.responses[response], None)]
     assert module.algorithm.commands == []

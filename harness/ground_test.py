@@ -119,16 +119,6 @@ class StubLink:
         """
         return channel.pack_many(payloads)
 
-    def write(self, name: str, t_ns: int, value: Any) -> None:
-        """Queues one write.
-
-        Args:
-            name: `<instance>.<channel>`.
-            t_ns: ns, its time tag.
-            value: the value written.
-        """
-        self.writes.append((self.dictionary.channel(name).id, t_ns, value))
-
 
 def _ground(link: StubLink, procedure: Callable[[Ground], Coroutine[Any, Any, None]]) -> Ground:
     """A ground running `procedure` on `link`, reset at t = 0 and run at the t = 0 tick.
@@ -396,11 +386,12 @@ def test_every_write_is_recorded_with_its_tag_in_order_and_tlm_reads_the_latest(
             await ground.sleep(1.0)
 
     link = StubLink(dictionary)
+    offset = dictionary.channel("toy.offset").id
     ground = _ground(link, procedure)
-    link.write("toy.offset", NS, np.array([1.0, 2.0, 3.0]))
-    link.write("toy.offset", NS, np.array([4.0, 5.0, 6.0]))
+    link.writes.append((offset, NS, np.array([1.0, 2.0, 3.0])))
+    link.writes.append((offset, NS, np.array([4.0, 5.0, 6.0])))
     _tick(ground, 1, 2)
-    link.write("toy.offset", 3 * NS, np.array([7.0, 8.0, 9.0]))
+    link.writes.append((offset, 3 * NS, np.array([7.0, 8.0, 9.0])))
     _tick(ground, 3)
 
     datasets = ground.telemetry_datasets()
@@ -491,27 +482,6 @@ async def _commands_the_toy(ground: Ground) -> None:
     await ground.until(lambda: ground.tlm("toy.mode") == "fast", timeout_s=5.0)
 
 
-def _flown(
-    dictionary: Dictionary, period_s: float, stops: bool
-) -> tuple[dict[str, tuple[np.ndarray, str]], Ground]:
-    """The datasets of 120 s of nominal Leo500 with the toy as its flight software.
-
-    Args:
-        dictionary: the toy's dictionary.
-        period_s: s, the ground's period.
-        stops: whether the ground's task stops once the procedure returns.
-
-    Returns:
-        The run's datasets and the ground's telemetry datasets, and the ground.
-    """
-    scenario = Leo500()
-    fsw = AlgorithmModule(Toy(), scenario.vehicle.readers(), instance="toy", dictionary=dictionary)
-    stop = scenario.stop_ground if stops else lambda: None
-    ground = Ground(_commands_the_toy, fsw, scenario.vehicle.tracking(), stop, period_s=period_s)
-    datasets = scenario.run(fsw, {}, duration_s=120.0, ground=ground)
-    return datasets | ground.telemetry_datasets(), ground
-
-
 def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stops(
     dictionary: Dictionary,
 ):
@@ -524,14 +494,26 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
     Args:
         dictionary: the toy's dictionary.
     """
-    ticking, ground = _flown(dictionary, 1.0, stops=False)
+    flights = {}
+    for period_s, stops in ((1.0, False), (1.0, True), (10.0, True)):
+        scenario = Leo500()
+        readers = scenario.vehicle.readers()
+        fsw = AlgorithmModule(Toy(), readers, instance="toy", dictionary=dictionary)
+        stop = scenario.stop_ground if stops else lambda: None
+        tracking = scenario.vehicle.tracking()
+        ground = Ground(_commands_the_toy, fsw, tracking, stop, period_s=period_s)
+        datasets = scenario.run(fsw, {}, duration_s=120.0, ground=ground)
+        flights[period_s, stops] = (datasets | ground.telemetry_datasets(), ground.now_s)
+
+    ticking, last_tick_s = flights.pop((1.0, False))
     assert ticking["tlm_t/toy.offset"][0][[0, -1]].tolist() == [1.0, 120.0]
     assert ticking["tlm_t/toy.mode"][0].tolist() == [61.0]
-    assert ground.now_s == 120.0
-
-    for period_s, last_tick_s in ((1.0, 61.0), (10.0, 70.0)):
-        flown, ground = _flown(dictionary, period_s, stops=True)
-        assert ground.now_s == last_tick_s
+    assert last_tick_s == 120.0
+    assert {key: last for key, (_, last) in flights.items()} == {
+        (1.0, True): 61.0,
+        (10.0, True): 70.0,
+    }
+    for flown, _ in flights.values():
         assert sorted(flown) == sorted(ticking)
         for name, (values, units) in ticking.items():
             np.testing.assert_array_equal(flown[name][0], values, err_msg=name)
