@@ -147,8 +147,8 @@ autocoder.
 - **The generated deployment written beside the algorithm.** It is a file in the tree that parallel
   test workers race to write. Rejected for the temporary directory.
 - **Resolving the framework files each call with `fpp-locate-defs` and `fpp-depend`.** It costs
-  1.2 s once and 0.28 s per call. Rejected for a fixed list of 17 files, which fails loudly, naming
-  the undefined symbol, when a model reaches outside it.
+  1.2 s once and 0.28 s per call. Rejected for a fixed list of framework files, which fails loudly,
+  naming the undefined symbol, when a model reaches outside it.
 - **nav's configuration and initial state set by public C++ methods the binding calls directly.**
   The call is outside any port, so the binding reaches past the F´ model. Rejected for ports.
 - **Each host logging its own estimate.** It moves the Python build's recording off Basilisk's

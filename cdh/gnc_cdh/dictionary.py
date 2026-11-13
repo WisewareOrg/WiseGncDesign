@@ -104,8 +104,11 @@ class _Type:
             (N, *shape) in the type's element dtype, whose bytes are the values serialized.
 
         Raises:
-            ValueError: a value is not of the type's kind or shape, or names no constant.
+            ValueError: a value is not of the type's kind or shape, is an integer outside its range,
+                or names no constant.
         """
+        if not len(values):
+            return np.empty((0, *self.dtype.shape), self.dtype.base)
         if self.constants is not None:
             try:
                 return np.array([self.constants[value] for value in values], self.dtype)
@@ -115,6 +118,10 @@ class _Type:
         kinds = "b" if self.bools else "iuf" if self.dtype.base.kind == "f" else "iu"
         if raw.dtype.kind not in kinds or raw.shape != (len(values), *self.dtype.shape):
             raise ValueError(f"{raw.dtype} of shape {raw.shape[1:]} is not a {self.name}")
+        if raw.dtype.kind in "iu" and self.dtype.base.kind in "iu":
+            limits = np.iinfo(self.dtype.base)
+            if raw.min() < limits.min or raw.max() > limits.max:
+                raise ValueError(f"{raw.min()} to {raw.max()} is outside {self.name}")
         if self.bools:
             return np.where(raw, self.bools[1], self.bools[0]).astype(self.dtype)
         return raw.astype(self.dtype.base)
@@ -171,24 +178,45 @@ class Channel:
     units: str
     _type: _Type
 
-    def decode(self, payload: Any) -> Any:
+    def decode(self, serialized: bytes) -> Any:
         """One write's value, as `decode_many` gives it.
 
         Args:
-            payload: the serialized value, or the value as a Python algorithm wrote it.
+            serialized: the value as F´ serializes it.
 
         Returns:
             The value.
         """
-        return self.decode_many([payload])[0]
+        return self.decode_many([serialized])[0]
 
-    def decode_many(self, payloads: Sequence[Any]) -> np.ndarray:
-        """Every write's value in one array, held to the channel's type as F´ would serialize it.
+    def decode_many(self, serialized: Sequence[bytes]) -> np.ndarray:
+        """Every write's value in one array, from the values as F´ serialized them.
 
         Args:
-            payloads: all serialized values, or all values as a Python algorithm wrote them, which
-                are packed into the channel's type: a float type truncates, and a value of another
-                kind or shape, or an enum name that is no constant, fails.
+            serialized: each write's bytes.
+
+        Returns:
+            As `pack_many` gives it.
+
+        Raises:
+            ValueError: naming the channel, for a write that is not bytes, or an enum value that
+                is no constant.
+        """
+        try:
+            raw = np.frombuffer(b"".join(serialized), self._type.dtype)
+        except TypeError as error:
+            raise ValueError(f"channel {self.name} decodes bytes only: {error}") from error
+        return self._values(raw)
+
+    def pack_many(self, written: Sequence[Any]) -> np.ndarray:
+        """Every write's value in one array, from the values a Python algorithm wrote.
+
+        Each value is packed into the channel's type as F´ would serialize it: a float type
+        truncates, and a value of another kind or shape, an integer outside the type's range, or
+        an enum name that is no constant fails.
+
+        Args:
+            written: each write's value.
 
         Returns:
             (N, *shape) float64, a bool as 1.0 or 0.0, or (N,) strings for an enum channel.
@@ -196,18 +224,32 @@ class Channel:
         Raises:
             ValueError: naming the channel, when a value does not fit its type.
         """
-        ftype = self._type
         try:
-            if isinstance(payloads[0], bytes):
-                raw = np.frombuffer(b"".join(payloads), ftype.dtype)
-            else:
-                raw = ftype.serialized(payloads)
-            if ftype.constants is None:
-                return (raw == ftype.bools[1] if ftype.bools else raw).astype(np.float64)
-            names = {value: name for name, value in ftype.constants.items()}
+            raw = self._type.serialized(written)
+        except ValueError as error:
+            raise ValueError(f"channel {self.name} cannot take its writes: {error}") from error
+        return self._values(raw)
+
+    def _values(self, raw: np.ndarray) -> np.ndarray:
+        """The values of serialized writes, as `pack_many` returns them.
+
+        Args:
+            raw: (N, *shape) in the channel's dtype.
+
+        Returns:
+            (N, *shape) float64, a bool as 1.0 or 0.0, or (N,) strings for an enum channel.
+
+        Raises:
+            ValueError: naming the channel, for an enum value that is no constant.
+        """
+        ftype = self._type
+        if ftype.constants is None:
+            return (raw == ftype.bools[1] if ftype.bools else raw).astype(np.float64)
+        names = {value: name for name, value in ftype.constants.items()}
+        try:
             return np.array([names[value] for value in raw.tolist()], dtype=str)
-        except (ValueError, KeyError) as error:
-            raise ValueError(f"channel {self.name} cannot take its writes: {error!r}") from error
+        except KeyError as error:
+            raise ValueError(f"channel {self.name} has no constant {error}") from error
 
 
 class Dictionary:
@@ -225,6 +267,9 @@ class Dictionary:
 
     def __init__(self, path: Path) -> None:
         """Parses the dictionary.
+
+        A command with a parameter of such a type loads, and is refused only when encoded or
+        decoded, so a deployment's framework commands, which take strings, do not stop it loading.
 
         Args:
             path: the JSON file F´ generated.
@@ -277,6 +322,8 @@ class Dictionary:
         generated once per process for each content of its inputs, which the key hashes: the
         deployment, the model, every `.fpp` and `.fppi` under `cdh/fprime/Interfaces`, every
         `.fppi` beside a file of `model`, the framework files and the clone's tag.
+        A generated dictionary with a channel of a type not coded fails its load with the
+        `ValueError` `Dictionary` raises.
 
         Args:
             model: the component's `.fpp` files.
@@ -295,10 +342,11 @@ class Dictionary:
             f"  instance {instance}: {component} base id 0x1000\n"
             f"  deployment topology {name} {{\n    instance {instance}\n  }}\n}}\n"
         )
-        model = [_INTERFACES / "Interfaces.fpp", *(Path(p).resolve() for p in model)]
+        sources = [Path(p).resolve() for p in model]
+        files = [_INTERFACES / "Interfaces.fpp", *sources]
         imports = [_CLONE / path for path in _FRAMEWORK]
-        hashed = [*model, *sorted(_INTERFACES.rglob("*.fpp*")), *imports]
-        hashed += sorted({f for p in model for f in p.parent.glob("*.fppi")})
+        hashed = [*sources, *sorted(_INTERFACES.rglob("*.fpp*")), *imports]
+        hashed += sorted({f for p in sources for f in p.parent.glob("*.fppi")})
         tag = _tag()
         digest = hashlib.sha256(tag.encode() + b"\0" + deployment.encode())
         for path in hashed:
@@ -310,7 +358,7 @@ class Dictionary:
                 written = Path(out) / "deployment.fpp"
                 written.write_text(deployment)
                 command = [str(tool), "-d", out, "-f", tag, "-i", ",".join(map(str, imports))]
-                command += [*map(str, model), str(written)]
+                command += [*map(str, files), str(written)]
                 result = subprocess.run(command, capture_output=True, text=True)
                 if result.returncode:
                     raise RuntimeError(f"fpp-to-dict rejected {component}:\n{result.stderr}")

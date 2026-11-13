@@ -28,6 +28,7 @@ module Toy {
       mode: Mode
       offset: Gnc.Vector3
       mounting: Gnc.Matrix3
+      count: U8
     )
 
     telemetry gain: F32 format "{} rad"
@@ -60,6 +61,7 @@ ARGS = {
     "mode": "fast",
     "offset": [1.0, 2.0, 3.0],
     "mounting": MOUNTING,
+    "count": 7,
 }
 
 
@@ -161,7 +163,7 @@ def test_a_command_packet_is_f_prime_s_and_decodes_as_f_prime_would(toy: Diction
     assert packet[:6] == struct.pack(">HI", 0, 0x1000)
     assert packet[6:10] == struct.pack(">f", 0.1)
     assert packet[10] == 0xFF
-    assert len(packet) == 6 + 4 + 1 + 4 + 3 * 8 + 9 * 8
+    assert len(packet) == 6 + 4 + 1 + 4 + 3 * 8 + 9 * 8 + 1
     name, args = toy.decode_command(packet, "toy")
     assert name == "setToy"
     assert args["gain"] == float(np.float32(0.1))
@@ -170,6 +172,7 @@ def test_a_command_packet_is_f_prime_s_and_decodes_as_f_prime_would(toy: Diction
     assert args["mode"] == "fast"
     np.testing.assert_array_equal(args["offset"], ARGS["offset"])
     np.testing.assert_array_equal(args["mounting"], MOUNTING)
+    assert args["count"] == 7
 
 
 @pytest.mark.parametrize(
@@ -219,8 +222,10 @@ def test_a_command_of_another_instance_is_an_invalid_opcode(toy: Dictionary):
         (ARGS | {"offset": [1.0, 2.0]}, "parameter offset"),
         (ARGS | {"gain": None}, "parameter gain"),
         (ARGS | {"mode": "standby"}, "parameter mode"),
+        (ARGS | {"count": 300}, "parameter count"),
+        (ARGS | {"count": -1}, "parameter count"),
     ],
-    ids=["missing", "short-array", "none", "no-constant"],
+    ids=["missing", "short-array", "none", "no-constant", "above-u8", "below-u8"],
 )
 def test_a_command_that_will_not_pack_is_refused_naming_what(
     toy: Dictionary, args: dict, match: str
@@ -252,6 +257,8 @@ def test_serialized_channels_decode_in_one_batch_with_their_units(toy: Dictionar
     assert toy.channel("toy.enabled").decode(b"\xff") == 1.0
     assert toy.channel("toy.mode").decode(struct.pack(">i", 1)) == "fast"
     assert toy.channel("toy.gain").decode(struct.pack(">f", 0.5)) == 0.5
+    assert offset.decode_many([]).shape == (0, 3)
+    assert toy.channel("toy.mode").decode_many([]).shape == (0,)
     assert [offset.units, mounting.units, toy.channel("toy.extra").units] == ["m", "", "s"]
     assert toy.channels_by_id[offset.id] is offset
 
@@ -262,17 +269,28 @@ def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
     Args:
         toy: the toy's dictionary.
     """
-    vectors = [np.array([1.0, 2.0, 3.0]), [4, 5, 6]]
+    offset = toy.channel("toy.offset")
 
     np.testing.assert_array_equal(
-        toy.channel("toy.offset").decode_many(vectors), [[1, 2, 3], [4, 5, 6]]
+        offset.pack_many([np.array([1.0, 2.0, 3.0]), [4, 5, 6]]), [[1, 2, 3], [4, 5, 6]]
     )
-    np.testing.assert_array_equal(toy.channel("toy.mounting").decode(MOUNTING), MOUNTING)
-    assert toy.channel("toy.enabled").decode(True) == 1.0
-    assert toy.channel("toy.mode").decode("slow") == "slow"
-    assert toy.channel("toy.count").decode(np.uint8(7)) == 7.0
-    assert toy.channel("toy.gain").decode(2) == 2.0
-    assert toy.channel("toy.gain").decode(0.1) == float(np.float32(0.1)) != 0.1
+    np.testing.assert_array_equal(toy.channel("toy.mounting").pack_many([MOUNTING])[0], MOUNTING)
+    assert toy.channel("toy.enabled").pack_many([True, False]).tolist() == [1.0, 0.0]
+    assert toy.channel("toy.mode").pack_many(["slow"]).tolist() == ["slow"]
+    assert toy.channel("toy.count").pack_many([np.uint8(7), 255, 0]).tolist() == [7.0, 255.0, 0.0]
+    assert toy.channel("toy.gain").pack_many([2, 0.1]).tolist() == [2.0, float(np.float32(0.1))]
+    assert offset.pack_many([]).shape == (0, 3)
+    assert toy.channel("toy.mode").pack_many([]).shape == (0,)
+
+
+def test_decode_many_takes_serialized_values_only(toy: Dictionary):
+    """Written values handed to `decode_many` fail, naming the channel.
+
+    Args:
+        toy: the toy's dictionary.
+    """
+    with pytest.raises(ValueError, match=r"channel toy\.gain "):
+        toy.channel("toy.gain").decode_many([0.5])
 
 
 @pytest.mark.parametrize(
@@ -287,6 +305,9 @@ def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
         ("toy.offset", [[1.0, 2.0, 3.0], [1.0, 2.0]]),
         ("toy.mounting", [np.eye(3)[0]]),
         ("toy.count", [1.5]),
+        ("toy.count", [300]),
+        ("toy.count", [-1]),
+        ("toy.count", [2**70]),
         ("toy.enabled", [1]),
         ("toy.mode", ["standby"]),
         ("toy.mode", [None]),
@@ -301,6 +322,9 @@ def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
         "ragged",
         "vector-to-matrix",
         "float-to-integer",
+        "above-u8",
+        "below-u8",
+        "above-i64",
         "integer-to-bool",
         "no-constant",
         "none-to-enum",
@@ -317,7 +341,7 @@ def test_a_written_value_that_will_not_fit_fails_naming_the_channel(
         values: its writes, one of them bad.
     """
     with pytest.raises(ValueError, match=rf"channel {channel} "):
-        toy.channel(channel).decode_many(values)
+        toy.channel(channel).pack_many(values)
 
 
 def test_a_channel_of_a_type_not_coded_is_refused_at_load_naming_channel_and_type(
@@ -372,9 +396,7 @@ def test_entries_are_equal_when_only_ids_and_opcodes_differ(tmp_path: Path):
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
     toy = TOY.replace('format "{} rad"', 'id 0x20 format "{} rad"')
-    toy = toy.replace(
-        "      mounting: Gnc.Matrix3\n    )", "      mounting: Gnc.Matrix3\n    ) opcode 5"
-    )
+    toy = toy.replace("      count: U8\n    )", "      count: U8\n    ) opcode 5")
     moved = _toy(tmp_path / "b", toy=toy)
     original = _toy(tmp_path / "a")
 

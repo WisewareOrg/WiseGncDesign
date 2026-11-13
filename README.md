@@ -37,12 +37,12 @@ that clone alone, with no compiler.
 or FPP is picked up. Besides `uv.lock`, the build needs the system C++ compiler and git. Eigen is
 fetched by tag into `cdh/fprime/lib/` on the first build, outside the build cache, so syncing and
 building need network access to GitHub and GitLab only the first time, or when a tag changes. A
-build reuses the existing cache; a sync discards its configuration, so after switching branches run `just pinned`
-or `just local` and the next build starts from scratch. `just lab` does not build F´, and a
-notebook that flies the F´ build says to run `just fsw` when it was never built. A process cannot
-reload the extension, so a notebook kernel that loaded it refuses to fly once it is rebuilt;
-restart the kernel. The F´ build's tests skip when it is absent. Why the F´ build flies inside the
-simulation, and how, is in
+build reuses the existing cache, and a sync discards its configuration, so after switching
+branches run `just pinned` or `just local` and the next build starts from scratch. `just lab` does
+not build F´, and a notebook that flies the F´ build says to run `just fsw` when it was never
+built. A process cannot reload the extension, so a notebook kernel that loaded it refuses to fly
+once it is rebuilt; restart the kernel. The F´ build's tests skip when it is absent. Why the F´
+build flies inside the simulation, and how, is in
 [ADR 0003 rev 2](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 ### Requirements and missions

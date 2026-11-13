@@ -82,8 +82,9 @@ output as an attribute. An output `gnc_cdh.UNITS` does not name gets its units a
 model, and names its entries `<instance>.<entry>` with the deployment prefix dropped. It encodes
 and decodes commands in F´'s packet format and channels in F´'s bytes. A channel's type is a
 primitive, an enum or an array, such as `nav.bodyEciPos`, a `Gnc.Vector3`. `Channel.decode_many`
-decodes a batch of writes, serialized or as a Python algorithm wrote them, and a written value
-that F´ would not pack into the channel's type fails, naming the channel.
+decodes a batch of writes as F´ serialized them, and `Channel.pack_many` packs a batch a Python
+algorithm wrote into the same array; a written value that F´ would not pack into the channel's
+type fails, naming the channel.
 
 A role's shared entries are `.fppi` groups under `cdh/fprime/Interfaces/<Role>/`, which a
 component's `.fpp` includes; the instance name is the role, so nav's entries are `nav.*` in every
@@ -102,7 +103,7 @@ process:
 >>> position = nav.channel("nav.bodyEciPos")
 >>> position.units
 'm'
->>> position.decode_many([[6871.0e3, 0.0, 0.0], [6871.0e3, 1.0, 0.0]]).shape
+>>> position.pack_many([[6871.0e3, 0.0, 0.0], [6871.0e3, 1.0, 0.0]]).shape
 (2, 3)
 
 ```

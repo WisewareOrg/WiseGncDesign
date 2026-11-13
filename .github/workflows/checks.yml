@@ -59,8 +59,11 @@ jobs:
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
       # Syncs every group, fetches the F´ clone and registers the kernel.
       - run: just _sync
-      # Builds the F´ deployment the tests fly, then runs the suite.
-      - run: just test
+      # Builds the F´ deployment the tests fly and fails unless its extension imports, since the F´
+      # tests skip when it is absent; then runs the suite.
+      - run: just fsw
+      - run: uv run --no-sync python -c "import gnc_cdh.fprime._wise_fsw"
+      - run: uv run --no-sync pytest
       # Everything the build and the suite write must be ignored; the log names what is not.
       - run: |
           out="$(git status --porcelain)"
