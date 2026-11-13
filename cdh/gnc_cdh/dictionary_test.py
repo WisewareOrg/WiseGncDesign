@@ -283,14 +283,27 @@ def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
     assert toy.channel("toy.mode").pack_many([]).shape == (0,)
 
 
-def test_decode_many_takes_serialized_values_only(toy: Dictionary):
-    """Written values handed to `decode_many` fail, naming the channel.
+@pytest.mark.parametrize(
+    ("channel", "serialized"),
+    [
+        ("toy.gain", [0.5]),
+        ("toy.offset", [np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0, 6.0])]),
+        ("toy.offset", [struct.pack(">2d", 1.0, 2.0)]),
+    ],
+    ids=["number", "numpy-array", "wrong-length"],
+)
+def test_decode_many_takes_whole_serialized_values_only(
+    toy: Dictionary, channel: str, serialized: list
+):
+    """Written values, numpy arrays included, or bytes of the wrong length fail, naming the channel.
 
     Args:
         toy: the toy's dictionary.
+        channel: the channel decoded.
+        serialized: what is handed to `decode_many`.
     """
-    with pytest.raises(ValueError, match=r"channel toy\.gain "):
-        toy.channel("toy.gain").decode_many([0.5])
+    with pytest.raises(ValueError, match=rf"channel {channel} "):
+        toy.channel(channel).decode_many(serialized)
 
 
 @pytest.mark.parametrize(

@@ -199,13 +199,15 @@ class Channel:
             As `pack_many` gives it.
 
         Raises:
-            ValueError: naming the channel, for a write that is not bytes, or an enum value that
-                is no constant.
+            ValueError: naming the channel, for a write that is not bytes, writes that are not
+                whole values of its type, or an enum value that is no constant.
         """
+        if not all(isinstance(value, bytes) for value in serialized):
+            raise ValueError(f"channel {self.name} decodes bytes only")
         try:
             raw = np.frombuffer(b"".join(serialized), self._type.dtype)
-        except TypeError as error:
-            raise ValueError(f"channel {self.name} decodes bytes only: {error}") from error
+        except ValueError as error:
+            raise ValueError(f"channel {self.name} cannot decode its writes: {error}") from error
         return self._values(raw)
 
     def pack_many(self, written: Sequence[Any]) -> np.ndarray:
@@ -268,8 +270,9 @@ class Dictionary:
     def __init__(self, path: Path) -> None:
         """Parses the dictionary.
 
-        A command with a parameter of such a type loads, and is refused only when encoded or
-        decoded, so a deployment's framework commands, which take strings, do not stop it loading.
+        A command with a parameter of a type the module does not code loads, and is refused only
+        when encoded or decoded, so a deployment's framework commands, which take strings, do not
+        stop it loading.
 
         Args:
             path: the JSON file F´ generated.
