@@ -184,6 +184,9 @@ class Ground(sysModel.SysModel):
     async def send(self, name: str, *, timeout_s: float = 5.0, **args: Any) -> None:
         """Uplinks a command and waits for its response.
 
+        A `TimeoutError` names the command and the time when no response has come by the first tick
+        at or after `timeout_s` from now.
+
         Args:
             name: `<instance>.<command>`, as the dictionary names it.
             timeout_s: s, how long to wait for the response.
