@@ -599,6 +599,21 @@ class StubHost(sysModel.SysModel):
 """
 
 
+STUB_FLIGHT = """
+from harness.mission import Mission, mission_tests, provides
+
+
+@provides("SYS901")
+def stub_fsw(scenario):
+    return StubHost()
+
+
+globals().update(
+    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
+)
+"""
+
+
 def test_a_flight_runs_the_procedure_on_the_host_s_link_for_the_scenario_s_duration(
     project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
@@ -613,22 +628,7 @@ def test_a_flight_runs_the_procedure_on_the_host_s_link_for_the_scenario_s_durat
         fly_in_a_subprocess: runs the project in a subprocess.
     """
     (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=20.0, body="pass"))
-    project.makepyfile(
-        test_flights=STUB_HOST
-        + """
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS901")
-def stub_fsw(scenario):
-    return StubHost()
-
-
-globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
-)
-"""
-    )
+    project.makepyfile(test_flights=STUB_HOST + STUB_FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
@@ -673,22 +673,7 @@ def test_the_definition_s_ground_period_mark_sets_the_ground_s_period(
             f"@pytest.mark.sim_runs(1)\n@pytest.mark.sim_ground_period_s({period_s})",
         )
     )
-    project.makepyfile(
-        test_flights=STUB_HOST
-        + """
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS901")
-def stub_fsw(scenario):
-    return StubHost()
-
-
-globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
-)
-"""
-    )
+    project.makepyfile(test_flights=STUB_HOST + STUB_FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
@@ -714,22 +699,7 @@ def test_a_procedure_s_exception_fails_the_case_as_itself(
     (project.path / "scenarios" / "alpha.py").write_text(
         ALPHA.format(duration=20.0, body="await ground.until(lambda: False, timeout_s=3.0)")
     )
-    project.makepyfile(
-        test_flights=STUB_HOST
-        + """
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS901")
-def stub_fsw(scenario):
-    return StubHost()
-
-
-globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
-)
-"""
-    )
+    project.makepyfile(test_flights=STUB_HOST + STUB_FLIGHT)
 
     monkeypatch.setenv("COLUMNS", "200")
     result = fly_in_a_subprocess(project)
@@ -739,21 +709,6 @@ globals().update(
         ["FAILED *TimeoutError: timed out at t = 3.0 s waiting until the condition at alpha.py:*"]
     )
     assert list(project.path.rglob("run_0000.h5")) == []
-
-
-STUB_FLIGHT = """
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS901")
-def stub_fsw(scenario):
-    return StubHost()
-
-
-globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
-)
-"""
 
 
 def test_a_procedure_still_waiting_when_the_flight_ends_fails_the_case_naming_its_wait(

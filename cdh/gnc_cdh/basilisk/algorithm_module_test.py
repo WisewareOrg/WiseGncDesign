@@ -124,70 +124,58 @@ class InPlace(StubAlgorithm):
         return {"offset": self.offset}
 
 
-class Misspelled(StubAlgorithm):
-    """A stub whose `step` writes a channel the dictionary does not have."""
+class Faulty(StubAlgorithm):
+    """A stub whose `step` or `setGain`, as `where` names, has a bug or writes `ofset`."""
 
-    def step(self, t: float, AngVelPlatform: np.ndarray, sigma_BN: np.ndarray) -> dict:
-        """Writes `ofset`.
+    def __init__(self, where: str, fault: str) -> None:
+        """Starts as `StubAlgorithm` does, holding the fault.
 
         Args:
-            t: s, the step's time.
-            AngVelPlatform: (3,) rad/s, read from the IMU message.
-            sigma_BN: (3,) MRP, read from the navigation message.
+            where: `step` or `setGain`.
+            fault: `bug` or `misspelled`.
+        """
+        super().__init__()
+        self.where, self.fault = where, fault
+
+    def _fail(self) -> dict:
+        """Fails as `fault` says.
 
         Returns:
-            `ofset`.
-        """
-        return {"ofset": t * STEPPED}
-
-
-class Broken(StubAlgorithm):
-    """A stub whose `step` has a bug."""
-
-    def step(self, t: float, AngVelPlatform: np.ndarray, sigma_BN: np.ndarray) -> None:
-        """Fails as a bug in an algorithm does.
-
-        Args:
-            t: s, the step's time.
-            AngVelPlatform: (3,) rad/s, read from the IMU message.
-            sigma_BN: (3,) MRP, read from the navigation message.
+            `ofset`, a channel the dictionary lacks, when misspelled.
 
         Raises:
-            ZeroDivisionError: always.
+            ZeroDivisionError: when a bug.
         """
-        raise ZeroDivisionError("the step's own bug")
-
-
-class BrokenHandler(StubAlgorithm):
-    """A stub whose `setGain` has a bug."""
-
-    def setGain(self, gain: float, mode: str) -> None:
-        """Fails as a bug in a handler does.
-
-        Args:
-            gain: the gain.
-            mode: the mode.
-
-        Raises:
-            KeyError: always.
-        """
-        raise KeyError("the handler's own bug")
-
-
-class MisspelledHandler(StubAlgorithm):
-    """A stub whose `setGain` writes a channel the dictionary does not have."""
+        if self.fault == "bug":
+            raise ZeroDivisionError("the algorithm's own bug")
+        return {"ofset": 1.0}
 
     def setGain(self, gain: float, mode: str) -> dict:
-        """Writes `gian`.
+        """Fails, when `where` names it; else as `StubAlgorithm.setGain`.
 
         Args:
             gain: the gain.
             mode: the mode.
 
         Returns:
-            `gian`.
+            The fault, or `gain` and `mode`.
         """
-        return {"gian": gain}
+        return self._fail() if self.where == "setGain" else super().setGain(gain, mode)
+
+    def step(self, t: float, AngVelPlatform: np.ndarray, sigma_BN: np.ndarray) -> dict:
+        """Fails, when `where` names it; else as `StubAlgorithm.step`.
+
+        Args:
+            t: s, the step's time.
+            AngVelPlatform: (3,) rad/s, read from the IMU message.
+            sigma_BN: (3,) MRP, read from the navigation message.
+
+        Returns:
+            The fault, or `offset`.
+        """
+        if self.where == "step":
+            return self._fail()
+        return super().step(t, AngVelPlatform, sigma_BN)
 
 
 class NoHandler:
@@ -442,75 +430,37 @@ def test_a_malformed_packet_earns_the_dictionary_s_response_and_runs_nothing(
     assert module.algorithm.commands == []
 
 
-def test_a_handler_s_bug_fails_the_tick_kept_whole_and_is_not_answered(dictionary: Dictionary):
-    """A handler raising anything but `ValueError` fails its tick as itself, with no response.
+@pytest.mark.parametrize("where", ["step", "setGain"])
+@pytest.mark.parametrize(
+    ("fault", "error", "message"),
+    [
+        ("bug", ZeroDivisionError, "the algorithm's own bug"),
+        ("misspelled", ValueError, r"toy\.ofset is not a channel"),
+    ],
+)
+def test_a_bug_or_a_write_to_a_channel_the_dictionary_lacks_fails_the_tick_kept_whole(
+    dictionary: Dictionary, where: str, fault: str, error: type, message: str
+):
+    """In `step` or a handler, the exception fails its tick as itself, and nothing is answered.
 
     Args:
         dictionary: the toy's dictionary.
+        where: the failing method.
+        fault: how it fails.
+        error: the exception the tick raises.
+        message: what the exception says.
     """
-    module = _module(dictionary, BrokenHandler())
+    module = _module(dictionary, Faulty(where, fault))
     _messages = _subscribed(module)
     module.Reset(0)
+    if where == "setGain":
+        module.uplink(dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}), 1)
 
-    with pytest.raises(KeyError, match="the handler's own bug") as raised:
-        _send(module, dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}))
+    with pytest.raises(error, match=message) as raised:
+        module.UpdateState(ONE_SECOND_NS)
 
     assert module.failure is raised.value
     assert module.responses() == []
-
-
-def test_a_handler_s_write_to_a_channel_the_dictionary_lacks_fails_naming_it(
-    dictionary: Dictionary,
-):
-    """A handler's write of `gian` raises at its tick, as a step's would.
-
-    Args:
-        dictionary: the toy's dictionary.
-    """
-    module = _module(dictionary, MisspelledHandler())
-    _messages = _subscribed(module)
-    module.Reset(0)
-
-    with pytest.raises(ValueError, match=r"toy\.gian is not a channel") as raised:
-        _send(module, dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}))
-
-    assert module.failure is raised.value
-
-
-def test_a_write_to_a_channel_the_dictionary_lacks_fails_on_its_tick_naming_it(
-    dictionary: Dictionary,
-):
-    """The step's write of `ofset` raises at that tick, and the exception is kept whole.
-
-    Args:
-        dictionary: the toy's dictionary.
-    """
-    module = _module(dictionary, Misspelled())
-    _messages = _subscribed(module)
-    module.Reset(0)
-
-    with pytest.raises(ValueError, match=r"toy\.ofset is not a channel") as raised:
-        module.UpdateState(ONE_SECOND_NS)
-
-    assert module.failure is raised.value
-
-
-def test_an_exception_in_the_algorithm_is_kept_whole_and_raised_from_the_tick(
-    dictionary: Dictionary,
-):
-    """A bug in `step` reaches the caller as itself, and `failure` holds the same exception.
-
-    Args:
-        dictionary: the toy's dictionary.
-    """
-    module = _module(dictionary, Broken())
-    _messages = _subscribed(module)
-    module.Reset(0)
-
-    with pytest.raises(ZeroDivisionError, match="the step's own bug") as raised:
-        module.UpdateState(ONE_SECOND_NS)
-
-    assert module.failure is raised.value
 
 
 def test_a_value_that_does_not_fit_its_channel_fails_when_packed_naming_it(
