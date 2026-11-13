@@ -61,8 +61,9 @@ autocoder.
 - **nav takes its configuration on an F´ port**, `NavConfig`, which `SimBridge` sends, **and its
   state by command**, `initNavState(epoch, attitude, position, velocity)` from the shared group
   `InitNavState`. The handler holds the state as of the epoch, with W >= 0, and writes `navState`
-  alone, since the estimate it holds is the epoch's, not the current time's. Until the F´ build
-  flies on the ground link, a flight hands nav its initial state at boot on the `NavInit` port.
+  alone, since the estimate it holds is the epoch's, not the current time's. A flight hands nav its
+  initial state at boot on the `NavInit` port, which is removed when the F´ host flies on the
+  link.
 
 ### The dictionary
 
@@ -226,10 +227,8 @@ autocoder.
 - The deployment departs from a standard F´ deployment on purpose: no timer or rate groups,
   `GroundLink` logging every write in place of F´'s downlink, no events or parameters, and one
   active component, the dispatcher, run on the tick's thread.
-- The `initNavState` command replaces the initialization port once the F´ build flies on the
-  ground link.
-- A clean `just fsw` also builds the dispatcher: 28.6 s and 174 compiles, against 28.9 s and 171
-  without it, on one host.
+- A clean `just fsw` also compiles the dispatcher and `Os_Task_Sim`; nothing else in the build
+  changes for commands.
 - An `FW_ASSERT` in F´ code aborts the process, so it ends a test worker rather than failing a
   case. A cooperative task asked to sleep asserts; nothing in the deployment sleeps.
 - An algorithm flies in Python before an F´ build of it exists, and the Python path needs no
