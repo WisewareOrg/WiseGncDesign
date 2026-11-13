@@ -7,6 +7,8 @@ void setupTopology(const TopologyState& state) {
     setBaseIds();
     connectComponents();
     configComponents(state);
+    regCommands();
+    startTasks(state);
 }
 
 }  // namespace WiseFsw

@@ -21,6 +21,16 @@ module Gnc {
     @ Telemetry out
     telemetry port tlmOut
 
+    @ Command registration
+    command reg port cmdRegOut
+
+    @ Command input
+    command recv port cmdIn
+
+    @ Command responses
+    command resp port cmdResponseOut
+
+    include "../../../cdh/fprime/Interfaces/Nav/InitNavState.fppi"
     include "../../../cdh/fprime/Interfaces/Nav/NavState.fppi"
     include "../../../cdh/fprime/Interfaces/Nav/BodyEci.fppi"
 

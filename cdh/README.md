@@ -121,8 +121,13 @@ their sync, and `just test`, `just fly` and `just lab` run it first; a host buil
 run `just fsw`. The module takes
 `AlgorithmModule`'s `period_s`, so the two builds fly at one rate.
 
-The module logs every channel each tick writes in F´'s bytes, and decodes them through
-`gnc_cdh.dictionary` once the run is flown. The one piece specific to an algorithm is small and
+The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
+thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
+and `_wise_fsw.responses()` returns each response under its context. `_wise_fsw.telemetry()`
+drains every telemetry write since the last call, each with its F´ time tag, and `boot` clears both
+and leaves nav idle. A flight still hands nav its initial state at boot rather than by its
+`nav.initNavState` command, and the module logs each channel's last write of each tick in F´'s
+bytes, decoded through `gnc_cdh.dictionary` once the run is flown. The one piece specific to an algorithm is small and
 named: `_ESTIMATE`, the channel each of the dead reckoner's estimates is read from. The reasoning is
 in
 [ADR 0003 rev 2](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).

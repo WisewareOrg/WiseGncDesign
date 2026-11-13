@@ -1,13 +1,15 @@
 # 0003 — Fly the F´ flight software inside the Basilisk process
 
 **Status:** accepted
-**Decided:** 2026-11-12 (issue 31: the two spikes and their discovery; issue 37: the dictionary)
+**Decided:** 2026-11-13 (issue 31: the two spikes and their discovery; issue 37: the dictionary; issue 38: commands)
 **Rev:** 2
 
 ## Revisions
 
-- **rev 2** — 2026-11-12 — the dictionary: a role's entries in shared FPP groups, array channels,
-  and a Python build's dictionary generated from FPP alone (issue 37 nav contract).
+- **rev 2** — 2026-11-13 — the dictionary: a role's entries in shared FPP groups, array channels,
+  and a Python build's dictionary generated from FPP alone (issue 37 nav contract); commands through
+  F´'s own dispatcher on a task with no thread, and `GroundLink` logging every telemetry write
+  (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
 
 ## Context
@@ -29,10 +31,26 @@ autocoder.
 - **F´ runs in Basilisk's process, as a passive deployment ticked on simulated time.** The
   deployment is a Python extension, `_wise_fsw`. A Basilisk module, `gnc_cdh.fprime.FprimeModule`,
   ticks it at the FSW rate, and the clock crosses into F´ as the simulation's integer nanoseconds.
-  `SimTime` sets the clock, `SimBridge` sends the readings and drives the schedule, and `TlmCapture`
-  holds the telemetry. Every component is passive, so a tick finishes before the call returns, and
-  a case reproduces from its seed. Sensor readings are the only Basilisk messages the deployment
-  reads, and its telemetry never passes through a Basilisk message.
+  `SimTime` sets the clock, `SimBridge` sends the readings and drives the schedule, and
+  `GroundLink` is the ground's side. Every component but the command dispatcher is passive, and the
+  dispatcher runs on the tick's thread, so a tick finishes before the call returns, and a case
+  reproduces from its seed. Sensor readings are the only Basilisk messages the deployment reads, and
+  its telemetry never passes through a Basilisk message.
+- **Commands go through F´'s own `Svc.CmdDispatcher`, unmodified, on an `Os::Task` with no
+  thread.** `Os_Task_Sim`, which `fprime_target_implementations` chooses for `_wise_fsw`, starts no
+  thread and reports itself cooperative, so F´ gives it the one-step routine that returns on an
+  empty queue. `Sim::Cooperative` registers every task and queue, and the tick pumps the tasks round
+  by round until no queue holds a message. A command uplinked before a step runs at that step,
+  before the IMU reading and the schedule. A queue still holding messages after the pump's bound,
+  1000 rounds, raises an error naming it, so a component that keeps requeueing crashes the case
+  instead of hanging it.
+- **`GroundLink` carries the link in F´'s form.** Command packets go up to the dispatcher under a
+  context the ground picks, and each response comes back as that context and its
+  `Fw.CmdResponse`. Every telemetry write is logged with its F´ time tag, in the order written,
+  and draining the log returns the writes since the last drain; nothing keeps a latest value. The
+  binding's `uplink`, `telemetry` and `responses` are the link's calls. `boot` runs the commands
+  still queued, clears the link, then configures nav idle, so a case keeps nothing of the one
+  before it.
 - **The binding is a small hand-written pybind11 module, with no fprime-python dependency.**
   fprime-python is reconsidered only once it fixes time, telemetry and build cost.
 - **Each F´ component sits beside the algorithm it ports.** The repository root is F´'s project root
@@ -40,9 +58,12 @@ autocoder.
   its package beside the notebook, the package ADR 0002 rev 1 lays out around each algorithm.
   `cdh/fprime/` holds the rest of the F´ project: the interface types, the sim-side components, the
   topology and the binding.
-- **nav takes its configuration and its initial state on F´ ports**, `NavConfig` and `NavInit`,
-  which `SimBridge` sends. The initial state is handed over at boot until the `initNavState`
-  command exists.
+- **nav takes its configuration on an F´ port**, `NavConfig`, which `SimBridge` sends, **and its
+  state by command**, `initNavState(epoch, attitude, position, velocity)` from the shared group
+  `InitNavState`. The handler holds the state as of the epoch, with W >= 0, and writes `navState`
+  alone, since the estimate it holds is the epoch's, not the current time's. Until the F´ build
+  flies on the ground link, a flight still hands nav its initial state at boot on the `NavInit`
+  port.
 
 ### The dictionary
 
@@ -107,8 +128,21 @@ autocoder.
 
 ### Not decided here
 
-- The ground link: commands, a ground station as its own process, and whether F´'s own command and
-  telemetry components or passive stand-ins carry them.
+- The ground: a ground station as its own process, and each host flying on the link.
+- **One F´ topology holds a single `nav`.** The deployment is one per process, with one `nav`
+  instance, and its sim side is specific to the dead reckoner: `SimBridge`'s ports, the binding's
+  `boot` and `step`, and `FprimeModule`'s constructor. Porting an algorithm adds its component, its
+  ports, its CMake, the topology instance and a builder, and no more only when it reuses the dead
+  reckoner's sensors and configuration. One with other sensors or configuration also changes
+  `Sim.fpp`, `SimBridge`, the binding and `FprimeModule`. A second F´ nav algorithm has to replace
+  the first, which breaks the first one's parity and drift checks. The options:
+  - one F´ deployment per ported algorithm, mirroring the Python build's generated deployment;
+    unproven, since whether two F´ extensions can load in one process is not known;
+  - distinct instance names per algorithm in one `WiseFsw`, which breaks a role being an instance
+    name;
+  - a rebuild per switch, which is the behaviour today.
+
+  The tripwire is the second F´ port. Nothing is built for it now.
 
 ## Alternatives considered
 
@@ -116,6 +150,18 @@ autocoder.
   time unless it gets a tick protocol of its own. Rejected for the in-process deployment.
 - **F´'s own timer, with active components on OS threads.** It wakes on wall-clock time, so a case
   does not reproduce from its seed. Rejected for a passive deployment ticked on simulated time.
+- **A passive stand-in for the command dispatcher.** About 80 lines of C++ reimplementing
+  registration, the malformed-packet and invalid-opcode responses and tracking, which drift from
+  F´'s. Rejected for the stock dispatcher on a task with no thread.
+- **The stock dispatcher never started, its queue drained by the tick.** Not feasible:
+  `CommandDispatcherImpl` is `final` and its dispatch is protected, so nothing outside it can drain
+  an unstarted queue.
+- **`TlmCapture` kept, holding each channel's latest value, with the uplink added to `SimBridge`.**
+  A latest-value table lets whoever reads it choose the telemetry rate, and drops every write
+  between reads. Rejected for one component on the ground's side that logs every write.
+- **Clearing the dispatcher's command tracking at boot, by `CMD_CLEAR_TRACKING`.** nav's handler is
+  sync and the pump runs every queue empty, so tracking holds nothing across a boot and no test can
+  fail without the clear. Rejected until a command handler is async, which is the tripwire for it.
 - **FSW telemetry in Basilisk message structs.** It limits the FSW to fields Basilisk happens to
   define, and puts Basilisk inside the FSW's interface. Rejected: telemetry stays on the F´ side.
 - **fprime-python's autocoder in place of the hand-written binding.** The second spike measured it
@@ -179,9 +225,14 @@ autocoder.
   overlapped another case's merge; any later successful case restores it.
 - The deployment is one per process, so one F´ host flies at a time in a process.
 - The deployment departs from a standard F´ deployment on purpose: no timer or rate groups,
-  `TlmCapture` in place of F´'s downlink, no commands, events or parameters, and passive components
-  only. These come up again when the ground link is designed.
-- The `initNavState` command, once it exists, replaces the initialization port.
+  `GroundLink` logging every write in place of F´'s downlink, no events or parameters, and one
+  active component, the dispatcher, run on the tick's thread.
+- The `initNavState` command replaces the initialization port once the F´ build flies on the
+  ground link.
+- A clean `just fsw` also builds the dispatcher: 28.6 s and 174 compiles, against 28.9 s and 171
+  without it, on one host.
+- An `FW_ASSERT` in F´ code aborts the process, so it ends a test worker rather than failing a
+  case. A cooperative task asked to sleep asserts; nothing in the deployment sleeps.
 - An algorithm flies in Python before an F´ build of it exists, and the Python path needs no
   compiler or F´ build, only the F´ clone. A new channel or command is two edits while
   prototyping: the `.fpp` line and the Python that writes or handles it.
