@@ -15,7 +15,7 @@ include(FetchContent)
 set(FETCHCONTENT_BASE_DIR "${CMAKE_CURRENT_LIST_DIR}/lib/fetchcontent")
 FetchContent_Declare(eigen
     GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-    GIT_TAG 3.4.0
+    GIT_TAG 5.0.1
     GIT_SHALLOW TRUE
     SOURCE_SUBDIR do-not-add-eigen-build)
 FetchContent_MakeAvailable(eigen)
