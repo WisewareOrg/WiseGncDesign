@@ -1,0 +1,14 @@
+register_fprime_module(
+  AUTOCODER_INPUTS
+    "${CMAKE_CURRENT_LIST_DIR}/Sim.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/SimTime.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/TlmCapture.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SimBridge.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/SimTime.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/TlmCapture.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SimBridge.hpp"
+  DEPENDS
+    cdh_fprime_Interfaces
+)

@@ -1,9 +1,17 @@
 # C&DH
 
 `gnc_cdh` is the C&DH (command and data handling) partition. It hosts an algorithm from
-`gnc_algorithms` in a simulator, and knows nothing about what any field means: it copies message
-fields to the algorithm's `step` as plain arrays, and the arrays it returns into messages, by
-name. Frames, mountings and units belong to the algorithm.
+`gnc_algorithms` in a simulator: `gnc_cdh.basilisk` hosts its Python build, and `gnc_cdh.fprime`
+its F´ build.
+
+Each host implements `fly(run) -> datasets`, which the harness calls to fly a case and record the
+estimate, and `build`, the host's build identity, which the harness records in the flight's
+`flight.json`. The contract and its reasoning are in
+[ADR 0003 rev 1](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+
+`gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
+algorithm's `step` as plain arrays, and the arrays it returns into messages, by name. Frames,
+mountings and units belong to the algorithm.
 
 `gnc_cdh.basilisk.AlgorithmModule(algorithm, inputs)` hosts an algorithm built at the simulation's
 start time on a dict of subscribed Basilisk readers, by role. The algorithm's names are its wiring:
@@ -70,3 +78,19 @@ Write the algorithm in `gnc_algorithms`. Its `step(t=..., **inputs)` takes plain
 each named as the message field it reads, and returns plain named arrays; it holds `t` and each
 output as an attribute, named in Basilisk's navigation convention. An output that no entry of
 `STANDARD_MESSAGES` carries gets that message added there.
+
+## The F´ host
+
+`gnc_cdh.fprime.FprimeModule(imu, mu, dcm_PB, initial)` runs the WiseFsw F´ deployment in the
+simulation's process. The deployment's content is the dead reckoner, whose F´ component sits beside
+its notebook. `just fsw` builds the deployment into this package as the extension `_wise_fsw`, with
+the JSON dictionary F´ generates for it alongside. `just pinned` and `just local` run it as part of
+their sync, and `just test`, `just fly` and `just lab` run it first. The module takes
+`AlgorithmModule`'s `period_s`, so the two builds fly at one rate.
+
+`gnc_cdh.fprime` decodes every telemetry channel generically from F´'s generated dictionary, so the
+C&DH and the ground learn fields through the dictionary. The one piece specific to an algorithm is
+small and named: the dead reckoner's channel-to-estimate mapping, in
+`FprimeModule.estimate_datasets`. It becomes configuration once the shared dictionary is designed.
+The reasoning is in
+[ADR 0003 rev 1](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).

@@ -1,0 +1,11 @@
+register_fprime_module(
+  AUTOCODER_INPUTS
+    "${CMAKE_CURRENT_LIST_DIR}/ImuDeadReckoner.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/ImuDeadReckoner.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/ImuDeadReckoner.hpp"
+  DEPENDS
+    cdh_fprime_Interfaces
+    wise_eigen
+)

@@ -10,8 +10,10 @@ folder of their own.
 import functools
 import importlib.util
 import json
+import os
 import re
 import sys
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -20,7 +22,6 @@ from typing import Any
 import pytest
 from wise_dynamics.basilisk.vehicles import VEHICLES
 
-from gnc_cdh.basilisk import estimate_fields
 from harness import requirements_tree
 
 
@@ -169,6 +170,7 @@ def _write_flight_json(self: object, request: pytest.FixtureRequest, sim_test_di
     """Record the facts of the flight this test flies, where the judge reads them.
 
     Autouse, so it runs before `sim_scenario` and a case that crashes in setup still leaves it.
+    The write merges, so a `build` that an earlier case of the flight recorded survives it.
 
     Args:
         self: the vehicle's test class.
@@ -177,22 +179,47 @@ def _write_flight_json(self: object, request: pytest.FixtureRequest, sim_test_di
     """
     mission, scenario_id = request.function.mission, request.function.scenario_id
     sim_test_directory.mkdir(parents=True, exist_ok=True)
-    (sim_test_directory / "flight.json").write_text(
-        json.dumps(
-            {
-                "scenario": scenario_id,
-                "capabilities": sorted(mission.fsw.provides),
-                "rungs": None if mission.rungs is None else list(mission.rungs),
-            }
-        )
+    _merge_json(
+        sim_test_directory / "flight.json",
+        {
+            "scenario": scenario_id,
+            "fsw": mission.fsw.__name__,
+            "capabilities": sorted(mission.fsw.provides),
+            "rungs": None if mission.rungs is None else list(mission.rungs),
+        },
     )
+
+
+def _merge_json(path: Path, mapping: dict[str, Any]) -> None:
+    """Overlay `mapping` on the JSON object in `path`, replacing the file atomically.
+
+    The merged object is written to a temporary file beside `path` and moved into place, so a
+    reader sees the previous file or the new one, never a half-written one.
+
+    Args:
+        path: the JSON file; a missing file is an empty object.
+        mapping: the members to set.
+
+    Raises:
+        BaseException: whatever interrupted the write, after its temporary file is removed.
+    """
+    merged = {**(json.loads(path.read_text()) if path.exists() else {}), **mapping}
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "w") as file:
+            json.dump(merged, file)
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
 
 
 def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """The Monte Carlo test flying a mission through one scenario.
 
     The TST item's reference names the scenario's definition, whose `sim_` marks say how it is
-    flown; the test carries them and the mission's vehicle.
+    flown; the test carries them and the mission's vehicle. The FSW host records its own estimate
+    through `fly`, which flies the scenario for the duration the definition gives.
 
     Args:
         mission: the mission.
@@ -206,7 +233,11 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
 
     @pytest.mark.sim_vehicle(mission.vehicle)
     def test(
-        self: object, sim_scenario: Any, sim_duration_s: float, sim_run_file: Callable[..., Path]
+        self: object,
+        sim_scenario: Any,
+        sim_duration_s: float,
+        sim_run_file: Callable[..., Path],
+        sim_test_directory: Path,
     ) -> None:
         """One case of the mission in the scenario writes its run file and passes the check.
 
@@ -215,9 +246,11 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_scenario: the case's dispersed scenario.
             sim_duration_s: s, the case's simulated duration.
             sim_run_file: writes the case's run file.
+            sim_test_directory: the test's directory in the session.
         """
         fsw = mission.fsw(sim_scenario)
-        datasets = sim_scenario.run(fsw, estimate_fields(fsw), duration_s=sim_duration_s)
+        _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
+        datasets = fsw.fly(functools.partial(sim_scenario.run, duration_s=sim_duration_s))
         path = sim_run_file(datasets)
         problems = [] if mission.check is None else mission.check(path)
         if problems:

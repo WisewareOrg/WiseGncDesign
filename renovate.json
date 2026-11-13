@@ -1,4 +1,30 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>WisewareOrg/wise-renovate#v1.7.0"]
+  "extends": ["github>WisewareOrg/wise-renovate#v1.7.0"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^justfile$/"],
+      "matchStrings": ["fprime_tag := \"(?<currentValue>v[0-9.]+)\""],
+      "depNameTemplate": "nasa/fprime",
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^cdh/fprime/CMakeLists\\.txt$/"],
+      "matchStrings": ["GIT_TAG (?<currentValue>[0-9][0-9.]*)"],
+      "depNameTemplate": "libeigen/eigen",
+      "datasourceTemplate": "gitlab-tags"
+    }
+  ],
+  "packageRules": [
+    {
+      "groupName": "fprime",
+      "matchPackageNames": ["nasa/fprime", "fprime-tools", "fprime-fpp"]
+    },
+    {
+      "matchPackageNames": ["cmake", "ninja"],
+      "enabled": false
+    }
+  ]
 }

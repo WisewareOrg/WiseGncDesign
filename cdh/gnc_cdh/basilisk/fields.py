@@ -1,14 +1,15 @@
 """What a hosted algorithm's estimate is recorded as in a run file."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from gnc_cdh.basilisk.algorithm_module import AlgorithmModule
+if TYPE_CHECKING:
+    from gnc_cdh.basilisk.algorithm_module import AlgorithmModule
 
 UNITS = {"sigma_BN": "MRP", "r_BN_N": "m", "v_BN_N": "m/s"}
 """The units of each standard output, by its name."""
 
 
-def estimate_fields(fsw: AlgorithmModule) -> dict[str, tuple[Any, str, str]]:
+def estimate_fields(fsw: "AlgorithmModule") -> dict[str, tuple[Any, str, str]]:
     """The estimate's run-file datasets, `est/<output name>`, one per output of the host module.
 
     Args:
