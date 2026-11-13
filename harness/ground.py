@@ -151,16 +151,18 @@ class Ground(sysModel.SysModel):
     async def until(self, condition: Callable[[], bool], *, timeout_s: float) -> None:
         """Waits until `condition` holds, checking now and then at each tick.
 
-        A `TimeoutError` names the condition's line and the time when `condition` still fails at
-        the first tick at or after `timeout_s` from now.
+        A `TimeoutError` names the condition, by its line or else its `repr`, and the time when
+        `condition` still fails at the first tick at or after `timeout_s` from now.
 
         Args:
             condition: reads the ground's view of the flight software.
             timeout_s: s, how long to wait.
         """
-        code = condition.__code__
-        where = f"{Path(code.co_filename).name}:{code.co_firstlineno}"
-        await self._until(condition, timeout_s, f"the condition at {where} holds")
+        code = getattr(condition, "__code__", None)
+        named = (
+            f"at {Path(code.co_filename).name}:{code.co_firstlineno}" if code else repr(condition)
+        )
+        await self._until(condition, timeout_s, f"the condition {named} holds")
 
     async def _until(self, condition: Callable[[], bool], timeout_s: float, what: str) -> None:
         """Waits until `condition` holds, checking now and then at each tick.

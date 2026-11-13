@@ -4,6 +4,7 @@ The stub link holds a toy component's dictionary, generated from FPP alone, and 
 what each test gives it; the tests that fly Leo500 host a toy algorithm for that component.
 """
 
+import functools
 import json
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any
@@ -589,6 +590,27 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
         for name, (values, units) in ticking.items():
             np.testing.assert_array_equal(flown[name][0], values, err_msg=name)
             assert flown[name][1] == units
+
+
+def test_a_condition_without_code_is_named_by_its_repr(dictionary: Dictionary):
+    """A `functools.partial` condition, which has no `__code__`, is waited on and named.
+
+    Args:
+        dictionary: the toy's dictionary.
+    """
+
+    async def procedure(ground: Ground) -> None:
+        """Waits 1 s on a partial that never holds.
+
+        Args:
+            ground: the ground running it.
+        """
+        await ground.until(functools.partial(bool, 0), timeout_s=1.0)
+
+    ground = _ground(StubLink(dictionary), procedure)
+
+    with pytest.raises(TimeoutError, match=r"until the condition functools\.partial\(.*\) holds"):
+        _tick(ground, 1)
 
 
 @pytest.mark.parametrize(
