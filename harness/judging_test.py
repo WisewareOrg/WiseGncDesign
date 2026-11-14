@@ -614,26 +614,48 @@ def test_a_flown_mission_is_judged_end_to_end(
 from pathlib import Path
 
 from algorithms.imu_dead_reckoning import parameters
-from fsw.python import AlgorithmModule
 from ground.dictionary import Dictionary
 from harness.mission import Mission, mission_tests, provides
 
 
 class Toy:
-    def step(self, t):
-        return {
-            "bodyEciPos": [7.0e6, 0.0, 0.0],
-            "bodyEciVel": [0.0, 7.5e3, 0.0],
-            "bodyEciAttitude": [1.0, 0.0, 0.0, 0.0],
-        }
+    period_s = 1.0
+    build = {"host": "toy"}
+
+    def __init__(self, dictionary):
+        self.dictionary = dictionary
+        self._log = []
+
+    def boot(self):
+        pass
+
+    def tick(self, t_ns, messages_by_role):
+        for channel, value in (
+            ("bodyEciPos", [7.0e6, 0.0, 0.0]),
+            ("bodyEciVel", [0.0, 7.5e3, 0.0]),
+            ("bodyEciAttitude", [1.0, 0.0, 0.0, 0.0]),
+        ):
+            self._log.append((f"nav.{channel}", t_ns, value))
+        return {}
+
+    def uplink(self, name, args, context):
+        raise AssertionError("no command is sent")
+
+    def responses(self):
+        return []
+
+    def telemetry(self):
+        drained, self._log = self._log, []
+        return drained
+
+    def values(self, name, raws):
+        return self.dictionary.channel(name).pack_many(raws)
 
 
 @provides("SYS901")
 def reckoner(scenario, prm_path):
     model = [Path(__file__).with_name("Toy.fpp")]
-    dictionary = Dictionary.from_component(model, "Toy.Toy", instance="nav")
-    readers = scenario.vehicle.readers()
-    return AlgorithmModule(Toy(), readers, instance="nav", dictionary=dictionary)
+    return Toy(Dictionary.from_component(model, "Toy.Toy", instance="nav"))
 
 
 globals().update(

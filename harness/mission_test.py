@@ -412,7 +412,7 @@ def test_a_failing_check_fails_the_case_with_its_messages_and_the_run_file_is_pl
         fly_in_a_subprocess: runs the project in a subprocess.
     """
     project.makepyfile(
-        test_flights=STUB_HOST
+        test_flights=STUB_BUILD
         + """
 from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
@@ -420,7 +420,7 @@ from harness.mission import Mission, mission_tests, provides
 
 @provides("SYS901")
 def stub_fsw(scenario, prm_path):
-    return StubHost()
+    return StubBuild()
 
 
 def check(path):
@@ -459,7 +459,7 @@ def test_a_check_is_given_the_cases_run_file_and_a_passing_check_passes(
         fly_in_a_subprocess: runs the project in a subprocess.
     """
     project.makepyfile(
-        test_flights=STUB_HOST
+        test_flights=STUB_BUILD
         + """
 import h5py
 
@@ -469,7 +469,7 @@ from harness.mission import Mission, mission_tests, provides
 
 @provides("SYS901")
 def stub_fsw(scenario, prm_path):
-    return StubHost()
+    return StubBuild()
 
 
 def check(path):
@@ -602,21 +602,17 @@ def alpha():
     result.stdout.fnmatch_lines(["*ValueError*alpha*"])
 
 
-STUB_HOST = """
-from Basilisk.architecture import sysModel
-
-
-class StubHost(sysModel.SysModel):
+STUB_BUILD = """
+class StubBuild:
     period_s = 1.0
     build = {"host": "stub", "revision": "r1"}
     dictionary = None
-    failure = None
 
-    def Reset(self, CurrentSimNanos):
+    def boot(self):
         pass
 
-    def UpdateState(self, CurrentSimNanos):
-        pass
+    def tick(self, t_ns, messages_by_role):
+        return {}
 
     def uplink(self, name, args, context):
         raise AssertionError("no command is sent")
@@ -639,7 +635,7 @@ from harness.mission import Mission, mission_tests, provides
 
 @provides("SYS901")
 def stub_fsw(scenario, prm_path):
-    return StubHost()
+    return StubBuild()
 
 
 globals().update(
@@ -652,12 +648,12 @@ globals().update(
 """
 
 
-def test_a_flight_runs_the_procedure_on_the_host_s_radio_edge_for_the_scenario_s_duration(
+def test_a_flight_runs_the_procedure_on_the_build_s_radio_edge_for_the_scenario_s_duration(
     project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
-    """A host that is neither built-in type flies through the ground, which records the run.
+    """A build that is neither built-in type, hosted by `FswHost`, flies through the ground.
 
-    The stub host presents a radio edge and writes nothing. The run file holds the truth and an
+    The stub build presents a radio edge and writes nothing. The run file holds the truth and an
     empty command log, no telemetry, and ends at the TST definition's `sim_duration_s`, so the
     harness bound the stopping rule. `flight.json` names the builder and the stub's `build`.
 
@@ -666,7 +662,7 @@ def test_a_flight_runs_the_procedure_on_the_host_s_radio_edge_for_the_scenario_s
         fly_in_a_subprocess: runs the project in a subprocess.
     """
     (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=20.0, body="pass"))
-    project.makepyfile(test_flights=STUB_HOST + STUB_FLIGHT)
+    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
@@ -696,7 +692,7 @@ from harness.mission import Mission, mission_tests, provides
 def recorded(scenario, prm_path):
     assert prm_path.name == "run_0000.prm.json"
     assert prm_path.is_file()
-    return StubHost()
+    return StubBuild()
 
 
 globals().update(
@@ -718,7 +714,7 @@ def test_a_case_s_parameter_record_is_written_beside_its_run_file_before_its_fsw
         project: the project.
         fly_in_a_subprocess: runs the project in a subprocess.
     """
-    project.makepyfile(test_flights=STUB_HOST + RECORDED_FLIGHT)
+    project.makepyfile(test_flights=STUB_BUILD + RECORDED_FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
@@ -746,7 +742,7 @@ def test_the_definition_s_ground_period_mark_sets_the_ground_s_period(
             "@pytest.mark.sim_runs(1)\n@pytest.mark.sim_ground_period_s(10.0)",
         )
     )
-    project.makepyfile(test_flights=STUB_HOST + STUB_FLIGHT)
+    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
@@ -768,7 +764,7 @@ def test_a_procedure_s_exception_fails_the_case_as_itself(
     (project.path / "scenarios" / "alpha.py").write_text(
         ALPHA.format(duration=20.0, body="await ground.until(lambda: False, timeout_s=3.0)")
     )
-    project.makepyfile(test_flights=STUB_HOST + STUB_FLIGHT)
+    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
 
     monkeypatch.setenv("COLUMNS", "200")
     result = fly_in_a_subprocess(project)
@@ -795,7 +791,7 @@ def test_a_procedure_still_waiting_when_the_flight_ends_fails_the_case_naming_it
     (project.path / "scenarios" / "alpha.py").write_text(
         ALPHA.format(duration=20.0, body="await ground.sleep(100.0)")
     )
-    project.makepyfile(test_flights=STUB_HOST + STUB_FLIGHT)
+    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
     monkeypatch.setenv("COLUMNS", "200")
 
     result = fly_in_a_subprocess(project)
@@ -821,7 +817,7 @@ def test_a_procedure_that_forgets_an_await_fails_the_case(
     (project.path / "scenarios" / "alpha.py").write_text(
         ALPHA.format(duration=3.0, body="ground.sleep(1.0)")
     )
-    project.makepyfile(test_flights=STUB_HOST + STUB_FLIGHT)
+    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
@@ -834,43 +830,28 @@ def test_an_exception_in_the_flight_software_fails_the_case_as_itself(
     fly_in_a_subprocess: Callable[..., pytest.RunResult],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A bug in a hosted toy algorithm's `step` fails the case with that exception, not Basilisk's.
+    """A bug in a build's `tick` fails the case with that exception, not Basilisk's.
 
     Args:
         project: the project.
         fly_in_a_subprocess: runs the project in a subprocess.
         monkeypatch: widens the subprocess's summary line to hold the exception.
     """
-    (project.path / "Toy.fpp").write_text(
-        "module Toy {\n"
-        "  passive component Toy {\n"
-        "    telemetry count: U32\n"
-        "    time get port timeCaller\n"
-        "    telemetry port tlmOut\n"
-        "  }\n"
-        "}\n"
-    )
     project.makepyfile(
-        test_flights="""
-from pathlib import Path
-
-from fsw.python import AlgorithmModule
-from ground.dictionary import Dictionary
+        test_flights=STUB_BUILD
+        + """
 from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 
 
-class Broken:
-    def step(self, t):
-        raise ZeroDivisionError("the step's own bug")
+class Broken(StubBuild):
+    def tick(self, t_ns, messages_by_role):
+        raise ZeroDivisionError("the tick's own bug")
 
 
 @provides("SYS901")
 def toy(scenario, prm_path):
-    model = [Path(__file__).with_name("Toy.fpp")]
-    dictionary = Dictionary.from_component(model, "Toy.Toy", instance="toy")
-    readers = scenario.vehicle.readers()
-    return AlgorithmModule(Broken(), readers, instance="toy", dictionary=dictionary)
+    return Broken()
 
 
 globals().update(
@@ -887,13 +868,13 @@ globals().update(
     result = fly_in_a_subprocess(project)
 
     result.assert_outcomes(failed=1)
-    result.stdout.fnmatch_lines(["FAILED *ZeroDivisionError: the step's own bug*"])
+    result.stdout.fnmatch_lines(["FAILED *ZeroDivisionError: the tick's own bug*"])
 
 
 def test_a_later_cases_base_write_keeps_the_build_an_earlier_case_merged(
     project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
-    """Case 0 builds the stub host; case 1's builder raises, and `flight.json` still has `build`.
+    """Case 0 builds the stub build; case 1's builder raises, and `flight.json` still has `build`.
 
     Case 1's fixture writes the flight's base facts before its builder raises, so the base write
     must merge into the file rather than replace it.
@@ -906,7 +887,7 @@ def test_a_later_cases_base_write_keeps_the_build_an_earlier_case_merged(
         ALPHA.format(duration=1.0, body="pass").replace("sim_runs(1)", "sim_runs(2)")
     )
     project.makepyfile(
-        test_flights=STUB_HOST
+        test_flights=STUB_BUILD
         + """
 from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
@@ -919,7 +900,7 @@ def stub_fsw(scenario, prm_path):
     BUILT.append(scenario)
     if len(BUILT) > 1:
         raise RuntimeError("the second case cannot build its host")
-    return StubHost()
+    return StubBuild()
 
 
 globals().update(

@@ -19,13 +19,10 @@ class RadioEdge(Protocol):
     Attributes:
         period_s: s, the period the build's flight software ticks at.
         dictionary: the dictionary the build is held to.
-        failure: the exception the build's tick raised, kept whole for the harness to re-raise in
-            place of the `RuntimeError` Basilisk reports it as, else `None`.
     """
 
     period_s: float
     dictionary: Dictionary
-    failure: BaseException | None
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command, which runs at the build's next tick.
