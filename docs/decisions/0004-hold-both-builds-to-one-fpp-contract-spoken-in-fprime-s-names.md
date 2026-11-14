@@ -122,8 +122,9 @@ dictionary; the check used a scratch deployment's.
 - **Telemetry and output fields default to not written**, so a channel written only at some ticks
   stays honest.
 - **A `<Name>Parameters` field has no default.** A missing parameter raises when the tuple is built,
-  unless its FPP declaration gives a `default`, which both builds then use. A missing parameter
-  therefore fails both builds alike.
+  unless its FPP declaration gives a `default`: the generated field then takes that value, so the
+  JSON and the `.dat` carry it and both builds use it. A missing parameter therefore fails both
+  builds alike.
 - **Convention lookups fail loudly:** a component with no Python class, or a `@ provides` claim the
   requirements tree does not hold, is an error.
 
