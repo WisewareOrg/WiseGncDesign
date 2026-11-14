@@ -122,6 +122,18 @@ An F´ port's tests assert that its Python build's entries equal WiseFsw's, IDs 
 builds are held to one contract. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
+## The FPP model
+
+`fsw.codegen.fpp_model` is the one module that reads FPP's model in Python: `read(files)` runs
+the native `fpp` binary inside the `fprime_fpp` package, `fpp to-json`, into a temporary directory,
+and returns a `Model` of named tuples by qualified name: instances with their base IDs, each
+topology's connections with both port numbers resolved, numeric constants, struct, enum and array
+types, each component's commands, channels and parameters, and annotations. It needs no compiler,
+no Java and no F´ build, only the model's `.fpp` files, F´'s framework files among them from the
+clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned compiler internals,
+so a key the module reads that is missing raises `KeyError`. The reasoning is in
+[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+
 ## The F´ host
 
 `lab.FprimeModule(imu, mu, dcm_PB)` runs the WiseFsw F´ deployment in the
