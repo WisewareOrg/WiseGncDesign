@@ -11,6 +11,7 @@ from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
 from ground.dictionary import Dictionary
+from ground.fprime_station import FprimeStation
 from lab import DICTIONARY, extension
 
 pytest.importorskip("lab._wise_fsw", reason="the F´ build is absent; run `just fsw`")
@@ -32,6 +33,9 @@ NS = 1_000_000_000
 WISE_FSW = Dictionary(DICTIONARY)
 """The deployment's dictionary, which the build generated."""
 
+STATION = FprimeStation(_wise_fsw, WISE_FSW)
+"""The ground station on the deployment."""
+
 
 def _telemetry() -> dict[str, object]:
     """Drains the telemetry writes and keeps each channel's last, by name.
@@ -39,8 +43,7 @@ def _telemetry() -> dict[str, object]:
     Returns:
         Channel name, `<instance>.<channel>`, to its last value written since the previous drain.
     """
-    channels = WISE_FSW.channels_by_id
-    return {channels[i].name: channels[i].decode(raw) for i, _, raw in _wise_fsw.telemetry()}
+    return {name: STATION.values(name, [raw])[0] for name, _, raw in STATION.telemetry()}
 
 
 def test_the_python_build_and_the_fprime_build_hold_nav_to_one_contract():
@@ -87,7 +90,7 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(sign: f
     """
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     state = {"epoch": 0.0, "attitude": sign * Q0, "position": R0, "velocity": V0}
-    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
+    STATION.uplink("nav.initNavState", state, 1)
     _wise_fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
     np.testing.assert_allclose(_telemetry()["nav.bodyEciAttitude"], Q0, rtol=0, atol=1e-15)
@@ -114,7 +117,7 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(rate_rad_s: f
     python.initNavState(epoch=0.0, attitude=Q0, position=R0, velocity=V0)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     state = {"epoch": 0.0, "attitude": Q0, "position": R0, "velocity": V0}
-    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
+    STATION.uplink("nav.initNavState", state, 1)
 
     for k, (omega, accel) in enumerate(readings, start=1):
         python.step(t=k * step_ns / NS, AngVelPlatform=omega, AccelPlatform=accel)
@@ -136,13 +139,13 @@ def test_init_nav_state_starts_the_reckoner_at_its_epoch():
     for k in range(1, 61):
         _wise_fsw.step(t_ns=k * NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
     state = {"epoch": 60.0, "attitude": Q0, "position": R0, "velocity": V0}
-    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
+    STATION.uplink("nav.initNavState", state, 1)
 
     for k, (omega, accel) in enumerate(readings, start=61):
         python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
         _wise_fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
 
-    assert _wise_fsw.responses() == [(1, WISE_FSW.responses["OK"])]
+    assert STATION.responses() == [(1, "OK", None)]
     _assert_matches(python)
 
 
@@ -157,7 +160,7 @@ def _fly_a_first_flight() -> None:
     rng = np.random.default_rng(3)
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     state = {"epoch": 0.0, "attitude": Q0, "position": R0, "velocity": V0}
-    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
+    STATION.uplink("nav.initNavState", state, 1)
     for k in range(1, 61):
         _wise_fsw.step(
             t_ns=10 * k * NS,
@@ -187,7 +190,7 @@ def test_a_second_flight_matches_a_fresh_notebook_reckoner():
 
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     state = {"epoch": 0.0, "attitude": Q_B, "position": R_B, "velocity": V_B}
-    _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
+    STATION.uplink("nav.initNavState", state, 1)
     for k, (omega, accel) in enumerate(readings, start=1):
         python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
         _wise_fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)

@@ -1,4 +1,4 @@
-"""`AlgorithmModule` driven directly, on the link.
+"""`AlgorithmModule` driven directly, on the radio edge.
 
 It hosts stub algorithms, wired by their names, on standalone Basilisk messages, as the instance
 `toy` of a toy component whose dictionary is generated from FPP alone.
@@ -283,7 +283,7 @@ def _subscribed(
 
 
 def _writes(module: AlgorithmModule) -> list[tuple[str, int, object]]:
-    """Drains the module's telemetry, named and packed.
+    """Drains the module's telemetry, packed.
 
     Args:
         module: the host.
@@ -291,11 +291,7 @@ def _writes(module: AlgorithmModule) -> list[tuple[str, int, object]]:
     Returns:
         Each write's channel name, time tag in ns and packed value, in the order written.
     """
-    channels = module.dictionary.channels_by_id
-    return [
-        (channels[i].name, t_ns, module.values(channels[i], [value])[0])
-        for i, t_ns, value in module.telemetry()
-    ]
+    return [(name, t_ns, module.values(name, [raw])[0]) for name, t_ns, raw in module.telemetry()]
 
 
 def test_each_step_keyword_is_read_from_the_message_carrying_that_field(dictionary: Dictionary):
@@ -316,10 +312,10 @@ def test_each_step_keyword_is_read_from_the_message_carrying_that_field(dictiona
     np.testing.assert_array_equal(step["sigma_BN"], [0.4, 0.5, 0.6])
 
 
-def test_a_command_runs_before_the_next_step_decoded_as_f_prime_hands_it_and_answers_ok(
+def test_a_command_runs_before_the_next_step_with_its_arguments_and_answers_ok(
     dictionary: Dictionary,
 ):
-    """The handler gets the F32 as F32 holds it and the enum by name, then `OK` under the context.
+    """The handler gets the arguments as uplinked, then `OK` under the context.
 
     Its writes come first in the tick, tagged with the tick's time, before the step's.
 
@@ -330,12 +326,12 @@ def test_a_command_runs_before_the_next_step_decoded_as_f_prime_hands_it_and_ans
     _messages = _subscribed(module)
     module.Reset(0)
 
-    module.uplink(dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}), 7)
+    gain = float(np.float32(0.1))
+    module.uplink("toy.setGain", {"gain": gain, "mode": "fast"}, 7)
     module.UpdateState(ONE_SECOND_NS)
 
-    gain = float(np.float32(0.1))
     assert module.algorithm.commands == [{"gain": gain, "mode": "fast"}]
-    assert module.responses() == [(7, dictionary.responses["OK"], None)]
+    assert module.responses() == [(7, "OK", None)]
     assert module.responses() == []
     writes = _writes(module)
     assert [(name, t_ns) for name, t_ns, _ in writes] == [
@@ -363,33 +359,35 @@ def test_a_handler_that_raises_value_error_answers_validation_error_and_writes_n
     _messages = _subscribed(module)
     module.Reset(0)
 
-    module.uplink(dictionary.encode_command("toy.setGain", {"gain": -1.0, "mode": "slow"}), 1)
+    module.uplink("toy.setGain", {"gain": -1.0, "mode": "slow"}, 1)
     module.UpdateState(ONE_SECOND_NS)
 
-    assert module.responses() == [(1, dictionary.responses["VALIDATION_ERROR"], "a negative gain")]
+    assert module.responses() == [(1, "VALIDATION_ERROR", "a negative gain")]
     assert [name for name, _, _ in _writes(module)] == ["toy.offset"]
 
 
-def test_a_malformed_packet_earns_the_dictionary_s_response_and_runs_nothing(
-    dictionary: Dictionary,
+@pytest.mark.parametrize("name", ["toy.setGian", "nav.setGain", "setGain"])
+def test_a_command_the_instance_lacks_is_an_invalid_opcode_and_runs_nothing(
+    dictionary: Dictionary, name: str
 ):
-    """A packet the dictionary cannot decode is answered as F´ answers it, and no handler runs.
+    """A name that is not one of the instance's commands is answered `INVALID_OPCODE`, no reason.
 
-    A packet cut short in its arguments earns `FORMAT_ERROR`.
+    The tick goes on to the step.
 
     Args:
         dictionary: the toy's dictionary.
+        name: the command uplinked.
     """
     module = _module(dictionary)
     _messages = _subscribed(module)
     module.Reset(0)
-    packet = dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"})
 
-    module.uplink(packet[:-1], 1)
+    module.uplink(name, {"gain": 0.1, "mode": "fast"}, 1)
     module.UpdateState(ONE_SECOND_NS)
 
-    assert module.responses() == [(1, dictionary.responses["FORMAT_ERROR"], None)]
+    assert module.responses() == [(1, "INVALID_OPCODE", None)]
     assert module.algorithm.commands == []
+    assert [name for name, _, _ in _writes(module)] == ["toy.offset"]
 
 
 @pytest.mark.parametrize(
@@ -413,7 +411,7 @@ def test_a_handler_s_bug_or_write_to_a_channel_the_dictionary_lacks_fails_the_ti
     module = _module(dictionary, Faulty(fault))
     _messages = _subscribed(module)
     module.Reset(0)
-    module.uplink(dictionary.encode_command("toy.setGain", {"gain": 0.1, "mode": "fast"}), 1)
+    module.uplink("toy.setGain", {"gain": 0.1, "mode": "fast"}, 1)
 
     with pytest.raises(error, match=message) as raised:
         module.UpdateState(ONE_SECOND_NS)

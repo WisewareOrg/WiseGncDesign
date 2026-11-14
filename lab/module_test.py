@@ -1,9 +1,8 @@
-"""The F´ host on the link, and its refusals, against messages written by hand.
+"""The F´ host on the radio edge, and its refusals, against messages written by hand.
 
 Skipped without the deployment `just fsw` builds.
 """
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -14,7 +13,7 @@ from Basilisk.architecture import messaging
 from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning import ImuDeadReckoner
-from lab import DICTIONARY, FprimeModule
+from lab import FprimeModule
 
 pytest.importorskip("lab._wise_fsw", reason="the F´ build is absent; run `just fsw`")
 
@@ -66,8 +65,8 @@ def test_a_tick_refuses_an_imu_never_written_and_keeps_the_exception():
     assert module.failure is raised.value
 
 
-def test_the_link_carries_a_command_up_and_its_response_and_every_write_down():
-    """A command runs at the next tick, answered with no reason; each write comes down decoded.
+def test_the_edge_carries_a_command_up_and_its_response_and_every_write_down():
+    """A command runs at the next tick, answered with no reason; each write comes down by name.
 
     The handler writes `navState` alone, before the step writes it with the estimate, both tagged
     with the tick's time.
@@ -78,27 +77,24 @@ def test_the_link_carries_a_command_up_and_its_response_and_every_write_down():
     module._imu.subscribeTo(imu)
     module.Reset(0)
 
-    module.uplink(module.dictionary.encode_command("nav.initNavState", STATE), 5)
+    module.uplink("nav.initNavState", STATE, 5)
     assert module.responses() == []
     module.UpdateState(ONE_SECOND_NS)
     writes = module.telemetry()
 
-    assert module.responses() == [(5, module.dictionary.responses["OK"], None)]
+    assert module.responses() == [(5, "OK", None)]
     assert module.failure is None
-    channels = module.dictionary.channels_by_id
-    assert [(channels[i].name, t) for i, t, _ in writes] == [
+    assert [(name, t) for name, t, _ in writes] == [
         ("nav.navState", ONE_SECOND_NS),
         ("nav.navState", ONE_SECOND_NS),
         ("nav.bodyEciPos", ONE_SECOND_NS),
         ("nav.bodyEciVel", ONE_SECOND_NS),
         ("nav.bodyEciAttitude", ONE_SECOND_NS),
     ]
-    nav_state = module.dictionary.channel("nav.navState")
-    payloads = [value for i, _, value in writes if i == nav_state.id]
-    assert module.values(nav_state, payloads).tolist() == ["initialized", "propagated"]
-    attitude = module.dictionary.channel("nav.bodyEciAttitude")
-    payloads = [value for i, _, value in writes if i == attitude.id]
-    np.testing.assert_array_equal(module.values(attitude, payloads), [STATE["attitude"]])
+    raws = [raw for name, _, raw in writes if name == "nav.navState"]
+    assert module.values("nav.navState", raws).tolist() == ["initialized", "propagated"]
+    raws = [raw for name, _, raw in writes if name == "nav.bodyEciAttitude"]
+    np.testing.assert_array_equal(module.values("nav.bodyEciAttitude", raws), [STATE["attitude"]])
     assert module.telemetry() == []
 
 
@@ -113,7 +109,7 @@ def test_the_host_mounts_the_imu_as_it_is_given():
     imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)
     module.Reset(0)
-    module.uplink(module.dictionary.encode_command("nav.initNavState", STATE), 1)
+    module.uplink("nav.initNavState", STATE, 1)
     python = ImuDeadReckoner(mu=MU, dcm_PB=mounting)
     python.initNavState(**STATE)
     rng = np.random.default_rng(7)
@@ -130,28 +126,10 @@ def test_the_host_mounts_the_imu_as_it_is_given():
             AccelPlatform=np.array(reading.AccelPlatform),
         )
 
-    channels = module.dictionary.channels_by_id
-    latest = {channels[i].name: channels[i].decode(value) for i, _, value in module.telemetry()}
+    latest = {name: module.values(name, [raw])[0] for name, _, raw in module.telemetry()}
     np.testing.assert_allclose(latest["nav.bodyEciAttitude"], python.q_BN, rtol=0, atol=1e-12)
     np.testing.assert_allclose(latest["nav.bodyEciPos"], python.r_BN_N, rtol=1e-12)
     np.testing.assert_allclose(latest["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)
-
-
-def test_a_command_f_prime_rejects_is_answered_with_its_response_and_fails_nothing():
-    """A packet with an opcode no instance has is answered `INVALID_OPCODE`, with no reason."""
-    module = _module()
-    imu = messaging.IMUSensorMsg()
-    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
-    module._imu.subscribeTo(imu)
-    module.Reset(0)
-    packet = module.dictionary.encode_command("nav.initNavState", STATE)
-    unknown = max(c["opcode"] for c in json.loads(DICTIONARY.read_text())["commands"]) + 1
-
-    module.uplink(packet[:2] + unknown.to_bytes(4, "big") + packet[6:], 9)
-    module.UpdateState(ONE_SECOND_NS)
-
-    assert module.responses() == [(9, module.dictionary.responses["INVALID_OPCODE"], None)]
-    assert module.failure is None
 
 
 def test_a_host_without_the_f_prime_build_says_to_build_it(monkeypatch: pytest.MonkeyPatch):

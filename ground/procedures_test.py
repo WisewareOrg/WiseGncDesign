@@ -1,6 +1,6 @@
-"""The ground driven tick by tick against a stub link: its waits, its commands and its record.
+"""The ground driven tick by tick against a stub edge: its waits, its commands and its record.
 
-The stub link holds a toy component's dictionary, generated from FPP alone, and answers and writes
+The stub edge holds a toy component's dictionary, generated from FPP alone, and answers and writes
 what each test gives it; the tests that fly Leo500 host a toy algorithm for that component.
 """
 
@@ -13,7 +13,7 @@ import pytest
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from fsw.python import AlgorithmModule
-from ground.dictionary import Channel, Dictionary
+from ground.dictionary import Dictionary
 from ground.procedures import CommandFailed, Ground
 
 NS = 1_000_000_000
@@ -58,8 +58,8 @@ def dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
     return Dictionary.from_component([model], "Toy.Toy", instance="toy")
 
 
-class StubLink:
-    """A link whose responses and writes a test queues, and which keeps what was uplinked.
+class StubEdge:
+    """A radio edge whose responses and writes a test queues, and which keeps what was uplinked.
 
     Attributes:
         period_s: s, the flight software's period.
@@ -76,20 +76,21 @@ class StubLink:
             dictionary: the toy's dictionary.
         """
         self.dictionary = dictionary
-        self.uplinked: list[tuple[bytes, int]] = []
-        self.answers: list[tuple[int, int, str | None]] = []
-        self.writes: list[tuple[int, int, Any]] = []
+        self.uplinked: list[tuple[str, dict[str, Any], int]] = []
+        self.answers: list[tuple[int, str, str | None]] = []
+        self.writes: list[tuple[str, int, Any]] = []
 
-    def uplink(self, packet: bytes, context: int) -> None:
-        """Keeps the packet and its context.
+    def uplink(self, name: str, args: dict[str, Any], context: int) -> None:
+        """Keeps the command, its arguments and its context.
 
         Args:
-            packet: the command packet.
+            name: `<instance>.<command>`.
+            args: its arguments by parameter name.
             context: the ground's number for it.
         """
-        self.uplinked.append((packet, context))
+        self.uplinked.append((name, args, context))
 
-    def responses(self) -> list[tuple[int, int, str | None]]:
+    def responses(self) -> list[tuple[int, str, str | None]]:
         """Drains the queued responses.
 
         Returns:
@@ -98,39 +99,39 @@ class StubLink:
         drained, self.answers = self.answers, []
         return drained
 
-    def telemetry(self) -> list[tuple[int, int, Any]]:
+    def telemetry(self) -> list[tuple[str, int, Any]]:
         """Drains the queued writes.
 
         Returns:
-            `(channel ID, time tag in ns, value)` triples.
+            `(channel name, time tag in ns, value)` triples.
         """
         drained, self.writes = self.writes, []
         return drained
 
-    def values(self, channel: Channel, payloads: Sequence[Any]) -> np.ndarray:
+    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
         """Packs written values, as the Python host does.
 
         Args:
-            channel: the channel.
-            payloads: its values.
+            name: the channel's name.
+            raws: its values.
 
         Returns:
             As `Channel.pack_many` gives them.
         """
-        return channel.pack_many(payloads)
+        return self.dictionary.channel(name).pack_many(raws)
 
 
-def _ground(link: StubLink, procedure: Callable[[Ground], Coroutine[Any, Any, None]]) -> Ground:
-    """A ground running `procedure` on `link`, reset at t = 0 and run at the t = 0 tick.
+def _ground(edge: StubEdge, procedure: Callable[[Ground], Coroutine[Any, Any, None]]) -> Ground:
+    """A ground running `procedure` on `edge`, reset at t = 0 and run at the t = 0 tick.
 
     Args:
-        link: the stub link.
+        edge: the stub edge.
         procedure: the procedure.
 
     Returns:
         The ground.
     """
-    ground = Ground(procedure, link, dict, lambda: None)
+    ground = Ground(procedure, edge, dict, lambda: None)
     ground.Reset(0)
     ground.UpdateState(0)
     return ground
@@ -164,7 +165,7 @@ def test_sleep_wakes_at_the_first_tick_at_or_after_its_duration(dictionary: Dict
         await ground.sleep(2.5)
         seen.append(ground.now_s)
 
-    ground = _ground(StubLink(dictionary), procedure)
+    ground = _ground(StubEdge(dictionary), procedure)
     _tick(ground, 1, 2)
     assert seen == []
 
@@ -193,7 +194,7 @@ def test_until_checks_now_then_each_tick_and_times_out_at_its_deadline(dictionar
         seen.append(ground.now_s)
         await ground.until(lambda: False, timeout_s=2.0)
 
-    ground = _ground(StubLink(dictionary), procedure)
+    ground = _ground(StubEdge(dictionary), procedure)
     assert seen == [0.0]
     _tick(ground, 1)
 
@@ -209,8 +210,8 @@ def test_until_checks_now_then_each_tick_and_times_out_at_its_deadline(dictionar
     assert ground.failure is raised.value
 
 
-def test_send_uplinks_the_encoded_command_and_returns_on_its_ok(dictionary: Dictionary):
-    """The packet is the dictionary's, under a fresh context, and its `OK` resumes the procedure.
+def test_send_uplinks_the_command_by_name_and_returns_on_its_ok(dictionary: Dictionary):
+    """The command goes up by name under a fresh context, and its `OK` resumes the procedure.
 
     The command log holds the command, its arguments as JSON, and its response and time.
 
@@ -218,7 +219,7 @@ def test_send_uplinks_the_encoded_command_and_returns_on_its_ok(dictionary: Dict
         dictionary: the toy's dictionary.
     """
     seen = []
-    link = StubLink(dictionary)
+    edge = StubEdge(dictionary)
 
     async def procedure(ground: Ground) -> None:
         """Sends `setMode`, then records the time.
@@ -229,12 +230,12 @@ def test_send_uplinks_the_encoded_command_and_returns_on_its_ok(dictionary: Dict
         await ground.send("toy.setMode", mode="fast")
         seen.append(ground.now_s)
 
-    ground = _ground(link, procedure)
-    assert link.uplinked == [(dictionary.encode_command("toy.setMode", {"mode": "fast"}), 1)]
+    ground = _ground(edge, procedure)
+    assert edge.uplinked == [("toy.setMode", {"mode": "fast"}, 1)]
     _tick(ground, 1)
     assert seen == []
 
-    link.answers.append((1, dictionary.responses["OK"], None))
+    edge.answers.append((1, "OK", None))
     _tick(ground, 2)
 
     assert seen == [2.0]
@@ -257,7 +258,7 @@ def test_the_command_log_holds_array_and_numpy_arguments_as_plain_json(dictionar
     Args:
         dictionary: the toy's dictionary.
     """
-    link = StubLink(dictionary)
+    edge = StubEdge(dictionary)
 
     async def procedure(ground: Ground) -> None:
         """Sends `setOffset` with an array and an F32.
@@ -267,11 +268,76 @@ def test_the_command_log_holds_array_and_numpy_arguments_as_plain_json(dictionar
         """
         await ground.send("toy.setOffset", offset=np.array([1.0, 2.0, 3.0]), gain=np.float32(0.25))
 
-    ground = _ground(link, procedure)
+    ground = _ground(edge, procedure)
 
     logged = json.loads(json.dumps(ground.command_log))
     assert logged[0]["args"] == {"offset": [1.0, 2.0, 3.0], "gain": 0.25}
     assert type(ground.command_log[0]["args"]["gain"]) is float
+
+
+def test_send_types_the_arguments_into_the_command_s_fpp_types_before_uplink(
+    dictionary: Dictionary,
+):
+    """The edge gets an F32 as F32 holds it and an array as an array; the log keeps them as given.
+
+    Args:
+        dictionary: the toy's dictionary.
+    """
+    edge = StubEdge(dictionary)
+
+    async def procedure(ground: Ground) -> None:
+        """Sends `setOffset` with a list and a float.
+
+        Args:
+            ground: the ground running it.
+        """
+        await ground.send("toy.setOffset", offset=[1.0, 2.0, 3.0], gain=0.1)
+
+    ground = _ground(edge, procedure)
+
+    [(name, args, context)] = edge.uplinked
+    assert (name, sorted(args), context) == ("toy.setOffset", ["gain", "offset"], 1)
+    assert args["gain"] == float(np.float32(0.1))
+    assert isinstance(args["offset"], np.ndarray)
+    np.testing.assert_array_equal(args["offset"], [1.0, 2.0, 3.0])
+    assert ground.command_log[0]["args"] == {"offset": [1.0, 2.0, 3.0], "gain": 0.1}
+
+
+@pytest.mark.parametrize(
+    ("name", "args", "error", "match"),
+    [
+        ("toy.setMod", {"mode": "fast"}, KeyError, "'toy.setMod'"),
+        ("toy.setMode", {"mood": "fast"}, ValueError, r"toy\.setMode takes \['mode'\]"),
+        ("toy.setMode", {"mode": "standby"}, ValueError, "parameter mode"),
+    ],
+    ids=["unknown-command", "misnamed-argument", "no-constant"],
+)
+def test_send_refuses_a_command_the_dictionary_cannot_type_before_uplink(
+    dictionary: Dictionary, name: str, args: dict, error: type, match: str
+):
+    """An unknown command, or arguments that do not fit, raise at `send`, and nothing goes up.
+
+    Args:
+        dictionary: the toy's dictionary.
+        name: the command sent.
+        args: its arguments.
+        error: what `send` raises.
+        match: what the error names.
+    """
+    edge = StubEdge(dictionary)
+
+    async def procedure(ground: Ground) -> None:
+        """Sends the command.
+
+        Args:
+            ground: the ground running it.
+        """
+        await ground.send(name, **args)
+
+    with pytest.raises(error, match=match):
+        _ground(edge, procedure)
+
+    assert edge.uplinked == []
 
 
 def test_consecutive_commands_take_fresh_contexts_and_each_resumes_on_its_own_answer(
@@ -283,7 +349,7 @@ def test_consecutive_commands_take_fresh_contexts_and_each_resumes_on_its_own_an
         dictionary: the toy's dictionary.
     """
     seen = []
-    link = StubLink(dictionary)
+    edge = StubEdge(dictionary)
 
     async def procedure(ground: Ground) -> None:
         """Sends `setMode` twice, recording the time after each.
@@ -296,17 +362,17 @@ def test_consecutive_commands_take_fresh_contexts_and_each_resumes_on_its_own_an
         await ground.send("toy.setMode", mode="slow")
         seen.append(ground.now_s)
 
-    ground = _ground(link, procedure)
-    link.answers.append((1, dictionary.responses["OK"], None))
+    ground = _ground(edge, procedure)
+    edge.answers.append((1, "OK", None))
     _tick(ground, 1)
-    link.answers.append((7, dictionary.responses["OK"], None))
+    edge.answers.append((7, "OK", None))
     _tick(ground, 2)
     assert seen == [1.0]
-    link.answers.append((2, dictionary.responses["OK"], None))
+    edge.answers.append((2, "OK", None))
     _tick(ground, 3)
 
     assert seen == [1.0, 3.0]
-    assert [context for _, context in link.uplinked] == [1, 2]
+    assert [context for *_, context in edge.uplinked] == [1, 2]
     assert [(e["context"], e["response"], e["response_t_s"]) for e in ground.command_log] == [
         (1, "OK", 1.0),
         (2, "OK", 3.0),
@@ -319,7 +385,7 @@ def test_a_command_answered_other_than_ok_fails_the_procedure_naming_it(dictiona
     Args:
         dictionary: the toy's dictionary.
     """
-    link = StubLink(dictionary)
+    edge = StubEdge(dictionary)
 
     async def procedure(ground: Ground) -> None:
         """Sends `setMode`.
@@ -329,8 +395,8 @@ def test_a_command_answered_other_than_ok_fails_the_procedure_naming_it(dictiona
         """
         await ground.send("toy.setMode", mode="slow")
 
-    ground = _ground(link, procedure)
-    link.answers.append((1, dictionary.responses["VALIDATION_ERROR"], "not in this mode"))
+    ground = _ground(edge, procedure)
+    edge.answers.append((1, "VALIDATION_ERROR", "not in this mode"))
 
     with pytest.raises(
         CommandFailed, match="toy.setMode was answered VALIDATION_ERROR: not in this mode"
@@ -357,7 +423,7 @@ def test_a_command_never_answered_times_out(dictionary: Dictionary):
         """
         await ground.send("toy.setMode", timeout_s=1.0, mode="fast")
 
-    ground = _ground(StubLink(dictionary), procedure)
+    ground = _ground(StubEdge(dictionary), procedure)
 
     with pytest.raises(
         TimeoutError, match=r"at t = 1.0 s waiting until toy.setMode is answered, by t = 1.0 s"
@@ -388,13 +454,12 @@ def test_every_write_is_recorded_with_its_tag_in_order_and_tlm_reads_the_latest(
             seen.append(ground.tlm("toy.offset"))
             await ground.sleep(1.0)
 
-    link = StubLink(dictionary)
-    offset = dictionary.channel("toy.offset").id
-    ground = _ground(link, procedure)
-    link.writes.append((offset, NS, np.array([1.0, 2.0, 3.0])))
-    link.writes.append((offset, NS, np.array([4.0, 5.0, 6.0])))
+    edge = StubEdge(dictionary)
+    ground = _ground(edge, procedure)
+    edge.writes.append(("toy.offset", NS, np.array([1.0, 2.0, 3.0])))
+    edge.writes.append(("toy.offset", NS, np.array([4.0, 5.0, 6.0])))
     _tick(ground, 1, 2)
-    link.writes.append((offset, 3 * NS, np.array([7.0, 8.0, 9.0])))
+    edge.writes.append(("toy.offset", 3 * NS, np.array([7.0, 8.0, 9.0])))
     _tick(ground, 3)
 
     datasets = ground.telemetry_datasets()
@@ -422,12 +487,12 @@ def test_a_period_that_is_not_a_whole_multiple_of_the_flight_software_s_is_refus
     Args:
         dictionary: the toy's dictionary.
     """
-    link = StubLink(dictionary)
+    edge = StubEdge(dictionary)
 
     with pytest.raises(ValueError, match=r"1.5 s is not a whole multiple .* 1.0 s"):
-        Ground(_returns, link, dict, lambda: None, period_s=1.5)
+        Ground(_returns, edge, dict, lambda: None, period_s=1.5)
 
-    assert Ground(_returns, link, dict, lambda: None, period_s=10.0).period_s == 10.0
+    assert Ground(_returns, edge, dict, lambda: None, period_s=10.0).period_s == 10.0
 
 
 async def _returns(ground: Ground) -> None:
@@ -532,7 +597,7 @@ def test_a_procedure_that_cannot_start_is_kept_whole(dictionary: Dictionary):
         """Takes no ground, so it cannot be started with one."""
         return None
 
-    ground = Ground(procedure, StubLink(dictionary), dict, lambda: None)
+    ground = Ground(procedure, StubEdge(dictionary), dict, lambda: None)
 
     with pytest.raises(TypeError) as raised:
         ground.Reset(0)

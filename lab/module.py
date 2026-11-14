@@ -1,7 +1,7 @@
 """A Basilisk Python `SysModel` running the WiseFsw F´ deployment in the simulation's process."""
 
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -10,7 +10,8 @@ import numpy as np
 from Basilisk.architecture import sysModel
 
 from fsw.python import AlgorithmModule
-from ground.dictionary import Channel, Dictionary
+from ground.dictionary import Dictionary
+from ground.fprime_station import FprimeStation
 
 __all__ = ["DICTIONARY", "FprimeModule", "extension"]
 
@@ -57,13 +58,14 @@ def extension() -> ModuleType:
 
 
 class FprimeModule(sysModel.SysModel):
-    """Runs the WiseFsw deployment each tick, and carries the ground's link to it.
+    """Runs the WiseFsw deployment each tick, and presents the ground's radio edge to it.
 
     The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
     with the dead reckoner idle. Each `UpdateState` whose time lies after the last tick's sets the
     clock, runs the uplinked commands through F´'s command dispatcher, sends the IMU reading and
-    runs the schedule. The link's bytes are F´'s own: command packets go up, and the responses and
-    every telemetry write with its F´ time tag come down.
+    runs the schedule. The radio edge is an `FprimeStation` on the deployment's pins: it encodes
+    each command into F´'s packet, and the responses and every telemetry write with its F´ time
+    tag come down through it.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in, the Python
@@ -93,6 +95,7 @@ class FprimeModule(sysModel.SysModel):
         self._mu = float(mu)
         self._dcm_PB = np.asarray(dcm_PB, dtype=float)
         self.dictionary = Dictionary(DICTIONARY)
+        self._station = FprimeStation(self._fsw, self.dictionary)
         self.failure = None
         self.build = {
             "host": "lab.FprimeModule",
@@ -101,46 +104,46 @@ class FprimeModule(sysModel.SysModel):
         }
         self._t_ns = 0
 
-    def uplink(self, packet: bytes, context: int) -> None:
-        """Queues a command packet at F´'s dispatcher, which runs it at the next tick.
+    def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
+        """Queues a command at F´'s dispatcher, through the station, which runs it at the next tick.
 
         Args:
-            packet: the serialized command packet.
+            name: `<instance>.<command>`.
+            args: the arguments by parameter name, as `Dictionary.arguments` types them.
             context: the ground's number for the command, returned with its response.
         """
-        self._fsw.uplink(packet, context)
+        self._station.uplink(name, args, context)
 
-    def responses(self) -> list[tuple[int, int, str | None]]:
+    def responses(self) -> list[tuple[int, str, None]]:
         """The command responses since the last call, oldest first.
 
         Returns:
-            `(context, response, None)`: the response a value of the dictionary's
-            `Fw.CmdResponse`; F´ gives no reason with it.
+            As `FprimeStation.responses` gives them: F´ gives no reason.
         """
-        return [(context, response, None) for context, response in self._fsw.responses()]
+        return self._station.responses()
 
-    def telemetry(self) -> list[tuple[int, int, bytes]]:
+    def telemetry(self) -> list[tuple[str, int, bytes]]:
         """Every telemetry write since the last call, in the order written.
 
         Returns:
-            `(channel ID, F´ time tag in ns, value)`, the value serialized as F´ writes it.
+            As `FprimeStation.telemetry` gives them, each value serialized as F´ writes it.
         """
-        return self._fsw.telemetry()
+        return self._station.telemetry()
 
-    def values(self, channel: Channel, payloads: Sequence[bytes]) -> np.ndarray:
-        """The values F´ wrote to one channel, decoded in one batch.
+    def values(self, name: str, raws: Sequence[bytes]) -> np.ndarray:
+        """The values F´ wrote to one channel, decoded in one batch by the station.
 
         Args:
-            channel: the channel written.
-            payloads: its writes' serialized values, as `telemetry` gave them.
+            name: `<instance>.<channel>`.
+            raws: its writes' bytes, as `telemetry` gave them.
 
         Returns:
-            As `Channel.decode_many` gives them.
+            As `FprimeStation.values` gives them.
         """
-        return channel.decode_many(payloads)
+        return self._station.values(name, raws)
 
     def Reset(self, CurrentSimNanos: int) -> None:
-        """Boots the deployment: queued commands run, the link cleared, the dead reckoner idle.
+        """Boots the deployment: queued commands run, the pins cleared, the dead reckoner idle.
 
         Args:
             CurrentSimNanos: ns, the reset time, as Basilisk passes it.

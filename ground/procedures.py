@@ -1,9 +1,10 @@
-"""The ground: a Basilisk module that runs a scenario's procedure against a flight software link.
+"""The ground: a Basilisk module that runs a scenario's procedure against the radio edge.
 
 The procedure is an `async def` driven on simulated time by the module's own loop, with no event
 loop and no wall clock: each `await` yields, and each tick resumes the coroutine until it waits
-again. The module also records every telemetry write the link reports, with the flight software's
-time tag, and every command with its response, so one recorder serves every host.
+again. The module also records every telemetry write the radio edge reports, with the flight
+software's time tag, and every command with its response, so one recorder serves every build. Writes
+are kept raw during the run and typed after it, each channel in one batch.
 """
 
 from collections.abc import Callable, Coroutine, Generator
@@ -13,7 +14,7 @@ from typing import Any
 import numpy as np
 from Basilisk.architecture import sysModel
 
-from ground.radio_edge import Link
+from ground.radio_edge import RadioEdge
 
 __all__ = ["CommandFailed", "Ground"]
 
@@ -72,12 +73,12 @@ class _Tick:
 
 
 class Ground(sysModel.SysModel):
-    """Runs a scenario's procedure against a flight software link, and records what crosses it.
+    """Runs a scenario's procedure against the radio edge, and records what crosses it.
 
     The simulation runs the module every `period_s`, a whole multiple of the flight software's
     period, after the flight software at each instant. Once the procedure returns, the module
     calls `stop` and is not run again; the flight goes on, and `telemetry_datasets` takes every
-    write the link still holds.
+    write the radio edge still holds.
 
     Attributes:
         period_s: s, the period of the task the simulation runs this module in.
@@ -94,17 +95,17 @@ class Ground(sysModel.SysModel):
     def __init__(
         self,
         procedure: Callable[["Ground"], Coroutine[Any, Any, None]],
-        link: Link,
+        edge: RadioEdge,
         truth: Callable[[], dict[str, np.ndarray]],
         stop: Callable[[], None],
         *,
         period_s: float | None = None,
     ) -> None:
-        """Holds the procedure, the link, the stand-in for tracking and what stops the module.
+        """Holds the procedure, the radio edge, the stand-in for tracking and what stops the module.
 
         Args:
             procedure: the scenario's `async def`, called with this ground when the run starts.
-            link: the flight software host.
+            edge: the flight software's radio edge.
             truth: reads the vehicle's true state now, the stand-in for tracking.
             stop: stops the simulation running this module, called once the procedure returns.
             period_s: s, the module's period; the flight software's when `None`.
@@ -114,22 +115,22 @@ class Ground(sysModel.SysModel):
                 software's.
         """
         super().__init__()
-        self.period_s = link.period_s if period_s is None else period_s
+        self.period_s = edge.period_s if period_s is None else period_s
         ground_ns = round(self.period_s * _NANOSECONDS_PER_SECOND)
-        fsw_ns = round(link.period_s * _NANOSECONDS_PER_SECOND)
+        fsw_ns = round(edge.period_s * _NANOSECONDS_PER_SECOND)
         if ground_ns < fsw_ns or ground_ns % fsw_ns:
             raise ValueError(
                 f"the ground's period {self.period_s} s is not a whole multiple of the flight"
-                f" software's {link.period_s} s"
+                f" software's {edge.period_s} s"
             )
-        self._procedure, self._link, self._truth, self._stop = procedure, link, truth, stop
+        self._procedure, self._edge, self._truth, self._stop = procedure, edge, truth, stop
         self._coroutine: Coroutine[Any, Any, None] | None = None
         self._now_ns = 0
         self._context = 0
-        self._answers: dict[int, tuple[int, str | None]] = {}
+        self._answers: dict[int, tuple[str, str | None]] = {}
         self._waiting = _Tick("its first tick")
-        self._writes: list[tuple[int, int, Any]] = []
-        self._latest: dict[int, Any] = {}
+        self._writes: list[tuple[str, int, Any]] = []
+        self._latest: dict[str, Any] = {}
         self.failure = None
         self.command_log = []
 
@@ -182,10 +183,10 @@ class Ground(sysModel.SysModel):
             await _Tick(until)
 
     async def send(self, name: str, *, timeout_s: float = 5.0, **args: Any) -> None:
-        """Uplinks a command and waits for its response.
+        """Uplinks a command, its arguments typed by the dictionary, and waits for its response.
 
         A `TimeoutError` names the command and the time when no response has come by the first tick
-        at or after `timeout_s` from now.
+        at or after `timeout_s` from now. The command log keeps the arguments as given.
 
         Args:
             name: `<instance>.<command>`, as the dictionary names it.
@@ -195,7 +196,7 @@ class Ground(sysModel.SysModel):
         Raises:
             CommandFailed: the response is not `OK`.
         """
-        packet = self._link.dictionary.encode_command(name, args)
+        typed = self._edge.dictionary.arguments(name, args)
         self._context += 1
         context = self._context
         entry = {
@@ -208,11 +209,10 @@ class Ground(sysModel.SysModel):
             "reason": None,
         }
         self.command_log.append(entry)
-        self._link.uplink(packet, context)
+        self._edge.uplink(name, typed, context)
         await self._until(lambda: context in self._answers, timeout_s, f"{name} is answered")
-        names = {value: key for key, value in self._link.dictionary.responses.items()}
-        response, entry["reason"] = self._answers.pop(context)
-        entry["response"], entry["response_t_s"] = names[response], self.now_s
+        entry["response"], entry["reason"] = self._answers.pop(context)
+        entry["response_t_s"] = self.now_s
         if entry["response"] != "OK":
             raise CommandFailed(name, entry["response"], entry["reason"])
 
@@ -225,10 +225,10 @@ class Ground(sysModel.SysModel):
         Returns:
             The value, as the run file records it, or `None` before the channel is written.
         """
-        channel = self._link.dictionary.channel(name)
-        if channel.id not in self._latest:
+        self._edge.dictionary.channel(name)
+        if name not in self._latest:
             return None
-        return self._link.values(channel, [self._latest[channel.id]])[0]
+        return self._edge.values(name, [self._latest[name]])[0]
 
     def truth(self) -> dict[str, np.ndarray]:
         """The vehicle's true state now, the stand-in for tracking.
@@ -255,7 +255,7 @@ class Ground(sysModel.SysModel):
             raise
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
-        """Takes the link's responses and telemetry, and runs the procedure to its next wait.
+        """Takes the radio edge's responses and telemetry, and runs the procedure to its next wait.
 
         Args:
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
@@ -267,11 +267,11 @@ class Ground(sysModel.SysModel):
         try:
             self._answers.update(
                 (context, (response, reason))
-                for context, response, reason in self._link.responses()
+                for context, response, reason in self._edge.responses()
             )
-            writes = self._link.telemetry()
+            writes = self._edge.telemetry()
             self._writes += writes
-            self._latest.update((channel, payload) for channel, _, payload in writes)
+            self._latest.update((name, raw) for name, _, raw in writes)
             if self._coroutine is not None:
                 try:
                     self._waiting = self._coroutine.send(None)
@@ -295,26 +295,26 @@ class Ground(sysModel.SysModel):
             )
 
     def telemetry_datasets(self) -> dict[str, tuple[np.ndarray, str]]:
-        """Every telemetry write of the run, as run-file datasets, each channel in one batch.
+        """Every telemetry write of the run, as run-file datasets, each channel typed in one batch.
 
-        The writes the link still holds are taken first, so a write after the module's last tick
-        is recorded too.
+        The writes the radio edge still holds are taken first, so a write after the module's last
+        tick is recorded too.
 
         Returns:
             For each channel written at least once, `tlm/<instance>.<channel>` to its values and
             units, and `tlm_t/<instance>.<channel>` to each write's flight software time tag in s.
         """
-        self._writes += self._link.telemetry()
-        by_channel: dict[int, tuple[list[int], list[Any]]] = {}
-        for channel, t_ns, payload in self._writes:
-            times, payloads = by_channel.setdefault(channel, ([], []))
+        self._writes += self._edge.telemetry()
+        by_channel: dict[str, tuple[list[int], list[Any]]] = {}
+        for name, t_ns, raw in self._writes:
+            times, raws = by_channel.setdefault(name, ([], []))
             times.append(t_ns)
-            payloads.append(payload)
+            raws.append(raw)
         datasets = {}
-        for channel_id, (times, payloads) in by_channel.items():
-            channel = self._link.dictionary.channels_by_id[channel_id]
-            datasets[f"tlm/{channel.name}"] = (self._link.values(channel, payloads), channel.units)
-            datasets[f"tlm_t/{channel.name}"] = (
+        for name, (times, raws) in by_channel.items():
+            units = self._edge.dictionary.channel(name).units
+            datasets[f"tlm/{name}"] = (self._edge.values(name, raws), units)
+            datasets[f"tlm_t/{name}"] = (
                 np.array(times) / _NANOSECONDS_PER_SECOND,
                 "s",
             )
