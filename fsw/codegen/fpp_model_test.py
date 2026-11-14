@@ -230,6 +230,7 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares()
         Connection("WiseFsw.simBridge", "navConfigOut", 0, dead_reckoner, "configureIn", 0),
         Connection("WiseFsw.simTime", "CycleOut", 0, "WiseFsw.rateGroupDriver", "CycleIn", 0),
     )
+    assert model.constants["ImuDeadReckoning.navDivider"] == 1
     nav = model.components["Gnc.ImuDeadReckoner"]
     assert nav.commands == (
         Command(
