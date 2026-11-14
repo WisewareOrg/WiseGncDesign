@@ -12,7 +12,7 @@
 
 The algorithms are written in Python first and flown with no F´ build, and F´ is good flight
 software in its own right, not a mirror of the Python build. Each build meets the world at two
-edges: the ground (ADR 0004 rev 2) and the sim (ADR 0003 rev 4).
+edges: the ground (ADR 0004 rev 3) and the sim (ADR 0003 rev 4).
 
 At `6f6276e`, one object per build did bus I/O, unit conversion, commands, telemetry and the
 algorithm, wired by hand for one algorithm. A second algorithm had no place to sit, and the glue grew
@@ -43,7 +43,7 @@ way through, partitioned as real flight software is.
   Rejected.
 - **One CDH converter shared by both builds.** One build would then run the other's internals, and
   a Python build must fly with no F´ build. Rejected for a CDH per build, each generated from the
-  same FPP (ADR 0004 rev 2).
+  same FPP (ADR 0004 rev 3).
 
 ## Consequences
 

@@ -2,10 +2,12 @@
 
 **Status:** accepted
 **Decided:** 2026-11-13 (issue 51 two edges design; issue 52 tooling checks)
-**Rev:** 2
+**Rev:** 3
 
 ## Revisions
 
+- **rev 3** — 2026-11-14 — the log holds every write the flight software downlinks, not its health
+  telemetry (ADR 0003 rev 4) (issue 57 GNC sub-topology).
 - **rev 2** — 2026-11-13 — retitled from "Carry commands and telemetry in F´'s form, from one FPP
   dictionary" and rewritten to two edges: RadioEdge in F´'s names, the F´ ground station, typing
   after the run, FPP as the contract read through the native `fpp to-json`, generated named tuples,
@@ -76,8 +78,8 @@ deployment's.
 
 ### Telemetry is pushed, and typed after the run
 
-- **Every telemetry write is logged with the flight software's time tag, in the order written.**
-  Nothing on the sim side samples or decimates it.
+- **Every telemetry write the flight software downlinks is logged with its time tag, in the order
+  written.** Nothing on the sim side samples or decimates it.
 - **The recorder keeps raw writes during the run** and types them with the dictionary after it.
 - **A vector or quaternion is one channel of an array type**, written in one write.
 

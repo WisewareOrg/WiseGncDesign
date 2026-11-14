@@ -8,8 +8,7 @@ sub-topology)
 ## Revisions
 
 - **rev 4** — 2026-11-14 — the rate groups' health telemetry is not downlinked: health instances
-  take base IDs from a reserved range the comm-stack stand-in drops (issue 57 GNC sub-topology,
-  E1 rate-group telemetry).
+  take base IDs from a reserved range the comm-stack stand-in drops (issue 57 GNC sub-topology).
 - **rev 3** — 2026-11-13 — the F´ build meets the sim as a hardware-in-the-loop rig: the lab, a
   fresh copy per case, one extension per configuration and rates as FPP constants, with the checks
   that support them; the partitions are ADR 0005 rev 1; reverses rev 2's configuration on an F´
@@ -83,8 +82,9 @@ The partitions inside each build are ADR 0005 rev 1.
   own, so a tick finishes before the call returns and a case reproduces from its seed.
 - **The binding is a small hand-written pybind11 module**, with no fprime-python dependency.
 - **If a real F´ deployment would have it, it is inside `_wise_fsw`.** Each stand-in replaces one
-  real thing: SimHub the bus driver, GroundLink the whole comm stack, SimTime the time source.
-  Everything else is ground segment (ADR 0004 rev 2) or lab; the lab's pins are compiled in as a
+  real thing: SimHub the bus driver, GroundLink the whole comm stack, SimTime the clock, its time
+  source and its timer.
+  Everything else is ground segment (ADR 0004 rev 3) or lab; the lab's pins are compiled in as a
   test connector.
 - **One extension per configuration**, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
 - **Rates are FPP constants in the GNC sub-topology**, which owns its rate groups; F´'s
@@ -145,13 +145,13 @@ The partitions inside each build are ADR 0005 rev 1.
   bridge and the pins. Rejected for the lab, which names no algorithm.
 - **An algorithm's configuration on an F´ port, sent at boot by the sim glue.** It is per-algorithm
   glue outside the FPP contract, and parity cannot see it. Rejected for F´ parameters
-  (ADR 0004 rev 2).
+  (ADR 0004 rev 3).
 - **Rates in F´'s C++ configuration only.** The Python build cannot read C++, so the two builds
   would carry two copies of each rate. Rejected for FPP constants.
 - **A list of the recorded instances, kept by hand or generated.** It needs a registration per
   component, or an autocoder. Rejected for the reserved range.
-- **Recording the health telemetry with a simulated clock.** The data is constant, and it adds
-  about 17k rows and 37% to each case's run file. Rejected.
+- **Recording the health telemetry with a simulated clock.** It records a row per channel per tick
+  of constant data: about 17k rows and 37% of a LEO500 case's run file, as measured. Rejected.
 - **Filtering the health telemetry on the ground or in the lab.** Every write still moves each
   tick, and the dictionary carries no component type to filter on. Rejected.
 - **A separate FSW process bridged over a socket.** No lockstep with simulated time without a tick
