@@ -103,7 +103,7 @@ globals().update(mission_tests(*MISSIONS))
 #         p, f = p["datasets"], f["datasets"]
 #         assert set(p) <= set(f), case
 #         fprime_only = {name.split("/", 1)[1] for name in set(f) - set(p)}
-#         assert all(name.startswith("navRateGroup.") for name in fprime_only), case
+#         assert not any(name.startswith("nav.") for name in fprime_only), case
 #         assert {*vectors, attitude} <= set(p), case
 #         for name, (values, units) in p.items():
 #             assert values.dtype == f[name][0].dtype, f"{case} {name}"
