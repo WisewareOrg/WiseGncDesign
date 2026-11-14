@@ -97,17 +97,17 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
     file differs from case 1's, so a comparison that cannot tell cases apart would show.
 
     Args:
-        pytester: the project the flights run in, each in a process of its own.
+        pytester: the project the flights run in, each run in one process of its own, xdist off.
     """
     pytester.makepyfile(test_flights=FLIGHT)
     test = "test_flights.py::Test_imu_spacecraft::test_fprime_leo500"
 
-    pytester.runpytest_subprocess("-p", "no:cacheprovider", f"{test}[1]").assert_outcomes(passed=1)
+    options = ("-p", "no:cacheprovider", "-p", "no:xdist")
+
+    pytester.runpytest_subprocess(*options, f"{test}[1]").assert_outcomes(passed=1)
     [alone] = pytester.path.rglob("run_0001.h5")
     alone = shutil.move(alone, pytester.path / "alone.h5")
-    pytester.runpytest_subprocess(
-        "-p", "no:cacheprovider", f"{test}[0]", f"{test}[1]"
-    ).assert_outcomes(passed=2)
+    pytester.runpytest_subprocess(*options, f"{test}[0]", f"{test}[1]").assert_outcomes(passed=2)
     [first] = pytester.path.rglob("run_0000.h5")
     [after] = pytester.path.rglob("run_0001.h5")
 
