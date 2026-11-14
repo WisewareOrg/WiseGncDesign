@@ -12,6 +12,9 @@ import h5py
 import numpy as np
 import pytest
 
+from ground.dictionary import Dictionary
+from ground.fprime_station import FprimeStation
+from lab import DICTIONARY as DICTIONARY_PATH
 from lab.power_cycle import power_cycle
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
@@ -22,6 +25,17 @@ MU = 3.986004360e14
 
 NS = 1_000_000_000
 """ns per s."""
+
+DICTIONARY = Dictionary(DICTIONARY_PATH)
+"""The deployment's dictionary, which the build generated."""
+
+STATE = {
+    "epoch": 0.0,
+    "attitude": np.array([1.0, 0.0, 0.0, 0.0]),
+    "position": np.array([6871.0e3, 0.0, 0.0]),
+    "velocity": np.array([0.0, 5.4e3, 5.4e3]),
+}
+"""`nav.initNavState`'s arguments: a state at t = 0."""
 
 FLIGHT = """
 import numpy as np
@@ -125,6 +139,43 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy():
     assert fresh.telemetry()
     assert raised not in sys.modules.values()
     assert fresh not in sys.modules.values()
+
+
+def test_two_copies_in_one_process_share_no_state():
+    """A copy left mid-flight, a command queued and its link undrained, reaches no later copy.
+
+    The later copy boots idle and answers nothing; the earlier one flies on from its own state.
+    """
+    zero = {"angVelPlatform": np.zeros(3), "accelPlatform": np.zeros(3)}
+    earlier, later = power_cycle(), power_cycle()
+    earlier_station = FprimeStation(earlier, DICTIONARY)
+    later_station = FprimeStation(later, DICTIONARY)
+    earlier.boot(mu=MU, dcm_PB=np.eye(3))
+    earlier_station.uplink("nav.initNavState", STATE, 1)
+    earlier.step(t_ns=NS, **zero)
+    earlier_station.uplink("nav.initNavState", STATE, 2)
+
+    later.boot(mu=MU, dcm_PB=np.eye(3))
+    later.step(t_ns=NS, **zero)
+    earlier.step(t_ns=2 * NS, **zero)
+
+    def nav_states(station: FprimeStation) -> list[tuple[int, str]]:
+        """Drains a station's telemetry and keeps nav's state writes.
+
+        Args:
+            station: the station on one copy.
+
+        Returns:
+            Each `nav.navState` write's F´ time tag and value, oldest first.
+        """
+        writes = [(t, raw) for name, t, raw in station.telemetry() if name == "nav.navState"]
+        values = station.values("nav.navState", [raw for _, raw in writes])
+        return [(t, value) for (t, _), value in zip(writes, values.tolist(), strict=True)]
+
+    assert nav_states(later_station) == [(NS, "idle")]
+    assert later_station.responses() == []
+    assert nav_states(earlier_station)[-1] == (2 * NS, "propagated")
+    assert [context for context, _, _ in earlier_station.responses()] == [1, 2]
 
 
 def test_a_copy_boots_once():
