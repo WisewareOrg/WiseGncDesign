@@ -125,10 +125,10 @@ The partitions inside each build are ADR 0005 rev 1.
     tag into the gitignored `fsw/fprime/lib/fprime`. It clones again when the clone's tag cannot be
     read as the pinned one.
   - CMake's FetchContent fetches Eigen by git tag.
-  - Renovate's regex managers bump both tags. F´'s tag, `fprime-tools` and `fprime-fpp` arrive as
-    one update, which CI proves together.
+  - Renovate's regex managers bump both tags. F´'s tag, `fprime-tools`, `fprime-fpp` and
+    `fprime-gds` arrive as one update, which CI proves together.
   - Renovate leaves `cmake` and `ninja` alone, and `fsw/fprime/pins_test.py` holds them, with the
-    other two tools, to the versions F´'s clone pins.
+    other three tools, to the versions F´'s clone pins.
 
 ## Alternatives considered
 

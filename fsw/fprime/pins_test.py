@@ -13,7 +13,7 @@ from packaging.utils import canonicalize_name
 ROOT = Path(__file__).resolve().parents[2]
 REQUIREMENTS = ROOT / "fsw" / "fprime" / "lib" / "fprime" / "requirements.txt"
 
-TOOLS = ("cmake", "ninja", "fprime-tools", "fprime-fpp")
+TOOLS = ("cmake", "ninja", "fprime-tools", "fprime-fpp", "fprime-gds")
 """The tools whose version F´ fixes and this project must not move."""
 
 
@@ -70,8 +70,20 @@ def test_the_project_pins_the_f_prime_tools_at_the_framework_versions():
     assert divergences(group, framework) == []
 
 
-FRAMEWORK = ["cmake==3.26.0", "ninja==1.11.1.4", "fprime-tools==4.4.0", "fprime-fpp==3.4.0"]
-PROJECT = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-tools==4.4.0", "ninja==1.11.1.4"]
+FRAMEWORK = [
+    "cmake==3.26.0",
+    "ninja==1.11.1.4",
+    "fprime-tools==4.4.0",
+    "fprime-gds==4.4.0",
+    "fprime-fpp==3.4.0",
+]
+PROJECT = [
+    "cmake==3.26.0",
+    "fprime-fpp==3.4.0",
+    "fprime-gds==4.4.0",
+    "fprime-tools==4.4.0",
+    "ninja==1.11.1.4",
+]
 
 
 def test_a_tool_pinned_to_another_version_diverges():
@@ -84,7 +96,7 @@ def test_a_tool_that_is_not_exactly_pinned_diverges():
     """A range, or a tool missing from either side, is reported."""
     ranged = [p.replace("cmake==3.26.0", "cmake>=3.26.0") for p in PROJECT]
     assert divergences(ranged, FRAMEWORK) == ["cmake is not ==-pinned in the fprime group"]
-    assert divergences(PROJECT, FRAMEWORK[:3]) == [
+    assert divergences(PROJECT, FRAMEWORK[:4]) == [
         "fprime-fpp is not ==-pinned in the framework's requirements.txt"
     ]
 
@@ -96,6 +108,7 @@ def test_a_spelling_variant_of_the_same_pin_agrees():
         "Ninja==1.11.1.4  # comment",
         "fprime_tools==4.4.0",
         'fprime.fpp==3.4.0; sys_platform == "linux"',
+        "FPRIME-GDS==4.4.0",
         "",
         "# a comment line",
         "pybind11>=2.13",
