@@ -46,22 +46,15 @@ NAV = Gnc.ImuDeadReckonerParameters(mu=MU, dcm_PB=MOUNTING)
 WISE_FSW = Dictionary(DICTIONARY)
 """The deployment's dictionary, which the build generated."""
 
-IDS = sorted(WISE_FSW.parameters_by_id)
-"""Every parameter's ID, which boot holds valid."""
-
 
 @pytest.fixture
-def prm(tmp_path: Path) -> str:
-    """A case's parameter file, `NAV`, made from its record as the ground makes it.
-
-    Args:
-        tmp_path: the case's directory.
+def nav_parameters() -> Gnc.ImuDeadReckonerParameters:
+    """The case's parameters for this module: `NAV`, its mounting not the identity.
 
     Returns:
-        The `.dat`'s path.
+        `NAV`.
     """
-    record = parameters.write(NAV, tmp_path / "run_0000.prm.json")
-    return str(parameters.dat(record, DICTIONARY))
+    return NAV
 
 
 def _telemetry(station: FprimeStation) -> dict[str, object]:
@@ -129,7 +122,7 @@ def _assert_matches(station: FprimeStation, python: ImuDeadReckoner) -> None:
 
 
 def test_a_booted_reckoner_reports_idle_and_no_state(
-    fsw: ModuleType, station: FprimeStation, prm: str
+    fsw: ModuleType, station: FprimeStation, prm: str, parameter_ids: list[int]
 ):
     """Booted, the deployment reports `navState` idle and writes no position.
 
@@ -137,8 +130,9 @@ def test_a_booted_reckoner_reports_idle_and_no_state(
         fsw: the test's copy of the deployment.
         station: the station on it.
         prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    fsw.boot(prm, IDS)
+    fsw.boot(prm, parameter_ids)
     fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
     assert _telemetry(station) == {"nav.navState": "idle"}
@@ -150,6 +144,7 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     station: FprimeStation,
     sign: float,
     prm: str,
+    parameter_ids: list[int],
 ):
     """Commanded q or -q as of t = 0 and stepped 1 s at zero rate, the deployment writes q.
 
@@ -158,8 +153,9 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
         station: the station on it.
         sign: the sign the initial quaternion is given with.
         prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    fsw.boot(prm, IDS)
+    fsw.boot(prm, parameter_ids)
     state = {"epoch": 0.0, "attitude": sign * Q0, "position": R0, "velocity": V0}
     station.uplink("nav.initNavState", state, 1)
     fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
@@ -178,6 +174,7 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
     rate_rad_s: float,
     step_ns: int,
     prm: str,
+    parameter_ids: list[int],
 ):
     """Fed the same 600 readings, the two builds agree to rounding.
 
@@ -190,12 +187,13 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
         rate_rad_s: rad/s, the gyro reading's magnitude.
         step_ns: ns between readings.
         prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
     rng = np.random.default_rng(7)
     readings = [(rate_rad_s * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(600)]
     python = ImuDeadReckoner(NAV)
     python.initNavState(epoch=0.0, attitude=Q0, position=R0, velocity=V0)
-    fsw.boot(prm, IDS)
+    fsw.boot(prm, parameter_ids)
     state = {"epoch": 0.0, "attitude": Q0, "position": R0, "velocity": V0}
     station.uplink("nav.initNavState", state, 1)
 
@@ -207,7 +205,7 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
 
 
 def test_init_nav_state_starts_the_reckoner_at_its_epoch(
-    fsw: ModuleType, station: FprimeStation, prm: str
+    fsw: ModuleType, station: FprimeStation, prm: str, parameter_ids: list[int]
 ):
     """Commanded with a state as of t = 60 s, the deployment agrees with a notebook started at 60 s.
 
@@ -217,12 +215,13 @@ def test_init_nav_state_starts_the_reckoner_at_its_epoch(
         fsw: the test's copy of the deployment.
         station: the station on it.
         prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
     rng = np.random.default_rng(5)
     readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
     python = ImuDeadReckoner(NAV)
     python.initNavState(epoch=60.0, attitude=Q0, position=R0, velocity=V0)
-    fsw.boot(prm, IDS)
+    fsw.boot(prm, parameter_ids)
     for k in range(1, 61):
         fsw.step(t_ns=k * NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
     state = {"epoch": 60.0, "attitude": Q0, "position": R0, "velocity": V0}
@@ -241,6 +240,7 @@ def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(
     station: FprimeStation,
     tmp_path: Path,
     prm: str,
+    parameter_ids: list[int],
 ):
     """Nav writes its state once per run, so `10 * navDivider` ticks give exactly 10 writes.
 
@@ -252,10 +252,11 @@ def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(
         station: the station on it.
         tmp_path: where the deployment's topology is rendered.
         prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
     divider = read(fpp_files("ImuDeadReckoning", tmp_path)).constants["ImuDeadReckoning.navDivider"]
     ticks = 10 * divider
-    fsw.boot(prm, IDS)
+    fsw.boot(prm, parameter_ids)
     station.telemetry()
 
     for tick in range(1, ticks + 1):
@@ -266,7 +267,11 @@ def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(
 
 
 def test_a_value_changed_in_the_record_reaches_prm_db_and_the_python_build_alike(
-    fsw: ModuleType, station: FprimeStation, tmp_path: Path
+    fsw: ModuleType,
+    station: FprimeStation,
+    tmp_path: Path,
+    prm_record: Path,
+    parameter_ids: list[int],
 ):
     """`mu` edited in the record is the one the F´ build's PrmDb holds and the Python build reads.
 
@@ -276,14 +281,16 @@ def test_a_value_changed_in_the_record_reaches_prm_db_and_the_python_build_alike
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
-        tmp_path: the case's directory.
+        tmp_path: where PrmDb's image is decoded.
+        prm_record: the case's parameter record, edited here.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    record = parameters.write(NAV, tmp_path / "run_0000.prm.json")
+    record = prm_record
     entries = json.loads(record.read_text())
     entries["ImuDeadReckoning.nav"]["mu"] = 4.9048695e12
     record.write_text(json.dumps(entries))
     dat = parameters.dat(record, DICTIONARY)
-    fsw.boot(str(dat), IDS)
+    fsw.boot(str(dat), parameter_ids)
 
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)
     fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
@@ -298,27 +305,35 @@ def test_a_value_changed_in_the_record_reaches_prm_db_and_the_python_build_alike
     assert json.loads(decoded.read_text()) == json.loads(record.read_text())
 
 
-def test_a_parameter_missing_from_the_record_fails_both_builds(fsw: ModuleType, tmp_path: Path):
+def test_a_parameter_missing_from_the_record_fails_both_builds(
+    fsw: ModuleType, prm_record: Path, parameter_ids: list[int]
+):
     """Without `mu` in the record, the F´ build's boot and the Python build's read both raise.
 
     Args:
         fsw: the test's copy of the deployment.
-        tmp_path: the case's directory.
+        prm_record: the case's parameter record, edited here.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    record = parameters.write(NAV, tmp_path / "run_0000.prm.json")
+    record = prm_record
     entries = json.loads(record.read_text())
     del entries["ImuDeadReckoning.nav"]["mu"]
     record.write_text(json.dumps(entries))
     mu = next(i for i, p in WISE_FSW.parameters_by_id.items() if p.name == "nav.mu")
 
     with pytest.raises(RuntimeError, match=rf"^parameters {mu} are not valid"):
-        fsw.boot(str(parameters.dat(record, DICTIONARY)), IDS)
+        fsw.boot(str(parameters.dat(record, DICTIONARY)), parameter_ids)
     with pytest.raises(TypeError, match="mu"):
         cdh_parameters.read(record, Gnc.ImuDeadReckonerParameters)
 
 
+@pytest.mark.parametrize("nav_parameters", [NAV._replace(mu=4.9048695e12)], ids=["moon"])
 def test_the_fprime_build_flies_the_mu_its_record_gives(
-    fsw: ModuleType, station: FprimeStation, tmp_path: Path
+    fsw: ModuleType,
+    station: FprimeStation,
+    nav_parameters: Gnc.ImuDeadReckonerParameters,
+    prm: str,
+    parameter_ids: list[int],
 ):
     """Booted on a record with the Moon's mu, nav propagates as the notebook does on that mu.
 
@@ -327,12 +342,12 @@ def test_the_fprime_build_flies_the_mu_its_record_gives(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
-        tmp_path: the case's directory.
+        nav_parameters: `NAV` with the Moon's mu.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    moon = NAV._replace(mu=4.9048695e12)
-    record = parameters.write(moon, tmp_path / "run_0000.prm.json")
-    fsw.boot(str(parameters.dat(record, DICTIONARY)), IDS)
-    python = ImuDeadReckoner(moon)
+    fsw.boot(prm, parameter_ids)
+    python = ImuDeadReckoner(nav_parameters)
     python.initNavState(epoch=0.0, attitude=Q0, position=R0, velocity=V0)
     state = {"epoch": 0.0, "attitude": Q0, "position": R0, "velocity": V0}
     station.uplink("nav.initNavState", state, 1)
