@@ -89,7 +89,7 @@ command; and both return the telemetry they write. Its builder hosts it with the
 ## The dictionary
 
 `ground.dictionary.Dictionary` reads an F´ JSON dictionary, F´'s published form of the FPP
-model, and names its entries `<instance>.<entry>` with the deployment prefix dropped. It holds
+model, and names its entries `<instance>.<entry>` with the instance's module dropped. It holds
 values to the model's types and leaves the bytes to the F´ ground station. `Dictionary.arguments`
 holds a command's arguments to its parameters' types. A channel's type is a primitive, an enum or
 an array, such as `nav.bodyEciPos`, a `Gnc.Vector3`. `Channel.pack_many` packs a batch a Python
