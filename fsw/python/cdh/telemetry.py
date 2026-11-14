@@ -1,7 +1,8 @@
 """The Python build's raw telemetry: an algorithm's telemetry tuple as one write per field written.
 
 A field is a channel of the algorithm's instance, and `None` is not written, which no FPP value is.
-The host tags each write with its tick's time; the ground packs the values with the dictionary.
+`GroundLink` tags each write with its tick's time; the ground packs the values with the
+dictionary.
 """
 
 from typing import Any, NamedTuple

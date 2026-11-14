@@ -1,22 +1,22 @@
 """The Python build: one frame per base tick, through its partitions, as a WiseDynamics FSW build.
 
-Each tick is one frame (ADR 0005 rev 1): CDH-in dispatches the commands uplinked since the last
-tick, RIO-in reads each paired role's message as its bus struct, CDH-in converts it to its GNC
-input, GNC runs the rate groups the base tick fires, CDH-out logs every telemetry write tagged with
-the tick's time, and RIO-out returns the actuator commands. The configuration's FPP gives all of
-it: the GNC sub-topology's wiring and rates, the pairing, the dictionary and the base tick.
+Each tick is one frame (ADR 0005 rev 1): CDH-in's ground link runs the commands uplinked since the
+last tick, RIO-in reads each paired role's message as its bus struct, CDH-in converts it to its GNC
+input, GNC runs the rate groups the base tick fires, CDH-out's ground link logs every telemetry
+write, and RIO-out returns the actuator commands. The configuration's FPP gives all of it: the GNC
+sub-topology's wiring and rates, the pairing, the dictionary and the base tick. The radio edge is
+CDH's `GroundLink`, which the frame runner forwards to.
 """
 
-import functools
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from fsw.codegen import fpp_types
 from fsw.codegen.deployment import configuration_model, tick_period
-from fsw.python.cdh import commands, inputs, parameters, telemetry
+from fsw.python.cdh import commands, inputs, parameters
+from fsw.python.cdh.ground_link import GroundLink
 from fsw.python.gnc.partition import GncPartition
 from fsw.python.platform.rates import RateGroupDriver, dividers
 from fsw.python.rio import messages
@@ -55,29 +55,28 @@ class FrameRunner:
         """
         model = configuration_model(configuration)
         self._gnc = GncPartition(model, configuration, components)
-        self._pairs = inputs.pairings(model, configuration)
+        self._pairs = inputs.pairings(model, self._gnc.inputs)
         self._dividers = dividers(model, self._gnc.rate_groups)
         self._prm_path = Path(prm_path)
         self.period_s = tick_period(configuration)
         self.dictionary = Dictionary.from_sub_topology(configuration)
-        self._uplinked: list[tuple[str, Mapping[str, Any], int]] = []
-        self._responses: list[tuple[int, str, str | None]] = []
-        self._log: list[tuple[str, int, Any]] = []
+        self._link = GroundLink(self.dictionary, {})
 
     def boot(self) -> None:
-        """Builds every algorithm afresh on the case's parameters, with the tick count at 0."""
+        """Builds every algorithm afresh on the case's parameters, with the tick count at 0.
+
+        The ground link starts afresh with it: no command, response or write survives a boot.
+        """
         self._gnc.boot(
             {
-                name: parameters.read(
-                    self._prm_path,
-                    functools.reduce(getattr, f"{component}Parameters".split("."), fpp_types),
-                )
+                name: parameters.read(self._prm_path, parameters.tuple_of(component))
                 for name, component in self._gnc.components.items()
             }
         )
-        self._handlers = commands.handlers(self.dictionary, self._gnc.algorithms)
+        self._link = GroundLink(
+            self.dictionary, commands.handlers(self.dictionary, self._gnc.algorithms)
+        )
         self._driver = RateGroupDriver(self._dividers)
-        self._uplinked, self._responses, self._log = [], [], []
 
     def tick(self, t_ns: int, messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
         """Runs one frame.
@@ -89,49 +88,40 @@ class FrameRunner:
         Returns:
             The actuator commands, by role.
         """
-        queued, self._uplinked = self._uplinked, []
-        for name, args, context in queued:
-            response, reason, writes = commands.dispatch(self._handlers, name, args)
-            self._responses.append((context, response, reason))
-            self._log.extend((channel, t_ns, value) for channel, value in writes)
+        self._link.run_commands(t_ns)
         read = messages.read(self._pairs, messages_by_role)
         for port, value in inputs.convert(self._pairs, read).items():
             self._gnc.write(port, value)
         t = t_ns / _NANOSECONDS_PER_SECOND
         for instance, written in self._gnc.run(t, self._driver.tick()):
-            self._log.extend(
-                (channel, t_ns, value) for channel, value in telemetry.writes(instance, written)
-            )
+            self._link.log(instance, written, t_ns)
         return messages.commands()
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
-        """Queues a command, which runs at the next tick.
+        """Queues a command at the ground link, which runs it at the next tick.
 
         Args:
             name: `<instance>.<command>`.
             args: the arguments by parameter name, as `Dictionary.arguments` types them.
             context: the ground's number for the command, returned with its response.
         """
-        self._uplinked.append((name, args, context))
+        self._link.uplink(name, args, context)
 
     def responses(self) -> list[tuple[int, str, str | None]]:
         """The command responses since the last call, oldest first.
 
         Returns:
-            `(context, response, reason)`: the response a name of `Fw.CmdResponse`, and the
-            message of the `ValueError` a handler refused it with, else `None`.
+            As `GroundLink.responses` gives them.
         """
-        drained, self._responses = self._responses, []
-        return drained
+        return self._link.responses()
 
     def telemetry(self) -> list[tuple[str, int, Any]]:
         """Every telemetry write since the last call, in the order written.
 
         Returns:
-            `(<instance>.<channel>, time tag in ns, value)`, the value as the algorithm wrote it.
+            As `GroundLink.telemetry` gives them.
         """
-        drained, self._log = self._log, []
-        return drained
+        return self._link.telemetry()
 
     def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
         """The values written to one channel, packed in one batch.
@@ -141,6 +131,6 @@ class FrameRunner:
             raws: its writes' values, as `telemetry` gave them.
 
         Returns:
-            As `Channel.pack_many` gives them.
+            As `GroundLink.values` gives them.
         """
-        return self.dictionary.channel(name).pack_many(raws)
+        return self._link.values(name, raws)
