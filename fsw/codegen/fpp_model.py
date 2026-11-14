@@ -330,14 +330,11 @@ def parse(directory: Path) -> Model:
         _qualified(topology): _connections(topology, instance_map)
         for topology in analysis["topologyMap"].values()
     }
-    ports = {}
-    for topology in analysis["topologyMap"].values():
-        for name, port in topology["portMap"].items():
-            instance = port["pii"]["interfaceInstance"]["InterfaceComponentInstance"]["astNodeId"]
-            ((_, port_instance),) = port["pii"]["portInstance"].items()
-            ports[f"{_qualified(topology)}.{name}"] = TopologyPort(
-                _qualified(instance_map[str(instance)]), port_instance["specifier"]["name"]
-            )
+    ports = {
+        f"{_qualified(topology)}.{name}": TopologyPort(*_port_end(port["pii"], instance_map))
+        for topology in analysis["topologyMap"].values()
+        for name, port in topology["portMap"].items()
+    }
 
     constants = {}
     types: dict[str, Struct | Enum | Array] = {}
@@ -384,6 +381,21 @@ def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tup
             yield from _definitions(node["data"]["members"], (*qualifier, node["data"]["name"]))
 
 
+def _port_end(port: dict[str, Any], instance_map: dict[str, Any]) -> tuple[str, str]:
+    """An instance's port, as a connection's end or a topology port names it.
+
+    Args:
+        port: the analysis's port instance identifier.
+        instance_map: the analysis's component instances, by AST node id.
+
+    Returns:
+        The instance's qualified name and the port's name.
+    """
+    instance = port["interfaceInstance"]["InterfaceComponentInstance"]["astNodeId"]
+    ((_, port_instance),) = port["portInstance"].items()
+    return _qualified(instance_map[str(instance)]), port_instance["specifier"]["name"]
+
+
 def _connections(topology: dict[str, Any], instance_map: dict[str, Any]) -> tuple[Connection, ...]:
     """A topology's connections, each port number resolved.
 
@@ -396,26 +408,11 @@ def _connections(topology: dict[str, Any], instance_map: dict[str, Any]) -> tupl
     """
     from_numbers = {_key(c): n for c, n in topology["fromPortNumberMap"]}
     to_numbers = {_key(c): n for c, n in topology["toPortNumberMap"]}
-
-    def end(side: dict[str, Any]) -> tuple[str, str]:
-        """One end of a connection.
-
-        Args:
-            side: the connection's `from` or `to`.
-
-        Returns:
-            The instance's qualified name and the port's name.
-        """
-        port = side["port"]
-        instance = port["interfaceInstance"]["InterfaceComponentInstance"]["astNodeId"]
-        ((_, port_instance),) = port["portInstance"].items()
-        return _qualified(instance_map[str(instance)]), port_instance["specifier"]["name"]
-
     connections = []
     for group in topology["connectionMap"].values():
         for c in group:
-            from_instance, from_port = end(c["from"])
-            to_instance, to_port = end(c["to"])
+            from_instance, from_port = _port_end(c["from"]["port"], instance_map)
+            to_instance, to_port = _port_end(c["to"]["port"], instance_map)
             from_index, to_index = from_numbers[_key(c)], to_numbers[_key(c)]
             connections.append(
                 Connection(from_instance, from_port, from_index, to_instance, to_port, to_index)

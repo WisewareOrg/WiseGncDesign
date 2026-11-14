@@ -298,9 +298,9 @@ class Dictionary:
         )
         sources = [Path(p).resolve() for p in model]
         files = [_INTERFACES / "Interfaces.fpp", *sources]
-        hashed = [*sources, *sorted(_INTERFACES.rglob("*.fpp*"))]
-        hashed += sorted({f for p in sources for f in p.parent.glob("*.fppi")})
-        return cls._generate(name, deployment, files, hashed, component)
+        includes = sorted(_INTERFACES.rglob("*.fpp*"))
+        includes += sorted({f for p in sources for f in p.parent.glob("*.fppi")})
+        return cls._generate(name, deployment, files, includes, component)
 
     @classmethod
     def from_sub_topology(cls, configuration: str) -> "Dictionary":
@@ -330,9 +330,9 @@ class Dictionary:
         framework = set(framework_files())
         files = [p for p in contract_files() if p not in framework]
         files.append(_REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp")
-        hashed = [*files, *sorted(_INTERFACES.rglob("*.fppi"))]
-        hashed += sorted({f for p in algorithm_files() for f in p.parent.glob("*.fppi")})
-        return cls._generate(name, deployment, files, hashed, configuration)
+        includes = sorted(_INTERFACES.rglob("*.fppi"))
+        includes += sorted({f for p in algorithm_files() for f in p.parent.glob("*.fppi")})
+        return cls._generate(name, deployment, files, includes, configuration)
 
     @classmethod
     def _generate(
@@ -340,7 +340,7 @@ class Dictionary:
         name: str,
         deployment: str,
         files: Sequence[Path],
-        hashed: Sequence[Path],
+        includes: Sequence[Path],
         subject: str,
     ) -> "Dictionary":
         """Runs `fpp-to-dict` on a deployment in a temporary directory, once per its inputs.
@@ -349,7 +349,8 @@ class Dictionary:
             name: the deployment's name, which names the generated dictionary.
             deployment: the deployment's FPP.
             files: the model's files, the framework's aside.
-            hashed: the files whose content, with the framework's, keys the dictionary.
+            includes: the files the model may include, whose content keys the dictionary with the
+                model's and the framework's.
             subject: what the deployment holds, named when the tool rejects it.
 
         Returns:
@@ -361,7 +362,7 @@ class Dictionary:
         imports = list(framework_files())
         tag = _tag()
         digest = hashlib.sha256(tag.encode() + b"\0" + deployment.encode())
-        for path in [*hashed, *imports]:
+        for path in [*files, *includes, *imports]:
             digest.update(b"\0" + path.read_bytes())
         key = digest.hexdigest()
         if key not in _generated:
