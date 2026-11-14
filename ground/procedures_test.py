@@ -199,7 +199,10 @@ def test_until_checks_now_then_each_tick_and_times_out_at_its_deadline(dictionar
 
     with pytest.raises(
         TimeoutError,
-        match=r"at t = 2.0 s waiting until the condition at procedures_test.py:\d+ holds, by t = 2.0 s",
+        match=(
+            r"at t = 2.0 s waiting until the condition at procedures_test.py:\d+ holds,"
+            r" by t = 2.0 s"
+        ),
     ) as raised:
         _tick(ground, 2)
 
