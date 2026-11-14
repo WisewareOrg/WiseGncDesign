@@ -46,16 +46,15 @@ class FprimeModule(sysModel.SysModel):
     build: dict[str, str]
 
     def __init__(self, imu: Any, mu: float, dcm_PB: np.ndarray) -> None:
-        """Holds what `Reset` boots the deployment with, once the build is checked.
+        """Holds what `Reset` boots the deployment with, once `source` has checked the build.
+
+        A deployment not built, or rebuilt since this process first checked it, raises as `source`
+        does.
 
         Args:
             imu: the IMU reader, subscribed by the caller.
             mu: m^3/s^2, the central body's gravitational parameter.
             dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B.
-
-        Raises:
-            ModuleNotFoundError: the deployment is not built.
-            RuntimeError: the deployment was rebuilt after this process first loaded it.
         """
         super().__init__()
         source()
