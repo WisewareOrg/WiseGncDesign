@@ -81,10 +81,10 @@ True
 ## Adding an algorithm
 
 Write the algorithm in `algorithms`, with its component model, `<Name>.fpp`, beside its
-notebook: the commands and telemetry it implements, and no input ports. Its `step(t=..., **inputs)`
-takes plain arrays by keyword, each named as the message field it reads; it has a method per
-command; and both return the telemetry they write. Its builder hosts it with the dictionary
-`Dictionary.from_component` generates from that model.
+notebook: the ports its GNC sub-topology wires, and the commands and telemetry it implements. Its
+`step(t=..., **inputs)` takes plain arrays by keyword, each named as the message field it reads; it
+has a method per command; and both return the telemetry they write. Its builder hosts it with the
+dictionary `Dictionary.from_component` generates from that model.
 
 ## The dictionary
 
@@ -132,10 +132,34 @@ Basilisk message. The reasoning is in
 the native `fpp` binary inside the `fprime_fpp` package, `fpp to-json`, into a temporary directory,
 and returns a `Model` of named tuples by qualified name: instances with their base IDs, each
 topology's connections with both port numbers resolved, numeric constants, struct, enum and array
-types, each component's commands, channels and parameters, and annotations. It needs no compiler,
+types, each component's commands, channels, parameters and general output ports with the file
+that defines it, and annotations. It needs no compiler,
 no Java and no F´ build, only the model's `.fpp` files, F´'s framework files among them from the
 clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned compiler internals,
 so a key the module reads that is missing raises `KeyError`. The reasoning is in
+[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+
+## FPP types in Python
+
+`fsw.codegen.fpp_types` is FPP's types as named tuples, generated when it is imported and never
+written in the tree, with `converter` between them. Its docstrings say what each FPP type becomes,
+which tuples an algorithm's component gets, and how fields are converted:
+
+```python
+>>> from Basilisk.architecture import messaging
+>>> from fsw.codegen.fpp_types import Bus, Gnc, converter
+>>> payload = messaging.IMUSensorMsgPayload()
+>>> payload.AngVelPlatform = [0.0, 0.0, 1.0e-3]
+>>> bus = converter(messaging.IMUSensorMsgPayload, Bus.ImuSensorMsg)(payload)
+>>> reading = converter(Bus.ImuSensorMsg, Gnc.ImuReading)(bus)
+>>> reading.angVelPlatform.tolist()
+[0.0, 0.0, 0.001]
+>>> Gnc.ImuDeadReckonerTelemetry(navState="initialized").bodyEciPos is None
+True
+
+```
+
+The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## The F´ host

@@ -23,6 +23,7 @@ from fsw.codegen.fpp_model import (
     Member,
     Model,
     Parameter,
+    Port,
     Struct,
     parse,
     read,
@@ -376,6 +377,39 @@ def test_a_component_s_commands_channels_and_parameters_are_read(toy: Model):
         Parameter("tag", "string", "x"),
     )
     assert [type(p.default) for p in nav.parameters] == [float, str, type(None), int, bool, str]
+
+
+def test_a_component_s_general_output_ports_and_its_file_are_read(toy: Model):
+    """Each output port that is not a special port, with its size and arguments, and the file.
+
+    Args:
+        toy: the toy model.
+    """
+    assert toy.components["Gnc.RateGroup"].outputs == (
+        Port("RateGroupMemberOut", 3, (Argument("ctx", "U32"),)),
+    )
+    assert toy.components["Top.Driver"].outputs == (Port("tickOut", 1, (Argument("ctx", "U32"),)),)
+    assert toy.components["Gnc.Nav"].outputs == ()
+    assert toy.components["Gnc.Nav"].file.name == "Gnc.fpp"
+    assert toy.components["Top.Driver"].file.name == "Top.fpp"
+    assert toy.components["Gnc.Nav"].file.is_absolute()
+
+
+def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
+    """A `serial` output port, which has no port type, is an output with no arguments.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    gnc = GNC.replace(
+        "    command recv port cmdIn\n",
+        "    output port anyOut: serial\n    command recv port cmdIn\n",
+    )
+    assert gnc != GNC
+
+    nav = read(_toy_files(tmp_path, gnc)).components["Gnc.Nav"]
+
+    assert nav.outputs == (Port("anyOut", 1, ()),)
 
 
 def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):
