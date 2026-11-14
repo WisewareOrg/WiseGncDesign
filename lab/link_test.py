@@ -9,16 +9,10 @@ from types import ModuleType
 import numpy as np
 import pytest
 
-from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import DICTIONARY
-from lab.power_cycle import power_cycle
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
-
-WISE_FSW = Dictionary(DICTIONARY)
-"""The deployment's dictionary, which the build generated."""
 
 MU = 3.986004360e14
 """m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
@@ -33,29 +27,6 @@ STATE = {
     "velocity": np.array([0.0, 5.4e3, 5.4e3]),
 }
 """`nav.initNavState`'s arguments: a state at t = 0."""
-
-
-@pytest.fixture
-def fsw() -> ModuleType:
-    """A fresh copy of the deployment, not yet booted.
-
-    Returns:
-        The copy.
-    """
-    return power_cycle()
-
-
-@pytest.fixture
-def station(fsw: ModuleType) -> FprimeStation:
-    """The ground station on the test's copy.
-
-    Args:
-        fsw: the test's copy.
-
-    Returns:
-        The station.
-    """
-    return FprimeStation(fsw, WISE_FSW)
 
 
 def _boot(fsw: ModuleType) -> None:

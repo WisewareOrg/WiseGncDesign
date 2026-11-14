@@ -17,7 +17,6 @@ from Basilisk.architecture import messaging
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import DICTIONARY, FprimeModule
-from lab.power_cycle import power_cycle
 
 BUILT = importlib.util.find_spec("lab._wise_fsw") is not None
 """Whether `just fsw` built the deployment; the tests that need it skip without it."""
@@ -113,29 +112,17 @@ def toy(toy_dictionary: Dictionary) -> FprimeStation:
 
 
 @pytest.fixture
-def wise_fsw() -> ModuleType:
-    """A fresh copy of the deployment, or a skip without the build.
-
-    Returns:
-        The copy, not yet booted.
-    """
-    if not BUILT:
-        pytest.skip("the F´ build is absent; run `just fsw`")
-    return power_cycle()
-
-
-@pytest.fixture
-def station(wise_fsw: ModuleType) -> FprimeStation:
+def booted_station(fsw: ModuleType) -> FprimeStation:
     """A station on the deployment, booted idle and mounted at identity.
 
     Args:
-        wise_fsw: the test's copy of the deployment.
+        fsw: the test's copy of the deployment.
 
     Returns:
         The station.
     """
-    wise_fsw.boot(mu=MU, dcm_PB=np.eye(3))
-    return FprimeStation(wise_fsw, WISE_FSW)
+    fsw.boot(mu=MU, dcm_PB=np.eye(3))
+    return FprimeStation(fsw, WISE_FSW)
 
 
 def test_a_command_packet_is_f_prime_s(toy: FprimeStation, toy_dictionary: Dictionary):
@@ -252,14 +239,14 @@ def _unknown_opcode() -> int:
     return max(c["opcode"] for c in json.loads(DICTIONARY.read_text())["commands"]) + 1
 
 
-def _step(wise_fsw: ModuleType, t_ns: int) -> None:
+def _step(fsw: ModuleType, t_ns: int) -> None:
     """Steps the deployment to `t_ns` on a zero IMU reading.
 
     Args:
-        wise_fsw: the test's copy of the deployment.
+        fsw: the test's copy of the deployment.
         t_ns: ns, the tick's time.
     """
-    wise_fsw.step(t_ns=t_ns, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+    fsw.step(t_ns=t_ns, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
 
 def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
@@ -299,21 +286,21 @@ def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
     ],
 )
 def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
-    wise_fsw: ModuleType, station: FprimeStation, change: object, response: str
+    fsw: ModuleType, booted_station: FprimeStation, change: object, response: str
 ):
     """F´ answers a bad packet with its `Fw.CmdResponse`, named, with no reason, and runs nothing.
 
     Args:
-        wise_fsw: the test's copy of the deployment.
-        station: the station on it.
+        fsw: the test's copy of the deployment.
+        booted_station: the station on it.
         change: makes the bad packet from a good `nav.initNavState`.
         response: the response F´ gives it.
     """
-    wise_fsw.uplink(change(_init()), 7)
-    _step(wise_fsw, NS)
+    fsw.uplink(change(_init()), 7)
+    _step(fsw, NS)
 
-    assert station.responses() == [(7, response, None)]
-    assert _writes(station) == [("nav.navState", NS, "idle")]
+    assert booted_station.responses() == [(7, response, None)]
+    assert _writes(booted_station) == [("nav.navState", NS, "idle")]
 
 
 @pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")
