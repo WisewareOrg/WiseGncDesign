@@ -1,1 +1,1 @@
-"""Code generated from FPP, and the one reader of FPP's model it is generated from."""
+"""FPP's model in Python, read through the native `fpp to-json`."""

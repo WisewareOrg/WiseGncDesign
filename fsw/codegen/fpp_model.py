@@ -277,7 +277,7 @@ def parse(directory: Path) -> Model:
     """
     analysis = json.loads((directory / "fpp-analysis.json").read_text())["analysis"]
     ast = json.loads((directory / "fpp-ast.json").read_text())["ast"]
-    nodes = {node_id: node for unit in ast for node_id, node in _definitions(unit["members"], ())}
+    nodes = dict(node for unit in ast for node in _definitions(unit["members"], ()))
     instance_map = analysis["componentInstanceMap"]
     type_map = analysis["typeMap"]
     values = analysis["valueMap"]
@@ -285,7 +285,7 @@ def parse(directory: Path) -> Model:
     instances = {}
     for entry in instance_map.values():
         qualified = _qualified(entry)
-        component = nodes[entry["component"]["astNodeId"]].name
+        component = nodes[str(entry["component"]["astNodeId"])].name
         instances[qualified] = Instance(qualified, component, entry["baseId"])
 
     topologies = {
@@ -297,41 +297,26 @@ def parse(directory: Path) -> Model:
     types: dict[str, Struct | Enum | Array] = {}
     for node_id, node in nodes.items():
         if node.kind == "DefConstant":
-            ((kind, value),) = values[str(node_id)].items()
+            ((kind, value),) = values[node_id].items()
             if kind in ("Integer", "Float"):
                 constants[node.name] = value["value"]
         elif node.kind == "DefStruct":
-            struct = type_map[str(node_id)]["Struct"]
-            members = struct["anonStruct"]["members"]
-            order = [m[1]["AstNode"]["data"]["name"] for m in node.data["members"]]
-            types[node.name] = Struct(
-                node.name,
-                tuple(
-                    Member(m, _type_name(members[m], nodes), struct["sizes"].get(m)) for m in order
-                ),
-            )
+            types[node.name] = _struct(node, type_map[node_id]["Struct"], nodes)
         elif node.kind == "DefEnum":
-            rep = type_map[str(node_id)]["Enum"]["repType"]["kind"]
-            enum_constants = dict(
-                values[str(c[1]["AstNode"]["id"])]["EnumConstant"]["value"]
-                for c in node.data["constants"]
-            )
-            types[node.name] = Enum(node.name, next(iter(rep)), enum_constants)
+            types[node.name] = _enum(node, type_map[node_id]["Enum"], values)
         elif node.kind == "DefArray":
-            array = type_map[str(node_id)]["Array"]["anonArray"]
-            size = array["size"]["Some"]
-            types[node.name] = Array(node.name, size, _type_name(array["eltType"], nodes))
+            types[node.name] = _array(node, type_map[node_id]["Array"], nodes)
 
     components = {}
     for node_id, entry in analysis["componentMap"].items():
-        component = _component(nodes[int(node_id)], entry, type_map, nodes)
+        component = _component(nodes[node_id], entry, type_map, nodes)
         components[component.name] = component
 
     annotations = {n.name: n.annotation for n in nodes.values() if n.kind in _ANNOTATED}
     return Model(instances, topologies, constants, types, components, annotations)
 
 
-def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tuple[int, _Node]]:
+def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tuple[str, _Node]]:
     """Every definition among a module's or component's members, and in those nested in them.
 
     Args:
@@ -339,7 +324,7 @@ def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tup
         qualifier: the enclosing modules' and component's names.
 
     Yields:
-        tuple[int, _Node]: each definition's AST node id and its node.
+        tuple[str, _Node]: each definition's AST node id, as the analysis keys it, and its node.
     """
     for pre, member, post in members:
         ((kind, body),) = member.items()
@@ -347,7 +332,7 @@ def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tup
             continue
         node = body["node"]["AstNode"]
         name = ".".join((*qualifier, node["data"]["name"]))
-        yield node["id"], _Node(name, kind, node["data"], (*pre, *post))
+        yield str(node["id"]), _Node(name, kind, node["data"], (*pre, *post))
         if kind in ("DefModule", "DefComponent"):
             yield from _definitions(node["data"]["members"], (*qualifier, node["data"]["name"]))
 
@@ -388,11 +373,63 @@ def _connections(topology: dict[str, Any], instance_map: dict[str, Any]) -> tupl
             connections.append(
                 Connection(from_instance, from_port, from_index, to_instance, to_port, to_index)
             )
-    return tuple(sorted(connections))
+    return tuple(sorted(connections, key=lambda c: (c.from_instance, c.from_port, c.from_index)))
+
+
+def _struct(node: _Node, struct: dict[str, Any], nodes: dict[str, _Node]) -> Struct:
+    """A struct type, its members in FPP's order.
+
+    Args:
+        node: the struct's definition.
+        struct: its type map entry's `Struct`, whose members are in no useful order.
+        nodes: every definition, by AST node id.
+
+    Returns:
+        The struct.
+    """
+    members = []
+    for _, member, _ in node.data["members"]:
+        name = member["AstNode"]["data"]["name"]
+        member_type = _type_name(struct["anonStruct"]["members"][name], nodes)
+        members.append(Member(name, member_type, struct["sizes"].get(name)))
+    return Struct(node.name, tuple(members))
+
+
+def _enum(node: _Node, enum: dict[str, Any], values: dict[str, Any]) -> Enum:
+    """An enum type.
+
+    Args:
+        node: the enum's definition.
+        enum: its type map entry's `Enum`.
+        values: the analysis's values, by AST node id.
+
+    Returns:
+        The enum.
+    """
+    constants = {}
+    for _, constant, _ in node.data["constants"]:
+        name, number = values[str(constant["AstNode"]["id"])]["EnumConstant"]["value"]
+        constants[name] = number
+    return Enum(node.name, next(iter(enum["repType"]["kind"])), constants)
+
+
+def _array(node: _Node, array: dict[str, Any], nodes: dict[str, _Node]) -> Array:
+    """An array type.
+
+    Args:
+        node: the array's definition.
+        array: its type map entry's `Array`.
+        nodes: every definition, by AST node id.
+
+    Returns:
+        The array.
+    """
+    anonymous = array["anonArray"]
+    return Array(node.name, anonymous["size"]["Some"], _type_name(anonymous["eltType"], nodes))
 
 
 def _component(
-    node: _Node, entry: dict[str, Any], type_map: dict[str, Any], nodes: dict[int, _Node]
+    node: _Node, entry: dict[str, Any], type_map: dict[str, Any], nodes: dict[str, _Node]
 ) -> Component:
     """A component's declared commands, channels and parameters.
 
@@ -408,7 +445,7 @@ def _component(
     specs = {}
     for position, (_, member, _) in enumerate(node.data["members"]):
         ((_, body),) = member.items()
-        specs[body["node"]["AstNode"]["id"]] = position, body["node"]["AstNode"]["data"]
+        specs[str(body["node"]["AstNode"]["id"])] = position, body["node"]["AstNode"]["data"]
 
     def spec(analysis_entry: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         """A command's, channel's or parameter's place among the members, and its AST data.
@@ -419,7 +456,7 @@ def _component(
         Returns:
             Its member position and its AST node's data.
         """
-        return specs[analysis_entry["aNode"]["astNodeId"]]
+        return specs[str(analysis_entry["aNode"]["astNodeId"])]
 
     commands = []
     for command in entry["commandMap"].values():
@@ -440,9 +477,9 @@ def _component(
     parameters = []
     for parameter in entry["paramMap"].values():
         position, data = spec(parameter)
-        kind = _type_name(parameter["paramType"], nodes)
         default = _default(data["name"], parameter["default"])
-        parameters.append((position, Parameter(data["name"], kind, default)))
+        parameter_type = _type_name(parameter["paramType"], nodes)
+        parameters.append((position, Parameter(data["name"], parameter_type, default)))
     return Component(
         node.name,
         tuple(c for _, c in sorted(commands)),
@@ -451,7 +488,7 @@ def _component(
     )
 
 
-def _type_name(t: dict[str, Any], nodes: dict[int, _Node]) -> str:
+def _type_name(t: dict[str, Any], nodes: dict[str, _Node]) -> str:
     """A type, as the analysis writes it, as a type reference.
 
     Args:
@@ -472,7 +509,7 @@ def _type_name(t: dict[str, Any], nodes: dict[int, _Node]) -> str:
         return "string"
     if kind == "AliasType":
         return _type_name(body["aliasType"], nodes)
-    return nodes[body["node"]["astNodeId"]].name
+    return nodes[str(body["node"]["astNodeId"])].name
 
 
 def _default(parameter: str, default: Any) -> int | float | bool | str | None:
