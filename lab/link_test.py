@@ -116,6 +116,17 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond():
     assert _writes() == [("nav.navState", t_ns, "idle")]
 
 
+def test_no_health_instance_s_telemetry_comes_down():
+    """The rate group writes its health channels every tick; GroundLink downlinks none of them."""
+    _boot()
+
+    _step(NS)
+    _step(2 * NS)
+
+    assert Dictionary(DICTIONARY).entries("navRateGroup")["channels"]
+    assert {name for name, _, _ in _writes()} == {"nav.navState"}
+
+
 def test_boot_leaves_nothing_of_the_previous_case():
     """A case that ends with a command queued and GroundLink undrained leaves nothing to the next.
 
