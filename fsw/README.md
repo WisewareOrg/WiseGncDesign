@@ -1,8 +1,7 @@
 # Flight software
 
-`fsw` is the flight software. It hosts an algorithm from
-`algorithms` in a simulator: `fsw.python` hosts its Python build, and `lab`
-its F´ build.
+`fsw` is the flight software. An algorithm from `algorithms` is hosted in a simulator by
+`fsw.python`, its Python build, or by `lab`, its F´ build.
 
 The ground, `ground.procedures.Ground`, flies a host that presents the link `ground.radio_edge.Link`:
 commands up, responses and every telemetry write down, in the form F´ uses. The ground runs the
