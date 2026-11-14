@@ -14,6 +14,8 @@ from Basilisk.architecture import messaging
 from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning import ImuDeadReckoner
+from fsw.codegen.fpp_types import Gnc
+from ground import parameters
 from lab import FprimeModule
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
@@ -35,18 +37,39 @@ STATE = {
 """`nav.initNavState`'s arguments: a state at t = 0."""
 
 
-def _module() -> FprimeModule:
+@pytest.fixture
+def prm(tmp_path: Path) -> Path:
+    """A case's parameter record: Earth's mu, the IMU mounted at identity.
+
+    Args:
+        tmp_path: the case's directory.
+
+    Returns:
+        The record.
+    """
+    nav = Gnc.ImuDeadReckonerParameters(mu=MU, dcm_PB=np.eye(3))
+    return parameters.write(nav, tmp_path / "run_0000.prm.json")
+
+
+def _module(prm: Path) -> FprimeModule:
     """A host on an unsubscribed IMU reader, mounted at identity.
+
+    Args:
+        prm: the case's parameter record.
 
     Returns:
         The `FprimeModule`.
     """
-    return FprimeModule(messaging.IMUSensorMsgReader(), mu=MU, dcm_PB=np.eye(3))
+    return FprimeModule(messaging.IMUSensorMsgReader(), prm)
 
 
-def test_reset_refuses_an_unsubscribed_imu_and_keeps_the_exception():
-    """`Reset` names the IMU reader that no message feeds, the exception kept in `failure`."""
-    module = _module()
+def test_reset_refuses_an_unsubscribed_imu_and_keeps_the_exception(prm: Path):
+    """`Reset` names the IMU reader that no message feeds, the exception kept in `failure`.
+
+    Args:
+        prm: the case's parameter record.
+    """
+    module = _module(prm)
 
     with pytest.raises(RuntimeError, match="IMU reader is not subscribed") as raised:
         module.Reset(0)
@@ -54,9 +77,13 @@ def test_reset_refuses_an_unsubscribed_imu_and_keeps_the_exception():
     assert module.failure is raised.value
 
 
-def test_a_tick_refuses_an_imu_never_written_and_keeps_the_exception():
-    """A tick after the reset names the IMU message never written, the exception kept."""
-    module = _module()
+def test_a_tick_refuses_an_imu_never_written_and_keeps_the_exception(prm: Path):
+    """A tick after the reset names the IMU message never written, the exception kept.
+
+    Args:
+        prm: the case's parameter record.
+    """
+    module = _module(prm)
     imu = messaging.IMUSensorMsg()
     module._imu.subscribeTo(imu)
     module.Reset(0)
@@ -67,13 +94,16 @@ def test_a_tick_refuses_an_imu_never_written_and_keeps_the_exception():
     assert module.failure is raised.value
 
 
-def test_the_edge_carries_a_command_up_and_its_response_and_nav_s_writes_down():
+def test_the_edge_carries_a_command_up_and_its_response_and_nav_s_writes_down(prm: Path):
     """A command runs at the next tick, answered with no reason; nav's writes come down by name.
 
     The handler writes `navState` alone, before the step writes it with the estimate, both tagged
     with the tick's time.
+
+    Args:
+        prm: the case's parameter record.
     """
-    module = _module()
+    module = _module(prm)
     imu = messaging.IMUSensorMsg()
     imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)
@@ -100,19 +130,24 @@ def test_the_edge_carries_a_command_up_and_its_response_and_nav_s_writes_down():
     assert module.telemetry() == []
 
 
-def test_the_host_mounts_the_imu_as_it_is_given():
+def test_the_host_mounts_the_imu_as_its_record_gives_it(tmp_path: Path):
     """On a mounting that is not the identity, the host's estimate is the notebook's.
 
     Ten readings are enough for a transposed mounting to show far above rounding.
+
+    Args:
+        tmp_path: the case's directory, where its parameter record is written.
     """
     mounting = Rotation.from_euler("zyx", [10.0, -20.0, 30.0], degrees=True).as_matrix()
-    module = FprimeModule(messaging.IMUSensorMsgReader(), mu=MU, dcm_PB=mounting)
+    nav = Gnc.ImuDeadReckonerParameters(mu=MU, dcm_PB=mounting)
+    record = parameters.write(nav, tmp_path / "run_0000.prm.json")
+    module = FprimeModule(messaging.IMUSensorMsgReader(), record)
     imu = messaging.IMUSensorMsg()
     imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)
     module.Reset(0)
     module.uplink("nav.initNavState", STATE, 1)
-    python = ImuDeadReckoner(mu=MU, dcm_PB=mounting)
+    python = ImuDeadReckoner(nav)
     python.initNavState(**STATE)
     rng = np.random.default_rng(7)
 
@@ -134,43 +169,51 @@ def test_the_host_mounts_the_imu_as_it_is_given():
     np.testing.assert_allclose(latest["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)
 
 
-def test_a_host_without_the_f_prime_build_says_to_build_it(monkeypatch: pytest.MonkeyPatch):
+def test_a_host_without_the_f_prime_build_says_to_build_it(
+    monkeypatch: pytest.MonkeyPatch, prm: Path
+):
     """With no extension to import, building a host names the recipe that builds it.
 
     Args:
         monkeypatch: hides the extension from the import system.
+        prm: the case's parameter record.
     """
     monkeypatch.setitem(sys.modules, "lab._wise_fsw", None)
 
     with pytest.raises(ModuleNotFoundError, match="not built; run `just fsw`"):
-        _module()
+        _module(prm)
 
 
 def test_a_host_refuses_an_extension_rebuilt_after_the_process_loaded_it(
     monkeypatch: pytest.MonkeyPatch,
+    prm: Path,
 ):
     """Once the extension changes on disk, building or resetting a host says restart the kernel.
 
     Args:
         monkeypatch: records a different file as the one this process loaded.
+        prm: the case's parameter record.
     """
-    built_before = _module()
+    built_before = _module(prm)
     monkeypatch.setattr("lab.power_cycle._loaded_stamp", (-1, -1))
 
     with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
-        _module()
+        _module(prm)
     with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
         built_before.Reset(0)
 
 
 @pytest.mark.parametrize("excess_ns", [1, 500, 999])
-def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(excess_ns: int):
+def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(
+    excess_ns: int, prm: Path
+):
     """A tick at a whole microsecond is stepped; one nanoseconds past it raises, naming its time.
 
     Args:
         excess_ns: ns past a whole microsecond.
+        prm: the case's parameter record.
     """
-    module = _module()
+    module = _module(prm)
     imu = messaging.IMUSensorMsg()
     imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)
@@ -184,9 +227,13 @@ def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(exces
     assert module.failure is raised.value
 
 
-def test_the_build_names_the_pinned_framework_tag_and_the_project_version():
-    """`build` is the host, the F´ tag the justfile pins and the dictionary's project version."""
-    build = _module().build
+def test_the_build_names_the_pinned_framework_tag_and_the_project_version(prm: Path):
+    """`build` is the host, the F´ tag the justfile pins and the dictionary's project version.
+
+    Args:
+        prm: the case's parameter record.
+    """
+    build = _module(prm).build
 
     tag = subprocess.run(
         ["just", "--evaluate", "fprime_tag"], cwd=REPOSITORY, capture_output=True, text=True

@@ -12,6 +12,8 @@ import h5py
 import numpy as np
 import pytest
 
+from fsw.codegen.fpp_types import Gnc
+from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import DICTIONARY as DICTIONARY_PATH
@@ -38,26 +40,38 @@ STATE = {
 """`nav.initNavState`'s arguments: a state at t = 0."""
 
 FLIGHT = """
-import numpy as np
-
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 from lab import FprimeModule
 
 
 @provides("SYS001")
-def fprime(scenario):
-    return FprimeModule(
-        scenario.vehicle.readers()["imu"],
-        mu=scenario.mu_m3_s2["earth"],
-        dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB),
-    )
+def fprime(scenario, prm_path):
+    return FprimeModule(scenario.vehicle.readers()["imu"], prm_path)
 
 
 globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=fprime, scenarios=("TST001",)))
+    mission_tests(
+        Mission(vehicle="imu_spacecraft", fsw=fprime, scenarios=("TST001",), parameters=parameters)
+    )
 )
 """
 """The F´ build flown through the repository's leo500 scenario, TST001."""
+
+
+@pytest.fixture
+def prm(tmp_path: Path) -> str:
+    """A case's parameter file: Earth's mu, the IMU mounted at identity.
+
+    Args:
+        tmp_path: the case's directory.
+
+    Returns:
+        The `.dat`'s path.
+    """
+    nav = Gnc.ImuDeadReckonerParameters(mu=MU, dcm_PB=np.eye(3))
+    record = parameters.write(nav, tmp_path / "run_0000.prm.json")
+    return str(parameters.dat(record, DICTIONARY_PATH))
 
 
 def _contents(path: Path) -> dict[str, object]:
@@ -121,11 +135,14 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
         np.testing.assert_equal(first, alone)
 
 
-def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy():
+def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(prm: str):
     """A pin called before boot trips an F´ assert, raised in Python with F´'s own text.
 
     The copy that raised is never handed out again: the next power cycle is another module, which
     boots and steps. Neither copy is in `sys.modules`.
+
+    Args:
+        prm: the case's parameter file.
     """
     raised = power_cycle()
 
@@ -134,28 +151,31 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy():
 
     fresh = power_cycle()
     assert fresh is not raised
-    fresh.boot(mu=MU, dcm_PB=np.eye(3))
+    fresh.boot(prm, sorted(DICTIONARY.parameters_by_id))
     fresh.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
     assert fresh.telemetry()
     assert raised not in sys.modules.values()
     assert fresh not in sys.modules.values()
 
 
-def test_two_copies_in_one_process_share_no_state():
+def test_two_copies_in_one_process_share_no_state(prm: str):
     """A copy left mid-flight, a command queued and its link undrained, reaches no later copy.
 
     The later copy boots idle and answers nothing; the earlier one flies on from its own state.
+
+    Args:
+        prm: the case's parameter file.
     """
     zero = {"angVelPlatform": np.zeros(3), "accelPlatform": np.zeros(3)}
     earlier, later = power_cycle(), power_cycle()
     earlier_station = FprimeStation(earlier, DICTIONARY)
     later_station = FprimeStation(later, DICTIONARY)
-    earlier.boot(mu=MU, dcm_PB=np.eye(3))
+    earlier.boot(prm, sorted(DICTIONARY.parameters_by_id))
     earlier_station.uplink("nav.initNavState", STATE, 1)
     earlier.step(t_ns=NS, **zero)
     earlier_station.uplink("nav.initNavState", STATE, 2)
 
-    later.boot(mu=MU, dcm_PB=np.eye(3))
+    later.boot(prm, sorted(DICTIONARY.parameters_by_id))
     later.step(t_ns=NS, **zero)
     earlier.step(t_ns=2 * NS, **zero)
 
@@ -178,10 +198,14 @@ def test_two_copies_in_one_process_share_no_state():
     assert [context for context, _, _ in earlier_station.responses()] == [1, 2]
 
 
-def test_a_copy_boots_once():
-    """A second boot of one copy is refused: a copy is powered on once."""
+def test_a_copy_boots_once(prm: str):
+    """A second boot of one copy is refused: a copy is powered on once.
+
+    Args:
+        prm: the case's parameter file.
+    """
     copy = power_cycle()
-    copy.boot(mu=MU, dcm_PB=np.eye(3))
+    copy.boot(prm, sorted(DICTIONARY.parameters_by_id))
 
     with pytest.raises(RuntimeError, match="already booted"):
-        copy.boot(mu=MU, dcm_PB=np.eye(3))
+        copy.boot(prm, sorted(DICTIONARY.parameters_by_id))

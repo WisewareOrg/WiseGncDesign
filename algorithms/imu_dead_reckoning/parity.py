@@ -17,10 +17,11 @@
 # %%
 """The dead reckoner's two builds, held to parity."""
 
-import numpy as np
+from pathlib import Path
+
 from wise_dynamics.basilisk import Scenario
 
-from algorithms.imu_dead_reckoning import dead_reckoner
+from algorithms.imu_dead_reckoning import dead_reckoner, parameters
 from algorithms.imu_dead_reckoning.gross_check import gross_check
 from harness.mission import Mission, mission_tests, provides
 from lab import FprimeModule
@@ -31,32 +32,31 @@ from lab import FprimeModule
 # %% [markdown]
 # ## The F´ flight software
 #
-# `fprime_dead_reckoner` boots the deployment idle on the scenario's vehicle. The scenario's
-# ground procedure gives the dead reckoner its state by command, as it gives the Python one.
+# `fprime_dead_reckoner` boots the deployment idle on the scenario's vehicle, PrmDb loading the
+# `.dat` F´'s tool makes from the case's record. The scenario's ground procedure gives the dead
+# reckoner its state by command, as it gives the Python one.
 
 
 # %%
 @provides("SYS001")
-def fprime_dead_reckoner(scenario: Scenario) -> FprimeModule:
+def fprime_dead_reckoner(scenario: Scenario, prm_path: Path) -> FprimeModule:
     """The F´ dead reckoner, booted idle on a scenario's vehicle.
 
     Args:
-        scenario: the scenario whose vehicle and `mu` the deployment takes.
+        scenario: the scenario whose vehicle the deployment flies on.
+        prm_path: the case's parameter record.
 
     Returns:
         The `FprimeModule` running it.
     """
-    return FprimeModule(
-        scenario.vehicle.readers()["imu"],
-        mu=scenario.mu_m3_s2["earth"],
-        dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB),
-    )
+    return FprimeModule(scenario.vehicle.readers()["imu"], prm_path)
 
 
 # %%
 PYTHON = Mission(
     vehicle="imu_spacecraft",
     fsw=dead_reckoner,
+    parameters=parameters,
     rungs=("SRS001", "SRS002", "SRS003", "SRS004", "SRS005"),
     scenarios=("TST001", "TST002"),
     check=gross_check,
@@ -85,6 +85,7 @@ globals().update(mission_tests(*MISSIONS))
 # judge()
 
 # %% active="ipynb"
+# import numpy as np
 # from test_attitude_knowledge import attitude_error_rad
 # from wise_dynamics.notebook import load_runs
 #

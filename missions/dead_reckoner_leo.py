@@ -16,7 +16,7 @@
 # %%
 """Missions: the IMU dead reckoner in low Earth orbit, on each vehicle."""
 
-from algorithms.imu_dead_reckoning import dead_reckoner
+from algorithms.imu_dead_reckoning import dead_reckoner, parameters
 from harness.mission import Mission, mission_tests
 
 # %load_ext wise_dynamics.notebook
@@ -24,6 +24,7 @@ from harness.mission import Mission, mission_tests
 BASE = Mission(
     vehicle="imu_spacecraft",
     fsw=dead_reckoner,
+    parameters=parameters,
     rungs=("SRS001", "SRS002", "SRS003", "SRS004", "SRS005"),
     scenarios=("TST001", "TST002"),
 )

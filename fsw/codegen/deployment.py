@@ -3,12 +3,22 @@
 A configuration's deployment topology is rendered from `fsw/fprime/deployment/Fsw.fpp.in`, the
 template CMake's `configure_file` renders for the F´ build, by the same `@CONFIGURATION@` token. The
 algorithms are those the F´ build takes: every directory under `algorithms/` with a
-`CMakeLists.txt`.
+`CMakeLists.txt`. `gnc_instance` finds a component's instance in the GNC sub-topologies.
 """
 
+import functools
 from pathlib import Path
 
-__all__ = ["CLONE", "algorithm_files", "contract_files", "fpp_files"]
+from fsw.codegen.fpp_model import Instance, read
+
+__all__ = [
+    "CLONE",
+    "algorithm_files",
+    "contract_files",
+    "fpp_files",
+    "framework_files",
+    "gnc_instance",
+]
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
 
@@ -23,6 +33,7 @@ _FRAMEWORK = (
     "Fw/Com/Com.fpp",
     "Fw/Dp/Dp.fpp",
     "Fw/Log/Log.fpp",
+    "Fw/Prm/Prm.fpp",
     "Fw/Time/Time.fpp",
     "Fw/Tlm/Tlm.fpp",
     "Fw/Types/Types.fpp",
@@ -33,6 +44,7 @@ _FRAMEWORK = (
     "Svc/DpCompressProc/Types/CompressionTypes.fpp",
     "Svc/Interfaces/Time.fpp",
     "Svc/PassiveRateGroup/PassiveRateGroup.fpp",
+    "Svc/PrmDb/PrmDb.fpp",
     "Svc/Ping/Ping.fpp",
     "Svc/RateGroupDriver/RateGroupDriver.fpp",
     "Svc/Sched/Sched.fpp",
@@ -61,6 +73,15 @@ _TEMPLATE = _REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in"
 """The deployment topology's template, rendered per configuration."""
 
 
+def framework_files() -> tuple[Path, ...]:
+    """The F´ framework files the model imports, in the clone `just _sync` fetches.
+
+    Returns:
+        The files, absolute.
+    """
+    return tuple(CLONE / path for path in _FRAMEWORK)
+
+
 def algorithm_files() -> tuple[Path, ...]:
     """Every algorithm's FPP files: the `.fpp` files beside each `algorithms/*/CMakeLists.txt`.
 
@@ -78,7 +99,7 @@ def contract_files() -> tuple[Path, ...]:
         The files, absolute: the framework's, the repository's, then every algorithm's.
     """
     return (
-        *(CLONE / path for path in _FRAMEWORK),
+        *framework_files(),
         *(_REPOSITORY / path for path in _PROJECT),
         *algorithm_files(),
     )
@@ -103,3 +124,40 @@ def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
         _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
         topology,
     )
+
+
+@functools.cache
+def _gnc_instances() -> tuple[Instance, ...]:
+    """Every instance the GNC sub-topologies in `fsw/fpp/gnc/` define, read once per process.
+
+    The contract defines the deployment's own instances, so those are left out.
+
+    Returns:
+        The instances.
+    """
+    sub_topologies = sorted((_REPOSITORY / "fsw" / "fpp" / "gnc").glob("*.fpp"))
+    contract = read(contract_files()).instances
+    return tuple(
+        instance
+        for name, instance in read((*contract_files(), *sub_topologies)).instances.items()
+        if name not in contract
+    )
+
+
+def gnc_instance(component: str) -> Instance:
+    """The one instance of a component in the GNC sub-topologies.
+
+    Args:
+        component: the component's qualified FPP name, such as `Gnc.ImuDeadReckoner`.
+
+    Returns:
+        The instance, its qualified name such as `ImuDeadReckoning.nav`.
+
+    Raises:
+        ValueError: the component is instanced other than once, naming its instances.
+    """
+    found = [i for i in _gnc_instances() if i.component == component]
+    if len(found) != 1:
+        names = [i.name for i in found]
+        raise ValueError(f"{component} is instanced {len(found)} times in fsw/fpp/gnc: {names}")
+    return found[0]
