@@ -868,7 +868,7 @@ globals().update(
     result = fly_in_a_subprocess(project)
 
     result.assert_outcomes(failed=1)
-    result.stdout.fnmatch_lines(["FAILED *ZeroDivisionError: the tick's own bug*"])
+    result.stdout.fnmatch_lines(["FAILED * - ZeroDivisionError: the tick's own bug"])
 
 
 def test_a_later_cases_base_write_keeps_the_build_an_earlier_case_merged(

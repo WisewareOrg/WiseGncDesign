@@ -124,8 +124,12 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
 
 @pytest.mark.parametrize(
     "algorithm",
-    [object(), type("Renamed", (Toy,), {"setGain": lambda self, value: None})()],
-    ids=["no method", "other parameters"],
+    [
+        object(),
+        type("Renamed", (Toy,), {"setGain": lambda self, value: None})(),
+        type("Extra", (Toy,), {"setGain": lambda self, gain, scale: None})(),
+    ],
+    ids=["no method", "other parameter", "extra parameter"],
 )
 def test_a_command_the_algorithm_lacks_or_declares_otherwise_is_refused_naming_it(
     dictionary: Dictionary, algorithm: object
