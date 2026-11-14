@@ -9,11 +9,9 @@ commands up, responses and every telemetry write down, in the form F´ uses. The
 scenario's procedure against it and records the flight. `AlgorithmModule` and the F´ host,
 `FprimeModule`, each present it, so one procedure and one set of analyzers fly either build. The
 link's docstrings say what each method does. Each host also has `build`, its build identity,
-which the harness records in the flight's `flight.json`. Why commands and telemetry travel in F´'s
-form, and why every write is pushed rather than sampled, is in
+which the harness records in the flight's `flight.json`. Why every write is pushed rather than
+sampled, and which side of the link speaks F´'s packets, is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
-That rev keeps F´'s packets to the F´ build alone, with the ground speaking names, and issue 54
-RadioEdge is the ticket that rewrites this link to match.
 
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
 algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm.

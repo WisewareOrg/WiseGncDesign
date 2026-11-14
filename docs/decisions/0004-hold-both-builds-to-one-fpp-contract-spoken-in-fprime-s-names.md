@@ -9,8 +9,8 @@
 - **rev 2** — 2026-11-13 — retitled from "Carry commands and telemetry in F´'s form, from one FPP
   dictionary" and rewritten to two edges: RadioEdge in F´'s names, the F´ ground station, typing
   after the run, FPP as the contract read through the native `fpp to-json`, the generator and its
-  named tuples, parameter files, and parity as an analyzer; with the checks' results (issue 52
-  tooling checks).
+  named tuples, parameter files, and parity as an analyzer; with the checks that support them
+  (issue 52 tooling checks).
 - **rev 1** — 2026-11-13 — first written (issue 37 the dictionary; issue 38 commands into the F´
   build).
 
@@ -20,11 +20,45 @@ One ground commands either build, records the telemetry either build writes, and
 judge both. An algorithm flies in Python before any F´ build of it exists, with no compiler. The F´
 build runs inside Basilisk with nothing on a thread of its own (ADR 0003 rev 3).
 
-In the build of main at `6f6276e`, the Python build imitates F´'s wire format: it decodes F´ command
+In the baseline build, the Python build imitates F´'s wire format: it decodes F´ command
 packets, imitates F´'s responses and packs telemetry into F´'s types. That is a Python version of F´
 written as glue. Flying the F´ build with F´'s real ground data system must stay possible, so names
 and values never move inside `_wise_fsw`, the generated dictionary JSON stays, and telemetry leaves
 through F´'s telemetry ports.
+
+### The checks
+
+They ran on branch `spike/two_edges` against the baseline: main `6f6276e`, F´ v4.4.2, fpp 3.4.0.
+
+**Native `fpp to-json`: PASS** (`8c83a2a`, `spikes/fpp/`). The native binary, with no Java, gives
+the instances, connections with port numbers, constants and `@` annotations, through a topology that
+imports a GNC sub-topology. `fprime_fpp/fpp to-json -d out fpp/Gnc.fpp fpp/Top.fpp`, exit 0, 0.01 s
+on the scratch model (0.17 s on the baseline's topology, in the design review); `python3 -I
+reader.py out`, condensed:
+
+```
+constants:   navDivider 1  ctrlDivider 10  tickHz 100  gain 2.5  name "gnc"
+Top.Deploy:  Gnc.rg.RateGroupMemberOut[0] -> Gnc.nav.schedIn[0]   (and [1] ctrl, [2] log)
+annotations: "provides: SRS010 free text, with spaces", "post-annotation on instance nav"
+```
+
+A missing imported group, an unresolved port number or a lost annotation would have shown in
+`Top.Deploy`'s connections or the annotation list. A port number the FPP leaves implicit is `"None"`
+in the connection itself and resolved only in the topology's port-number maps.
+
+**`fprime-prm-write` and stock PrmDb: PASS** (`9eccec3`, `spikes/fprime/`). F´'s tool turns a case's
+JSON into the `.dat` stock PrmDb loads at boot. `fprime-prm-write dat prm/nav_case.json -d
+SpikeTopologyDictionary.json`, then `python spike_check.py b prm/nav_case.dat`:
+
+```
+PrmFileLoadComplete : Parameter file load completed. Database: ACTIVE, Records: 2 (2 added and 0 updated).
+nav.mu 398600441800000.0 valid
+nav.dcm_PB [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]] valid
+```
+
+With the file missing, PrmDb reports `PrmFileReadError` and both parameters stay invalid, so a load
+that failed would have shown. The tool refuses, writing no `.dat`, an unqualified instance name, a
+wrong parameter name, a wrong array length and a wrong type.
 
 ## Decision
 
@@ -82,9 +116,10 @@ through F´'s telemetry ports.
 ### Parameters: JSON per case, F´'s tool makes the `.dat`
 
 - **The ground's parameter-file writer emits each case's values as JSON**, from each algorithm's
-  `parameters(scenario)`, in the form F´'s `fprime-prm-write` takes. That tool writes the `.dat`
-  that stock PrmDb loads at boot, and the Python build reads the JSON. Both files are saved beside
-  the run file.
+  `parameters(scenario)`, in the form F´'s `fprime-prm-write` takes, keyed by the dictionary's
+  qualified instance name: `{"<module>.nav": {"mu": 3.986004418e14, "dcm_PB": [[…], […], […]]}}`.
+  That tool writes the `.dat` that stock PrmDb loads at boot, and the Python build reads the JSON.
+  Both files are saved beside the run file.
 - **`fprime-gds`, pinned by F´ v4.4.2 at 4.4.0, joins the uv environment.** No Python code parses or
   writes F´'s binary parameter format.
 - **PrmDb's sandbox root is the directory that holds the case's parameter file**, derived in the
@@ -99,64 +134,6 @@ through F´'s telemetry ports.
 - **A build may add anything beyond that, and extras are never compared:** free-text reasons,
   commands only one build has (F´'s `_PRM_SET`, `CMD_NO_OP`), and telemetry about other partitions or
   process health (`cmdDisp.*`, `prmDb.*`).
-
-## Results
-
-The checks ran on F´ v4.4.2 and `fprime-fpp` 3.4.0, on branch `spike/two_edges`.
-
-### Native `fpp to-json`: PASS (commit `8c83a2a`, `spikes/fpp/`)
-
-A scratch deployment topology `Top.Deploy` imports a GNC sub-topology `Gnc.Gnc` with a three-member
-rate group, constants and `@` annotations.
-
-```
-$ fprime_fpp/fpp to-json -d out fpp/Gnc.fpp fpp/Top.fpp      # exit 0, Java not installed
-$ python3 -I reader.py out          # reader-output.json, condensed
-instances:   Gnc.nav:Nav  Gnc.ctrl:Ctrl  Gnc.log:Log  Gnc.rg:RateGroup  Top.drv:Driver
-constants:   navDivider 1  ctrlDivider 10  tickHz 100  gain 2.5  name "gnc"
-Top.Deploy:  Gnc.rg.RateGroupMemberOut[0] -> Gnc.nav.schedIn[0]   (and [1] ctrl, [2] log)
-annotations: "provides: SRS010 free text, with spaces", "post-annotation on instance nav"
-```
-
-Wall time is 0.01 s on the scratch model, and 0.17 s on the deployment of main at `6f6276e`. The
-connections reached only through the import, with their port numbers, are in `Top.Deploy`.
-`reader.py`, 57 lines, is the proof that one module parses it.
-
-**Where the data is, which the reader must follow** (fpp 3.4.0, unversioned internals):
-
-- instances in `fpp-analysis.json` `.analysis.componentInstanceMap`, typed through the
-  `DefComponent` AST node;
-- connections in `.analysis.topologyMap[<id>].connectionMap`. A port number the FPP leaves implicit
-  is `"None"` there, so the resolved number comes from `fromPortNumberMap` and `toPortNumberMap`.
-  Connections arrive in no stable order, so member order is a sort by port number;
-- constants in `.analysis.valueMap`, each held twice; use the definition node's id;
-- annotations only in `fpp-ast.json`, one string per `@` line, pre and post;
-- both topologies sit in `topologyMap`, so the reader selects the deployment by qualified name;
-- the output embeds absolute paths, so it is not byte-reproducible across checkouts.
-
-### `fprime-prm-write` and stock PrmDb: PASS (commit `9eccec3`, `spikes/fprime/`)
-
-The JSON form, keyed by the dictionary's qualified instance name:
-
-```json
-{ "Spike.nav": { "mu": 3.986004418e14,
-                 "dcm_PB": [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]] } }
-```
-
-```
-$ fprime-prm-write dat prm/nav_case.json -d SpikeTopologyDictionary.json
-$ python spike_check.py b prm/nav_case.dat
-PrmFileLoadComplete : Parameter file load completed. Database: ACTIVE, Records: 2 (2 added and 0 updated).
-nav.mu 398600441800000.0 valid
-nav.dcm_PB [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]] valid
-CHECK B PASS
-```
-
-With the file missing, PrmDb reports `PrmFileReadError` and both parameters stay invalid, so the
-valid values came from the file. The tool fails with no `.dat` on an unqualified instance name, a
-wrong parameter name, a wrong array length or a wrong type. `fprime-prm-decode` round-trips the
-file byte for byte, but its default output path overwrites the input JSON, so it is always given
-`-o`.
 
 ## Alternatives considered
 
@@ -198,8 +175,9 @@ file byte for byte, but its default output path overwrites the input JSON, so it
 - Both builds answer in `Fw.CmdResponse` codes. Free-text reasons are an extra the Python build adds.
 - A ported algorithm's F´ test asserts that its Python build's dictionary entries equal the F´
   build's, IDs aside, so a stale F´ build fails it.
-- An `fprime-fpp` bump that moves the JSON shape fails issue 55's contract test on its Renovate PR,
-  never mis-wires the Python build.
+- `to-json`'s layout is unversioned compiler internals. One module reads it, and issue 55's contract
+  test holds it, so a bump that moves it fails on its Renovate PR and never mis-wires the Python
+  build.
 - The case's parameter path must stay under 240 characters, F´'s `FileNameStringSize`: a longer one
   asserts in PrmDb's sandbox, which raises in Python. Issue 60 parameters from a per-case file either
   keeps session paths short or raises the limit in the deployment's config.
