@@ -12,11 +12,19 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk import ImuSpacecraft
+from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
+from algorithms.imu_dead_reckoning import imu_dead_reckoning as reckoner_module
 from algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
-from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner, _q_dot, parameters
+from algorithms.imu_dead_reckoning.imu_dead_reckoning import (
+    ImuDeadReckoner,
+    _q_dot,
+    dead_reckoner,
+    parameters,
+)
 from fsw.codegen.fpp_types import Gnc
 from fsw.python import AlgorithmModule
+from ground import parameters as ground_parameters
 from harness.notebook import run_notebook
 
 _IDENTITY = np.eye(3)
@@ -268,6 +276,39 @@ def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() 
     assert type(nav) is Gnc.ImuDeadReckonerParameters
     assert nav.mu == 4.9048695e12
     np.testing.assert_array_equal(nav.dcm_PB, mounting)
+
+
+def test_the_builder_builds_the_reckoner_on_its_record_s_parameters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`dead_reckoner` reads the record it is given, not the scenario's mu or mounting.
+
+    The record holds the Moon's mu and a mounting that is not the identity; the scenario flies
+    Earth's mu at identity mounting.
+
+    Args:
+        tmp_path: where the case's record is written.
+        monkeypatch: records the parameters the builder gives the reckoner.
+    """
+    built = []
+
+    class Recorded(ImuDeadReckoner):
+        """The reckoner, recording its parameters."""
+
+        def __init__(self, parameters: Gnc.ImuDeadReckonerParameters) -> None:
+            built.append(parameters)
+            super().__init__(parameters)
+
+    monkeypatch.setattr(reckoner_module, "ImuDeadReckoner", Recorded)
+    mounting = np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    moon = Gnc.ImuDeadReckonerParameters(mu=4.9048695e12, dcm_PB=mounting)
+    record = ground_parameters.write([moon], tmp_path / "run_0000.prm.json")
+
+    dead_reckoner(Leo500(), record)
+
+    (flown,) = built
+    assert flown.mu == moon.mu
+    np.testing.assert_array_equal(flown.dcm_PB, mounting)
 
 
 @pytest.mark.xdist_group("notebooks")
