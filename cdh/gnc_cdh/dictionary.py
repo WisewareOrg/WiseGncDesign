@@ -270,8 +270,8 @@ class Dictionary:
         """Parses the dictionary.
 
         A command with a parameter of a type the module does not code loads, and is refused only
-        when encoded or decoded, so a deployment's framework commands, which take strings, do not
-        stop it loading.
+        when encoded, so a deployment's framework commands, which take strings, do not stop it
+        loading.
 
         Args:
             path: the JSON file F´ generated.
@@ -469,8 +469,6 @@ class Dictionary:
         prefix = f"{instance}."
         if command is None or not command.name.startswith(prefix):
             raise DecodeError("INVALID_OPCODE", f"opcode {opcode} is not {instance}'s")
-        if command._types is None:
-            raise DecodeError("FORMAT_ERROR", f"{command.name} has a parameter type not coded")
         sizes = [ftype.dtype.itemsize for ftype in command._types]
         if len(packet) != head + sum(sizes):
             raise DecodeError("FORMAT_ERROR", f"{command.name} takes {sum(sizes)} bytes")
