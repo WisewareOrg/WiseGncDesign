@@ -2,7 +2,7 @@
 #ifndef WISEFSW_@CONFIGURATION@FSWTOPOLOGYDEFS_HPP
 #define WISEFSW_@CONFIGURATION@FSWTOPOLOGYDEFS_HPP
 
-#include "fsw/fpp/gnc/FppConstantsAc.hpp"
+#include "fsw/fprime/deployment/@CONFIGURATION@/FppConstantsAc.hpp"
 
 namespace PingEntries {}
 

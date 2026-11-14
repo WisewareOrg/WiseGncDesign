@@ -153,17 +153,19 @@ group that runs it, the rate-group driver, and its rate as the FPP constant `nav
 blocks on the driver and the rate group pass the constant to their `configure()`. It exposes the
 ports `tickIn`, `imuIn` and `navConfigIn`. Each configuration's deployment, `WiseFsw.<Cfg>Fsw`, is
 rendered at build time from the templates in `fsw/fprime/deployment/`, one per file in
-`fsw/fpp/gnc/`, into the build directory; the shared instances are in
-`fsw/fprime/deployment/instances.fpp`. A configuration's instances take base IDs no other
-configuration's do, since F´ checks them across every GNC sub-topology. Each `step` sets SimTime to
-the simulation's time, then SimTime ticks the driver once, so nav runs on every `navDivider`-th
-step. The rate group's health telemetry is recorded with every other
-channel; the deployment links F´'s stub `Os::RawTime`, so its cycle times read 0. A process's first
-case reproduces its rate-group datasets from the seed; a later case carries the rate group's
-`CycleCount` over from the cases before it and lacks the channels written only on change. Issue 59
-Power-cycle the F´ build per case closes that gap. Nav's datasets reproduce bitwise in every case.
+`fsw/fpp/gnc/`, into the build directory, where it compiles its GNC sub-topology with it; the
+shared instances are in `fsw/fprime/deployment/instances.fpp`. The F´ build takes every directory
+under `algorithms/` with a `CMakeLists.txt`, and F´ finds which algorithms a configuration links
+from its FPP. Each `step` sets SimTime to the simulation's time, then SimTime ticks the driver once,
+so nav runs on every `navDivider`-th step. The rate group's health telemetry is recorded with every
+other channel; the deployment links F´'s stub `Os::RawTime`, so its cycle times read 0. A
+process's first case reproduces its rate-group datasets from the seed; a later case carries the
+rate group's `CycleCount` over from the cases before it and lacks the channels written only on
+change. Issue 59 Power-cycle the F´ build per case closes that gap. Nav's datasets reproduce
+bitwise in every case.
 `fsw.codegen.deployment.fpp_files(configuration, directory)` renders a configuration's topology
-and lists its deployment's FPP files for `fpp_model.read`. The reasoning is in [ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
+and lists its deployment's FPP files for `fpp_model.read`. The reasoning is in
+[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
 and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
 
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's

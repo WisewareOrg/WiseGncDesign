@@ -1,5 +1,6 @@
 # The WiseFsw deployment of each configuration, rendered from the templates here for each GNC
-# sub-topology in fsw/fpp/gnc/, into a build subdirectory of its own; nothing rendered is in source.
+# sub-topology in fsw/fpp/gnc/, into a build subdirectory of its own that also compiles that
+# sub-topology; nothing rendered is in source.
 register_fprime_module(
   fsw_fprime_deployment_instances
   AUTOCODER_INPUTS

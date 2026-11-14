@@ -26,8 +26,12 @@ add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/fsw/fpp/interfaces")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/platform")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/cdh")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/rio")
-add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/algorithms/imu_dead_reckoning")
-add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/fsw/fpp/gnc")
+# Every algorithm with an F´ component: the directories under algorithms/ with a CMakeLists.txt.
+file(GLOB WISE_ALGORITHMS CONFIGURE_DEPENDS "${FPRIME_PROJECT_ROOT}/algorithms/*/CMakeLists.txt")
+foreach (WISE_ALGORITHM IN LISTS WISE_ALGORITHMS)
+    get_filename_component(WISE_ALGORITHM_DIR "${WISE_ALGORITHM}" DIRECTORY)
+    add_fprime_subdirectory("${WISE_ALGORITHM_DIR}")
+endforeach ()
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/deployment")
 
 # The hand-written pybind11 module that hosts the deployment in the simulation's process.
