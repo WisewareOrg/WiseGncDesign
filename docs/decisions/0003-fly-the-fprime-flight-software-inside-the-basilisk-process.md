@@ -94,4 +94,4 @@ an assert thrown through F´ into pybind11.
 - Copies share no state, so more than one F´ build can be booted in one process.
 - An F´ assert fails the case in Python with F´'s own text, instead of printing and flying on.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard
-  deployment only in its threadless tasks, its stub raw time and the lab's stand-ins.
+  deployment in its threadless tasks and the lab's stand-ins.

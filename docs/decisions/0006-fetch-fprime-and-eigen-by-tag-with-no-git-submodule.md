@@ -6,8 +6,8 @@
 
 ## Revisions
 
-- **rev 1** — 2026-11-14 — moved out of ADR 0003 rev 2, the rev on main, which carried it from
-  rev 1 (issue 85 one decision per ADR).
+- **rev 1** — 2026-11-14 — moved out of ADR 0003 rev 2 (main at `6f6276e`), which carried it
+  from rev 1 (issue 85 one decision per ADR).
 
 ## Context
 

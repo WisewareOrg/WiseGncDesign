@@ -13,7 +13,7 @@
 
 The algorithms are written in Python first and flown with no F´ build, and F´ is good flight
 software in its own right, not a mirror of the Python build. Each build meets the world at two
-edges: the ground (ADR 0004 rev 2) and the sim (ADR 0003 rev 3).
+edges: the ground (ADR 0004 rev 2) and the sim (ADR 0008 rev 1).
 
 At `6f6276e`, one object per build did bus I/O, unit conversion, commands, telemetry and the
 algorithm, wired by hand for one algorithm. A second algorithm had no place to sit, and the glue grew
