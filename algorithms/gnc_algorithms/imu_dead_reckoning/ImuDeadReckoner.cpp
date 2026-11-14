@@ -82,7 +82,7 @@ void ImuDeadReckoner::imuIn_handler(FwIndexType portNum, const Gnc::Vector3& ang
 
 void ImuDeadReckoner::schedIn_handler(FwIndexType portNum, U32 context) {
     const F64 t = this->now();
-    if (this->m_navState == NavState::idle || !(t > this->m_t)) {
+    if (this->m_navState == NavState::idle) {
         this->writeTelemetry();
         return;
     }

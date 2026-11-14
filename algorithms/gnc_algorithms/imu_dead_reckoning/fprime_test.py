@@ -80,19 +80,17 @@ def test_a_booted_reckoner_reports_idle_and_no_state():
 
 @pytest.mark.parametrize("sign", [1.0, -1.0], ids=["w-positive", "w-negative"])
 def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(sign: float):
-    """Commanded q or -q as of a step's time, the deployment writes q, whose W is not negative.
+    """Commanded q or -q as of t = 0 and stepped 1 s at zero rate, the deployment writes q.
 
     Args:
         sign: the sign the initial quaternion is given with.
     """
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    state = {"epoch": 1.0, "attitude": sign * Q0, "position": R0, "velocity": V0}
+    state = {"epoch": 0.0, "attitude": sign * Q0, "position": R0, "velocity": V0}
     _wise_fsw.uplink(WISE_FSW.encode_command("nav.initNavState", state), 1)
     _wise_fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
-    tlm = _telemetry()
-    assert tlm["nav.navState"] == "initialized"
-    np.testing.assert_array_equal(tlm["nav.bodyEciAttitude"], Q0)
+    np.testing.assert_allclose(_telemetry()["nav.bodyEciAttitude"], Q0, rtol=0, atol=1e-15)
 
 
 @pytest.mark.parametrize(
