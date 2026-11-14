@@ -17,7 +17,11 @@ __all__ = ["FprimeStation"]
 
 
 class FprimeStation:
-    """The ground's radio edge to an F´ deployment, through the deployment's pins."""
+    """The ground's radio edge to an F´ deployment, through the deployment's pins.
+
+    It supplies the edge's four methods; `lab.FprimeModule` holds it and supplies `period_s`,
+    `dictionary` and `failure`.
+    """
 
     def __init__(self, fsw: ModuleType, dictionary: Dictionary) -> None:
         """Holds the deployment and reads the packet's types from its dictionary.
@@ -70,7 +74,7 @@ class FprimeStation:
         """
         self._fsw.uplink(self.encode_command(name, args), context)
 
-    def responses(self) -> list[tuple[int, str, None]]:
+    def responses(self) -> list[tuple[int, str, str | None]]:
         """The command responses since the last call, oldest first.
 
         Returns:

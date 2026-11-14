@@ -186,7 +186,9 @@ class Ground(sysModel.SysModel):
         """Uplinks a command, its arguments typed by the dictionary, and waits for its response.
 
         A `TimeoutError` names the command and the time when no response has come by the first tick
-        at or after `timeout_s` from now. The command log keeps the arguments as given.
+        at or after `timeout_s` from now. A command the dictionary cannot type raises at once, as
+        `Dictionary.arguments` does, and nothing goes up. The command log keeps the arguments as
+        given.
 
         Args:
             name: `<instance>.<command>`, as the dictionary names it.
@@ -219,16 +221,19 @@ class Ground(sysModel.SysModel):
     def tlm(self, name: str) -> Any:
         """One channel's latest write.
 
+        A name the dictionary lacks raises `KeyError`, as `Dictionary.channel` does, so a mistyped
+        channel fails rather than reading `None` forever.
+
         Args:
             name: `<instance>.<channel>`.
 
         Returns:
             The value, as the run file records it, or `None` before the channel is written.
         """
-        self._edge.dictionary.channel(name)
-        if name not in self._latest:
+        channel = self._edge.dictionary.channel(name)
+        if channel.name not in self._latest:
             return None
-        return self._edge.values(name, [self._latest[name]])[0]
+        return self._edge.values(channel.name, [self._latest[channel.name]])[0]
 
     def truth(self) -> dict[str, np.ndarray]:
         """The vehicle's true state now, the stand-in for tracking.

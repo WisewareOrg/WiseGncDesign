@@ -114,7 +114,7 @@ class FprimeModule(sysModel.SysModel):
         """
         self._station.uplink(name, args, context)
 
-    def responses(self) -> list[tuple[int, str, None]]:
+    def responses(self) -> list[tuple[int, str, str | None]]:
         """The command responses since the last call, oldest first.
 
         Returns:
