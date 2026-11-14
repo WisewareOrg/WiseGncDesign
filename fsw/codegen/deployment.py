@@ -1,7 +1,9 @@
 """A WiseFsw deployment's FPP files, the list `fsw.codegen.fpp_model.read` is given for it.
 
-A configuration's deployment topology is rendered from the template the F´ build renders, by the
-same `@CONFIGURATION@` token.
+A configuration's deployment topology is rendered from `fsw/fprime/deployment/Fsw.fpp.in`, the
+template CMake's `configure_file` renders for the F´ build, by the same `@CONFIGURATION@` token. The
+algorithms are those the F´ build takes: every directory under `algorithms/` with a
+`CMakeLists.txt`.
 """
 
 from pathlib import Path
@@ -46,14 +48,13 @@ _FRAMEWORK = (
 """The F´ framework files the deployment's model imports, in the clone `just _sync` fetches."""
 
 _PROJECT = (
-    "algorithms/imu_dead_reckoning/ImuDeadReckoner.fpp",
     "fsw/fpp/interfaces/Interfaces.fpp",
     "fsw/fprime/cdh/GroundLink.fpp",
     "fsw/fprime/platform/SimTime.fpp",
     "fsw/fprime/rio/SimBridge.fpp",
     "fsw/fprime/deployment/instances.fpp",
 )
-"""The repository's files of every deployment's model, its GNC sub-topology aside."""
+"""The repository's files of every deployment's model, its algorithms and GNC sub-topology aside."""
 
 _TEMPLATE = _REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in"
 """The deployment topology's template, rendered per configuration."""
@@ -68,14 +69,16 @@ def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
         directory: where the rendered `<configuration>Fsw.fpp` is written.
 
     Returns:
-        The files, absolute: the framework's, the repository's, the configuration's GNC
-        sub-topology, then its rendered deployment topology.
+        The files, absolute: the framework's, the repository's, every algorithm's, the
+        configuration's GNC sub-topology, then its rendered deployment topology.
     """
     topology = directory / f"{configuration}Fsw.fpp"
     topology.write_text(_TEMPLATE.read_text().replace("@CONFIGURATION@", configuration))
+    algorithms = sorted(_REPOSITORY.glob("algorithms/*/CMakeLists.txt"))
     return (
         *(CLONE / path for path in _FRAMEWORK),
         *(_REPOSITORY / path for path in _PROJECT),
+        *(fpp for build in algorithms for fpp in sorted(build.parent.glob("*.fpp"))),
         _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
         topology,
     )
