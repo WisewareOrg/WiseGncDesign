@@ -28,9 +28,7 @@ station, `ground.fprime_station.FprimeStation`, the only F´ codec in the reposi
 F´'s real ground data system replaces: F´ packets exist only between it and `_wise_fsw`.
 
 Each host also has `build`, its build identity, which the harness records in the flight's
-`flight.json`, as
-[ADR 0007 rev 1](../docs/decisions/0007-record-which-fsw-flew-each-flight-in-its-flight-json.md)
-decides. How commands and telemetry travel between the ground and each build, and why every
+`flight.json`. How commands and telemetry travel between the ground and each build, and why every
 write is pushed rather than sampled, is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
@@ -126,7 +124,7 @@ builds are held to one contract. The reasoning is in
 
 The bus structs are in `fsw/fpp/interfaces/Bus.fpp`, and `bus_test.py` beside it holds each to its
 Basilisk message. The reasoning is in
-[ADR 0008 rev 1](../docs/decisions/0008-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
+[ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
 
 ## The FPP model
 

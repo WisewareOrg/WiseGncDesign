@@ -9,9 +9,11 @@
 - **rev 3** — 2026-11-14 — each case flies a fresh copy of the extension, and an F´ assert raises
   in Python, with the checks that support them; corrects rev 2's "an `FW_ASSERT` aborts the
   process" (issue 52 tooling checks); the partitions are ADR 0005 rev 1; reverses rev 2's
-  configuration on an F´ port for F´ parameters (ADR 0004 rev 2); fetching F´ and Eigen by tag is
-  ADR 0006 rev 1, a flight's record is ADR 0007 rev 1, and the lab is ADR 0008 rev 1 (issue 85
-  one decision per ADR).
+  configuration on an F´ port for F´ parameters (ADR 0004 rev 2), which also takes the rejected FSW
+  telemetry in Basilisk message structs and the boot(prm_path) check; the lab is ADR 0006 rev 1;
+  fetching by tag and the flight's record become consequences, their rejected alternatives standing
+  in rev 2, and a flight's end belonging to the scenario moves to the README (issue 85 one decision
+  per ADR).
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
   telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
@@ -48,11 +50,6 @@ reports (every case flown with a ground stays in memory), so that growth was nei
 excluded. Not covered: the copies ran setup at import, so a fresh copy, `boot(prm_path)` and PrmDb's
 load were never run together.
 
-**boot(prm_path): PASS** (`9eccec3`, `spikes/fprime/`). Setup moves out of import into
-`boot(prm_path)`, and PrmDb reads the case's file there. `python spike_check.py b <case>.dat`
-from two processes with two files: each read its own case's `mu`, so a path that never reached PrmDb
-would have shown as equal values.
-
 **An assert in a Release build** (`9eccec3`). A 55-byte push through SimHub asserted, printed,
 and delivered a partly filled struct: F´'s default assert handler prints and returns. Not covered:
 an assert thrown through F´ into pybind11.
@@ -64,7 +61,7 @@ an assert thrown through F´ into pybind11.
 - **The binding is a small hand-written pybind11 module**, with no fprime-python dependency.
 - **Each case flies a fresh copy of the extension**, the way a vehicle is power-cycled.
 - **An F´ assert raises in Python; a copy that raised is never reused.**
-- **The build meets the sim through the lab**, a hardware-in-the-loop rig (ADR 0008 rev 1).
+- **The build meets the sim through the lab**, a hardware-in-the-loop rig (ADR 0006 rev 1).
 
 ## Alternatives considered
 
@@ -72,8 +69,6 @@ an assert thrown through F´ into pybind11.
   protocol of its own. Rejected.
 - **F´'s own timer, with components on OS threads.** It wakes on wall-clock time, so a case does not
   reproduce from its seed. Rejected.
-- **FSW telemetry in Basilisk message structs.** It limits the FSW to fields Basilisk defines.
-  Rejected.
 - **fprime-python's autocoder in place of the hand-written binding.** The second spike of issue 31
   F´ in Basilisk measured it from clean checkouts: 443 s to build against 32 s, 0.85 s per case
   against 0.76 s, no less glue, a clock that cannot be set from Python, unbound telemetry buffers,
@@ -85,7 +80,7 @@ an assert thrown through F´ into pybind11.
 - **`FW_ASSERTIONS_ALWAYS_ABORT`, in place of an assert that raises in Python.** It kills the worker
   and loses the case's failure, where a fault in an in-process F´ must fail the case. Rejected.
 - **A length check in the pins or the bus emulator, in place of the raising assert.** It is per-port
-  glue at the edge, and the emulator is generated from the same struct (ADR 0008 rev 1). Rejected.
+  glue at the edge, and the emulator is generated from the same struct (ADR 0006 rev 1). Rejected.
 
 ## Consequences
 
@@ -94,4 +89,15 @@ an assert thrown through F´ into pybind11.
 - Copies share no state, so more than one F´ build can be booted in one process.
 - An F´ assert fails the case in Python with F´'s own text, instead of printing and flying on.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard
-  deployment in its threadless tasks and the lab's stand-ins.
+  deployment only in its threadless tasks, its stub raw time and the lab's stand-ins.
+- Each configuration's deployment is generated from its GNC sub-topology, and each configuration
+  flies its own extension, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
+- The rate groups' health telemetry is recorded on F´'s stub raw time, so it repeats from the seed
+  with cycle times of 0; the trade is on issue 57 GNC sub-topology, and its cost is issue 80
+  telemetry recording cost.
+- F´ and Eigen are pinned by release tag, with no git submodule. Renovate bumps F´'s tag with
+  `fprime-tools` and `fprime-fpp` as one update, and a test holds those and `cmake` and `ninja` to
+  F´'s pins.
+- Each flight's `flight.json` records which FSW flew: `fsw`, and `build`, whose F´ `projectVersion`
+  names the commit built from (`-dirty` when uncommitted), so two builds of one commit are told
+  apart. `build` is merged in per case without a lock, so it can rarely be missing after a crash.

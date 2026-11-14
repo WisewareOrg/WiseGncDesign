@@ -1,4 +1,4 @@
-# 0008 — Meet the sim as a hardware-in-the-loop rig, on bus bytes
+# 0006 — Meet the sim as a hardware-in-the-loop rig, on bus bytes
 
 **Status:** accepted
 **Decided:** 2026-11-14 (issue 51 two edges design; issue 52 tooling checks)
