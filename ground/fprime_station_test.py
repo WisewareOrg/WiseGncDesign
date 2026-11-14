@@ -8,12 +8,16 @@ it.
 import importlib.util
 import json
 import struct
+from collections.abc import Callable
+from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
+from fsw.codegen.fpp_model import Instance
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import DICTIONARY, FprimeModule
@@ -65,9 +69,6 @@ ARGS = {
     "count": 7,
 }
 
-MU = 3.986004360e14
-"""m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
-
 NS = 1_000_000_000
 """ns per s."""
 
@@ -95,7 +96,7 @@ def toy_dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
     """
     model = tmp_path_factory.mktemp("toy") / "Toy.fpp"
     model.write_text(TOY)
-    return Dictionary.from_component([model], "Toy.Toy", instance="toy")
+    return Dictionary.from_component([model], Instance("Toy.toy", "Toy.Toy", 0x1000))
 
 
 @pytest.fixture(scope="module")
@@ -112,16 +113,18 @@ def toy(toy_dictionary: Dictionary) -> FprimeStation:
 
 
 @pytest.fixture
-def booted_station(fsw: ModuleType) -> FprimeStation:
-    """A station on the deployment, booted idle and mounted at identity.
+def booted_station(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> FprimeStation:
+    """A station on the deployment, booted idle on the case's parameters.
 
     Args:
         fsw: the test's copy of the deployment.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
 
     Returns:
         The station.
     """
-    fsw.boot(mu=MU, dcm_PB=np.eye(3))
+    fsw.boot(prm, parameter_ids)
     return FprimeStation(fsw, WISE_FSW)
 
 
@@ -249,23 +252,6 @@ def _step(fsw: ModuleType, t_ns: int) -> None:
     fsw.step(t_ns=t_ns, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
 
-def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
-    """Drains the telemetry writes and keeps nav's, as values.
-
-    Args:
-        station: the station.
-
-    Returns:
-        Each of nav's writes' channel name, F´ time tag in ns and value, oldest first.
-    """
-    writes = station.telemetry()
-    return [
-        (name, t, station.values(name, [raw])[0])
-        for name, t, raw in writes
-        if name.startswith("nav.")
-    ]
-
-
 @pytest.mark.parametrize(
     ("change", "response"),
     [
@@ -286,13 +272,18 @@ def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
     ],
 )
 def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
-    fsw: ModuleType, booted_station: FprimeStation, change: object, response: str
+    fsw: ModuleType,
+    booted_station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
+    change: object,
+    response: str,
 ):
     """F´ answers a bad packet with its `Fw.CmdResponse`, named, with no reason, and runs nothing.
 
     Args:
         fsw: the test's copy of the deployment.
         booted_station: the station on it.
+        decoded: drains the station's telemetry as values.
         change: makes the bad packet from a good `nav.initNavState`.
         response: the response F´ gives it.
     """
@@ -300,13 +291,18 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
     _step(fsw, NS)
 
     assert booted_station.responses() == [(7, response, None)]
-    assert _writes(booted_station) == [("nav.navState", NS, "idle")]
+    writes = [write for write in decoded(booted_station) if write[0].startswith("nav.")]
+    assert writes == [("nav.navState", NS, "idle")]
 
 
 @pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")
-def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host():
-    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, no reason."""
-    module = FprimeModule(messaging.IMUSensorMsgReader(), mu=MU, dcm_PB=np.eye(3))
+def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host(prm_record: Path):
+    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, no reason.
+
+    Args:
+        prm_record: the case's parameter record.
+    """
+    module = FprimeModule(messaging.IMUSensorMsgReader(), prm_record)
     imu = messaging.IMUSensorMsg()
     imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)

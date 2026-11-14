@@ -4,11 +4,14 @@ It hosts stub algorithms, wired by their names, on standalone Basilisk messages,
 `toy` of a toy component whose dictionary is generated from FPP alone.
 """
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 from Basilisk.utilities import SimulationBaseClass, macros
 
+from fsw.codegen.fpp_model import Instance
 from fsw.python import AlgorithmModule
 from ground.dictionary import Dictionary
 
@@ -53,7 +56,7 @@ def dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
     """
     model = tmp_path_factory.mktemp("toy") / "Toy.fpp"
     model.write_text(TOY)
-    return Dictionary.from_component([model], "Toy.Toy", instance="toy")
+    return Dictionary.from_component([model], Instance("Toy.toy", "Toy.Toy", 0x1000))
 
 
 class StubAlgorithm:
@@ -581,3 +584,35 @@ def test_the_build_names_the_host(dictionary: Dictionary):
         dictionary: the toy's dictionary.
     """
     assert _module(dictionary).build == {"host": "fsw.python.AlgorithmModule"}
+
+
+def test_a_parameter_s_own_commands_are_not_the_algorithm_s_and_answer_invalid_opcode(
+    tmp_path: Path,
+):
+    """F´ generates a set and a save command per parameter; the host asks no handler for them.
+
+    Args:
+        tmp_path: where the toy with a parameter is written.
+    """
+    model = tmp_path / "Toy.fpp"
+    model.write_text(
+        TOY.replace(
+            "    command resp port cmdResponseOut\n",
+            "    command resp port cmdResponseOut\n"
+            "    param get port prmGetOut\n"
+            "    param set port prmSetOut\n"
+            "    param limit: F32\n",
+        )
+    )
+    dictionary = Dictionary.from_component([model], Instance("Toy.toy", "Toy.Toy", 0x1000))
+    assert dictionary.command("toy.LIMIT_PRM_SET").kind == "set"
+    assert dictionary.command("toy.LIMIT_PRM_SAVE").kind == "save"
+    module = _module(dictionary)
+    _messages = _subscribed(module)
+    module.Reset(0)
+
+    module.uplink("toy.LIMIT_PRM_SET", {"val": 1.0}, 1)
+    module.uplink("toy.LIMIT_PRM_SAVE", {}, 2)
+    module.UpdateState(ONE_SECOND_NS)
+
+    assert module.responses() == [(1, "INVALID_OPCODE", None), (2, "INVALID_OPCODE", None)]

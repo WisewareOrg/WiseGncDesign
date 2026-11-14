@@ -15,7 +15,6 @@ class ImuDeadReckoner final : public ImuDeadReckonerComponentBase {
   private:
     void schedIn_handler(FwIndexType portNum, U32 context) override;
     void imuIn_handler(FwIndexType portNum, const Gnc::ImuReading& reading) override;
-    void configureIn_handler(FwIndexType portNum, F64 mu, const Gnc::Matrix3& dcmPB) override;
     void initNavState_cmdHandler(FwOpcodeType opCode, U32 cmdSeq, F64 epoch, const Gnc::Quaternion& attitude,
                                  const Gnc::Vector3& position, const Gnc::Vector3& velocity) override;
 
@@ -25,8 +24,6 @@ class ImuDeadReckoner final : public ImuDeadReckonerComponentBase {
     //! Writes every telemetry channel from the held state.
     void writeTelemetry();
 
-    F64 m_mu = 0.0;
-    Eigen::Matrix3d m_dcm_BP = Eigen::Matrix3d::Identity();
     NavState m_navState = NavState::idle;
     F64 m_t = 0.0;
     //! Body to ECI, unit, W >= 0.

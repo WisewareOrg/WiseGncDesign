@@ -11,6 +11,7 @@ register_fprime_module(
     fsw_fprime_cdh
     fsw_fprime_rio
     Svc_CmdDispatcher
+    Svc_PrmDb
 )
 
 file(GLOB GNC_SUB_TOPOLOGIES CONFIGURE_DEPENDS "${FPRIME_PROJECT_ROOT}/fsw/fpp/gnc/*.fpp")
