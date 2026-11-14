@@ -8,4 +8,7 @@ module Bus {
     angVelPlatform: [3] F64 @< r/s, angular velocity in platform frame
   }
 
+  @ Carries one IMU message
+  port ImuSensorMsg(msg: ImuSensorMsg)
+
 }

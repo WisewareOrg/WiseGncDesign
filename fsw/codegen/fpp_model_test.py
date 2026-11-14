@@ -419,6 +419,19 @@ def test_a_component_s_general_output_ports_and_its_file_are_read(toy: Model):
     assert toy.components["Gnc.Nav"].file.is_absolute()
 
 
+def test_a_component_s_general_input_ports_are_read_in_fpp_s_order(toy: Model):
+    """Each input port that is not a special port, with its size and arguments.
+
+    Args:
+        toy: the toy model.
+    """
+    assert toy.components["Gnc.RateGroup"].inputs == (
+        Port("CycleIn", 1, (Argument("ctx", "U32"),)),
+    )
+    assert toy.components["Gnc.Nav"].inputs == (Port("schedIn", 1, (Argument("ctx", "U32"),)),)
+    assert toy.components["Top.Driver"].inputs == ()
+
+
 def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
     """A `serial` output port, which has no port type, is an output with no arguments.
 

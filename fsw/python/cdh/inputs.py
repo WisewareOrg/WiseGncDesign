@@ -1,23 +1,25 @@
-"""The Python build's CDH-in: each role's Basilisk message, converted to its GNC input's FPP type.
+"""The Python build's CDH-in: each sensor role's bus struct, converted to its GNC input's FPP type.
 
-A `Pair` names a vehicle role, the bus struct its message mirrors, the ICD struct the GNC takes and
-the GNC sub-topology's port it enters by. The message is converted to the bus struct and the bus
-struct to the ICD struct, each field by name with `fsw.codegen.fpp_types.converter`, so every array
-is a fresh copy: the host's payload is a view of its reader's buffer, valid only during its tick.
-A payload's fields are read through `Basilisk.architecture.messaging`'s class of its name, which
-declares them: SWIG can return the payload as another module's class of that name, such as
-`Basilisk.simulation.imuSensor`'s once that module is imported, which does not.
+The pairing is FPP's: `Cdh.BusConverter` has, per role, a `<role>In` typed by the role's bus struct
+and a `<role>Out` typed by the GNC's struct, and a configuration takes the role at its GNC
+sub-topology's port `<role>In`. A `Pair` names the four. The bus struct is converted to the ICD
+struct field by field with `fsw.codegen.fpp_types.converter`, every array a fresh copy.
 """
 
 import functools
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
-from Basilisk.architecture import messaging
+from fsw.codegen import fpp_types
+from fsw.codegen.fpp_model import Model, Port
 
-from fsw.codegen.fpp_types import converter
+__all__ = ["Pair", "convert", "pairings"]
 
-__all__ = ["Pair", "convert"]
+_CONVERTER = "Cdh.BusConverter"
+"""The component whose port pairs are the pairing."""
+
+_DRIVER = "Svc.RateGroupDriver"
+"""The component type of the port a sub-topology's base tick enters by."""
 
 
 class Pair(NamedTuple):
@@ -36,36 +38,99 @@ class Pair(NamedTuple):
     port: str
 
 
-@functools.cache
-def _conversion(payload: type, bus: type, icd: type) -> Callable[[Any], Any]:
-    """A payload type's conversion through a bus struct to an ICD struct, planned once.
+def _carried(port: Port) -> str:
+    """The struct a port carries: its one argument's type.
 
     Args:
-        payload: the Basilisk message payload's type.
+        port: the port.
+
+    Returns:
+        The struct's qualified name.
+    """
+    [argument] = port.args
+    return argument.type
+
+
+def _tuple(name: str) -> type:
+    """A struct's tuple, by its qualified name.
+
+    Args:
+        name: such as `Gnc.ImuReading`.
+
+    Returns:
+        The tuple.
+    """
+    return functools.reduce(getattr, name.split("."), fpp_types)
+
+
+def pairings(model: Model, configuration: str) -> list[Pair]:
+    """Every role the configuration takes, paired by `Cdh.BusConverter` to its GNC port.
+
+    A bus-typed `<role>In` of the converter needs a `<role>Out` that is not bus-typed; a role whose
+    port the sub-topology lacks is not taken. Every sub-topology port but its base tick's must be
+    a role's.
+
+    Args:
+        model: the model holding the converter and the sub-topology `<configuration>.Gnc`.
+        configuration: the configuration, such as `ImuDeadReckoning`.
+
+    Returns:
+        The pairs, in the converter's port order.
+
+    Raises:
+        ValueError: a role has no `<role>Out`, or a bus-typed one, naming the role; or a
+            sub-topology port is no role's, naming it.
+    """
+    topology = f"{configuration}.Gnc"
+    converter = model.components[_CONVERTER]
+    outputs = {port.name: port for port in converter.outputs}
+    pairs = []
+    for port in converter.inputs:
+        bus = _carried(port)
+        if not bus.startswith("Bus."):
+            continue
+        role = port.name.removesuffix("In")
+        output = outputs.get(f"{role}Out")
+        if output is None or _carried(output).startswith("Bus."):
+            raise ValueError(
+                f"{_CONVERTER}'s role {role} takes {bus} at {port.name} but has no {role}Out of a"
+                " GNC type"
+            )
+        if f"{topology}.{port.name}" in model.ports:
+            pairs.append(Pair(role, _tuple(bus), _tuple(_carried(output)), port.name))
+    paired = {pair.port for pair in pairs}
+    for name, port in model.ports.items():
+        if not name.startswith(f"{topology}."):
+            continue
+        if model.instances[port.instance].component == _DRIVER:
+            continue
+        if name.removeprefix(f"{topology}.") not in paired:
+            raise ValueError(f"{name} is fed by no role of {_CONVERTER}")
+    return pairs
+
+
+@functools.cache
+def _conversion(bus: type, icd: type) -> Any:
+    """A bus struct's conversion to an ICD struct, planned once.
+
+    Args:
         bus: the bus struct's tuple.
         icd: the ICD struct's tuple.
 
     Returns:
         The conversion.
     """
-    to_bus = converter(getattr(messaging, payload.__name__), bus)
-    to_icd = converter(bus, icd)
-    return lambda message: to_icd(to_bus(message))
+    return fpp_types.converter(bus, icd)
 
 
-def convert(pairs: Sequence[Pair], messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
-    """Each pair's message as its GNC port's value.
+def convert(pairs: Sequence[Pair], messages: Mapping[str, Any]) -> dict[str, Any]:
+    """Each pair's bus struct as its GNC port's value.
 
     Args:
         pairs: the pairs.
-        messages_by_role: each role's Basilisk message payload, as the host gives it; a role no
-            pair names is not read.
+        messages: each role's bus struct, as RIO-in reads it.
 
     Returns:
         Each value, an ICD struct's tuple, by its GNC port.
     """
-    converted = {}
-    for pair in pairs:
-        message = messages_by_role[pair.role]
-        converted[pair.port] = _conversion(type(message), pair.bus, pair.icd)(message)
-    return converted
+    return {pair.port: _conversion(pair.bus, pair.icd)(messages[pair.role]) for pair in pairs}

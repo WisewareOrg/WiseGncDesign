@@ -201,7 +201,7 @@ class Parameter(NamedTuple):
 
 
 class Port(NamedTuple):
-    """A general output port a component declares.
+    """A general port a component declares.
 
     Attributes:
         name: the port's name.
@@ -215,10 +215,10 @@ class Port(NamedTuple):
 
 
 class Component(NamedTuple):
-    """A component's commands, channels, parameters and general output ports, each in FPP's order.
+    """A component's commands, channels, parameters and general ports, each in FPP's order.
 
     F´'s implicit parameter set and save commands are not among the commands, and special ports,
-    such as `telemetry port`, are not among the outputs. Output ports imported from an interface
+    such as `telemetry port`, are not among the general ports. Ports imported from an interface
     follow the component's own, in the order `to-json` parsed them.
 
     Attributes:
@@ -227,6 +227,7 @@ class Component(NamedTuple):
         channels: its telemetry channels.
         parameters: its parameters.
         outputs: its general output ports.
+        inputs: its general input ports.
         file: the absolute path of the file that defines it.
     """
 
@@ -235,6 +236,7 @@ class Component(NamedTuple):
     channels: tuple[Channel, ...]
     parameters: tuple[Parameter, ...]
     outputs: tuple[Port, ...]
+    inputs: tuple[Port, ...]
     file: Path
 
 
@@ -479,7 +481,7 @@ def _component(
     nodes: dict[str, _Node],
     file: Path,
 ) -> Component:
-    """A component's declared commands, channels, parameters and general output ports.
+    """A component's declared commands, channels, parameters and general ports.
 
     Args:
         node: the component's definition.
@@ -540,23 +542,25 @@ def _component(
         default = _default(data["name"], parameter["default"])
         parameter_type = _type_name(parameter["paramType"], nodes)
         parameters.append((position, Parameter(data["name"], parameter_type, default)))
-    outputs = []
+    outputs, inputs = [], []
     for port in entry["portInterface"]["portMap"].values():
         general = port.get("General")
-        if general and general["kind"] == "Output":
+        if general:
             node_id = general["aNode"]["astNodeId"]
             position = (0, specs[str(node_id)][0]) if str(node_id) in specs else (1, node_id)
             args: tuple[Argument, ...] = ()
             if "DefPort" in general["ty"]:
                 port_type = nodes[str(general["ty"]["DefPort"]["symbol"]["Port"]["nodeId"])]
                 args = arguments(port_type.data["params"])
-            outputs.append((position, Port(general["specifier"]["name"], general["size"], args)))
+            kind = outputs if general["kind"] == "Output" else inputs
+            kind.append((position, Port(general["specifier"]["name"], general["size"], args)))
     return Component(
         node.name,
         tuple(c for _, c in sorted(commands)),
         tuple(c for _, c in sorted(channels)),
         tuple(p for _, p in sorted(parameters)),
         tuple(p for _, p in sorted(outputs)),
+        tuple(p for _, p in sorted(inputs)),
         file,
     )
 

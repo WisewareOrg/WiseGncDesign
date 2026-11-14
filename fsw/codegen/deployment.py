@@ -63,6 +63,7 @@ _FRAMEWORK = (
 
 _PROJECT = (
     "fsw/fpp/interfaces/Bus.fpp",
+    "fsw/fpp/interfaces/Cdh.fpp",
     "fsw/fpp/interfaces/Interfaces.fpp",
     "fsw/fprime/cdh/GroundLink.fpp",
     "fsw/fprime/platform/SimTime.fpp",

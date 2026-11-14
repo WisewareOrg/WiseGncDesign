@@ -146,10 +146,9 @@ Basilisk message. The reasoning is in
 the native `fpp` binary inside the `fprime_fpp` package, `fpp to-json`, into a temporary directory,
 and returns a `Model` of named tuples by qualified name: instances with their base IDs, each
 topology's connections with both port numbers resolved, the instance port each topology port
-exposes, numeric constants, struct, enum and array
-types, each component's commands, channels, parameters and general output ports with the file
-that defines it, and annotations. It needs no compiler,
-no Java and no F´ build, only the model's `.fpp` files, F´'s framework files among them from the
+exposes, numeric constants, struct, enum and array types, each component's commands, channels,
+parameters and general output and input ports with the file that defines it, and annotations. It
+needs no compiler, no Java and no F´ build, only the model's `.fpp` files, F´'s framework files among them from the
 clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned compiler internals,
 so a key the module reads that is missing raises `KeyError`. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
