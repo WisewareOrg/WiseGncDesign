@@ -8,10 +8,10 @@ import json
 import subprocess
 from pathlib import Path
 
-import fprime_fpp
 import pytest
 
 from fsw.codegen.fpp_model import (
+    _FPP,
     Argument,
     Array,
     Channel,
@@ -93,6 +93,7 @@ module Gnc {
     rate: F64
     accel: [3] F64
     count: U32
+    label: string size 8
   }
 
   enum Mode: U8 {
@@ -101,6 +102,8 @@ module Gnc {
   }
 
   array Vector3 = [3] F64
+
+  type Seconds = F64
 
   port Sched(ctx: U32)
 
@@ -122,14 +125,20 @@ module Gnc {
     param get port prmGetOut
     param set port prmSetOut
 
-    sync command setMode(mode: Mode, reading: Reading)
+    sync command setMode(mode: Mode, reading: Reading) opcode 0x20
+    sync command reset(after: Seconds) opcode 0x10
 
     telemetry rate: F64
     telemetry mode: Mode
+    telemetry armed: bool
+    telemetry elapsed: Seconds
 
     param gain: F64 default 2.0
     param startMode: Mode default Mode.running
     param mounting: Vector3
+    param count: U32 default 7
+    param armed: bool default true
+    param tag: string default "x"
   }
 
   passive component Ctrl {
@@ -333,11 +342,30 @@ def test_types_are_read_with_struct_members_in_declaration_order(toy: Model):
     """
     assert toy.types["Gnc.Reading"] == Struct(
         "Gnc.Reading",
-        (Member("rate", "F64", None), Member("accel", "F64", 3), Member("count", "U32", None)),
+        (
+            Member("rate", "F64", None),
+            Member("accel", "F64", 3),
+            Member("count", "U32", None),
+            Member("label", "string", None),
+        ),
     )
     assert toy.types["Gnc.Mode"] == Enum("Gnc.Mode", "U8", {"idle": 0, "running": 3})
     assert toy.types["Gnc.Vector3"] == Array("Gnc.Vector3", 3, "F64")
-    assert isinstance(toy.types["Fw.CmdResponse"], Enum)
+    assert toy.types["Fw.CmdResponse"] == Enum(
+        "Fw.CmdResponse",
+        "U8",
+        {
+            "OK": 0,
+            "INVALID_OPCODE": 1,
+            "VALIDATION_ERROR": 2,
+            "FORMAT_ERROR": 3,
+            "EXECUTION_ERROR": 4,
+            "BUSY": 5,
+            "CLEARED": 6,
+            "DISPATCHED_UNTRACKED": 7,
+        },
+    )
+    assert "Gnc.Seconds" not in toy.types
 
 
 def test_a_component_s_commands_channels_and_parameters_are_read(toy: Model):
@@ -351,13 +379,23 @@ def test_a_component_s_commands_channels_and_parameters_are_read(toy: Model):
     assert nav.name == "Gnc.Nav"
     assert nav.commands == (
         Command("setMode", (Argument("mode", "Gnc.Mode"), Argument("reading", "Gnc.Reading"))),
+        Command("reset", (Argument("after", "F64"),)),
     )
-    assert nav.channels == (Channel("rate", "F64"), Channel("mode", "Gnc.Mode"))
+    assert nav.channels == (
+        Channel("rate", "F64"),
+        Channel("mode", "Gnc.Mode"),
+        Channel("armed", "bool"),
+        Channel("elapsed", "F64"),
+    )
     assert nav.parameters == (
         Parameter("gain", "F64", 2.0),
         Parameter("startMode", "Gnc.Mode", "running"),
         Parameter("mounting", "Gnc.Vector3", None),
+        Parameter("count", "U32", 7),
+        Parameter("armed", "bool", True),
+        Parameter("tag", "string", "x"),
     )
+    assert [type(p.default) for p in nav.parameters] == [float, str, type(None), int, bool, str]
 
 
 def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):
@@ -388,7 +426,7 @@ def test_a_model_fpp_rejects_fails_with_its_stderr(tmp_path: Path):
     "key", ["componentInstanceMap", "componentMap", "topologyMap", "typeMap", "valueMap"]
 )
 def test_a_renamed_analysis_key_fails_the_read(tmp_path: Path, key: str):
-    """`parse` on output with a key it reads renamed raises, rather than reading a model short.
+    """`parse` on output with a top-level analysis key it reads renamed raises, naming the key.
 
     Args:
         tmp_path: where the toy's model and `to-json`'s output are written.
@@ -398,8 +436,7 @@ def test_a_renamed_analysis_key_fails_the_read(tmp_path: Path, key: str):
     model = tmp_path / "model"
     out.mkdir()
     model.mkdir()
-    fpp = Path(fprime_fpp.__file__).with_name("fpp")
-    command = [str(fpp), "to-json", "-d", str(out), *map(str, _toy_files(model))]
+    command = [str(_FPP), "to-json", "-d", str(out), *map(str, _toy_files(model))]
     subprocess.run(command, check=True, capture_output=True)
     analysis = out / "fpp-analysis.json"
     document = json.loads(analysis.read_text())

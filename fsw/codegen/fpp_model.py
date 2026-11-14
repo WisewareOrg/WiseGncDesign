@@ -423,7 +423,7 @@ def _component(
 
     commands = []
     for command in entry["commandMap"].values():
-        if "NonParam" in command:
+        if "Param" not in command:
             position, data = spec(command["NonParam"])
             args = []
             for _, arg, _ in data["params"]:
