@@ -1,6 +1,6 @@
-# C&DH
+# Flight software
 
-`fsw` holds the C&DH (command and data handling) partition. It hosts an algorithm from
+`fsw` is the flight software. It hosts an algorithm from
 `algorithms` in a simulator: `fsw.python` hosts its Python build, and `lab`
 its F´ build.
 
@@ -118,7 +118,7 @@ builds are held to one contract. The reasoning is in
 `lab.FprimeModule(imu, mu, dcm_PB)` runs the WiseFsw F´ deployment in the
 simulation's process. The deployment's content is the dead reckoner, whose F´ component sits
 beside its notebook, and the module's reset boots it idle with `mu` and the IMU's mounting.
-`just fsw` builds the deployment into this package as the extension `_wise_fsw`, with the JSON
+`just fsw` builds the deployment into `lab` as the extension `_wise_fsw`, with the JSON
 dictionary F´ generates for it alongside. `just pinned` and `just local` run it as part of their
 sync, and `just test`, `just fly` and `just lab` run it first; a host built without it says to run
 `just fsw`. The module takes `AlgorithmModule`'s `period_s`, so the two builds fly at one rate.
