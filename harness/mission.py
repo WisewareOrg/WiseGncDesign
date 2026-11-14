@@ -270,7 +270,9 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             period_s=ground_period_s,
         )
         try:
-            datasets = sim_scenario.run(fsw, {}, duration_s=sim_duration_s, ground=ground)
+            datasets = sim_scenario.run(
+                fsw, fsw_fields={}, duration_s=sim_duration_s, ground=ground
+            )
         except BaseException:
             failure = fsw.failure or ground.failure
             if failure is None:
