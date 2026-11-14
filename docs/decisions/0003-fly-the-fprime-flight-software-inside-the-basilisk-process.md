@@ -47,8 +47,8 @@ res/fresh100_gc.log: n=100 time mean 0.282 median 0.281 | rss start 261 end 334 
 first and third in 3, 7, 3, and on the shared extension; case 7 differs from case 3, so a leak would
 have shown as unequal datasets. A copy loaded under the spec name `_wise_fsw` returned the first
 copy's module, because pybind11 caches a module by spec name; a unique dotted name per copy fixed
-it. The driver did not reproduce the growth in issue 49 every case flown with a ground stays in
-memory, so that growth was neither counted nor excluded. Not covered: the copies ran setup at import,
+it. The driver did not reproduce the growth issue 49 reports (every case flown with a ground stays
+in memory), so that growth was neither counted nor excluded. Not covered: the copies ran setup at import,
 so a fresh copy, `boot(prm_path)` and PrmDb's load were never run together.
 
 **SimHub on F´ serial ports: PASS** (`9eccec3`, `spikes/fprime/`). Bytes Python's `struct.pack`

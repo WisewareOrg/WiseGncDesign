@@ -100,8 +100,8 @@ dictionary; the check used a scratch deployment's.
 - **Python reads FPP's model through the native `fpp to-json`,** called directly, since F´'s wrapper
   sends `to-json` to its Java JAR. One module parses the output and extracts only instances,
   connections and port numbers, constants, annotations, type definitions (structs, arrays, enums,
-  aliases), and each component's commands, telemetry channels and parameters. Nothing else reads
-  FPP's model. The design review's run on the baseline's topology found all of these in the output:
+  aliases), and each component's commands, telemetry channels and parameters. No other Python code
+  parses FPP's model. The design review's run on the baseline's topology found all of these in the output:
   `typeMap` holds its structs, arrays and enums, and `componentMap` carries each component's
   `commandMap`, `tlmChannelMap` and `paramMap`. A contract test on the real flight software's FPP
   fails loudly when an `fprime-fpp` bump changes the JSON's shape. It needs only the native `fpp`,
@@ -193,9 +193,9 @@ dictionary; the check used a scratch deployment's.
   build's, IDs aside, so a stale F´ build fails it.
 - `to-json`'s layout is unversioned compiler internals. One module reads it and a contract test
   holds it, so a bump that moves it fails on its Renovate PR and never mis-wires the Python build.
-- A parameter-file path beyond F´'s 240-character `FileNameStringSize` fails PrmDb's load (the open
-  is refused as outside the sandbox), and boot then fails the case. A sandbox directory of 239 or
-  more characters asserts.
+- A parameter-file path of 240 characters or more, F´'s `FileNameStringSize`, fails PrmDb's load
+  (the open is refused as outside the sandbox), and boot then fails the case. A sandbox directory of
+  239 or more characters asserts.
 - A new channel or command while prototyping is two edits: the `.fpp` line and the Python that writes
   or handles it.
 - Generating a Python build's dictionary takes 0.1–0.3 s, once per process for each model.
