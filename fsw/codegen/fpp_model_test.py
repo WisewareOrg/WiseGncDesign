@@ -395,6 +395,23 @@ def test_a_component_s_general_output_ports_and_its_file_are_read(toy: Model):
     assert toy.components["Gnc.Nav"].file.is_absolute()
 
 
+def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
+    """A `serial` output port, which has no port type, is an output with no arguments.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    gnc = GNC.replace(
+        "    command recv port cmdIn\n",
+        "    output port anyOut: serial\n    command recv port cmdIn\n",
+    )
+    assert gnc != GNC
+
+    nav = read(_toy_files(tmp_path, gnc)).components["Gnc.Nav"]
+
+    assert nav.outputs == (Port("anyOut", 1, ()),)
+
+
 def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):
     """A default the reader does not convert raises, naming the parameter.
 
