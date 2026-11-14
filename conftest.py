@@ -2,7 +2,9 @@
 
 A test module flying other values overrides `nav_parameters`. The `.dat` and the IDs need the F´
 build's dictionary, so a test asking for either skips without it. The copy and its station need the
-F´ build, and a test asking for either skips without it too.
+F´ build, and a test asking for either skips without it too. Every pytest run loads this file, the
+judge's included, so the FPP model, Basilisk and F´ are imported only by the fixtures that need
+them.
 """
 
 from __future__ import annotations
@@ -15,12 +17,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from fsw.codegen.fpp_types import Gnc
-from ground import parameters
-from ground.dictionary import Dictionary
-from lab import DICTIONARY
-
 if TYPE_CHECKING:
+    from fsw.codegen.fpp_types import Gnc
     from ground.fprime_station import FprimeStation
 
 
@@ -62,6 +60,8 @@ def nav_parameters() -> Gnc.ImuDeadReckonerParameters:
     Returns:
         The tuple.
     """
+    from fsw.codegen.fpp_types import Gnc
+
     return Gnc.ImuDeadReckonerParameters(mu=3.986004360e14, dcm_PB=np.eye(3))
 
 
@@ -76,6 +76,8 @@ def prm_record(nav_parameters: Gnc.ImuDeadReckonerParameters, tmp_path: Path) ->
     Returns:
         The record, `case/run_0000.prm.json`.
     """
+    from ground import parameters
+
     case = tmp_path / "case"
     case.mkdir()
     return parameters.write(nav_parameters, case / "run_0000.prm.json")
@@ -91,8 +93,9 @@ def prm(prm_record: Path) -> str:
     Returns:
         The `.dat`'s path, as `boot` takes it.
     """
-    _skip_without_the_build()
-    return str(parameters.dat(prm_record, DICTIONARY))
+    from ground import parameters
+
+    return str(parameters.dat(prm_record, _dictionary()))
 
 
 @pytest.fixture(scope="session")
@@ -102,11 +105,19 @@ def parameter_ids() -> list[int]:
     Returns:
         The IDs, sorted.
     """
-    _skip_without_the_build()
-    return sorted(Dictionary(DICTIONARY).parameters_by_id)
+    from ground.dictionary import Dictionary
+
+    return sorted(Dictionary(_dictionary()).parameters_by_id)
 
 
-def _skip_without_the_build() -> None:
-    """Skips the test asking when `just fsw` has not built the deployment's dictionary."""
+def _dictionary() -> Path:
+    """The deployment's dictionary, skipping the test asking when `just fsw` has not built it.
+
+    Returns:
+        Its path.
+    """
+    from lab import DICTIONARY
+
     if not DICTIONARY.exists():
         pytest.skip("the F´ build is absent; run `just fsw`")
+    return DICTIONARY
