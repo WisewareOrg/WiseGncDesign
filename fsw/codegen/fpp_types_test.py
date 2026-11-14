@@ -14,7 +14,7 @@ from Basilisk.architecture import messaging
 from fsw.codegen.deployment import CLONE
 from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_model_test import _TOY_FRAMEWORK
-from fsw.codegen.fpp_types import Bus, Gnc, Svc, _build, converter
+from fsw.codegen.fpp_types import Bus, Gnc, Svc, _build, converter, parameters_from
 
 TOY = """\
 module Toy {
@@ -190,10 +190,13 @@ def test_unwritten_telemetry_is_none_and_written_telemetry_is_not():
     assert Gnc.ImuDeadReckonerTelemetry() == (None, None, None, None)
 
 
-def test_the_dead_reckoner_has_no_outputs_and_no_parameters():
-    """The dead reckoner's FPP declares neither, so both tuples are empty."""
+def test_the_dead_reckoner_has_no_outputs_and_two_required_parameters():
+    """Its FPP declares no output port, and `mu` and `dcm_PB` with no default."""
     assert Gnc.ImuDeadReckonerOutputs() == ()
-    assert Gnc.ImuDeadReckonerParameters() == ()
+    assert Gnc.ImuDeadReckonerParameters._fields == ("mu", "dcm_PB")
+    assert Gnc.ImuDeadReckonerParameters.component == "Gnc.ImuDeadReckoner"
+    with pytest.raises(TypeError, match="dcm_PB"):
+        Gnc.ImuDeadReckonerParameters(mu=1.0)
 
 
 def test_only_an_algorithm_s_component_gets_tuples():
@@ -250,6 +253,38 @@ def test_a_parameter_has_a_default_only_when_fpp_gives_one(toy: SimpleNamespace)
     assert built.startMode == "running"
     with pytest.raises(TypeError, match="count"):
         parameters(mounting=np.zeros(3))
+
+
+def test_parameters_from_plain_values_makes_each_array_of_its_fpp_shape_and_type(
+    toy: SimpleNamespace,
+):
+    """JSON-shaped values become the tuple: lists to fresh arrays, scalars as given, defaults kept.
+
+    Args:
+        toy: the toy's namespace.
+    """
+    built = parameters_from(toy.SpinnerParameters, {"mounting": [1, 2, 3], "count": 4})
+
+    assert type(built) is toy.SpinnerParameters
+    assert built.mounting.dtype == np.float64
+    np.testing.assert_array_equal(built.mounting, [1.0, 2.0, 3.0])
+    assert built.count == 4
+    assert built.gain == 2.0
+    nav = parameters_from(Gnc.ImuDeadReckonerParameters, {"mu": 1.0, "dcm_PB": np.eye(3).tolist()})
+    assert nav.dcm_PB.shape == (3, 3)
+    assert nav.dcm_PB.dtype == np.float64
+
+
+def test_parameters_from_refuses_an_array_of_another_shape_naming_it(toy: SimpleNamespace):
+    """A value whose shape is not the field's FPP shape fails, naming the field.
+
+    Args:
+        toy: the toy's namespace.
+    """
+    with pytest.raises(
+        ValueError, match=r"Toy\.Spinner\.mounting is \(3,\), but its value is \(2,\)"
+    ):
+        parameters_from(toy.SpinnerParameters, {"mounting": [1.0, 2.0], "count": 4})
 
 
 def test_outputs_are_one_field_per_output_port_defaulting_to_none(toy: SimpleNamespace):

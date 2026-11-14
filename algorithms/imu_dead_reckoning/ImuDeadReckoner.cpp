@@ -45,22 +45,6 @@ F64 ImuDeadReckoner::now() {
     return static_cast<F64>(time.getSeconds()) + static_cast<F64>(time.getUSeconds()) * 1e-6;
 }
 
-void ImuDeadReckoner::configureIn_handler(FwIndexType portNum, F64 mu, const Gnc::Matrix3& dcmPB) {
-    Eigen::Matrix3d dcm_PB;
-    for (FwIndexType row = 0; row < 3; row++) {
-        dcm_PB.row(row) = vector(dcmPB[row]).transpose();
-    }
-    this->m_mu = mu;
-    this->m_dcm_BP = dcm_PB.transpose();
-    this->m_navState = NavState::idle;
-    this->m_t = this->now();
-    this->m_q.setIdentity();
-    this->m_r.setZero();
-    this->m_v.setZero();
-    this->m_omega_P.setZero();
-    this->m_accel_P.setZero();
-}
-
 void ImuDeadReckoner::initNavState_cmdHandler(FwOpcodeType opCode, U32 cmdSeq, F64 epoch,
                                               const Gnc::Quaternion& attitude, const Gnc::Vector3& position,
                                               const Gnc::Vector3& velocity) {
@@ -85,19 +69,30 @@ void ImuDeadReckoner::schedIn_handler(FwIndexType portNum, U32 context) {
         this->writeTelemetry();
         return;
     }
+    Fw::ParamValid valid;
+    const F64 mu = this->paramGet_mu(valid);
+    FW_ASSERT(valid == Fw::ParamValid::VALID, valid.e);
+    const Gnc::Matrix3 dcmPB = this->paramGet_dcm_PB(valid);
+    FW_ASSERT(valid == Fw::ParamValid::VALID, valid.e);
+    Eigen::Matrix3d dcm_PB;
+    for (FwIndexType row = 0; row < 3; row++) {
+        dcm_PB.row(row) = vector(dcmPB[row]).transpose();
+    }
+    const Eigen::Matrix3d dcm_BP = dcm_PB.transpose();
+
     const F64 dt = t - this->m_t;
-    const Vector3d omega = this->m_dcm_BP * this->m_omega_P;
-    const Vector3d accel = this->m_dcm_BP * this->m_accel_P;
+    const Vector3d omega = dcm_BP * this->m_omega_P;
+    const Vector3d accel = dcm_BP * this->m_accel_P;
     const Vector4d q = wxyz(this->m_q);
     const Vector3d& r = this->m_r;
     const Vector3d& v = this->m_v;
 
-    const Derivative k1 = derivative(q, r, v, omega, accel, this->m_mu);
+    const Derivative k1 = derivative(q, r, v, omega, accel, mu);
     const Derivative k2 =
-        derivative(q + 0.5 * dt * k1.q, r + 0.5 * dt * k1.r, v + 0.5 * dt * k1.v, omega, accel, this->m_mu);
+        derivative(q + 0.5 * dt * k1.q, r + 0.5 * dt * k1.r, v + 0.5 * dt * k1.v, omega, accel, mu);
     const Derivative k3 =
-        derivative(q + 0.5 * dt * k2.q, r + 0.5 * dt * k2.r, v + 0.5 * dt * k2.v, omega, accel, this->m_mu);
-    const Derivative k4 = derivative(q + dt * k3.q, r + dt * k3.r, v + dt * k3.v, omega, accel, this->m_mu);
+        derivative(q + 0.5 * dt * k2.q, r + 0.5 * dt * k2.r, v + 0.5 * dt * k2.v, omega, accel, mu);
+    const Derivative k4 = derivative(q + dt * k3.q, r + dt * k3.r, v + dt * k3.v, omega, accel, mu);
 
     Vector4d qNew = q + (dt / 6.0) * (k1.q + 2.0 * k2.q + 2.0 * k3.q + k4.q);
     qNew /= qNew.norm();

@@ -8,12 +8,15 @@ it.
 import importlib.util
 import json
 import struct
+from pathlib import Path
 from types import ModuleType
 
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
+from fsw.codegen.fpp_types import Gnc
+from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import DICTIONARY, FprimeModule
@@ -83,6 +86,9 @@ STATE = {
 WISE_FSW = Dictionary(DICTIONARY) if DICTIONARY.exists() else None
 """The deployment's dictionary, which the build generated, or `None` without the build."""
 
+NAV = Gnc.ImuDeadReckonerParameters(mu=MU, dcm_PB=np.eye(3))
+"""Nav's parameters: Earth's mu, the IMU mounted at identity."""
+
 
 @pytest.fixture(scope="module")
 def toy_dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
@@ -125,16 +131,18 @@ def wise_fsw() -> ModuleType:
 
 
 @pytest.fixture
-def station(wise_fsw: ModuleType) -> FprimeStation:
+def station(wise_fsw: ModuleType, tmp_path: Path) -> FprimeStation:
     """A station on the deployment, booted idle and mounted at identity.
 
     Args:
         wise_fsw: the test's copy of the deployment.
+        tmp_path: the case's directory, where its parameter file is made.
 
     Returns:
         The station.
     """
-    wise_fsw.boot(mu=MU, dcm_PB=np.eye(3))
+    record = parameters.write(NAV, tmp_path / "run_0000.prm.json")
+    wise_fsw.boot(str(parameters.dat(record, DICTIONARY)), sorted(WISE_FSW.parameters_by_id))
     return FprimeStation(wise_fsw, WISE_FSW)
 
 
@@ -317,9 +325,14 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
 
 
 @pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")
-def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host():
-    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, no reason."""
-    module = FprimeModule(messaging.IMUSensorMsgReader(), mu=MU, dcm_PB=np.eye(3))
+def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host(tmp_path: Path):
+    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, no reason.
+
+    Args:
+        tmp_path: the case's directory, where its parameter record is written.
+    """
+    record = parameters.write(NAV, tmp_path / "run_0000.prm.json")
+    module = FprimeModule(messaging.IMUSensorMsgReader(), record)
     imu = messaging.IMUSensorMsg()
     imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)

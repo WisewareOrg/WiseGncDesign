@@ -20,7 +20,8 @@ class AlgorithmModule(sysModel.SysModel):
 
     Each keyword of the algorithm's `step` other than `t` is a message field, read from the one
     input reader whose message has a field of that name. Every command the dictionary gives
-    `instance` is a method of the algorithm, named and parametered as in FPP.
+    `instance` is a method of the algorithm, named and parametered as in FPP, but for the set and
+    save commands F´ generates for each parameter, which are not the algorithm's.
 
     The ground reaches the algorithm through the radio edge by name: `uplink` queues a command with
     its arguments, which the ground has typed as the F´ handler gets them, and the next tick runs
@@ -71,7 +72,12 @@ class AlgorithmModule(sysModel.SysModel):
         self._reads = tuple((self._role(keyword), keyword) for keyword in keywords)
         self._readers = tuple(self._inputs.items())
         entries = dictionary.entries(instance)
-        for name, params in entries["commands"].items():
+        commands = {
+            name: params
+            for name, params in entries["commands"].items()
+            if dictionary.command(f"{instance}.{name}").kind not in ("set", "save")
+        }
+        for name, params in commands.items():
             handler = getattr(algorithm, name, None)
             found = list(inspect.signature(handler).parameters) if callable(handler) else None
             wanted = [param for param, _ in params]
@@ -80,7 +86,7 @@ class AlgorithmModule(sysModel.SysModel):
                     f"{instance}.{name} takes {wanted}; the algorithm has "
                     f"{'no such method' if found is None else found}"
                 )
-        self._commands = frozenset(f"{instance}.{name}" for name in entries["commands"])
+        self._commands = frozenset(f"{instance}.{name}" for name in commands)
         self._channels = {name: f"{instance}.{name}" for name in entries["channels"]}
         self.failure = None
         self._inputs_written = False

@@ -19,32 +19,12 @@ from typing import Any
 
 import numpy as np
 
-from fsw.codegen.deployment import CLONE
+from fsw.codegen.deployment import CLONE, framework_files
 
-__all__ = ["Channel", "Command", "Dictionary", "Type"]
+__all__ = ["Channel", "Command", "Dictionary", "Parameter", "Type"]
 
 _REPOSITORY = Path(__file__).resolve().parents[1]
 _INTERFACES = _REPOSITORY / "fsw" / "fpp" / "interfaces"
-_FRAMEWORK = (
-    "Fw/Buffer/Buffer.fpp",
-    "Fw/Cmd/Cmd.fpp",
-    "Fw/Dp/Dp.fpp",
-    "Fw/Log/Log.fpp",
-    "Fw/Time/Time.fpp",
-    "Fw/Tlm/Tlm.fpp",
-    "Fw/Types/Types.fpp",
-    "Svc/Ccsds/Types/Types.fpp",
-    "Svc/DpCompressProc/Types/CompressionTypes.fpp",
-    "Svc/Sched/Sched.fpp",
-    "cmake/platform/unix/Platform/PlatformTypes.fpp",
-    "default/config/ComCfg.fpp",
-    "default/config/DpCfg.fpp",
-    "default/config/FpConfig.fpp",
-    "default/config/FpConstants.fpp",
-    "default/config/FpySequencerCfg.fpp",
-    "default/config/WasmSequencerCfg.fpp",
-)
-"""The F´ framework files, in the clone, that a component's model imports."""
 
 _PRIMITIVES = {
     "F32": ">f4",
@@ -138,12 +118,30 @@ class Command:
         opcode: the command's opcode.
         params: the parameter names, in order.
         types: each parameter's type, in order, or `None` when one is of a type not coded.
+        kind: the dictionary's `commandKind`, such as `sync`, or `set` and `save` for the commands
+            F´ generates for a parameter.
     """
 
     name: str
     opcode: int
     params: tuple[str, ...]
     types: tuple[Type, ...] | None
+    kind: str
+
+
+@dataclass(frozen=True)
+class Parameter:
+    """One parameter of an instance.
+
+    Attributes:
+        id: the parameter's ID.
+        name: `<instance>.<parameter>`.
+        type: the parameter's type.
+    """
+
+    id: int
+    name: str
+    type: Type
 
 
 @dataclass(frozen=True)
@@ -213,11 +211,13 @@ class Dictionary:
         metadata: the dictionary's `metadata` object.
         responses: `Fw.CmdResponse`'s constants by name.
         channels_by_id: every channel by its ID.
+        parameters_by_id: every parameter by its ID.
     """
 
     metadata: Mapping[str, Any]
     responses: Mapping[str, int]
     channels_by_id: Mapping[int, Channel]
+    parameters_by_id: Mapping[int, Parameter]
 
     def __init__(self, path: Path) -> None:
         """Parses the dictionary.
@@ -230,8 +230,8 @@ class Dictionary:
             path: the JSON file F´ generated.
 
         Raises:
-            ValueError: naming a channel whose type is not a primitive, an enum, or an array of
-                primitives or of such arrays.
+            ValueError: naming a channel or a parameter whose type is not a primitive, an enum, or
+                an array of primitives or of such arrays.
         """
         document = json.loads(Path(path).read_text())
         self.metadata = document["metadata"]
@@ -248,7 +248,9 @@ class Dictionary:
                 types = tuple(self.type(p["type"]["name"]) for p in entry["formalParams"])
             except ValueError:
                 types = None
-            self._commands[name] = Command(name, entry["opcode"], params, types)
+            self._commands[name] = Command(
+                name, entry["opcode"], params, types, entry["commandKind"]
+            )
         self._channels: dict[str, Channel] = {}
         for entry in document["telemetryChannels"]:
             name = entry["name"].split(".", 1)[1]
@@ -259,6 +261,14 @@ class Dictionary:
                 raise ValueError(f"channel {name} has {error}") from error
             self._channels[name] = Channel(entry["id"], name, units[1] if units else "", ftype)
         self.channels_by_id = {c.id: c for c in self._channels.values()}
+        self.parameters_by_id: dict[int, Parameter] = {}
+        for entry in document["parameters"]:
+            name = entry["name"].split(".", 1)[1]
+            try:
+                ftype = self.type(entry["type"]["name"])
+            except ValueError as error:
+                raise ValueError(f"parameter {name} has {error}") from error
+            self.parameters_by_id[entry["id"]] = Parameter(entry["id"], name, ftype)
 
     @classmethod
     def from_component(
@@ -295,7 +305,7 @@ class Dictionary:
         )
         sources = [Path(p).resolve() for p in model]
         files = [_INTERFACES / "Interfaces.fpp", *sources]
-        imports = [CLONE / path for path in _FRAMEWORK]
+        imports = list(framework_files())
         hashed = [*sources, *sorted(_INTERFACES.rglob("*.fpp*")), *imports]
         hashed += sorted({f for p in sources for f in p.parent.glob("*.fppi")})
         tag = _tag()

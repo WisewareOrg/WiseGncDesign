@@ -18,12 +18,6 @@ module Gnc {
   @ Carries one IMU reading
   port ImuReading(reading: ImuReading)
 
-  @ The navigation filter's configuration
-  port NavConfig(
-    mu: F64 @< m^3/s^2, the central body's gravitational parameter
-    dcmPB: Matrix3 @< the IMU's mounting [PB], v_P = [PB] v_B
-  )
-
   @ A command's response: F´'s own enumeration, put in every dictionary
   dictionary type CommandResponse = Fw.CmdResponse
 

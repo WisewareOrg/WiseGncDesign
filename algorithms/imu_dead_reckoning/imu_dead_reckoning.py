@@ -27,7 +27,9 @@ from wise_dynamics.basilisk import Scenario
 import algorithms.imu_dead_reckoning as package
 from algorithms.imu_dead_reckoning.gross_check import gross_check
 from algorithms.quaternion import dcm_NB, multiply
+from fsw.codegen.fpp_types import Gnc
 from fsw.python import AlgorithmModule
+from fsw.python.cdh.parameters import read
 from ground.dictionary import Dictionary
 from harness.mission import Mission, mission_tests, provides
 
@@ -259,15 +261,15 @@ def _step(
 class ImuDeadReckoner:
     """Propagates attitude, inertial position and inertial velocity from raw IMU readings."""
 
-    def __init__(self, mu: float, dcm_PB: np.ndarray) -> None:
-        """Boots idle, with no state, holding `mu` and the mounting.
+    def __init__(self, parameters: Gnc.ImuDeadReckonerParameters) -> None:
+        """Boots idle, with no state, holding its parameters.
 
         Args:
-            mu: m^3/s^2, gravitational parameter of the central body.
-            dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B.
+            parameters: `mu` (m^3/s^2, gravitational parameter of the central body) and
+                `dcm_PB` ((3, 3) the IMU's mounting [PB], v_P = [PB] v_B).
         """
-        self._mu = float(mu)
-        self._dcm_BP = np.ascontiguousarray(np.asarray(dcm_PB, dtype=float).T)
+        self._mu = float(parameters.mu)
+        self._dcm_BP = np.ascontiguousarray(np.asarray(parameters.dcm_PB, dtype=float).T)
         self.navState = "idle"
 
     def initNavState(
@@ -333,27 +335,42 @@ class ImuDeadReckoner:
 # %% [markdown]
 # ## The flight software
 #
-# `dead_reckoner` boots the estimator idle and hosts it on the scenario's vehicle as `nav`, with
-# `fsw.python`, held to the dictionary generated from `ImuDeadReckoner.fpp`; the dynamics and
-# the IMU step at its period. The scenario's ground procedure gives it its state by command.
+# `parameters` gives nav's parameters for a case: `mu` from the scenario and the IMU's mounting from
+# its vehicle. The ground writes them as the case's record, and `dead_reckoner` boots the estimator
+# idle on the values the Python build's CDH reads back from it, hosted on the scenario's vehicle as
+# `nav` with `fsw.python`, held to the dictionary generated from `ImuDeadReckoner.fpp`; the dynamics
+# and the IMU step at its period. The scenario's ground procedure gives it its state by command.
 
 
 # %%
-@provides("SYS001")
-def dead_reckoner(scenario: Scenario) -> AlgorithmModule:
-    """The dead reckoner, booted idle and hosted on a scenario's vehicle as `nav`.
-
-    It takes `mu` from the scenario and the IMU's mounting from the vehicle it flies on.
+def parameters(scenario: Scenario) -> Gnc.ImuDeadReckonerParameters:
+    """Nav's parameters for one case: `mu` from the scenario, the mounting from its vehicle.
 
     Args:
-        scenario: the scenario whose vehicle and `mu` the dead reckoner takes.
+        scenario: the case's dispersed scenario.
+
+    Returns:
+        The parameters, which the ground writes as the case's record.
+    """
+    return Gnc.ImuDeadReckonerParameters(
+        mu=scenario.mu_m3_s2["earth"], dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB)
+    )
+
+
+@provides("SYS001")
+def dead_reckoner(scenario: Scenario, prm_path: Path) -> AlgorithmModule:
+    """The dead reckoner, booted idle and hosted on a scenario's vehicle as `nav`.
+
+    Its parameters are the case's record, read by the Python build's CDH.
+
+    Args:
+        scenario: the scenario whose vehicle the dead reckoner flies on.
+        prm_path: the case's parameter record.
 
     Returns:
         The `AlgorithmModule` hosting it.
     """
-    algorithm = ImuDeadReckoner(
-        mu=scenario.mu_m3_s2["earth"], dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB)
-    )
+    algorithm = ImuDeadReckoner(read(prm_path, Gnc.ImuDeadReckonerParameters))
     dictionary = Dictionary.from_component(
         [Path(package.__file__).with_name("ImuDeadReckoner.fpp")],
         "Gnc.ImuDeadReckoner",
@@ -378,6 +395,7 @@ def dead_reckoner(scenario: Scenario) -> AlgorithmModule:
 MISSION = Mission(
     vehicle="imu_spacecraft",
     fsw=dead_reckoner,
+    parameters=parameters,
     rungs=("SRS001", "SRS002", "SRS003", "SRS004", "SRS005"),
     scenarios=("TST001", "TST002"),
     check=gross_check,

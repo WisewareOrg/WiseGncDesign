@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
-from fsw.codegen.deployment import algorithm_files, contract_files, fpp_files
+import pytest
+
+from fsw.codegen.deployment import algorithm_files, contract_files, fpp_files, gnc_instance
+from fsw.codegen.fpp_model import Instance
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
 
@@ -30,3 +33,12 @@ def test_the_contract_holds_the_bus_structs_and_every_algorithm_s_files():
     reckoner = _REPOSITORY / "algorithms" / "imu_dead_reckoning" / "ImuDeadReckoner.fpp"
     assert reckoner in algorithm_files()
     assert set(algorithm_files()) <= set(files)
+
+
+def test_a_component_s_gnc_instance_is_its_one_instance_in_the_gnc_sub_topologies():
+    """Nav is found qualified by its sub-topology; a deployment's own instance is in none."""
+    assert gnc_instance("Gnc.ImuDeadReckoner") == Instance(
+        "ImuDeadReckoning.nav", "Gnc.ImuDeadReckoner", 0x1000
+    )
+    with pytest.raises(ValueError, match=r"Svc\.PrmDb is instanced 0 times in fsw/fpp/gnc"):
+        gnc_instance("Svc.PrmDb")

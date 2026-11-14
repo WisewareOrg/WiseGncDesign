@@ -202,6 +202,7 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(t
         "WiseFsw.groundLink": Instance("WiseFsw.groundLink", "Sim.GroundLink", 0x200),
         "WiseFsw.simBridge": Instance("WiseFsw.simBridge", "Sim.SimBridge", 0x300),
         "WiseFsw.cmdDisp": Instance("WiseFsw.cmdDisp", "Svc.CommandDispatcher", 0x500),
+        "WiseFsw.prmDb": Instance("WiseFsw.prmDb", "Svc.PrmDb", 0x600),
         "ImuDeadReckoning.rateGroupDriver": Instance(
             "ImuDeadReckoning.rateGroupDriver", "Svc.RateGroupDriver", 0x400
         ),
@@ -215,6 +216,8 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(t
     assert model.topologies["WiseFsw.ImuDeadReckoningFsw"] == (
         Connection(dead_reckoner, "cmdRegOut", 0, "WiseFsw.cmdDisp", "compCmdReg", 0),
         Connection(dead_reckoner, "cmdResponseOut", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
+        Connection(dead_reckoner, "prmGetOut", 0, "WiseFsw.prmDb", "getPrm", 0),
+        Connection(dead_reckoner, "prmSetOut", 0, "WiseFsw.prmDb", "setPrm", 0),
         Connection(dead_reckoner, "timeCaller", 0, "WiseFsw.simTime", "timeGetPort", 0),
         Connection(dead_reckoner, "tlmOut", 0, "WiseFsw.groundLink", "tlmIn", 0),
         Connection(rate_group, "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 1),
@@ -230,10 +233,13 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(t
         Connection("WiseFsw.cmdDisp", "compCmdSend", 0, dead_reckoner, "cmdIn", 0),
         Connection("WiseFsw.cmdDisp", "compCmdSend", 1, rate_group, "CmdDisp", 0),
         Connection("WiseFsw.cmdDisp", "compCmdSend", 2, "WiseFsw.cmdDisp", "CmdDisp", 0),
+        Connection("WiseFsw.cmdDisp", "compCmdSend", 3, "WiseFsw.prmDb", "CmdDisp", 0),
         Connection("WiseFsw.cmdDisp", "seqCmdStatus", 0, "WiseFsw.groundLink", "cmdResponseIn", 0),
         Connection("WiseFsw.groundLink", "cmdOut", 0, "WiseFsw.cmdDisp", "seqCmdBuff", 0),
+        Connection("WiseFsw.prmDb", "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 3),
+        Connection("WiseFsw.prmDb", "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
+        Connection("WiseFsw.prmDb", "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
         Connection("WiseFsw.simBridge", "imuOut", 0, dead_reckoner, "imuIn", 0),
-        Connection("WiseFsw.simBridge", "navConfigOut", 0, dead_reckoner, "configureIn", 0),
         Connection("WiseFsw.simTime", "CycleOut", 0, driver, "CycleIn", 0),
     )
     assert model.constants["ImuDeadReckoning.navDivider"] == 1
