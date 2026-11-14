@@ -6,11 +6,11 @@ __pycache__/
 *.ipynb
 # F´ build products: the build cache, and the extension and dictionary `just fsw` places beside its host
 build-fprime-*/
-/cdh/gnc_cdh/fprime/_wise_fsw*.so
-/cdh/gnc_cdh/fprime/WiseFswTopologyDictionary.json
+/lab/_wise_fsw*.so
+/lab/WiseFswTopologyDictionary.json
 # Fetched sources: the F´ clone and Eigen's checkout
-/cdh/fprime/lib/fprime/
-/cdh/fprime/lib/fetchcontent/
+/fsw/fprime/lib/fprime/
+/fsw/fprime/lib/fetchcontent/
 # Generated output outside the build cache
 build-artifacts/
 *Ac.cpp

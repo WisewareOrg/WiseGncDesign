@@ -1,0 +1,27 @@
+register_fprime_module(
+  AUTOCODER_INPUTS
+    "${CMAKE_CURRENT_LIST_DIR}/SimTime.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/SimTime.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/Cooperative.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/SimTime.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/Cooperative.hpp"
+  DEPENDS
+    fsw_fpp_interfaces
+    Os
+)
+
+# The deployment's Os::Task: no thread; Sim::Cooperative runs its routine on the caller's.
+register_fprime_implementation(
+    Os_Task_Sim
+  IMPLEMENTS
+    Os_Task
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/SimTask.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/SimTask.hpp"
+  DEPENDS
+    Fw_Types
+    Os_Task
+)

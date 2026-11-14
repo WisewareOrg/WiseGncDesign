@@ -5,23 +5,23 @@ fprime_tag := "v4.4.2"
 _sync:
     #!/usr/bin/env bash
     set -euo pipefail
-    clone=cdh/fprime/lib/fprime
+    clone=fsw/fprime/lib/fprime
     if [ "$(git -C "$clone" describe --tags --exact-match 2>/dev/null || true)" != "{{fprime_tag}}" ]; then
         rm -rf "$clone"
         git clone --quiet --depth 1 --branch "{{fprime_tag}}" https://github.com/nasa/fprime "$clone"
     fi
     uv sync --locked --group sim --group notebooks --group fprime
     uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
-    rm -f cdh/fprime/build-fprime-automatic-native/CMakeCache.txt
+    rm -f fsw/fprime/build-fprime-automatic-native/CMakeCache.txt
     just fsw
 
-# Build the F´ deployment into gnc_cdh.fprime: its Python extension and its dictionary.
+# Build the F´ deployment into lab: its Python extension and its dictionary.
 fsw:
     #!/usr/bin/env bash
     set -euo pipefail
-    build=cdh/fprime/build-fprime-automatic-native
+    build=fsw/fprime/build-fprime-automatic-native
     if [ ! -f "$build/CMakeCache.txt" ]; then
-        (cd cdh/fprime && uv run --no-sync fprime-util generate --force -DCMAKE_BUILD_TYPE=Release -DPython_EXECUTABLE="$(uv run --no-sync python -c 'import sys; print(sys.executable)')")
+        (cd fsw/fprime && uv run --no-sync fprime-util generate --force -DCMAKE_BUILD_TYPE=Release -DPython_EXECUTABLE="$(uv run --no-sync python -c 'import sys; print(sys.executable)')")
     fi
     # F´ reruns its version command only when its outputs are missing, so remove them to restamp.
     rm -f "$build"/versions/version.{hpp,cpp,json}
@@ -31,12 +31,12 @@ fsw:
 local: _sync
     uv pip install -e "${WISE_DYNAMICS_PATH:-../WiseDynamics}[notebook]"
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
-    uv run --no-sync jupytext --sync $(grep -l '^#   jupytext:' algorithms/gnc_algorithms/*/*.py missions/*.py)
+    uv run --no-sync jupytext --sync $(grep -l '^#   jupytext:' algorithms/*/*.py missions/*.py)
 
 # Install the WiseDynamics commit in uv.lock and print the one in use.
 pinned: _sync
     uv run --no-sync python -c "import wise_dynamics; print(wise_dynamics.__file__)"
-    uv run --no-sync jupytext --sync $(grep -l '^#   jupytext:' algorithms/gnc_algorithms/*/*.py missions/*.py)
+    uv run --no-sync jupytext --sync $(grep -l '^#   jupytext:' algorithms/*/*.py missions/*.py)
 
 # Open JupyterLab in this environment.
 lab: fsw

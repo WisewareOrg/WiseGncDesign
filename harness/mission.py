@@ -23,8 +23,8 @@ from typing import Any
 import pytest
 from wise_dynamics.basilisk.vehicles import VEHICLES
 
+from ground.procedures import Ground
 from harness import requirements_tree
-from harness.ground import Ground
 
 
 def provides(*capability_ids: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:

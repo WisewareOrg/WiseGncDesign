@@ -773,8 +773,8 @@ def test_an_exception_in_the_flight_software_fails_the_case_as_itself(
         test_flights="""
 from pathlib import Path
 
-from gnc_cdh.basilisk import AlgorithmModule
-from gnc_cdh.dictionary import Dictionary
+from fsw.python import AlgorithmModule
+from ground.dictionary import Dictionary
 from harness.mission import Mission, mission_tests, provides
 
 

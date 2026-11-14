@@ -12,15 +12,18 @@ The repository's parts are laid out under Development.
 ### Layout
 
 ```text
-harness/       mission.py, ground.py, requirements_tree.py, judging.py (a pytest plugin),
+harness/       mission.py, requirements_tree.py, judging.py (a pytest plugin),
                notebook.py, runs.py
 analysis/      one analyzer per metric: its limits, error math and plot
 scenarios/     how each scenario a TST item references is flown: its ground procedure and marks
-algorithms/gnc_algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
+algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
                                     re-exporting the notebook
-algorithms/gnc_algorithms/quaternion.py   the quaternion math numba-compiled algorithms share
+algorithms/quaternion.py   the quaternion math numba-compiled algorithms share
 missions/      notebooks that plan missions, and the test running them
-cdh/           gnc_cdh, the Python and F´ hosts and a worked example; fprime/, the F´ project
+fsw/           the flight software: python/, its Python host; fprime/, the F´ project; fpp/interfaces/,
+               the shared FPP contract; and a worked example
+ground/        the ground: dictionary, radio edge and procedures
+lab/           the F´ host that runs the F´ build in the simulation, and its pybind11 module
 docs/          requirements/ (Doorstop tree), decisions/ (ADRs)
 ```
 
@@ -32,7 +35,7 @@ Tests sit beside the code they test. The suite needs the simulator installed, fr
 
 `just pinned` and `just local` also build the F´ deployment. Besides `uv.lock`, the build needs the
 system C++ compiler and git. The F´ framework and Eigen are fetched by tag into gitignored folders
-under `cdh/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
+under `fsw/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
 GitLab only the first time, or when a tag changes. Each sync rebuilds the F´ build cache from
 scratch, which needs no network.
 
@@ -41,7 +44,7 @@ picked up. That rebuild reuses the existing cache, so after switching branches r
 `just local` to rebuild it from scratch. A process cannot reload the extension, so a notebook
 kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. A Python build needs
 no F´ build, and the F´ build's tests skip when it is absent; where a Python build's dictionary
-comes from is in [`cdh/README.md`](cdh/README.md#the-dictionary). Why the F´ build flies inside
+comes from is in [`fsw/README.md`](fsw/README.md#the-dictionary). Why the F´ build flies inside
 the simulation, and how, is in
 [ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md);
 how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
@@ -62,7 +65,7 @@ Carlo tests: a class per vehicle holding a test per FSW and scenario. The reason
 
 ### Notebooks
 
-An algorithm notebook, `algorithms/gnc_algorithms/<name>/<name>.py`, holds the algorithm's
+An algorithm notebook, `algorithms/<name>/<name>.py`, holds the algorithm's
 derivation and implementation, then its mission, then cells that run in the notebook only and judge
 and plot. An algorithm with an F´ build also has `parity.py` beside it, which flies both builds and
 holds them to parity case by case. A mission notebook in `missions/` plans missions instead, such

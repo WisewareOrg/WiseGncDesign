@@ -26,7 +26,7 @@ BAD = 1.5e-3
 PLANNED = 10
 KINDS = {"attitude": "SRS901", "velocity": "SRS902", "position": "SRS903"}
 
-BODY_ECI = Path(__file__).parents[1] / "cdh" / "fprime" / "Interfaces" / "Nav" / "BodyEci.fppi"
+BODY_ECI = Path(__file__).parents[1] / "fsw" / "fpp" / "interfaces" / "Nav" / "BodyEci.fppi"
 """nav's estimate channels, which a toy flight software includes to be judged."""
 NODE = "missions/nb/Test_vehicle/test_fsw_alpha"
 NODEID = "missions/nb.py::Test_vehicle::test_fsw_alpha"
@@ -613,8 +613,8 @@ def test_a_flown_mission_is_judged_end_to_end(
         test_flights="""
 from pathlib import Path
 
-from gnc_cdh.basilisk import AlgorithmModule
-from gnc_cdh.dictionary import Dictionary
+from fsw.python import AlgorithmModule
+from ground.dictionary import Dictionary
 from harness.mission import Mission, mission_tests, provides
 
 
