@@ -19,11 +19,12 @@ from typing import Any
 
 import numpy as np
 
+from fsw.codegen.deployment import CLONE
+
 __all__ = ["Channel", "Command", "Dictionary", "Type"]
 
 _REPOSITORY = Path(__file__).resolve().parents[1]
 _INTERFACES = _REPOSITORY / "fsw" / "fpp" / "interfaces"
-_CLONE = _REPOSITORY / "fsw" / "fprime" / "lib" / "fprime"
 _FRAMEWORK = (
     "Fw/Buffer/Buffer.fpp",
     "Fw/Cmd/Cmd.fpp",
@@ -72,7 +73,7 @@ def _tag() -> str:
     Returns:
         Its tag, such as `v4.4.2`.
     """
-    command = ["git", "-C", str(_CLONE), "describe", "--tags", "--exact-match"]
+    command = ["git", "-C", str(CLONE), "describe", "--tags", "--exact-match"]
     return subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
 
 
@@ -294,7 +295,7 @@ class Dictionary:
         )
         sources = [Path(p).resolve() for p in model]
         files = [_INTERFACES / "Interfaces.fpp", *sources]
-        imports = [_CLONE / path for path in _FRAMEWORK]
+        imports = [CLONE / path for path in _FRAMEWORK]
         hashed = [*sources, *sorted(_INTERFACES.rglob("*.fpp*")), *imports]
         hashed += sorted({f for p in sources for f in p.parent.glob("*.fppi")})
         tag = _tag()
