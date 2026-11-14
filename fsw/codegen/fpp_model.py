@@ -4,7 +4,7 @@ The binary is the native one inside the `fprime_fpp` package, run directly. A ke
 that is missing from the output raises `KeyError`. Every name is FPP's qualified name, such as
 `ImuDeadReckoning.nav` or `Gnc.Vector3`. A type reference is a primitive's name (`F64`, `U8`,
 `bool`), `string`, or a named type's qualified name; an alias reads as the type it names. Why one
-module reads `to-json` directly is in ADR 0004 rev 3.
+module reads `to-json` directly is in ADR 0004 rev 2.
 """
 
 import json
