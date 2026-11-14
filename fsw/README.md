@@ -153,8 +153,10 @@ group that runs it, and its rate as the FPP constant `navDivider`. The deploymen
 its configuration code passes the generated constant to the rate-group driver's `configure()`.
 Each `step` sets SimTime to the simulation's time, then SimTime ticks the driver once, so nav runs
 on every `navDivider`-th step. The rate group's health telemetry is recorded with every other
-channel; the deployment links F´'s stub `Os::RawTime`, so its cycle times read 0 and a case repeats
-from its seed.
+channel; the deployment links F´'s stub `Os::RawTime`, so its cycle times read 0. A process's first
+case reproduces its rate-group datasets from the seed; a later case carries the rate group's
+`CycleCount` over from the cases before it and lacks the channels written only on change. Issue 59
+Power-cycle the F´ build per case closes that gap. Nav's datasets reproduce bitwise in every case.
 `fsw.codegen.deployment.FPP_FILES` lists the deployment's FPP files for `fpp_model.read`. The
 reasoning is in [ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
 and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).

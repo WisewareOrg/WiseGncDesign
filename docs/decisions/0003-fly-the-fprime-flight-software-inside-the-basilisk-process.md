@@ -88,8 +88,8 @@ The partitions inside each build are ADR 0005 rev 1.
 - **One extension per configuration**, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
 - **Rates are FPP constants in the GNC sub-topology**, which owns its rate groups; F´'s
   configuration code passes the generated constants to `configure()`.
-- **The rate groups' health telemetry is recorded, with F´'s stub raw time** so that it repeats from
-  the seed.
+- **The rate groups' health telemetry is recorded, with F´'s stub raw time.** Its cycle times read
+  0, and each case flies a fresh copy of the deployment, so it repeats from the seed.
 
 ### The lab: a hardware-in-the-loop rig
 
