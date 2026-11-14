@@ -117,9 +117,9 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond():
 
 
 def test_boot_leaves_nothing_of_the_previous_case():
-    """A case that ends with a command queued and its pins undrained leaves nothing to the next.
+    """A case that ends with a command queued and GroundLink undrained leaves nothing to the next.
 
-    The queued command runs at boot, before nav is configured idle, and the pins are cleared after.
+    The queued command runs at boot, before nav is configured idle, and GroundLink is cleared after.
     """
     _boot()
     STATION.uplink("nav.initNavState", STATE, 1)

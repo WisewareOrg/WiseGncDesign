@@ -379,7 +379,7 @@ class Dictionary:
     def arguments(self, name: str, args: Mapping[str, Any]) -> dict[str, Any]:
         """A command's arguments held to its parameters' types, as F´'s handler gets them.
 
-        A name the dictionary lacks raises `command`'s `KeyError`.
+        A name the dictionary lacks raises `KeyError`, as `Dictionary.command` does.
 
         Args:
             name: `<instance>.<command>`.

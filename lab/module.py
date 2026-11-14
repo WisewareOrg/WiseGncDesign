@@ -143,7 +143,7 @@ class FprimeModule(sysModel.SysModel):
         return self._station.values(name, raws)
 
     def Reset(self, CurrentSimNanos: int) -> None:
-        """Boots the deployment: queued commands run, the pins cleared, the dead reckoner idle.
+        """Boots the deployment: queued commands run, GroundLink cleared, the dead reckoner idle.
 
         Args:
             CurrentSimNanos: ns, the reset time, as Basilisk passes it.

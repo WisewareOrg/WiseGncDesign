@@ -1,9 +1,8 @@
 """The F´ ground station: the radio edge of the F´ build, and the only F´ codec in the repository.
 
-It does a ground data system's job against the deployment's pins: a command goes up as F´'s command
-packet, a `FwPacketDescriptorType` holding `FW_PACKET_COMMAND`, a `FwOpcodeType` and the arguments
-in order, all big-endian; responses come down as `Fw.CmdResponse` names; and each telemetry write
-comes down as the bytes F´ serialized, which `values` turns into values in one batch.
+It does a ground data system's job against the deployment's pins: commands go up as F´'s command
+packets, responses come down as `Fw.CmdResponse` names, and each telemetry write comes down as the
+bytes F´ serialized, which `values` turns into values in one batch.
 """
 
 from collections.abc import Mapping, Sequence
@@ -18,12 +17,7 @@ __all__ = ["FprimeStation"]
 
 
 class FprimeStation:
-    """The ground's radio edge to an F´ deployment, through the deployment's pins.
-
-    `fsw` is the deployment's extension: `uplink(packet, context)` takes a command packet,
-    `responses()` gives `(context, response)` with the response a value of `Fw.CmdResponse`, and
-    `telemetry()` gives `(channel ID, time tag in ns, bytes)` for every write since the last call.
-    """
+    """The ground's radio edge to an F´ deployment, through the deployment's pins."""
 
     def __init__(self, fsw: ModuleType, dictionary: Dictionary) -> None:
         """Holds the deployment and reads the packet's types from its dictionary.
@@ -42,15 +36,16 @@ class FprimeStation:
     def encode_command(self, name: str, args: Mapping[str, Any]) -> bytes:
         """A command packet.
 
-        A name the dictionary lacks raises `Dictionary.command`'s `KeyError`, and a missing
-        argument a `KeyError` naming it.
+        A name the dictionary lacks raises `KeyError`, as `Dictionary.command` does, and so does a
+        missing argument.
 
         Args:
             name: `<instance>.<command>`.
             args: the arguments by parameter name.
 
         Returns:
-            The packet: descriptor, opcode, then the arguments.
+            The packet, big-endian: a `FwPacketDescriptorType` holding `FW_PACKET_COMMAND`, a
+            `FwOpcodeType`, then the arguments in order.
 
         Raises:
             ValueError: when a parameter is of a type the dictionary does not code, or an argument
