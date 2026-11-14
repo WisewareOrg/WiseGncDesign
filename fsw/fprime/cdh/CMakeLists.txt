@@ -1,0 +1,11 @@
+register_fprime_module(
+  AUTOCODER_INPUTS
+    "${CMAKE_CURRENT_LIST_DIR}/GroundLink.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/GroundLink.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/GroundLink.hpp"
+  DEPENDS
+    fsw_fpp_interfaces
+    Os
+)

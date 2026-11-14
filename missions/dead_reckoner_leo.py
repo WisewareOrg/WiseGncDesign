@@ -16,7 +16,7 @@
 # %%
 """Missions: the IMU dead reckoner in low Earth orbit, on each vehicle."""
 
-from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+from algorithms.imu_dead_reckoning import dead_reckoner
 from harness.mission import Mission, mission_tests
 
 # %load_ext wise_dynamics.notebook

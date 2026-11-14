@@ -1,0 +1,11 @@
+register_fprime_module(
+  AUTOCODER_INPUTS
+    "${CMAKE_CURRENT_LIST_DIR}/SimBridge.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/SimBridge.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/SimBridge.hpp"
+  DEPENDS
+    fsw_fpp_interfaces
+    Os
+)

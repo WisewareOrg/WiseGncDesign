@@ -28,7 +28,7 @@ dev = [
 ]
 sim = ["wise-dynamics[notebook]"]
 notebooks = ["ipykernel>=6.29", "ipython>=9.0", "jupyterlab>=4.4", "jupytext>=1.17", "notebook", "pip"]
-# The F´ toolchain at the versions the F´ clone pins (held to them by cdh/fprime/pins_test.py),
+# The F´ toolchain at the versions the F´ clone pins (held to them by fsw/fprime/pins_test.py),
 # packaging, which that test parses with, and pybind11 for the deployment's Python module.
 fprime = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-tools==4.4.0", "ninja==1.11.1.4", "packaging", "pybind11>=2.13"]
 
@@ -41,12 +41,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["algorithms/gnc_algorithms", "cdh/gnc_cdh"]
+packages = ["algorithms", "fsw", "ground", "lab"]
 # The repository root makes `harness` importable as a package.
-dev-mode-dirs = [".", "algorithms", "cdh", "analysis"]
+dev-mode-dirs = [".", "analysis"]
 
 [tool.pytest.ini_options]
-testpaths = ["algorithms", "cdh", "harness", "missions"]
+testpaths = ["algorithms", "fsw", "ground", "harness", "lab", "missions"]
 strict_markers = true
 markers = [
     "sim_ground_period_s(period_s): the ground's period, in s, for a scenario's definition",
@@ -59,14 +59,14 @@ filterwarnings = [
 # The F´ framework clone and the F´ build cache carry F´'s own tests, which are not this project's.
 addopts = [
     "--import-mode=importlib", "-n", "auto", "--dist", "loadgroup", "-p", "pytester",
-    "--ignore=cdh/fprime/lib", "--ignore-glob=cdh/fprime/build-fprime-*",
+    "--ignore=fsw/fprime/lib", "--ignore-glob=fsw/fprime/build-fprime-*",
 ]
 
 [tool.ruff]
 line-length = 100
-src = [".", "algorithms", "cdh", "analysis"]
+src = [".", "analysis"]
 # The F´ framework clone and the F´ build cache carry third-party Python.
-extend-exclude = ["*.ipynb", "cdh/fprime/lib", "cdh/fprime/build-fprime-*"]
+extend-exclude = ["*.ipynb", "fsw/fprime/lib", "fsw/fprime/build-fprime-*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "D", "D417"]
@@ -82,7 +82,7 @@ check-return-types = false
 skip-checking-short-docstrings = false
 allow-init-docstring = true
 # The F´ framework clone and the F´ build cache carry third-party Python.
-exclude = 'cdh/fprime/(lib|build-fprime-[^/]*)/'
+exclude = 'fsw/fprime/(lib|build-fprime-[^/]*)/'
 
 [tool.interrogate]
-exclude = ["cdh/fprime/lib", "cdh/fprime/build-fprime-automatic-native"]
+exclude = ["fsw/fprime/lib", "fsw/fprime/build-fprime-automatic-native"]

@@ -114,12 +114,12 @@ The partitions inside each build are ADR 0005 rev 1.
 
 - **F´ and Eigen are fetched by tag, with no git submodule.**
   - F´'s release tag is one line, `fprime_tag` in the `justfile`. `just _sync` shallow-clones that
-    tag into the gitignored `cdh/fprime/lib/fprime`. It clones again when the clone's tag cannot be
+    tag into the gitignored `fsw/fprime/lib/fprime`. It clones again when the clone's tag cannot be
     read as the pinned one.
   - CMake's FetchContent fetches Eigen by git tag.
   - Renovate's regex managers bump both tags. F´'s tag, `fprime-tools` and `fprime-fpp` arrive as
     one update, which CI proves together.
-  - Renovate leaves `cmake` and `ninja` alone, and `cdh/fprime/pins_test.py` holds them, with the
+  - Renovate leaves `cmake` and `ninja` alone, and `fsw/fprime/pins_test.py` holds them, with the
     other two tools, to the versions F´'s clone pins.
 
 ## Alternatives considered
@@ -174,5 +174,5 @@ The partitions inside each build are ADR 0005 rev 1.
 - Each case merges `build` into `flight.json` atomically, without a lock, so `build` can rarely be
   missing from a flight that already has a crashed case; any later successful case restores it.
 - An F´ release bump arrives as one Renovate update with the tools F´ pins, and a tool pin that
-  drifts from F´'s fails `cdh/fprime/pins_test.py`.
+  drifts from F´'s fails `fsw/fprime/pins_test.py`.
 - The bus structs are a hand-kept mirror of Basilisk's messages; a test fails when one drifts.

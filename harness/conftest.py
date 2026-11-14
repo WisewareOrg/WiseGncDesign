@@ -30,7 +30,7 @@ def fly_in_a_subprocess() -> Callable[..., pytest.RunResult]:
         """
         conftest = project.makeconftest(
             "from pathlib import Path\n\n"
-            "import gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning  # noqa: F401\n"
+            "import algorithms.imu_dead_reckoning.imu_dead_reckoning  # noqa: F401\n"
             "from harness import requirements_tree\n\n"
             "requirements_tree.ROOT = Path(__file__).parent\n"
         )

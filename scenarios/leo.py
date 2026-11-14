@@ -10,7 +10,7 @@ WiseDynamics scenario is a different definition, referenced by a different TST i
 
 import pytest
 
-from harness.ground import Ground
+from ground.procedures import Ground
 
 
 @pytest.mark.sim_scenario("leo500")

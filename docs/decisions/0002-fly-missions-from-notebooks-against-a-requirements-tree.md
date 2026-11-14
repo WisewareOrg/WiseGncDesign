@@ -114,12 +114,12 @@ everywhere, even with `--full-monte-carlo`, and the session name `scratch` is re
   `harness.<module>`, holds what knows no specific requirement, metric or scenario: the mission
   code, the judging fixtures as a pytest plugin, `judge()` and `plots()`, and the tree reader.
   Content stays where it is read: `analysis/` holds only the analyzers, `scenarios/` holds how each
-  TST is flown, and `algorithms/`, `missions/` and `cdh/` hold the rest.
+  TST is flown, and `algorithms/`, `missions/`, `fsw/`, `ground/` and `lab/` hold the rest.
 - **Tests sit beside the code they test**, with no central `tests/` folder. Same-named test files
   stay apart under `--import-mode=importlib`.
 - **An algorithm is a package around its notebook.** The notebook keeps the derivation and the
   implementation readable together; the gross check and the tests live in the package.
-- **`gnc_algorithms` is a workbook, not a library.** It is installed editable so notebooks and tests
+- **`algorithms` is a workbook, not a library.** It is installed editable so notebooks and tests
   import it, and is never shipped on its own. Its notebooks import the harness and the analyzers on
   purpose, and the F´ flight software, which is C++, never imports it.
 

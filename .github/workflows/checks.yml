@@ -29,8 +29,8 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run interrogate -v --fail-under 100 algorithms cdh analysis harness scenarios missions
-      - run: uv run pydoclint algorithms cdh analysis harness scenarios missions
+      - run: uv run interrogate -v --fail-under 100 algorithms fsw ground lab analysis harness scenarios missions
+      - run: uv run pydoclint algorithms fsw ground lab analysis harness scenarios missions
 
   requirements:
     name: requirements
@@ -60,7 +60,7 @@ jobs:
       # Syncs every group, registers the kernel and builds the F´ deployment the tests fly.
       - run: just _sync
       # The F´ tests skip when the extension is absent, so a build that lands none fails here.
-      - run: uv run --no-sync python -c "import gnc_cdh.fprime._wise_fsw"
+      - run: uv run --no-sync python -c "import lab._wise_fsw"
       - run: uv run --no-sync pytest
       # Everything the build and the suite write must be ignored; the log names what is not.
       - run: |
@@ -83,7 +83,7 @@ jobs:
       # which a Python build's dictionary is generated against; the F´ build's tests skip.
       - run: uv sync --locked --group sim --group notebooks --group fprime
       - run: uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
-      - run: git clone --quiet --depth 1 --branch "$(just --evaluate fprime_tag)" https://github.com/nasa/fprime cdh/fprime/lib/fprime
+      - run: git clone --quiet --depth 1 --branch "$(just --evaluate fprime_tag)" https://github.com/nasa/fprime fsw/fprime/lib/fprime
       - run: uv run --no-sync pytest
       - run: |
           out="$(git status --porcelain)"
