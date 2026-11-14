@@ -1,0 +1,407 @@
+"""FPP's model read through the native `fpp to-json`: the real deployment's, and a toy's.
+
+The contract test reads the WiseFsw deployment's FPP, so a `fprime-fpp` bump that moves the JSON
+shape fails here. Needs the F´ framework clone `just _sync` fetches, not an F´ build.
+"""
+
+import json
+import subprocess
+from pathlib import Path
+
+import fprime_fpp
+import pytest
+
+from fsw.codegen.fpp_model import (
+    Array,
+    Channel,
+    Command,
+    Connection,
+    Enum,
+    Instance,
+    Member,
+    Model,
+    Parameter,
+    Struct,
+    parse,
+    read,
+)
+
+_REPOSITORY = Path(__file__).resolve().parents[2]
+_CLONE = _REPOSITORY / "fsw" / "fprime" / "lib" / "fprime"
+
+_FRAMEWORK = (
+    "Fw/Buffer/Buffer.fpp",
+    "Fw/Cmd/Cmd.fpp",
+    "Fw/Com/Com.fpp",
+    "Fw/Dp/Dp.fpp",
+    "Fw/Log/Log.fpp",
+    "Fw/Time/Time.fpp",
+    "Fw/Tlm/Tlm.fpp",
+    "Fw/Types/Types.fpp",
+    "Svc/Ccsds/Types/Types.fpp",
+    "Svc/CmdDispatcher/CmdDispatcher.fpp",
+    "Svc/DpCompressProc/Types/CompressionTypes.fpp",
+    "Svc/Interfaces/Time.fpp",
+    "Svc/Ping/Ping.fpp",
+    "Svc/Sched/Sched.fpp",
+    "cmake/platform/unix/Platform/PlatformTypes.fpp",
+    "default/config/AcConstants.fpp",
+    "default/config/ComCfg.fpp",
+    "default/config/DpCfg.fpp",
+    "default/config/FpConfig.fpp",
+    "default/config/FpConstants.fpp",
+    "default/config/FpySequencerCfg.fpp",
+    "default/config/WasmSequencerCfg.fpp",
+)
+"""The F´ framework files, in the clone, that the WiseFsw deployment's model imports."""
+
+_DEPLOYMENT = (
+    "algorithms/imu_dead_reckoning/ImuDeadReckoner.fpp",
+    "fsw/fpp/interfaces/Interfaces.fpp",
+    "fsw/fprime/cdh/GroundLink.fpp",
+    "fsw/fprime/platform/SimTime.fpp",
+    "fsw/fprime/rio/SimBridge.fpp",
+    "fsw/fprime/configurations/imu_dead_reckoning/topology.fpp",
+)
+"""The repository's files of the WiseFsw deployment's model."""
+
+_TOY_FRAMEWORK = (
+    "Fw/Cmd/Cmd.fpp",
+    "Fw/Prm/Prm.fpp",
+    "Fw/Time/Time.fpp",
+    "Fw/Tlm/Tlm.fpp",
+    "Fw/Types/Types.fpp",
+    "cmake/platform/unix/Platform/PlatformTypes.fpp",
+    "default/config/ComCfg.fpp",
+    "default/config/FpConfig.fpp",
+    "default/config/FpConstants.fpp",
+)
+"""The F´ framework files, in the clone, that the toy model imports."""
+
+GNC = """\
+module Gnc {
+
+  @ nav runs every tick
+  constant navDivider = 1
+  constant gain = 2.5
+  constant label = "gnc"
+  constant enabled = true
+
+  @ One IMU reading
+  struct Reading {
+    rate: F64
+    accel: [3] F64
+    count: U32
+  }
+
+  enum Mode: U8 {
+    idle = 0
+    running = 3
+  }
+
+  array Vector3 = [3] F64
+
+  port Sched(ctx: U32)
+
+  @ Rate group driver stand-in
+  passive component RateGroup {
+    sync input port CycleIn: Sched
+    output port RateGroupMemberOut: [3] Sched
+  }
+
+  @ A navigation component
+  @ provides: SRS010 free text, with spaces
+  passive component Nav {
+    sync input port schedIn: Sched
+    command recv port cmdIn
+    command reg port cmdRegOut
+    command resp port cmdResponseOut
+    telemetry port tlmOut
+    time get port timeCaller
+    param get port prmGetOut
+    param set port prmSetOut
+
+    sync command setMode(mode: Mode, reading: Reading)
+
+    telemetry rate: F64
+    telemetry mode: Mode
+
+    param gain: F64 default 2.0
+    param startMode: Mode default Mode.running
+    param mounting: Vector3
+  }
+
+  passive component Ctrl {
+    sync input port schedIn: Sched
+  }
+
+  passive component Log {
+    sync input port schedIn: Sched
+  }
+
+  @ pre-annotation on instance nav
+  instance nav: Nav base id 0x1000 \\
+    @< post-annotation on instance nav
+  instance ctrl: Ctrl base id 0x2000
+  instance log: Log base id 0x3000
+  instance rg: RateGroup base id 0x4000
+
+  @ GNC sub-topology
+  topology Gnc {
+    instance nav
+    instance ctrl
+    instance log
+    instance rg
+    connections Rates {
+      rg.RateGroupMemberOut[2] -> log.schedIn
+      rg.RateGroupMemberOut[0] -> nav.schedIn
+      rg.RateGroupMemberOut[1] -> ctrl.schedIn
+    }
+  }
+
+}
+"""
+
+TOP = """\
+module Top {
+
+  passive component Driver {
+    output port tickOut: Gnc.Sched
+  }
+
+  instance drv: Driver base id 0x100
+
+  @ The deployment
+  topology Deploy {
+    import Gnc.Gnc
+    instance drv
+    connections Tick {
+      drv.tickOut -> Gnc.rg.CycleIn
+    }
+  }
+
+}
+"""
+
+
+def _toy_files(directory: Path, gnc: str = GNC) -> list[Path]:
+    """The toy model's files, its two modules written into `directory`.
+
+    Args:
+        directory: where `Gnc.fpp` and `Top.fpp` are written.
+        gnc: the GNC module.
+
+    Returns:
+        The framework files, then `Gnc.fpp` and `Top.fpp`.
+    """
+    (directory / "Gnc.fpp").write_text(gnc)
+    (directory / "Top.fpp").write_text(TOP)
+    return [
+        *(_CLONE / path for path in _TOY_FRAMEWORK),
+        directory / "Gnc.fpp",
+        directory / "Top.fpp",
+    ]
+
+
+@pytest.fixture(scope="module")
+def toy(tmp_path_factory: pytest.TempPathFactory) -> Model:
+    """The toy model, read once.
+
+    Args:
+        tmp_path_factory: where the toy's model is written.
+
+    Returns:
+        The model.
+    """
+    return read(_toy_files(tmp_path_factory.mktemp("toy")))
+
+
+def test_the_deployment_reads_back_with_every_connection_its_topology_declares():
+    """WiseFsw's instances and every connection, its pattern connections included, are read."""
+    files = [*(_CLONE / path for path in _FRAMEWORK), *(_REPOSITORY / path for path in _DEPLOYMENT)]
+
+    model = read(files)
+
+    assert model.instances == {
+        "WiseFsw.simTime": Instance("WiseFsw.simTime", "Sim.SimTime", 0x100),
+        "WiseFsw.groundLink": Instance("WiseFsw.groundLink", "Sim.GroundLink", 0x200),
+        "WiseFsw.simBridge": Instance("WiseFsw.simBridge", "Sim.SimBridge", 0x300),
+        "WiseFsw.cmdDisp": Instance("WiseFsw.cmdDisp", "Svc.CommandDispatcher", 0x500),
+        "WiseFsw.nav": Instance("WiseFsw.nav", "Gnc.ImuDeadReckoner", 0x1000),
+    }
+    assert model.topologies["WiseFsw.WiseFsw"] == (
+        Connection("WiseFsw.cmdDisp", "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 0),
+        Connection("WiseFsw.cmdDisp", "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
+        Connection("WiseFsw.cmdDisp", "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
+        Connection("WiseFsw.cmdDisp", "Tlm", 0, "WiseFsw.groundLink", "tlmIn", 0),
+        Connection("WiseFsw.cmdDisp", "compCmdSend", 0, "WiseFsw.cmdDisp", "CmdDisp", 0),
+        Connection("WiseFsw.cmdDisp", "compCmdSend", 1, "WiseFsw.nav", "cmdIn", 0),
+        Connection("WiseFsw.cmdDisp", "seqCmdStatus", 0, "WiseFsw.groundLink", "cmdResponseIn", 0),
+        Connection("WiseFsw.groundLink", "cmdOut", 0, "WiseFsw.cmdDisp", "seqCmdBuff", 0),
+        Connection("WiseFsw.nav", "cmdRegOut", 0, "WiseFsw.cmdDisp", "compCmdReg", 1),
+        Connection("WiseFsw.nav", "cmdResponseOut", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
+        Connection("WiseFsw.nav", "timeCaller", 0, "WiseFsw.simTime", "timeGetPort", 0),
+        Connection("WiseFsw.nav", "tlmOut", 0, "WiseFsw.groundLink", "tlmIn", 0),
+        Connection("WiseFsw.simBridge", "imuOut", 0, "WiseFsw.nav", "imuIn", 0),
+        Connection("WiseFsw.simBridge", "navConfigOut", 0, "WiseFsw.nav", "configureIn", 0),
+        Connection("WiseFsw.simBridge", "schedOut", 0, "WiseFsw.nav", "schedIn", 0),
+    )
+    nav = model.components["Gnc.ImuDeadReckoner"]
+    assert nav.commands == (
+        Command(
+            "initNavState",
+            (
+                ("epoch", "F64"),
+                ("attitude", "Gnc.Quaternion"),
+                ("position", "Gnc.Vector3"),
+                ("velocity", "Gnc.Vector3"),
+            ),
+        ),
+    )
+    assert nav.channels == (
+        Channel("navState", "Gnc.NavState"),
+        Channel("bodyEciPos", "Gnc.Vector3"),
+        Channel("bodyEciVel", "Gnc.Vector3"),
+        Channel("bodyEciAttitude", "Gnc.Quaternion"),
+    )
+    assert model.types["Gnc.Matrix3"] == Array("Gnc.Matrix3", 3, "Gnc.Vector3")
+    assert model.annotations["WiseFsw.WiseFsw"] == (
+        "The flight software run inside the simulation: the dead reckoner, fed and ticked by the"
+        " simulation,",
+        "commanded and read by the ground",
+    )
+
+
+def test_an_imported_sub_topology_s_connections_are_the_deployment_s_in_port_order(toy: Model):
+    """The deployment holds the imported group's connections, ordered by their from-numbers.
+
+    Args:
+        toy: the toy model.
+    """
+    assert toy.topologies["Top.Deploy"] == (
+        Connection("Gnc.rg", "RateGroupMemberOut", 0, "Gnc.nav", "schedIn", 0),
+        Connection("Gnc.rg", "RateGroupMemberOut", 1, "Gnc.ctrl", "schedIn", 0),
+        Connection("Gnc.rg", "RateGroupMemberOut", 2, "Gnc.log", "schedIn", 0),
+        Connection("Top.drv", "tickOut", 0, "Gnc.rg", "CycleIn", 0),
+    )
+    assert toy.topologies["Gnc.Gnc"] == toy.topologies["Top.Deploy"][:3]
+    assert toy.instances["Gnc.rg"] == Instance("Gnc.rg", "Gnc.RateGroup", 0x4000)
+    assert toy.instances["Top.drv"] == Instance("Top.drv", "Top.Driver", 0x100)
+
+
+def test_numeric_constants_are_read_by_qualified_name_and_others_are_not(toy: Model):
+    """Integer and float constants are read, the framework's too; strings and bools are not.
+
+    Args:
+        toy: the toy model.
+    """
+    assert toy.constants["Gnc.navDivider"] == 1
+    assert isinstance(toy.constants["Gnc.navDivider"], int)
+    assert toy.constants["Gnc.gain"] == 2.5
+    assert "Gnc.label" not in toy.constants
+    assert "Gnc.enabled" not in toy.constants
+    assert isinstance(toy.constants["FW_COM_BUFFER_MAX_SIZE"], int)
+
+
+def test_annotations_are_read_pre_lines_then_post_lines(toy: Model):
+    """A definition's `@` lines, then its `@<` lines; one with none has an empty tuple.
+
+    Args:
+        toy: the toy model.
+    """
+    assert toy.annotations["Gnc.nav"] == (
+        "pre-annotation on instance nav",
+        "post-annotation on instance nav",
+    )
+    assert toy.annotations["Gnc.Nav"] == (
+        "A navigation component",
+        "provides: SRS010 free text, with spaces",
+    )
+    assert toy.annotations["Gnc.navDivider"] == ("nav runs every tick",)
+    assert toy.annotations["Gnc.Reading"] == ("One IMU reading",)
+    assert toy.annotations["Gnc.Gnc"] == ("GNC sub-topology",)
+    assert toy.annotations["Top.Deploy"] == ("The deployment",)
+    assert toy.annotations["Gnc.ctrl"] == ()
+
+
+def test_types_are_read_with_struct_members_in_declaration_order(toy: Model):
+    """Structs keep FPP's member order; enums carry their constants and arrays their size.
+
+    Args:
+        toy: the toy model.
+    """
+    assert toy.types["Gnc.Reading"] == Struct(
+        "Gnc.Reading",
+        (Member("rate", "F64", None), Member("accel", "F64", 3), Member("count", "U32", None)),
+    )
+    assert toy.types["Gnc.Mode"] == Enum("Gnc.Mode", "U8", {"idle": 0, "running": 3})
+    assert toy.types["Gnc.Vector3"] == Array("Gnc.Vector3", 3, "F64")
+    assert isinstance(toy.types["Fw.CmdResponse"], Enum)
+
+
+def test_a_component_s_commands_channels_and_parameters_are_read(toy: Model):
+    """Declared commands, channels and parameters, with defaults; F´'s PRM commands are not.
+
+    Args:
+        toy: the toy model.
+    """
+    nav = toy.components["Gnc.Nav"]
+
+    assert nav.name == "Gnc.Nav"
+    assert nav.commands == (Command("setMode", (("mode", "Gnc.Mode"), ("reading", "Gnc.Reading"))),)
+    assert nav.channels == (Channel("rate", "F64"), Channel("mode", "Gnc.Mode"))
+    assert nav.parameters == (
+        Parameter("gain", "F64", 2.0),
+        Parameter("startMode", "Gnc.Mode", "running"),
+        Parameter("mounting", "Gnc.Vector3", None),
+    )
+
+
+def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):
+    """A default the reader does not convert raises, naming the parameter.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    gnc = GNC.replace("param mounting: Vector3", "param mounting: Vector3 default [1.0, 0.0, 0.0]")
+
+    with pytest.raises(ValueError, match="mounting"):
+        read(_toy_files(tmp_path, gnc))
+
+
+def test_a_model_fpp_rejects_fails_with_its_stderr(tmp_path: Path):
+    """`to-json`'s refusal raises with what it printed.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    gnc = GNC.replace("instance nav: Nav", "instance nav: Navigator")
+
+    with pytest.raises(RuntimeError, match="Navigator"):
+        read(_toy_files(tmp_path, gnc))
+
+
+@pytest.mark.parametrize(
+    "key", ["componentInstanceMap", "componentMap", "topologyMap", "typeMap", "valueMap"]
+)
+def test_a_renamed_analysis_key_fails_the_read(tmp_path: Path, key: str):
+    """`parse` on output with a key it reads renamed raises, rather than reading a model short.
+
+    Args:
+        tmp_path: where the toy's model and `to-json`'s output are written.
+        key: the analysis key renamed.
+    """
+    out = tmp_path / "out"
+    model = tmp_path / "model"
+    out.mkdir()
+    model.mkdir()
+    fpp = Path(fprime_fpp.__file__).with_name("fpp")
+    command = [str(fpp), "to-json", "-d", str(out), *map(str, _toy_files(model))]
+    subprocess.run(command, check=True, capture_output=True)
+    analysis = out / "fpp-analysis.json"
+    document = json.loads(analysis.read_text())
+    document["analysis"][f"{key}Renamed"] = document["analysis"].pop(key)
+    analysis.write_text(json.dumps(document))
+
+    with pytest.raises(KeyError, match=key):
+        parse(out)
