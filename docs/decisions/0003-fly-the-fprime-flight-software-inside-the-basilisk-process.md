@@ -2,10 +2,12 @@
 
 **Status:** accepted
 **Decided:** 2026-11-12 (issue 31: the two spikes and their discovery)
-**Rev:** 1
+**Rev:** 2
 
 ## Revisions
 
+- **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
+  telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
 
 ## Context
@@ -13,53 +15,36 @@
 F´ is to be the flight software, and the Python C&DH stands in for it. Each algorithm and its F´
 build are to be written side by side in this repository, and flown through the same missions,
 scenarios, cases and judging as the notebook, so the two builds compare case by case. Basilisk only
-arbitrates, schedules and runs the dynamics: no FSW telemetry or command is a Basilisk message. The
-ground link that follows needs the F´ boundary to exist first.
+arbitrates, schedules and runs the dynamics: no FSW telemetry or command is a Basilisk message.
 
-Two spikes flew an F´ v4.4.2 build of the IMU dead reckoner inside Basilisk. The first wraps the
-deployment in a hand-written pybind11 binding. The second replaced that binding with fprime-python's
+Two spikes flew an F´ v4.4.2 build of one algorithm inside Basilisk. The first wraps the deployment
+in a hand-written pybind11 binding. The second replaced that binding with fprime-python's
 autocoder.
 
 ## Decision
 
 ### The deployment
 
-- **F´ runs in Basilisk's process, as a passive deployment ticked on simulated time.** The
-  deployment is a Python extension, `_wise_fsw`. A Basilisk module, `gnc_cdh.fprime.FprimeModule`,
-  ticks it at the FSW rate, and the clock crosses into F´ as the simulation's integer nanoseconds.
-  `SimTime` sets the clock, `SimBridge` sends the readings and drives the schedule, and `TlmCapture`
-  holds the telemetry. Every component is passive, so a tick finishes before the call returns, and
-  a case reproduces from its seed. Sensor readings are the only Basilisk messages the deployment
-  reads, and its telemetry never passes through a Basilisk message.
+- **F´ runs in Basilisk's process, as a deployment ticked on simulated time.** The deployment is a
+  Python extension, `_wise_fsw`. A Basilisk module, `gnc_cdh.fprime.FprimeModule`, ticks it at the
+  FSW rate, and the clock crosses into F´ as the simulation's integer nanoseconds. `SimTime` sets
+  the clock, and `SimBridge` sends the readings and drives the schedule. Nothing in the deployment
+  runs on a thread of its own, so a tick finishes before the call returns, and a case reproduces
+  from its seed. Sensor readings are the only Basilisk messages the deployment reads, and its
+  telemetry never passes through a Basilisk message.
 - **The binding is a small hand-written pybind11 module, with no fprime-python dependency.**
-  fprime-python is reconsidered only once it fixes time, telemetry and build cost.
 - **Each F´ component sits beside the algorithm it ports.** The repository root is F´'s project root
-  (`cdh/fprime/settings.ini`). The dead reckoner's `ImuDeadReckoner.fpp`, `.hpp` and `.cpp` sit in
-  its package beside the notebook, the package ADR 0002 rev 1 lays out around each algorithm.
+  (`cdh/fprime/settings.ini`). An algorithm's component `.fpp`, `.hpp` and `.cpp` sit in its
+  package beside the notebook, the package ADR 0002 rev 1 lays out around each algorithm.
   `cdh/fprime/` holds the rest of the F´ project: the interface types, the sim-side components, the
   topology and the binding.
-- **nav takes its configuration and its initial state on F´ ports**, `NavConfig` and `NavInit`,
-  which `SimBridge` sends. The initial state is handed over at boot until the `initNavState`
-  command exists.
-
-### The dictionary
-
-- **The FPP model is the dictionary's source, and F´'s generated JSON dictionary is its published
-  form.** Python reads the JSON. The host decodes every telemetry channel generically from it, so
-  the C&DH and the ground learn fields through the dictionary.
-- **The dead reckoner's channel-to-estimate mapping is the one named, algorithm-specific piece** of
-  the host, in `FprimeModule.estimate_datasets`. It becomes configuration once the shared dictionary
-  is designed.
+- **An algorithm takes its configuration on an F´ port**, which `SimBridge` sends at boot, so
+  nothing reaches past the F´ model.
 
 ### Recording a flight
 
-- **Each host implements one recording method, `fly(run) -> datasets`.** The harness binds the
-  scenario and its stopping rule into `run`. The host calls `run` with itself and the datasets it
-  records, and adds whatever it records after the run. A host never sees the scenario or a
-  duration, and the harness imports no host by type.
-- **A flight's end belongs to the scenario**, and later to a ground procedure, never to a fixed
-  length. The simulator stops only on time, so the one stopping rule the harness binds is the TST
-  definition's duration.
+- **A flight's end belongs to the scenario**, never to a fixed length. The simulator stops only on
+  time, so the one stopping rule the harness binds is the TST definition's duration.
 - **Each flight's `flight.json` records which FSW flew**, beside the facts ADR 0002 rev 1 records
   there for the judge. `fsw` is the FSW builder's name, and `build` is the host's build identity:
   - for the F´ host, the host, `frameworkVersion` (the F´ tag) and `projectVersion`, read from the
@@ -82,19 +67,12 @@ autocoder.
   - Renovate leaves `cmake` and `ninja` alone, and `cdh/fprime/pins_test.py` holds them, with the
     other two tools, to the versions F´'s clone pins.
 
-### Not decided here
-
-- The ground link: commands, a ground station as its own process, and whether F´'s own command and
-  telemetry components or passive stand-ins carry them.
-- A dictionary contract shared across algorithms, and how it maps onto F´'s per-instance channel
-  names.
-
 ## Alternatives considered
 
 - **A separate FSW process, bridged to Basilisk over a socket.** It has no lockstep with simulated
   time unless it gets a tick protocol of its own. Rejected for the in-process deployment.
 - **F´'s own timer, with active components on OS threads.** It wakes on wall-clock time, so a case
-  does not reproduce from its seed. Rejected for a passive deployment ticked on simulated time.
+  does not reproduce from its seed. Rejected for a deployment ticked on simulated time.
 - **FSW telemetry in Basilisk message structs.** It limits the FSW to fields Basilisk happens to
   define, and puts Basilisk inside the FSW's interface. Rejected: telemetry stays on the F´ side.
 - **fprime-python's autocoder in place of the hand-written binding.** The second spike measured it
@@ -103,7 +81,7 @@ autocoder.
   - a Monte Carlo case took 0.85 s, against 0.76 s;
   - it saved no code: 647 lines of hand-written glue, against 665;
   - a Python handler gets a copy of `Fw::Time` and no setter is bound, so a Python clock cannot
-    serve time, and nav never propagated;
+    serve time, and the algorithm never propagated;
   - `Fw::TlmBuffer` and the port-count methods are unbound;
   - the process segfaults at exit unless the deployment is torn down first;
   - only Python components can be reached from Python, which forces the design;
@@ -113,18 +91,8 @@ autocoder.
   and to fly.
 - **F´ in a repository of its own.** Rejected: each algorithm and its F´ build are written side by
   side and compared.
-- **A generic F´ host, with the dead reckoner's mapping moved beside the algorithm.** Rejected:
-  generality with one consumer. The mapping stays one named piece of the host until the shared
-  dictionary is designed.
-- **nav's configuration and initial state set by public C++ methods the binding calls directly.**
-  The call is outside any port, so the binding reaches past the F´ model. Rejected for ports.
-- **Each host logging its own estimate.** It moves the Python build's recording off Basilisk's
-  recorders, which no need asks for. Rejected.
-- **A duration parameter on the recording method.** Rejected: a flight is not defined by a fixed
-  simulated length.
-- **`fly(scenario, stop)`** and **a stop value type.** Rejected for `fly(run)`: the harness binds
-  the scenario and its stopping rule into one callable, and the host never sees the scenario or its
-  stopping rule.
+- **An algorithm's configuration set by public C++ methods the binding calls directly.** The call
+  is outside any port, so the binding reaches past the F´ model. Rejected for ports.
 - **The build identity in run-file attributes.** Rejected: it would need the simulator changed.
 - **The repository commit alone as the build identity.** Rejected: it cannot tell two builds of one
   commit apart.
@@ -137,7 +105,6 @@ autocoder.
 
 - The two builds fly the same missions, scenarios and cases and are judged alike, so they compare
   case by case. Parity tests hold them to rounding.
-- A further host implements `fly` and `build`, and the harness needs no change for it.
 - Two builds of one algorithm are told apart in the judge's session even at one repository commit.
   A stale extension shows as a `projectVersion` that differs from the run file's
   `versions_caller_commit`.
@@ -145,9 +112,9 @@ autocoder.
   rarely be missing from a flight that already has a crashed case, when that case's base write
   overlapped another case's merge; any later successful case restores it.
 - The deployment is one per process, so one F´ host flies at a time in a process.
-- The deployment departs from a standard F´ deployment on purpose: no timer or rate groups,
-  `TlmCapture` in place of F´'s downlink, no commands, events or parameters, and passive components
-  only. These come up again when the ground link is designed.
-- The `initNavState` command, once it exists, replaces the initialization port.
+- The deployment departs from a standard F´ deployment on purpose: no timer or rate groups, and no
+  component on a thread of its own.
+- An `FW_ASSERT` in F´ code aborts the process, so it ends a test worker rather than failing a
+  case.
 - An F´ release bump arrives as one Renovate update with the tools F´ pins, and a tool pin that
   drifts from F´'s fails `cdh/fprime/pins_test.py`.

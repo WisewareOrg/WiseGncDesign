@@ -3,12 +3,29 @@ register_fprime_module(
     "${CMAKE_CURRENT_LIST_DIR}/Sim.fpp"
   SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/SimTime.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/TlmCapture.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/GroundLink.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/SimBridge.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/Cooperative.cpp"
   HEADERS
     "${CMAKE_CURRENT_LIST_DIR}/SimTime.hpp"
-    "${CMAKE_CURRENT_LIST_DIR}/TlmCapture.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/GroundLink.hpp"
     "${CMAKE_CURRENT_LIST_DIR}/SimBridge.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/Cooperative.hpp"
   DEPENDS
     cdh_fprime_Interfaces
+    Os
+)
+
+# The deployment's Os::Task: no thread; Sim::Cooperative runs its routine on the caller's.
+register_fprime_implementation(
+    Os_Task_Sim
+  IMPLEMENTS
+    Os_Task
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/SimTask.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/SimTask.hpp"
+  DEPENDS
+    Fw_Types
+    Os_Task
 )

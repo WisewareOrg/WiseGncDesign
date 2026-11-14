@@ -25,6 +25,9 @@ GOOD = 0.9e-3
 BAD = 1.5e-3
 PLANNED = 10
 KINDS = {"attitude": "SRS901", "velocity": "SRS902", "position": "SRS903"}
+
+BODY_ECI = Path(__file__).parents[1] / "cdh" / "fprime" / "Interfaces" / "Nav" / "BodyEci.fppi"
+"""nav's estimate channels, which a toy flight software includes to be judged."""
 NODE = "missions/nb/Test_vehicle/test_fsw_alpha"
 NODEID = "missions/nb.py::Test_vehicle::test_fsw_alpha"
 ALL = {"scenario": "TST901", "capabilities": ["SYS901"], "rungs": None}
@@ -79,17 +82,25 @@ def write_run(path: Path, error: float, kind: str = "attitude") -> None:
         error: the estimate's error at one sample, in rad, m/s or m.
         kind: "attitude", "velocity" or "position".
     """
-    est = {name: np.zeros((5, 3)) for name in ("sigma_BN", "v_BN_N", "r_BN_N")}
+    identity = np.tile([1.0, 0.0, 0.0, 0.0], (5, 1))
+    tlm = {
+        "nav.bodyEciAttitude": identity.copy(),
+        "nav.bodyEciVel": np.zeros((5, 3)),
+        "nav.bodyEciPos": np.zeros((5, 3)),
+    }
     if kind == "attitude":
-        est["sigma_BN"][2, 2] = np.tan(error / 4.0)
+        tlm["nav.bodyEciAttitude"][2] = [np.cos(error / 2.0), 0.0, 0.0, np.sin(error / 2.0)]
     else:
-        est["v_BN_N" if kind == "velocity" else "r_BN_N"][2, 0] = error
+        tlm["nav.bodyEciVel" if kind == "velocity" else "nav.bodyEciPos"][2, 0] = error
+    t_s = np.linspace(0.0, 1.0, 5)
     with h5py.File(path, "w") as f:
-        f["t_s"] = np.linspace(0.0, 1.0, 5)
-        for truth in ("sigma_BN", "v_N", "r_N"):
+        f["t_s"] = t_s
+        f["truth/q_BN"] = identity
+        for truth in ("v_N", "r_N"):
             f[f"truth/{truth}"] = np.zeros((5, 3))
-        for name, values in est.items():
-            f[f"est/{name}"] = values
+        for name, values in tlm.items():
+            f[f"tlm/{name}"] = values
+            f[f"tlm_t/{name}"] = t_s
 
 
 def write_cases(
@@ -561,8 +572,9 @@ def test_a_flown_mission_is_judged_end_to_end(
 
     The flight's `flight.json` and run files come from the simulator's own writers, so a key or
     dataset the writer and the judge disagree on makes this fail. Four cases are the fewest that
-    show p = 0.8 at c = 0.5, and each rung's x is set far above the dead reckoner's error so the
-    verdict rests on the agreement alone.
+    show p = 0.8 at c = 0.5. The flight software is a toy writing nav's estimate channels with a
+    fixed state, and each rung's x is set far above its error so the verdict rests on the
+    agreement alone.
 
     Args:
         project: the project.
@@ -583,20 +595,44 @@ def test_a_flown_mission_is_judged_end_to_end(
     (root / "scenarios" / "alpha.py").write_text(
         "import pytest\n\n\n"
         '@pytest.mark.sim_scenario("leo500")\n'
-        "@pytest.mark.sim_duration_s(1.0)\n"
+        "@pytest.mark.sim_duration_s(2.0)\n"
         "@pytest.mark.sim_runs(4)\n"
-        "def alpha() -> None:\n"
+        "async def alpha(ground) -> None:\n"
         "    pass\n"
+    )
+    (root / "Toy.fpp").write_text(
+        "module Toy {\n"
+        "  passive component Toy {\n"
+        f'    include "{BODY_ECI}"\n'
+        "    time get port timeCaller\n"
+        "    telemetry port tlmOut\n"
+        "  }\n"
+        "}\n"
     )
     project.makepyfile(
         test_flights="""
-from gnc_algorithms.imu_dead_reckoning import dead_reckoner
+from pathlib import Path
+
+from gnc_cdh.basilisk import AlgorithmModule
+from gnc_cdh.dictionary import Dictionary
 from harness.mission import Mission, mission_tests, provides
+
+
+class Toy:
+    def step(self, t):
+        return {
+            "bodyEciPos": [7.0e6, 0.0, 0.0],
+            "bodyEciVel": [0.0, 7.5e3, 0.0],
+            "bodyEciAttitude": [1.0, 0.0, 0.0, 0.0],
+        }
 
 
 @provides("SYS901")
 def reckoner(scenario):
-    return dead_reckoner(scenario)
+    model = [Path(__file__).with_name("Toy.fpp")]
+    dictionary = Dictionary.from_component(model, "Toy.Toy", instance="nav")
+    readers = scenario.vehicle.readers()
+    return AlgorithmModule(Toy(), readers, instance="nav", dictionary=dictionary)
 
 
 globals().update(

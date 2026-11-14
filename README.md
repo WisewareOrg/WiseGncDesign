@@ -12,11 +12,13 @@ The repository's parts are laid out under Development.
 ### Layout
 
 ```text
-harness/       mission.py, requirements_tree.py, judging.py (a pytest plugin), notebook.py, runs.py
+harness/       mission.py, ground.py, requirements_tree.py, judging.py (a pytest plugin),
+               notebook.py, runs.py
 analysis/      one analyzer per metric: its limits, error math and plot
-scenarios/     how each scenario a TST item references is flown
+scenarios/     how each scenario a TST item references is flown: its ground procedure and marks
 algorithms/gnc_algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
                                     re-exporting the notebook
+algorithms/gnc_algorithms/quaternion.py   the quaternion math numba-compiled algorithms share
 missions/      notebooks that plan missions, and the test running them
 cdh/           gnc_cdh, the Python and F´ hosts and a worked example; fprime/, the F´ project
 docs/          requirements/ (Doorstop tree), decisions/ (ADRs)
@@ -37,9 +39,13 @@ scratch, which needs no network.
 `just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
 picked up. That rebuild reuses the existing cache, so after switching branches run `just pinned` or
 `just local` to rebuild it from scratch. A process cannot reload the extension, so a notebook
-kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. Why the F´ build flies
-inside the simulation, and how, is in
-[ADR 0003 rev 1](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. A Python build needs
+no F´ build, and the F´ build's tests skip when it is absent; where a Python build's dictionary
+comes from is in [`cdh/README.md`](cdh/README.md#the-dictionary). Why the F´ build flies inside
+the simulation, and how, is in
+[ADR 0003 rev 2](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md);
+how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
+[ADR 0004 rev 1](docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
 
 ### Requirements and missions
 
@@ -58,10 +64,11 @@ Carlo tests: a class per vehicle holding a test per FSW and scenario. The reason
 
 An algorithm notebook, `algorithms/gnc_algorithms/<name>/<name>.py`, holds the algorithm's
 derivation and implementation, then its mission, then cells that run in the notebook only and judge
-and plot. A mission notebook in `missions/` plans missions instead, such as one algorithm on several
-vehicles. Each is a jupytext percent-format `.py`, the source of truth, paired with an `.ipynb`
-beside it that git ignores. The `.py` records no kernel; the `.ipynb` keeps the kernel chosen on the
-machine, and a headless run uses the registered `wise-gnc-design` kernel.
+and plot. An algorithm with an F´ build also has `parity.py` beside it, which flies both builds and
+holds them to parity case by case. A mission notebook in `missions/` plans missions instead, such
+as one algorithm on several vehicles. Each is a jupytext percent-format `.py`, the source of truth,
+paired with an `.ipynb` beside it that git ignores. The `.py` records no kernel; the `.ipynb` keeps
+the kernel chosen on the machine, and a headless run uses the registered `wise-gnc-design` kernel.
 
 To work in a notebook, run `just pinned` or `just local`, which sync the environment, register the
 kernel and create the `.ipynb` files, then `just lab` and open the `.ipynb` on the `WiseGncDesign`

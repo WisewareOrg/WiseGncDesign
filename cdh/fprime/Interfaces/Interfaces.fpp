@@ -3,6 +3,9 @@ module Gnc {
   @ A 3-vector
   array Vector3 = [3] F64
 
+  @ A quaternion W X Y Z, Hamilton
+  array Quaternion = [4] F64
+
   @ A 3x3 matrix, by rows
   array Matrix3 = [3] Vector3
 
@@ -18,12 +21,8 @@ module Gnc {
     dcmPB: Matrix3 @< the IMU's mounting [PB], v_P = [PB] v_B
   )
 
-  @ A navigation state to start from, at the current time, given directly rather than by command
-  port NavInit(
-    sigmaBN: Vector3 @< MRP of the body frame with respect to ECI
-    rBN_N: Vector3 @< m, position in ECI
-    vBN_N: Vector3 @< m/s, velocity in ECI
-  )
+  @ A command's response: F´'s own enumeration, put in every dictionary
+  dictionary type CommandResponse = Fw.CmdResponse
 
   @ The state of the navigation estimate
   enum NavState {

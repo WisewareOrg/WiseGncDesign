@@ -12,40 +12,24 @@ module Gnc {
     @ Boots the estimator idle with its configuration
     sync input port configureIn: Gnc.NavConfig
 
-    @ Gives the estimator its state at the current time, directly rather than by command
-    sync input port initializeIn: Gnc.NavInit
-
     @ The deployment's clock
     time get port timeCaller
 
     @ Telemetry out
     telemetry port tlmOut
 
-    @ The state of the estimate
-    telemetry navState: Gnc.NavState
+    @ Command registration
+    command reg port cmdRegOut
 
-    @ Position of the body in ECI, x
-    telemetry bodyEciPosX: F64 format "{} m"
-    @ Position of the body in ECI, y
-    telemetry bodyEciPosY: F64 format "{} m"
-    @ Position of the body in ECI, z
-    telemetry bodyEciPosZ: F64 format "{} m"
+    @ Command input
+    command recv port cmdIn
 
-    @ Velocity of the body in ECI, x
-    telemetry bodyEciVelX: F64 format "{} m/s"
-    @ Velocity of the body in ECI, y
-    telemetry bodyEciVelY: F64 format "{} m/s"
-    @ Velocity of the body in ECI, z
-    telemetry bodyEciVelZ: F64 format "{} m/s"
+    @ Command responses
+    command resp port cmdResponseOut
 
-    @ Attitude quaternion taking body vectors into ECI, scalar part, W >= 0
-    telemetry bodyEciAttitudeW: F64
-    @ Attitude quaternion taking body vectors into ECI, x
-    telemetry bodyEciAttitudeX: F64
-    @ Attitude quaternion taking body vectors into ECI, y
-    telemetry bodyEciAttitudeY: F64
-    @ Attitude quaternion taking body vectors into ECI, z
-    telemetry bodyEciAttitudeZ: F64
+    include "../../../cdh/fprime/Interfaces/Nav/InitNavState.fppi"
+    include "../../../cdh/fprime/Interfaces/Nav/NavState.fppi"
+    include "../../../cdh/fprime/Interfaces/Nav/BodyEci.fppi"
 
   }
 

@@ -37,7 +37,8 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     pybind11_add_module(_wise_fsw "${CMAKE_CURRENT_LIST_DIR}/Python/WiseFswModule.cpp")
     target_link_libraries(_wise_fsw PRIVATE cdh_fprime_Top wise_eigen)
     # The platform implementations (Os and the like) F´ chooses at link time, as for a deployment.
-    fprime_target_implementations(_wise_fsw)
+    # Its Os::Task has no thread, so the tick runs the active components.
+    fprime_target_implementations(_wise_fsw Os_Task_Sim)
     set_target_properties(_wise_fsw PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${FPRIME_PROJECT_ROOT}/cdh/gnc_cdh/fprime")
     # The dictionary ships beside the extension: Python names and decodes the telemetry with it.

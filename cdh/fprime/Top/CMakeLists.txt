@@ -8,5 +8,6 @@ register_fprime_module(
     "${CMAKE_CURRENT_LIST_DIR}/WiseFswTopologyDefs.hpp"
   DEPENDS
     cdh_fprime_Sim
+    Svc_CmdDispatcher
     algorithms_gnc_algorithms_imu_dead_reckoning
 )
