@@ -3,7 +3,9 @@
 Skipped without the deployment `just fsw` builds.
 """
 
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pytest
@@ -14,10 +16,11 @@ from fsw.codegen.deployment import fpp_files
 from fsw.codegen.fpp_model import read
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import DICTIONARY, extension
+from lab import DICTIONARY
+from lab.power_cycle import power_cycle
 
-pytest.importorskip("lab._wise_fsw", reason="the F´ build is absent; run `just fsw`")
-_wise_fsw = extension()
+if importlib.util.find_spec("lab._wise_fsw") is None:
+    pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
 
 MU = 3.986004360e14
 """m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
@@ -35,8 +38,24 @@ NS = 1_000_000_000
 WISE_FSW = Dictionary(DICTIONARY)
 """The deployment's dictionary, which the build generated."""
 
-STATION = FprimeStation(_wise_fsw, WISE_FSW)
-"""The ground station on the deployment."""
+_wise_fsw: ModuleType
+"""The current copy of the deployment."""
+
+STATION: FprimeStation
+"""The ground station on the current copy."""
+
+
+def _power_cycle() -> None:
+    """Makes a fresh copy of the deployment the current one, with a station on it."""
+    global _wise_fsw, STATION
+    _wise_fsw = power_cycle()
+    STATION = FprimeStation(_wise_fsw, WISE_FSW)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_copy() -> None:
+    """Power-cycles the deployment for each test."""
+    _power_cycle()
 
 
 def _telemetry() -> dict[str, object]:
@@ -175,10 +194,11 @@ def _fly_a_first_flight() -> None:
     assert _telemetry()["nav.navState"] == "propagated"
 
 
-def test_a_rebooted_reckoner_keeps_nothing_of_the_previous_flight():
-    """After a flight, booting again leaves the reckoner idle, with no state, from t = 0."""
+def test_a_fresh_copy_after_another_copy_flew_keeps_nothing_of_that_flight():
+    """After a flight, a fresh copy boots the reckoner idle, with no state, from t = 0."""
     _fly_a_first_flight()
 
+    _power_cycle()
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     _wise_fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
@@ -188,8 +208,8 @@ def test_a_rebooted_reckoner_keeps_nothing_of_the_previous_flight():
 def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(tmp_path: Path):
     """Nav writes its state once per run, so `10 * navDivider` ticks give exactly 10 writes.
 
-    The driver's tick count carries over from earlier tests in the process, so the count is taken
-    over a whole number of dividers, which holds whatever tick the driver starts on.
+    The count is taken over a whole number of dividers, which holds whatever tick the driver
+    starts on.
 
     Args:
         tmp_path: where the deployment's topology is rendered.
@@ -206,9 +226,10 @@ def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(tmp_path: Path):
     assert len(writes) == ticks // divider
 
 
-def test_a_second_flight_matches_a_fresh_notebook_reckoner():
-    """A flight after another, from its own state, agrees with a reckoner that never flew before."""
+def test_a_flight_on_a_fresh_copy_after_another_copy_flew_matches_a_fresh_notebook_reckoner():
+    """A fresh copy's flight after another copy's agrees with a reckoner that never flew before."""
     _fly_a_first_flight()
+    _power_cycle()
     rng = np.random.default_rng(11)
     readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
     python = ImuDeadReckoner(mu=MU, dcm_PB=MOUNTING)

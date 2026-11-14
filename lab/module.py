@@ -1,9 +1,7 @@
 """A Basilisk Python `SysModel` running the WiseFsw F´ deployment in the simulation's process."""
 
-import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -12,8 +10,9 @@ from Basilisk.architecture import sysModel
 from fsw.python import AlgorithmModule
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
+from lab.power_cycle import power_cycle, source
 
-__all__ = ["DICTIONARY", "FprimeModule", "extension"]
+__all__ = ["DICTIONARY", "FprimeModule"]
 
 _NANOSECONDS_PER_SECOND = 1e9
 _NANOSECONDS_PER_MICROSECOND = 1_000
@@ -21,51 +20,16 @@ _NANOSECONDS_PER_MICROSECOND = 1_000
 DICTIONARY = Path(__file__).with_name("WiseFswTopologyDictionary.json")
 """The dictionary F´ generated for the deployment, copied here by `just fsw`."""
 
-_loaded_stamp: tuple[int, int] | None = None
-"""The extension file's inode and modification time, in ns, when this process first loaded it."""
-
-
-def extension() -> ModuleType:
-    """The deployment's extension, `_wise_fsw`, the one entry point to it.
-
-    A process cannot reload an extension, so one rebuilt on disk after this process loaded it is
-    refused rather than flown stale. The file is stamped on the first call, so an import of
-    `_wise_fsw` that bypasses this goes unchecked.
-
-    Returns:
-        The extension module.
-
-    Raises:
-        ModuleNotFoundError: the extension is not built.
-        RuntimeError: the extension file changed after this process loaded it.
-    """
-    global _loaded_stamp
-    try:
-        import lab._wise_fsw as _wise_fsw
-    except ModuleNotFoundError as error:
-        raise ModuleNotFoundError("the F´ deployment is not built; run `just fsw`") from error
-
-    status = os.stat(_wise_fsw.__file__)
-    stamp = (status.st_ino, status.st_mtime_ns)
-    if _loaded_stamp is None:
-        _loaded_stamp = stamp
-    if stamp != _loaded_stamp:
-        raise RuntimeError(
-            f"{_wise_fsw.__file__} was rebuilt after this process loaded it;"
-            " restart the kernel to fly the new build"
-        )
-    return _wise_fsw
-
 
 class FprimeModule(sysModel.SysModel):
     """Runs the WiseFsw deployment each tick, and presents the ground's radio edge to it.
 
-    The deployment is one per process, so one module flies at a time. `Reset` boots it at t = 0
-    with the dead reckoner idle. Each `UpdateState` whose time lies after the last tick's sets the
-    clock, runs the uplinked commands through F´'s command dispatcher, sends the IMU reading and
-    ticks the rate groups. The radio edge is an `FprimeStation` on the deployment's pins: it
-    encodes each command into F´'s packet, and the responses and every telemetry write, each with
-    its F´ time tag, come down through it.
+    `Reset` power-cycles the deployment: it loads a fresh copy and boots it at t = 0 with the dead
+    reckoner idle, so a case keeps nothing of an earlier one. Each `UpdateState` whose time lies
+    after the last tick's sets the clock, runs the uplinked commands through F´'s command
+    dispatcher, sends the IMU reading and ticks the rate groups. The radio edge is an
+    `FprimeStation` on the copy's pins: it encodes each command into F´'s packet, and the
+    responses and every telemetry write, each with its F´ time tag, come down through it.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in, the Python
@@ -82,20 +46,23 @@ class FprimeModule(sysModel.SysModel):
     build: dict[str, str]
 
     def __init__(self, imu: Any, mu: float, dcm_PB: np.ndarray) -> None:
-        """Holds what `Reset` boots the deployment with.
+        """Holds what `Reset` boots the deployment with, once the build is checked.
 
         Args:
             imu: the IMU reader, subscribed by the caller.
             mu: m^3/s^2, the central body's gravitational parameter.
             dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B.
+
+        Raises:
+            ModuleNotFoundError: the deployment is not built.
+            RuntimeError: the deployment was rebuilt after this process first loaded it.
         """
         super().__init__()
-        self._fsw = extension()
+        source()
         self._imu = imu
         self._mu = float(mu)
         self._dcm_PB = np.asarray(dcm_PB, dtype=float)
         self.dictionary = Dictionary(DICTIONARY)
-        self._station = FprimeStation(self._fsw, self.dictionary)
         self.failure = None
         self.build = {
             "host": "lab.FprimeModule",
@@ -143,7 +110,7 @@ class FprimeModule(sysModel.SysModel):
         return self._station.values(name, raws)
 
     def Reset(self, CurrentSimNanos: int) -> None:
-        """Boots the deployment: queued commands run, GroundLink cleared, the dead reckoner idle.
+        """Power-cycles the deployment: a fresh copy, booted with the dead reckoner idle.
 
         Args:
             CurrentSimNanos: ns, the reset time, as Basilisk passes it.
@@ -154,7 +121,8 @@ class FprimeModule(sysModel.SysModel):
             BaseException: the reset's exception, kept whole in `failure`.
         """
         try:
-            self._fsw = extension()
+            self._fsw = power_cycle()
+            self._station = FprimeStation(self._fsw, self.dictionary)
             if not self._imu.isLinked():
                 raise RuntimeError("the IMU reader is not subscribed to any message")
             self._t_ns = CurrentSimNanos
