@@ -7,9 +7,9 @@ is a class named as its member's FPP component, built at `boot` on its parameter
 `t`, in s, and a keyword per data input, named as the input port without its trailing `In`, and
 returns its `<Name>Outputs` and `<Name>Telemetry` tuples, read by field name. A connection
 `A.X -> B.Y` routes `A`'s output `X` to `B`'s input `Y`, as an F´ sync port does: an output reaches
-a later member in the same frame, an earlier one at its next run, and a `None` output writes
-nothing, so an input holds the latest value written to it. A sub-topology `port` other than the
-driver's is an input the CDH writes.
+a later member in the same frame, and a `None` output writes nothing, so an input holds the latest
+value written to it. A backward edge, into a member that runs before `A` in the frame, is refused.
+A sub-topology `port` other than the driver's is an input the CDH writes.
 """
 
 from collections.abc import Mapping, Sequence
@@ -80,7 +80,8 @@ class GncPartition:
 
         Raises:
             ValueError: the sub-topology has other than one rate group driver; a member's component
-                has no class, or a class no member; or a data input is not named `<keyword>In`.
+                has no class, or a class no member; a data input is not named `<keyword>In`; or a
+                data connection is a backward edge, naming it.
         """
         topology = f"{configuration}.Gnc"
         connections = model.topologies[topology]
@@ -116,10 +117,17 @@ class GncPartition:
         self._classes = {m: by_name[name] for m, name in wanted.items()}
 
         scheduling = {i for i, kind in component.items() if kind in (_DRIVER, _RATE_GROUP)}
+        order = {m: n for n, m in enumerate(m for group in self._members for m in group)}
         self._inputs: dict[str, set[str]] = {m: set() for m in members}
         self._routes: dict[tuple[str, str], tuple[str, str]] = {}
         for c in connections:
             if c.from_instance not in scheduling:
+                if order[c.to_instance] < order[c.from_instance]:
+                    raise ValueError(
+                        f"{_name(c.from_instance)}.{c.from_port} -> {_name(c.to_instance)}."
+                        f"{c.to_port} is a backward edge into a member that runs first in the"
+                        " frame, a one-frame-delayed feedback, which is not supported"
+                    )
                 keyword = _keyword(c.to_instance, c.to_port)
                 self._inputs[c.to_instance].add(keyword)
                 self._routes[c.from_instance, c.from_port] = c.to_instance, keyword
