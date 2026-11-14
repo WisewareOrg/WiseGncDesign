@@ -43,6 +43,20 @@ module Toy {
     counts: [2] U16
   }
 
+  struct FlatShapes {
+    rows: [6] F64
+    counts: [2] U16
+  }
+
+  struct WideShapes {
+    rows: Rows
+    counts: [2] U32
+  }
+
+  struct QuaternionRate {
+    angVelPlatform: [4] F64
+  }
+
   port ReadingPort(reading: Reading)
 
   port Gain(value: F64)
@@ -138,6 +152,12 @@ def test_a_converter_missing_a_target_field_in_its_source_fails_naming_it():
     """The ICD has no `dvFramePlatform`, so no converter from it to the bus struct is built."""
     with pytest.raises(ValueError, match="dvFramePlatform"):
         converter(Gnc.ImuReading, Bus.ImuSensorMsg)
+
+
+def test_a_converter_to_a_tuple_that_is_not_a_struct_s_fails_naming_it():
+    """Telemetry is no struct, so no converter to it is built."""
+    with pytest.raises(ValueError, match="ImuDeadReckonerTelemetry"):
+        converter(Bus.ImuSensorMsg, Gnc.ImuDeadReckonerTelemetry)
 
 
 def test_a_misspelt_field_raises():
@@ -273,6 +293,37 @@ def test_a_converter_keeps_each_array_s_shape_and_element_type(toy: SimpleNamesp
     assert converted.rows.dtype == np.dtype("float64")
     assert converted.counts.dtype == np.dtype("uint16")
     assert converted.counts.tolist() == [7, 8]
+
+
+@pytest.mark.parametrize(
+    ("source", "field"),
+    [("FlatShapes", "rows"), ("WideShapes", "counts")],
+    ids=["flat array to an array of arrays", "U32 to U16"],
+)
+def test_a_converter_from_a_field_of_another_shape_or_type_fails_naming_it(
+    toy: SimpleNamespace, source: str, field: str
+):
+    """A source field must have its target field's shape and element type.
+
+    Args:
+        toy: the toy's namespace.
+        source: the source struct, whose `field` differs from `Shapes`'.
+        field: the field that differs.
+    """
+    with pytest.raises(ValueError, match=field):
+        converter(getattr(toy, source), toy.Shapes)
+
+
+def test_a_converter_from_a_basilisk_field_of_another_shape_fails_naming_it(
+    toy: SimpleNamespace,
+):
+    """Basilisk's three-element rate does not fill a four-element field.
+
+    Args:
+        toy: the toy's namespace.
+    """
+    with pytest.raises(ValueError, match="AngVelPlatform"):
+        converter(messaging.IMUSensorMsgPayload, toy.QuaternionRate)
 
 
 def test_a_converter_to_a_nested_struct_field_fails_naming_it(toy: SimpleNamespace):
