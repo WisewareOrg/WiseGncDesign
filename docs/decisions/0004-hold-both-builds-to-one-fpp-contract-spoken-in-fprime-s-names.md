@@ -37,6 +37,7 @@ on the scratch model (0.17 s on the baseline's topology, in the design review); 
 reader.py out`, condensed:
 
 ```
+instances:   Gnc.nav:Nav  Gnc.ctrl:Ctrl  Gnc.log:Log  Gnc.rg:RateGroup  Top.drv:Driver
 constants:   navDivider 1  ctrlDivider 10  tickHz 100  gain 2.5  name "gnc"
 Top.Deploy:  Gnc.rg.RateGroupMemberOut[0] -> Gnc.nav.schedIn[0]   (and [1] ctrl, [2] log)
 annotations: "provides: SRS010 free text, with spaces", "post-annotation on instance nav"
@@ -47,7 +48,8 @@ A missing imported group, an unresolved port number or a lost annotation would h
 in the connection itself and resolved only in the topology's port-number maps.
 
 **`fprime-prm-write` and stock PrmDb: PASS** (`9eccec3`, `spikes/fprime/`). F´'s tool turns a case's
-JSON into the `.dat` stock PrmDb loads at boot. `fprime-prm-write dat prm/nav_case.json -d
+JSON into the `.dat` stock PrmDb loads at boot, here against a scratch deployment's dictionary.
+`fprime-prm-write dat prm/nav_case.json -d
 SpikeTopologyDictionary.json`, then `python spike_check.py b prm/nav_case.dat`:
 
 ```
@@ -87,8 +89,11 @@ wrong parameter name, a wrong array length and a wrong type.
 - **Both builds fly one FPP model:** ICD types, bus structs, role groups, commands, telemetry,
   parameters, capability claims (`@ provides: SYS…`), and each configuration's GNC sub-topology with
   its wiring and rates (ADR 0003 rev 3).
+- **A role's shared entries are `.fppi` groups in `fsw/fpp/interfaces/` that a component
+  includes,** and a role is an instance name, so an entry reads `<role>.<entry>` in every build.
 - **F´'s generated JSON dictionary is the model's published form.** A Python build's dictionary is
-  generated from FPP alone with `fpp-to-dict`, against the F´ source clone, into a temp dir.
+  generated from FPP alone with `fpp-to-dict`, against the F´ source clone, into a temp dir: written
+  into the tree, it races between parallel test workers and is a build product in source.
 - **Python reads FPP's model through the native `fpp to-json`,** called directly, since F´'s wrapper
   sends `to-json` to its Java JAR. One module parses the output and extracts only instances,
   connections, port numbers, constants and annotations. A contract test on the real flight

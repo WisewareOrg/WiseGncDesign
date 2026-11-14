@@ -32,7 +32,8 @@ possible.
 
 ### The checks
 
-They ran on branch `spike/two_edges` against the baseline: main `6f6276e`, F´ v4.4.2, fpp 3.4.0.
+They ran on branch `spike/two_edges` against the baseline: main `6f6276e`, F´ v4.4.2, fpp 3.4.0,
+pybind11 3.1.0.
 
 **Power cycle: PASS** (`f618d9e`, `spikes/power/`). A fresh copy of the extension per case leaks no
 state and costs no time. `spikes/power/run_all.sh`, then `python summarize.py res/*100_gc.log`:
@@ -115,6 +116,7 @@ Each tick is one frame: RIO in, CDH in, GNC, CDH out, RIO out.
   and a case reproduces from its seed.
 - **The binding is a small hand-written pybind11 module**, with no fprime-python dependency.
 - **One extension per configuration**, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
+  `_wise_fsw` names whichever configuration's extension is flying.
 - **Rates are FPP constants in the GNC sub-topology**, e.g. `constant navDivider = 1`. The
   sub-topology owns its rate-group instances and member order. F´'s configuration code passes the
   generated constants (`FppConstantsAc.hpp`) to `configure()`, and the Python frame runner reads the
@@ -143,7 +145,8 @@ code.
   - it loads under the spec name `_power_cycle_<n>.<extension>`, with `n` from a process counter,
     never the case index, and never enters `sys.modules`;
   - the rebuilt-on-disk check stats the source `.so`, and a rebuilt extension is refused until the
-    kernel restarts.
+    kernel restarts: picking one up mid-kernel would change how a notebook session behaves on a
+    rebuild, and could fly a new extension against a dictionary cached from the old one.
 - **An F´ assert raises in Python; a copy that raised is never reused.** In a Release build F´'s
   default assert handler prints and returns. The pins register a throwing `Fw::AssertHook` before
   setup, which keeps the assert's text.
@@ -198,9 +201,14 @@ code.
   Rejected.
 - **F´ in a repository of its own.** Each algorithm and its F´ build are written side by side.
   Rejected.
+- **An algorithm's configuration on an F´ port, sent at boot by the sim glue.** It is per-algorithm
+  glue outside the FPP contract, and parity cannot see it. Rejected for F´ parameters, which are part
+  of the contract both builds fly (ADR 0004 rev 2).
 - **The build identity in run-file attributes, or the commit alone.** The first needs the simulator
   changed; the second cannot tell two builds of one commit apart. Rejected.
-- **F´ as a git submodule, Eigen as a hash-pinned tarball.** Renovate tracks neither by release tag.
+- **F´ as a git submodule.** Renovate's submodule manager is off in the preset this repository
+  extends, and it tracks commits, not release tags. Rejected.
+- **Eigen as a hash-pinned tarball.** Renovate cannot recompute the hash when it bumps the version.
   Rejected.
 
 ## Consequences
@@ -213,7 +221,7 @@ code.
   handlers.
 - An F´ assert fails the case in Python with F´'s own text.
 - Copies share no state, so more than one F´ build can be booted in one process.
-- A rebuilt extension needs a kernel restart.
+- A rebuilt extension needs a kernel restart, though the power cycle would allow picking it up.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard
   deployment only in its threadless tasks, its three stand-ins and the pins.
 - A stale extension shows as a `projectVersion` that differs from the run file's
