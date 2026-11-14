@@ -47,9 +47,9 @@ class GroundLink:
         """
         queued, self._uplinked = self._uplinked, []
         for name, args, context in queued:
-            response, reason, writes = commands.dispatch(self._handlers, name, args)
-            self._responses.append((context, response, reason))
-            self._log.extend((channel, t_ns, value) for channel, value in writes)
+            dispatched = commands.dispatch(self._handlers, name, args)
+            self._responses.append((context, dispatched.response, dispatched.reason))
+            self._log.extend((channel, t_ns, value) for channel, value in dispatched.writes)
 
     def log(self, instance: str, written: NamedTuple | None, t_ns: int) -> None:
         """Logs an algorithm's telemetry tuple, a write per field written.

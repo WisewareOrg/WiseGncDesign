@@ -10,15 +10,42 @@ not the algorithm's. A handler that returns answers `OK`, and one that raises `V
 
 import inspect
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, NamedTuple
 
 from fsw.python.cdh import telemetry
 from ground.dictionary import Dictionary
 
-__all__ = ["dispatch", "handlers"]
+__all__ = ["Dispatched", "Handler", "dispatch", "handlers"]
 
-Handlers = dict[str, tuple[str, Callable[..., Any]]]
-"""Each command's handler, by `<instance>.<command>`, with its instance's name."""
+
+class Handler(NamedTuple):
+    """A command's handler.
+
+    Attributes:
+        instance: its algorithm's instance's name, such as `nav`.
+        method: the algorithm's method of the command's name.
+    """
+
+    instance: str
+    method: Callable[..., Any]
+
+
+class Dispatched(NamedTuple):
+    """What running a command gave.
+
+    Attributes:
+        response: the `Fw.CmdResponse` name.
+        reason: the message of the `ValueError` the handler refused the command with, else `None`.
+        writes: the telemetry the handler wrote, as `telemetry.writes` gives it.
+    """
+
+    response: str
+    reason: str | None
+    writes: list[tuple[str, Any]]
+
+
+Handlers = dict[str, Handler]
+"""Each command's handler, by `<instance>.<command>`."""
 
 
 def handlers(dictionary: Dictionary, algorithms: Mapping[str, Any]) -> Handlers:
@@ -47,13 +74,11 @@ def handlers(dictionary: Dictionary, algorithms: Mapping[str, Any]) -> Handlers:
                     f"{instance}.{name} takes {wanted}; the algorithm has "
                     f"{'no such method' if found is None else found}"
                 )
-            resolved[f"{instance}.{name}"] = instance, handler
+            resolved[f"{instance}.{name}"] = Handler(instance, handler)
     return resolved
 
 
-def dispatch(
-    handlers: Handlers, name: str, args: Mapping[str, Any]
-) -> tuple[str, str | None, list[tuple[str, Any]]]:
+def dispatch(handlers: Handlers, name: str, args: Mapping[str, Any]) -> Dispatched:
     """Runs a command's handler.
 
     Args:
@@ -62,14 +87,13 @@ def dispatch(
         args: the arguments by parameter name, as `Dictionary.arguments` types them.
 
     Returns:
-        The `Fw.CmdResponse` name, the message of the `ValueError` the handler refused the command
-        with, else `None`, and the telemetry the handler wrote, as `telemetry.writes` gives it.
+        Its response, its reason and its writes.
     """
     if name not in handlers:
-        return "INVALID_OPCODE", None, []
-    instance, handler = handlers[name]
+        return Dispatched("INVALID_OPCODE", None, [])
+    handler = handlers[name]
     try:
-        written = handler(**args)
+        written = handler.method(**args)
     except ValueError as error:
-        return "VALIDATION_ERROR", str(error), []
-    return "OK", None, telemetry.writes(instance, written)
+        return Dispatched("VALIDATION_ERROR", str(error), [])
+    return Dispatched("OK", None, telemetry.writes(handler.instance, written))

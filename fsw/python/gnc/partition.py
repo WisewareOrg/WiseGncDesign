@@ -15,11 +15,11 @@ A sub-topology `port` other than the driver's is an input the CDH writes.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 from fsw.codegen.fpp_model import Model
 
-__all__ = ["GncPartition"]
+__all__ = ["GncPartition", "MemberTelemetry"]
 
 _DRIVER = "Svc.RateGroupDriver"
 """The component type of the sub-topology's rate group driver."""
@@ -59,6 +59,18 @@ def _keyword(instance: str, port: str) -> str:
             " names no step keyword"
         )
     return port.removesuffix("In")
+
+
+class MemberTelemetry(NamedTuple):
+    """What one member wrote in a frame.
+
+    Attributes:
+        instance: its instance's name, such as `nav`.
+        telemetry: its `<Name>Telemetry` tuple.
+    """
+
+    instance: str
+    telemetry: Any
 
 
 class GncPartition:
@@ -177,7 +189,7 @@ class GncPartition:
         instance, keyword = self._ports[port]
         self._held[instance][keyword] = value
 
-    def run(self, t: float, fired: Sequence[int]) -> list[tuple[str, Any]]:
+    def run(self, t: float, fired: Sequence[int]) -> list[MemberTelemetry]:
         """Runs each member of each fired rate group, in order, routing its outputs.
 
         Args:
@@ -203,5 +215,5 @@ class GncPartition:
                     if value is not None and (member, port) in self._routes:
                         target, keyword = self._routes[member, port]
                         self._held[target][keyword] = value
-                telemetry.append((name, tlm))
+                telemetry.append(MemberTelemetry(name, tlm))
         return telemetry

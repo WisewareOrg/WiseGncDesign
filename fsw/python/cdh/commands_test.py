@@ -90,6 +90,7 @@ def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
         [("toy.gain", 2.0)],
     )
     assert commands.dispatch(handlers, "toy.reset", {}) == ("OK", None, [])
+    assert type(commands.dispatch(handlers, "toy.reset", {})) is commands.Dispatched
     assert commands.dispatch(handlers, "toy.setGain", {"gain": -1.0}) == (
         "VALIDATION_ERROR",
         "gain -1.0 is negative",

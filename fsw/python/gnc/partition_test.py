@@ -223,6 +223,7 @@ def test_members_run_in_rate_group_order_and_an_output_reaches_a_later_member_in
 
     assert [("source", 1.0, Value(3.0)), ("sink", 1.0, Value(6.0))] == LOG
     assert telemetry == [("source", SourceTelemetry(count=1)), ("sink", Nothing())]
+    assert telemetry[0].instance == "source"
     assert gnc.algorithms["source"].parameters == "p"
     assert sorted(gnc.algorithms) == ["sink", "slow", "source"]
     assert gnc.inputs == ("seedIn",)

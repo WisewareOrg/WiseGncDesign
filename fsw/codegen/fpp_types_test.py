@@ -404,10 +404,8 @@ def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_an
     output ports, for every configuration in `fsw/fpp/gnc/`, so a write named for a field is a
     channel the ground can pack.
     """
-    import functools
-
-    from fsw.codegen import fpp_types
     from fsw.codegen.deployment import configuration_model
+    from fsw.codegen.fpp_types import named
     from ground.dictionary import Dictionary
 
     configurations = sorted(
@@ -432,7 +430,7 @@ def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_an
                 Returns:
                     The tuple.
                 """
-                return functools.reduce(getattr, f"{component}{suffix}".split("."), fpp_types)
+                return named(f"{component}{suffix}")
 
             channels = dictionary.entries(short)["channels"]
             parameters = [

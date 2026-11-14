@@ -93,8 +93,8 @@ class FrameRunner:
         for port, value in inputs.convert(self._pairs, read).items():
             self._gnc.write(port, value)
         t = t_ns / _NANOSECONDS_PER_SECOND
-        for instance, written in self._gnc.run(t, self._driver.tick()):
-            self._link.log(instance, written, t_ns)
+        for member in self._gnc.run(t, self._driver.tick()):
+            self._link.log(member.instance, member.telemetry, t_ns)
         return messages.commands()
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
