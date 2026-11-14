@@ -14,8 +14,7 @@ class ImuDeadReckoner final : public ImuDeadReckonerComponentBase {
 
   private:
     void schedIn_handler(FwIndexType portNum, U32 context) override;
-    void imuIn_handler(FwIndexType portNum, const Gnc::Vector3& angVelPlatform,
-                       const Gnc::Vector3& accelPlatform) override;
+    void imuIn_handler(FwIndexType portNum, const Gnc::ImuReading& reading) override;
     void configureIn_handler(FwIndexType portNum, F64 mu, const Gnc::Matrix3& dcmPB) override;
     void initNavState_cmdHandler(FwOpcodeType opCode, U32 cmdSeq, F64 epoch, const Gnc::Quaternion& attitude,
                                  const Gnc::Vector3& position, const Gnc::Vector3& velocity) override;

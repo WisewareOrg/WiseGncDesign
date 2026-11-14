@@ -9,7 +9,7 @@ void SimBridge::configureNav(F64 mu, const Gnc::Matrix3& dcmPB) {
 }
 
 void SimBridge::sendImu(const Gnc::Vector3& angVelPlatform, const Gnc::Vector3& accelPlatform) {
-    this->imuOut_out(0, angVelPlatform, accelPlatform);
+    this->imuOut_out(0, Gnc::ImuReading(angVelPlatform, accelPlatform));
 }
 
 void SimBridge::tick() {
