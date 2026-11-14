@@ -4,10 +4,12 @@ Skipped without the deployment `just fsw` builds.
 """
 
 import importlib.util
+import itertools
 import json
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
@@ -135,18 +137,19 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
         fsw.boot(str(parameters.dat(prm_record, DICTIONARY_PATH)), parameter_ids)
 
 
-def _changed(value: object) -> object:
-    """A record's value with one added to each of its numbers.
+def _changed(value: object, counter: Iterator[int]) -> object:
+    """A record's value with each of its numbers raised by the next count, so no two are equal.
 
     Args:
         value: a parameter's value as the record holds it, a number or nested lists of numbers.
+        counter: the counts, each used once.
 
     Returns:
         The changed value, of the same shape.
     """
     if isinstance(value, list):
-        return [_changed(v) for v in value]
-    return value + 1
+        return [_changed(v, counter) for v in value]
+    return value + next(counter)
 
 
 def test_prm_db_s_saved_image_decodes_to_the_edited_record(
@@ -169,8 +172,9 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
         parameter_ids: every parameter's ID, which boot holds valid.
     """
     entries = json.loads(prm_record.read_text())
+    counter = itertools.count(1)
     edited = {
-        instance: {name: _changed(value) for name, value in values.items()}
+        instance: {name: _changed(value, counter) for name, value in values.items()}
         for instance, values in entries.items()
     }
     assert edited != entries
