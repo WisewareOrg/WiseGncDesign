@@ -341,8 +341,9 @@ def test_a_converter_to_a_nested_struct_field_fails_naming_it(toy: SimpleNamespa
     [
         ("output port gainOut: Gain", "output port gainOut: Pair"),
         ("output port gainOut: Gain", "output port gainOut: [2] Gain"),
+        ("output port gainOut: Gain", "output port gainOut: serial"),
     ],
-    ids=["two arguments", "port array"],
+    ids=["two arguments", "port array", "serial"],
 )
 def test_an_output_port_that_is_not_one_value_fails_generation_naming_it(
     tmp_path: Path, port: str, replacement: str
