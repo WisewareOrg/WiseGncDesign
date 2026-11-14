@@ -508,3 +508,22 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
         assert expected["channels"] or expected["commands"] or ids(wise_fsw, short), instance.name
         assert generated.entries(short) == expected, instance.name
         assert ids(generated, short) == ids(wise_fsw, short), instance.name
+
+
+def test_a_configuration_s_dictionary_holds_its_gnc_instances_as_each_component_s_does():
+    """`from_sub_topology` names each algorithm instance's entries as its component's own does.
+
+    The configuration's dictionary also holds its rate groups' entries, which the Python build
+    never writes, and is generated once per content.
+    """
+    configuration = Dictionary.from_sub_topology("ImuDeadReckoning")
+    components = read(contract_files()).components
+    instances = configuration.algorithm_instances()
+    assert instances
+
+    for instance in instances:
+        generated = Dictionary.from_component([components[instance.component].file], instance)
+        short = instance.name.rsplit(".", 1)[-1]
+        assert configuration.entries(short) == generated.entries(short), instance.name
+    assert configuration.metadata["deploymentName"] == "PyImuDeadReckoning.PyImuDeadReckoning"
+    assert Dictionary.from_sub_topology("ImuDeadReckoning") is configuration
