@@ -6,7 +6,8 @@
 
 ## Revisions
 
-- **rev 1** — 2026-11-13 — first written (issue 52 tooling checks).
+- **rev 1** — 2026-11-13 — first written (issue 52 tooling checks); F´ in a repository of its own
+  rejected, moved from ADR 0003 rev 3 (issue 85 one decision per ADR).
 
 ## Context
 
@@ -32,7 +33,7 @@ way through, partitioned as real flight software is.
 - **Each build has its own CDH**, however thin.
 - **An algorithm's code lives in `algorithms/<name>/`, and GNC wires it in.** A configuration
   reaches its algorithms only through its GNC sub-topology.
-- **RIO, CDH, platform and the lab (ADR 0003 rev 3) name no algorithm.**
+- **RIO, CDH, platform and the lab (ADR 0008 rev 1) name no algorithm.**
 - **RIO, CDH and platform live in `fsw/<build>/<partition>/`; GNC is one sub-topology in
   `fsw/fpp/gnc/` that both builds fly.** The Python frame runner is nothing but these partitions.
 
@@ -44,6 +45,8 @@ way through, partitioned as real flight software is.
 - **One CDH converter shared by both builds.** One build would then run the other's internals, and
   a Python build must fly with no F´ build. Rejected for a CDH per build, each generated from the
   same FPP (ADR 0004 rev 2).
+- **F´ in a repository of its own.** Each algorithm and its F´ build are written side by side.
+  Rejected.
 
 ## Consequences
 

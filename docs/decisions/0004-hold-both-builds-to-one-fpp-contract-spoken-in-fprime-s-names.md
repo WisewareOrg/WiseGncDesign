@@ -10,7 +10,8 @@
   dictionary" and rewritten to two edges: RadioEdge in F´'s names, the F´ ground station, typing
   after the run, FPP as the contract read through the native `fpp to-json`, generated named tuples,
   parameter files, and parity as an analyzer; with the checks that support them (issue 52 tooling
-  checks).
+  checks); rates as FPP constants (issue 57 GNC sub-topology) and the rejected configuration on an
+  F´ port, both moved from ADR 0003 rev 3 (issue 85 one decision per ADR).
 - **rev 1** — 2026-11-13 — first written (issue 37 the dictionary; issue 38 commands into the F´
   build).
 
@@ -85,6 +86,8 @@ deployment's.
 
 - **Both builds fly one FPP model:** types, role groups, commands, telemetry, parameters, capability
   claims, and each configuration's GNC sub-topology with its wiring and rates.
+- **A rate is an FPP constant in the GNC sub-topology**, not F´'s C++ configuration alone, which
+  the Python build cannot read.
 - **A role's shared entries are `.fppi` groups a component includes,** and a role is an instance
   name, so an entry reads `<role>.<entry>` in every build.
 - **F´'s generated JSON dictionary is the model's published form, and what the ground consumes.** A
@@ -126,6 +129,8 @@ deployment's.
   Python build and duplicates F´'s own tool. Rejected for JSON plus `fprime-prm-write`.
 - **The Python build taking `parameters(scenario)` directly, with a file only for F´.** The two
   builds would then not read one case record. Rejected.
+- **An algorithm's configuration on an F´ port, sent at boot by the sim glue.** It is per-algorithm
+  glue outside the FPP contract, and parity cannot see it. Rejected for F´ parameters.
 - **Parity over every command and every channel.** F´ generates commands the Python build lacks and
   gives no refusal reason, so the logs would never match. Rejected for a minimum spec.
 - **Dictionaries for inputs, outputs, telemetry and parameters.** A misspelled key passes silently.

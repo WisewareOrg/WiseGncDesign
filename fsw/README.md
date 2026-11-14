@@ -124,7 +124,7 @@ builds are held to one contract. The reasoning is in
 
 The bus structs are in `fsw/fpp/interfaces/Bus.fpp`, and `bus_test.py` beside it holds each to its
 Basilisk message. The reasoning is in
-[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+[ADR 0008 rev 1](../docs/decisions/0008-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
 
 ## The FPP model
 
@@ -195,9 +195,9 @@ every case reproduces its rate-group datasets from the seed, as it does nav's.
 
 `fsw.codegen.deployment.fpp_files(configuration, directory)` renders a configuration's topology
 and lists its deployment's FPP files, the algorithms the F´ build takes among them, for
-`fpp_model.read`. The reasoning is in
-[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
-and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
+`fpp_model.read`. The reasoning is on
+[issue 57 GNC sub-topology](https://github.com/WisewareOrg/WiseGncDesign/issues/57) and in
+[ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
 
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
