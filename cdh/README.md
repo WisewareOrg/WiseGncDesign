@@ -11,7 +11,9 @@ scenario's procedure against it and records the flight. `AlgorithmModule` and th
 link's docstrings say what each method does. Each host also has `build`, its build identity,
 which the harness records in the flight's `flight.json`. Why commands and telemetry travel in F´'s
 form, and why every write is pushed rather than sampled, is in
-[ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
+[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+That rev keeps F´'s packets to the F´ build alone, with the ground speaking names, and issue 54
+RadioEdge rewrites this link to match.
 
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
 algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm.
@@ -111,7 +113,7 @@ process:
 
 An F´ port's tests assert that its Python build's entries equal WiseFsw's, IDs aside, so the two
 builds are held to one contract. The reasoning is in
-[ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
+[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## The F´ host
 
@@ -128,4 +130,4 @@ thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the ne
 and `_wise_fsw.responses()` returns each response under its context. `_wise_fsw.telemetry()`
 drains every telemetry write since the last call, each with its F´ time tag, and `boot` runs the
 commands left queued, clears the link and leaves nav idle. The reasoning is in
-[ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
+[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
