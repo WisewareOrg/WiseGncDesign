@@ -1,9 +1,10 @@
 """Each bus struct in `Bus.fpp` mirrors the Basilisk message payload of its name.
 
-`Bus.<Name>` is held to `messaging.<Name>Payload`, the name matched ignoring case: its members'
-names, ignoring case, element types and shapes, in order, equal the payload's fields in Basilisk's
-`__dtype__`. Offsets and padding are not compared, since F´ serializes packed. Reads `Bus.fpp` alone
-through the native `fpp to-json`, so it needs neither the F´ framework clone nor an F´ build.
+`Bus.<Name>` is held to `messaging.<Name>Payload`: its members' names, element types and shapes, in
+order, equal the fields of the payload's `__dtype__`. Every name, struct's and member's alike, is
+matched ignoring case. Offsets and padding are not compared, since F´ serializes packed. Reads
+`Bus.fpp` alone through the native `fpp to-json`, so it needs neither the F´ framework clone nor an
+F´ build.
 """
 
 from collections.abc import Callable
@@ -65,8 +66,7 @@ def _payload_fields(struct: Struct) -> list[Field]:
         struct: the bus struct, `Bus.<Name>`.
 
     Returns:
-        The fields of `messaging.<Name>Payload`, the name matched ignoring case, in Basilisk's
-        order.
+        The fields of `messaging.<Name>Payload`, in Basilisk's order.
 
     Raises:
         KeyError: no payload matches the struct's name.
@@ -112,15 +112,55 @@ def _delete(text: str) -> str:
     return "".join(line for line in lines if not line.strip().startswith("drFramePlatform:"))
 
 
-@pytest.mark.parametrize("seed", [_rename, _delete], ids=["renamed", "missing"])
-def test_a_drifted_bus_struct_differs_from_its_payload(
-    seed: Callable[[str], str], tmp_path: Path
-) -> None:
-    """A copy of Bus.fpp with a member renamed, or a Basilisk field missing, no longer mirrors it.
+def _swap(text: str) -> str:
+    """Bus.fpp with `dvFramePlatform` and `accelPlatform` in each other's place.
 
     Args:
-        seed: the drift to seed into the copy.
-        tmp_path: where the seeded copy is written.
+        text: Bus.fpp's text.
+
+    Returns:
+        The seeded text.
+    """
+    lines = text.splitlines(keepends=True)
+    first = next(i for i, line in enumerate(lines) if line.strip().startswith("dvFramePlatform:"))
+    second = next(i for i, line in enumerate(lines) if line.strip().startswith("accelPlatform:"))
+    lines[first], lines[second] = lines[second], lines[first]
+    return "".join(lines)
+
+
+def _reshape(text: str) -> str:
+    """Bus.fpp with `accelPlatform` four elements long.
+
+    Args:
+        text: Bus.fpp's text.
+
+    Returns:
+        The seeded text.
+    """
+    return text.replace("accelPlatform: [3] F64", "accelPlatform: [4] F64")
+
+
+def _recase(text: str) -> str:
+    """Bus.fpp with `angVelPlatform` spelled in capitals, a name that differs only in case.
+
+    Args:
+        text: Bus.fpp's text.
+
+    Returns:
+        The seeded text.
+    """
+    return text.replace("angVelPlatform:", "ANGVELPLATFORM:")
+
+
+def _seeded_imu(seed: Callable[[str], str], tmp_path: Path) -> Struct:
+    """`Bus.ImuSensorMsg` from a seeded copy of Bus.fpp, once the seed is seen to change the text.
+
+    Args:
+        seed: the edit to make to the copy.
+        tmp_path: where the copy is written.
+
+    Returns:
+        The copy's `Bus.ImuSensorMsg`.
     """
     text = BUS.read_text()
     seeded = seed(text)
@@ -128,4 +168,30 @@ def test_a_drifted_bus_struct_differs_from_its_payload(
     copy = tmp_path / "Bus.fpp"
     copy.write_text(seeded)
     (struct,) = (s for s in _bus_structs(copy) if s.name == "Bus.ImuSensorMsg")
+    return struct
+
+
+@pytest.mark.parametrize(
+    "seed", [_rename, _delete, _swap, _reshape], ids=["renamed", "missing", "swapped", "reshaped"]
+)
+def test_a_drifted_bus_struct_differs_from_its_payload(
+    seed: Callable[[str], str], tmp_path: Path
+) -> None:
+    """A copy of Bus.fpp with a member renamed, missing, moved or resized no longer mirrors it.
+
+    Args:
+        seed: the drift to seed into the copy.
+        tmp_path: where the seeded copy is written.
+    """
+    struct = _seeded_imu(seed, tmp_path)
     assert _struct_fields(struct) != _payload_fields(struct)
+
+
+def test_a_member_name_differing_only_in_case_still_mirrors_its_field(tmp_path: Path) -> None:
+    """A copy of Bus.fpp with a member's name in capitals still mirrors its payload.
+
+    Args:
+        tmp_path: where the seeded copy is written.
+    """
+    struct = _seeded_imu(_recase, tmp_path)
+    assert _struct_fields(struct) == _payload_fields(struct)
