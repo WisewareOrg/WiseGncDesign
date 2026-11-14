@@ -261,6 +261,20 @@ def test_a_step_whose_input_was_never_written_raises_naming_the_port(gnc: GncPar
         gnc.run(1.0, [0])
 
 
+def test_boot_drops_every_input_held(gnc: GncPartition):
+    """A power cycle leaves no input written: the seed written before boot is gone after it.
+
+    Args:
+        gnc: the toy's partition.
+    """
+    gnc.write("seedIn", Value(3.0))
+
+    gnc.boot({"source": "p", "sink": None, "slow": None})
+
+    with pytest.raises(RuntimeError, match=r"source\.seedIn"):
+        gnc.run(1.0, [0])
+
+
 def test_boot_builds_every_algorithm_afresh(gnc: GncPartition):
     """A second boot replaces each algorithm with a new one on the parameters given.
 
@@ -405,16 +419,3 @@ def test_a_sub_topology_without_exactly_one_rate_group_driver_is_refused(tmp_pat
 
     with pytest.raises(ValueError, match="2 rate group drivers"):
         GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
-
-
-def test_a_rate_group_without_its_divider_constant_is_refused_naming_it(tmp_path: Path):
-    """`<stem>RateGroup` runs at the constant `<stem>Divider` of its module, which must exist.
-
-    Args:
-        tmp_path: where the toy is written.
-    """
-    model = _model(tmp_path, TOY.replace("  constant slowDivider = 2\n", ""))
-    gnc = GncPartition(model, "Toy", (Sink, Slow, Source))
-
-    with pytest.raises(KeyError, match=r"Toy\.slowDivider"):
-        dividers(model, gnc.rate_groups)

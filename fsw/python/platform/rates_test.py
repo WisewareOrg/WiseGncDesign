@@ -1,6 +1,9 @@
 """The Python build's rate-group driver counts base ticks as F´'s `Svc.RateGroupDriver` does."""
 
-from fsw.python.platform.rates import RateGroupDriver
+import pytest
+
+from fsw.codegen.fpp_model import Model
+from fsw.python.platform.rates import RateGroupDriver, dividers
 
 
 def test_each_rate_group_runs_on_every_divider_th_tick_from_the_first():
@@ -17,3 +20,28 @@ def test_a_divider_of_zero_never_runs_its_rate_group_as_in_f_prime():
     driver = RateGroupDriver((2, 0))
 
     assert [driver.tick() for _ in range(3)] == [[0], [], [0]]
+
+
+def _constants(constants: dict[str, int]) -> Model:
+    """A model holding only constants.
+
+    Args:
+        constants: each constant's value, by qualified name.
+
+    Returns:
+        The model.
+    """
+    return Model({}, {}, {}, constants, {}, {}, {})
+
+
+def test_each_rate_group_takes_its_stem_s_divider_in_its_module():
+    """`<stem>RateGroup` runs at `<stem>Divider`, in the rate groups' order."""
+    model = _constants({"Toy.fastDivider": 1, "Toy.slowDivider": 2, "Other.fastDivider": 5})
+
+    assert dividers(model, ("Toy.slowRateGroup", "Toy.fastRateGroup")) == (2, 1)
+
+
+def test_a_rate_group_without_its_divider_constant_is_refused_naming_it():
+    """A rate group whose module declares no `<stem>Divider` raises, naming the constant."""
+    with pytest.raises(KeyError, match=r"Toy\.slowDivider"):
+        dividers(_constants({"Toy.fastDivider": 1}), ("Toy.fastRateGroup", "Toy.slowRateGroup"))

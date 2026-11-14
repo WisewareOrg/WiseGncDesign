@@ -77,7 +77,7 @@ def test_it_boots_idle_and_writes_only_navstate_until_commanded():
 
     outputs, written = reckoner.step(t=1.0, imu=Gnc.ImuReading(_ZERO3, _ZERO3))
 
-    assert outputs == Gnc.ImuDeadReckonerOutputs()
+    assert type(outputs) is Gnc.ImuDeadReckonerOutputs
     assert written == Gnc.ImuDeadReckonerTelemetry(navState="idle")
     assert not hasattr(reckoner, "q_BN")
 

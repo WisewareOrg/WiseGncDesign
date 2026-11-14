@@ -395,3 +395,50 @@ def test_an_output_port_that_is_not_one_value_fails_generation_naming_it(
 
     with pytest.raises(ValueError, match="gainOut"):
         _toy(tmp_path, seeded)
+
+
+def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_and_ports():
+    """Each algorithm instance's telemetry tuple writes exactly its dictionary's channels.
+
+    Its parameters tuple holds the dictionary's parameters, and its outputs tuple its component's
+    output ports, for every configuration in `fsw/fpp/gnc/`, so a write named for a field is a
+    channel the ground can pack.
+    """
+    import functools
+
+    from fsw.codegen import fpp_types
+    from fsw.codegen.deployment import configuration_model
+    from ground.dictionary import Dictionary
+
+    configurations = sorted(
+        p.stem for p in (Path(__file__).parents[1] / "fpp" / "gnc").glob("*.fpp")
+    )
+    assert configurations
+    for configuration in configurations:
+        dictionary = Dictionary.from_sub_topology(configuration)
+        components = configuration_model(configuration).components
+        instances = dictionary.algorithm_instances()
+        assert instances, configuration
+        for instance in instances:
+            short = instance.name.rsplit(".", 1)[-1]
+
+            def tuple_of(suffix: str, component: str = instance.component) -> type:
+                """The instance's component's tuple of a suffix.
+
+                Args:
+                    suffix: `Telemetry`, `Parameters` or `Outputs`.
+                    component: the component's qualified name.
+
+                Returns:
+                    The tuple.
+                """
+                return functools.reduce(getattr, f"{component}{suffix}".split("."), fpp_types)
+
+            channels = dictionary.entries(short)["channels"]
+            parameters = [
+                p.name.removeprefix(f"{short}.") for p in dictionary.parameters_by_id.values()
+            ]
+            ports = [p.name for p in components[instance.component].outputs]
+            assert sorted(tuple_of("Telemetry")._fields) == sorted(channels), instance.name
+            assert sorted(tuple_of("Parameters")._fields) == sorted(parameters), instance.name
+            assert list(tuple_of("Outputs")._fields) == ports, instance.name

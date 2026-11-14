@@ -6,7 +6,7 @@ from Basilisk.architecture import messaging
 
 from fsw.codegen.fpp_types import Bus, Gnc
 from fsw.python.cdh.inputs import Pair
-from fsw.python.rio.messages import commands, read
+from fsw.python.rio.messages import read
 
 IMU = Pair("imu", Bus.ImuSensorMsg, Gnc.ImuReading, "imuIn")
 """A pair: the IMU's message, through its bus struct, to the GNC's reading."""
@@ -95,8 +95,3 @@ def test_a_paired_role_the_vehicle_does_not_have_is_refused_naming_it():
     """The configuration takes the IMU; a vehicle without one fails the tick, naming the role."""
     with pytest.raises(KeyError, match="imu"):
         read([IMU], {"star": object()})
-
-
-def test_rio_out_commands_no_actuator():
-    """No actuator is written, so RIO-out returns no command."""
-    assert commands() == {}

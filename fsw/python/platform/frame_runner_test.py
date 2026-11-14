@@ -82,6 +82,20 @@ def _imu(rate: list[float]) -> messaging.IMUSensorMsgPayload:
     return payload
 
 
+MOUNTING = np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+"""A mounting that is not the identity, so a record not read shows."""
+
+
+@pytest.fixture(scope="session")
+def case_parameters() -> tuple[Gnc.ImuDeadReckonerParameters]:
+    """The case's record: a mu and a mounting that no default or zero would give.
+
+    Returns:
+        The instance's parameters.
+    """
+    return (Gnc.ImuDeadReckonerParameters(mu=4.9048695e12, dcm_PB=MOUNTING),)
+
+
 @pytest.fixture
 def runner(prm_record: Path) -> FrameRunner:
     """The dead reckoner's configuration, flown with the stub, booted, the log cleared.
@@ -117,11 +131,31 @@ def test_boot_builds_each_algorithm_afresh_on_its_record_parameters(runner: Fram
     """
     [(_, parameters)] = LOG
     assert type(parameters) is Gnc.ImuDeadReckonerParameters
-    np.testing.assert_array_equal(parameters.dcm_PB, np.zeros((3, 3)))
+    assert parameters.mu == 4.9048695e12
+    np.testing.assert_array_equal(parameters.dcm_PB, MOUNTING)
 
     runner.boot()
 
     assert [entry[0] for entry in LOG] == ["boot", "boot"]
+
+
+def test_boot_drops_every_command_response_and_write_not_yet_drained(runner: FrameRunner):
+    """A power cycle keeps nothing of the last flight: no queued command, response or write.
+
+    Args:
+        runner: the frame runner.
+    """
+    vector = np.zeros(3)
+    args = {"attitude": np.array([1.0, 0, 0, 0]), "position": vector, "velocity": vector}
+    runner.uplink("nav.initNavState", {"epoch": 0.5, **args}, 7)
+    runner.tick(1_000_000_000, {"imu": _imu([0.0, 0.0, 0.0])})
+    runner.uplink("nav.initNavState", {"epoch": 1.5, **args}, 8)
+
+    runner.boot()
+    runner.tick(1_000_000_000, {"imu": _imu([0.0, 0.0, 0.0])})
+
+    assert runner.responses() == []
+    assert [name for name, _, _ in runner.telemetry()] == ["nav.bodyEciPos"]
 
 
 def test_a_tick_converts_the_message_steps_at_its_time_and_commands_nothing(
