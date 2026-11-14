@@ -82,7 +82,8 @@ def case_parameters() -> tuple[Any, ...]:
 
     The instances are those the deployment's dictionary holds, so the case skips without it. A
     zero holds for a numeric parameter or an array of them; a parameter of an enum, struct or
-    string type gets none, and fails `parameters_from` or the `.dat`.
+    string type gets none, and fails `parameters_from` or the `.dat`. A test module flying an
+    algorithm's own values overrides this fixture, swapping that algorithm's tuple in.
 
     Returns:
         Each instance's `<Name>Parameters` tuple.
