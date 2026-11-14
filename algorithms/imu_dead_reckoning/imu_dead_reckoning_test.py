@@ -14,6 +14,7 @@ from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk import ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
+from algorithms.imu_dead_reckoning import gross_check
 from algorithms.imu_dead_reckoning import imu_dead_reckoning as reckoner_module
 from algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import (
@@ -23,7 +24,6 @@ from algorithms.imu_dead_reckoning.imu_dead_reckoning import (
     parameters,
 )
 from fsw.codegen.fpp_types import Gnc
-from fsw.python import AlgorithmModule
 from ground import parameters as ground_parameters
 from harness.notebook import run_notebook
 
@@ -256,7 +256,7 @@ def test_a_longer_step_lowers_each_sample_s_noise(monkeypatch: pytest.MonkeyPatc
     Args:
         monkeypatch: replaces the flight software's step for this test.
     """
-    monkeypatch.setattr(AlgorithmModule, "period_s", 4.0)
+    monkeypatch.setattr(gross_check, "tick_period", lambda _: 4.0)
     inputs = bound_inputs()
     assert inputs["step_s"] == 4.0
     assert inputs["gyro_noise_std_rad_s"] == ImuSpacecraft.gyro_noise_density_rad_s_rthz / 2

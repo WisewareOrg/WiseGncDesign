@@ -4,22 +4,25 @@ A configuration's deployment topology is rendered from `fsw/fprime/deployment/Fs
 template CMake's `configure_file` renders for the F´ build, by the same `@CONFIGURATION@` token. The
 algorithms are those the F´ build takes: every directory under `algorithms/` with a
 `CMakeLists.txt`. `gnc_instances` lists the GNC sub-topologies' instances, and `gnc_instance`
-finds a component's one instance among them.
+finds a component's one instance among them. `configuration_model` reads a configuration's contract
+and GNC sub-topology, and `tick_period` its base tick's period.
 """
 
 import functools
 from pathlib import Path
 
-from fsw.codegen.fpp_model import Instance, read
+from fsw.codegen.fpp_model import Instance, Model, read
 
 __all__ = [
     "CLONE",
     "algorithm_files",
+    "configuration_model",
     "contract_files",
     "fpp_files",
     "framework_files",
     "gnc_instance",
     "gnc_instances",
+    "tick_period",
 ]
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
@@ -164,3 +167,36 @@ def gnc_instance(component: str) -> Instance:
         names = [i.name for i in found]
         raise ValueError(f"{component} is instanced {len(found)} times in fsw/fpp/gnc: {names}")
     return found[0]
+
+
+@functools.cache
+def configuration_model(configuration: str) -> Model:
+    """A configuration's model: the contract and its GNC sub-topology, read once per process.
+
+    Args:
+        configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`, such
+            as `ImuDeadReckoning`.
+
+    Returns:
+        The model.
+    """
+    return read((*contract_files(), _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp"))
+
+
+def tick_period(configuration: str) -> float:
+    """A configuration's base tick's period: the constant `tickPeriod` of its GNC sub-topology.
+
+    Args:
+        configuration: the configuration, such as `ImuDeadReckoning`.
+
+    Returns:
+        s, the period.
+
+    Raises:
+        KeyError: the sub-topology declares no `tickPeriod`, naming it.
+    """
+    constant = f"{configuration}.tickPeriod"
+    constants = configuration_model(configuration).constants
+    if constant not in constants:
+        raise KeyError(f"{constant} is not declared in fsw/fpp/gnc/{configuration}.fpp")
+    return float(constants[constant])

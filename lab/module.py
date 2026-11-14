@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 from Basilisk.architecture import sysModel
 
-from fsw.python import AlgorithmModule
+from fsw.codegen.deployment import tick_period
 from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
@@ -34,15 +34,16 @@ class FprimeModule(sysModel.SysModel):
     and the responses and every telemetry write, each with its F´ time tag, come down through it.
 
     Attributes:
-        period_s: the period, in s, of the task the simulation runs this module in, the Python
-            host's, so the two builds fly at one rate.
+        period_s: the period, in s, of the task the simulation runs this module in: the base tick
+            `tickPeriod` of the deployment's configuration, as the Python build's, so the two
+            builds fly at one rate.
         dictionary: the deployment's dictionary.
         failure: the exception `Reset` or a tick raised, kept whole, else `None`.
         build: the host's build identity, recorded in a flight's `flight.json`: the host, F´'s
             version and the commit the deployment was built from.
     """
 
-    period_s = AlgorithmModule.period_s
+    period_s = tick_period("ImuDeadReckoning")
     dictionary: Dictionary
     failure: BaseException | None
     build: dict[str, str]
