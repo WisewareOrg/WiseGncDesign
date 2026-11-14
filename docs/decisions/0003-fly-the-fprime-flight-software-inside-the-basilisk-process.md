@@ -11,8 +11,9 @@ sub-topology)
   fresh copy per case, one extension per configuration and rates as FPP constants, with the checks
   that support them; the partitions are ADR 0005 rev 1; reverses rev 2's configuration on an F´
   port for F´ parameters (ADR 0004 rev 2); corrects rev 2's "an `FW_ASSERT` aborts the process"
-  (issue 52 tooling checks); the rate groups' health telemetry is recorded, on F´'s stub raw time
-  (issue 57 GNC sub-topology).
+  (issue 52 tooling checks); the rate groups' health telemetry is recorded, on F´'s stub raw time,
+  and each configuration's deployment is generated from its GNC sub-topology (issue 57 GNC
+  sub-topology).
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
   telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
@@ -86,8 +87,10 @@ The partitions inside each build are ADR 0005 rev 1.
   Everything else is ground segment (ADR 0004 rev 2) or lab; the lab's pins are compiled in as a
   test connector.
 - **One extension per configuration**, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
-- **Rates are FPP constants in the GNC sub-topology**, which owns its rate groups; F´'s
-  configuration code passes the generated constants to `configure()`.
+- **Rates are FPP constants in the GNC sub-topology**, which owns its rate groups and their driver;
+  platform supplies the base tick.
+- **Each configuration's deployment is generated from its GNC sub-topology**; nothing is written per
+  configuration.
 - **The rate groups' health telemetry is recorded, with F´'s stub raw time.** Its cycle times read
   0, and each case flies a fresh copy of the deployment, so it repeats from the seed.
 
