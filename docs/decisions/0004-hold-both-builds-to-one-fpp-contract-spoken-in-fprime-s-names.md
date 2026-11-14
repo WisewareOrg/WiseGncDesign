@@ -18,7 +18,7 @@
 
 One ground commands either build, records the telemetry either build writes, and the same analyzers
 judge both. An algorithm flies in Python before any F´ build of it exists, with no compiler. The F´
-build runs inside Basilisk with nothing on a thread of its own (ADR 0003 rev 3), and each build has
+build runs inside Basilisk with nothing on a thread of its own (ADR 0003 rev 4), and each build has
 its own CDH (ADR 0005 rev 1).
 
 At `6f6276e`, the Python build imitated F´'s wire format: it decoded F´ command packets, imitated

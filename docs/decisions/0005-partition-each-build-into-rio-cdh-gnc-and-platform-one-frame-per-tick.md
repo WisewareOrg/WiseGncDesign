@@ -12,7 +12,7 @@
 
 The algorithms are written in Python first and flown with no F´ build, and F´ is good flight
 software in its own right, not a mirror of the Python build. Each build meets the world at two
-edges: the ground (ADR 0004 rev 2) and the sim (ADR 0003 rev 3).
+edges: the ground (ADR 0004 rev 2) and the sim (ADR 0003 rev 4).
 
 At `6f6276e`, one object per build did bus I/O, unit conversion, commands, telemetry and the
 algorithm, wired by hand for one algorithm. A second algorithm had no place to sit, and the glue grew
@@ -32,7 +32,7 @@ way through, partitioned as real flight software is.
 - **Each build has its own CDH**, however thin.
 - **An algorithm's code lives in `algorithms/<name>/`, and GNC wires it in.** A configuration
   reaches its algorithms only through its GNC sub-topology.
-- **RIO, CDH, platform and the lab (ADR 0003 rev 3) name no algorithm.**
+- **RIO, CDH, platform and the lab (ADR 0003 rev 4) name no algorithm.**
 - **RIO, CDH and platform live in `fsw/<build>/<partition>/`; GNC is one sub-topology in
   `fsw/fpp/gnc/` that both builds fly.** The Python frame runner is nothing but these partitions.
 

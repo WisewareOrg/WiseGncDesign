@@ -124,7 +124,7 @@ builds are held to one contract. The reasoning is in
 
 The bus structs are in `fsw/fpp/interfaces/Bus.fpp`, and `bus_test.py` beside it holds each to its
 Basilisk message. The reasoning is in
-[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+[ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 ## The FPP model
 
@@ -147,6 +147,16 @@ beside its notebook, and the module's reset boots it idle with `mu` and the IMU'
 dictionary F´ generates for it alongside. `just pinned` and `just local` run it as part of their
 sync, and `just test`, `just fly` and `just lab` run it first; a host built without it says to run
 `just fsw`. The module takes `AlgorithmModule`'s `period_s`, so the two builds fly at one rate.
+
+The dead reckoner's GNC sub-topology, `fsw/fpp/gnc/ImuDeadReckoning.fpp`, holds nav, the F´ rate
+group that runs it, and its rate as the FPP constant `navDivider`. The deployment imports it, and
+its configuration code passes the generated constant to the rate-group driver's `configure()`.
+Each `step` sets SimTime to the simulation's time, then SimTime ticks the driver once, so nav runs
+on every `navDivider`-th step. The rate group's own telemetry is not connected, and
+`topology_test.py` beside the topology holds every other instance with telemetry to the ground link.
+`fsw.codegen.deployment.FPP_FILES` lists the deployment's FPP files for the reader. The reasoning
+is in [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
+and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
 
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
