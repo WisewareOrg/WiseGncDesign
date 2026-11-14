@@ -13,7 +13,8 @@ sub-topology)
   port for F´ parameters (ADR 0004 rev 2); corrects rev 2's "an `FW_ASSERT` aborts the process"
   (issue 52 tooling checks); the rate groups' health telemetry is recorded, on F´'s stub raw time,
   and each configuration's deployment is generated from its GNC sub-topology (issue 57 GNC
-  sub-topology).
+  sub-topology); the Python build's identity names its frame runner, since WiseDynamics' module is
+  the host (issue 61 Python frame runner).
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
   telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
@@ -112,10 +113,10 @@ The partitions inside each build are ADR 0005 rev 1.
   there for the judge. `fsw` is the FSW builder's name, and `build` is the build's identity:
   - for the F´ build, its host's name, `frameworkVersion` (the F´ tag) and `projectVersion`, read
     from the dictionary's metadata;
-  - for the Python build, its host's name.
+  - for the Python build, its frame runner's name.
 
   The base facts are written before a case flies. `build` is merged in once a case has built its
-  host. `just fsw` forces F´'s version stamp on every build, so `projectVersion` names the commit
+  build. `just fsw` forces F´'s version stamp on every build, so `projectVersion` names the commit
   the extension was built from, with a `-dirty` suffix when built from an uncommitted tree.
 
 ### Dependencies

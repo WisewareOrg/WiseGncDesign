@@ -67,7 +67,7 @@ def _propagate(
     reckoner.initNavState(epoch=0.0, attitude=q0, position=r0, velocity=v0)
     dt = total_t / n_steps
     for i in range(1, n_steps + 1):
-        reckoner.step(t=i * dt, AngVelPlatform=AngVelPlatform, AccelPlatform=AccelPlatform)
+        reckoner.step(t=i * dt, imu=Gnc.ImuReading(AngVelPlatform, AccelPlatform))
     return reckoner
 
 
@@ -75,9 +75,10 @@ def test_it_boots_idle_and_writes_only_navstate_until_commanded():
     """Booted, each step writes `navState` idle and nothing else, holding no state."""
     reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=0.0, dcm_PB=_IDENTITY))
 
-    written = reckoner.step(t=1.0, AngVelPlatform=_ZERO3, AccelPlatform=_ZERO3)
+    outputs, written = reckoner.step(t=1.0, imu=Gnc.ImuReading(_ZERO3, _ZERO3))
 
-    assert written == {"navState": "idle"}
+    assert outputs == Gnc.ImuDeadReckonerOutputs()
+    assert written == Gnc.ImuDeadReckonerTelemetry(navState="idle")
     assert not hasattr(reckoner, "q_BN")
 
 
@@ -92,14 +93,13 @@ def test_the_command_writes_navstate_alone_and_the_next_step_propagates_from_its
     commanded = reckoner.initNavState(
         epoch=60.0, attitude=_Q_IDENTITY, position=_AWAY_FROM_ORIGIN, velocity=velocity
     )
-    stepped = reckoner.step(t=61.0, AngVelPlatform=_ZERO3, AccelPlatform=_ZERO3)
+    _, stepped = reckoner.step(t=61.0, imu=Gnc.ImuReading(_ZERO3, _ZERO3))
 
-    assert commanded == {"navState": "initialized"}
-    assert list(stepped) == ["navState", "bodyEciPos", "bodyEciVel", "bodyEciAttitude"]
-    assert stepped["navState"] == "propagated"
-    np.testing.assert_allclose(stepped["bodyEciPos"], _AWAY_FROM_ORIGIN + velocity, rtol=1e-15)
-    np.testing.assert_array_equal(stepped["bodyEciVel"], velocity)
-    np.testing.assert_array_equal(stepped["bodyEciAttitude"], _Q_IDENTITY)
+    assert commanded == Gnc.ImuDeadReckonerTelemetry(navState="initialized")
+    assert stepped.navState == "propagated"
+    np.testing.assert_allclose(stepped.bodyEciPos, _AWAY_FROM_ORIGIN + velocity, rtol=1e-15)
+    np.testing.assert_array_equal(stepped.bodyEciVel, velocity)
+    np.testing.assert_array_equal(stepped.bodyEciAttitude, _Q_IDENTITY)
 
 
 # Past a rotation of $\pi$ the quaternion's $q_w$ would turn negative; the step keeps $q_w \ge 0$,
@@ -187,10 +187,10 @@ def test_the_kinematics_match_the_dcm_derivative_for_a_nonaligned_rate():
     reckoner.initNavState(epoch=0.0, attitude=q0, position=_AWAY_FROM_ORIGIN, velocity=_ZERO3)
     dt = 1e-5
 
-    state = reckoner.step(t=dt, AngVelPlatform=omega, AccelPlatform=_ZERO3)
+    _, state = reckoner.step(t=dt, imu=Gnc.ImuReading(omega, _ZERO3))
 
     c0 = Rotation.from_quat(q0, scalar_first=True).as_matrix().T
-    c1 = Rotation.from_quat(state["bodyEciAttitude"], scalar_first=True).as_matrix().T
+    c1 = Rotation.from_quat(state.bodyEciAttitude, scalar_first=True).as_matrix().T
     np.testing.assert_allclose(
         (c1 - c0) / dt,
         -np.cross(omega[:, None], c0, axis=0),
