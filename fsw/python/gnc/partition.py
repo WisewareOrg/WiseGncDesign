@@ -66,10 +66,12 @@ class GncPartition:
     Attributes:
         rate_groups: each rate group's qualified name, in its driver's `CycleOut` order; a frame's
             rate groups are named by their position here.
+        components: each member's FPP component's qualified name, by its instance's name.
         algorithms: each algorithm `boot` built, by its instance's name, such as `nav`.
     """
 
     rate_groups: tuple[str, ...]
+    components: dict[str, str]
     algorithms: dict[str, Any]
 
     def __init__(self, model: Model, configuration: str, classes: Sequence[type]) -> None:
@@ -118,6 +120,7 @@ class GncPartition:
                 f"{topology}'s members need the classes {missing} and have none for {extra}"
             )
         self._classes = {m: by_name[name] for m, name in wanted.items()}
+        self.components = {_name(m): model.instances[m].component for m in members}
 
         scheduling = {i for i, kind in component.items() if kind in (_DRIVER, _RATE_GROUP)}
         order = {m: n for n, m in enumerate(m for group in self._members for m in group)}
