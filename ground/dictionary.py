@@ -19,8 +19,14 @@ from typing import Any
 
 import numpy as np
 
-from fsw.codegen.deployment import CLONE, framework_files
-from fsw.codegen.fpp_model import Instance
+from fsw.codegen.deployment import (
+    CLONE,
+    algorithm_files,
+    contract_files,
+    framework_files,
+    gnc_instances,
+)
+from fsw.codegen.fpp_model import Instance, read
 
 __all__ = ["Channel", "Command", "Dictionary", "Parameter", "Type"]
 
@@ -203,6 +209,18 @@ class Channel:
             raise ValueError(f"channel {self.name} has no constant {error}") from error
 
 
+@functools.cache
+def _algorithm_components() -> frozenset[str]:
+    """The components an algorithm's `.fpp` defines, read once per process.
+
+    Returns:
+        Their qualified names.
+    """
+    algorithms = set(algorithm_files())
+    components = read(contract_files()).components.values()
+    return frozenset(c.name for c in components if c.file in algorithms)
+
+
 class Dictionary:
     """One deployment's F´ JSON dictionary, its names without their instances' modules.
 
@@ -264,6 +282,20 @@ class Dictionary:
             entry["id"]: Parameter(entry["id"], entry["name"].split(".", 1)[1])
             for entry in document["parameters"]
         }
+
+    def algorithm_instances(self) -> tuple[Instance, ...]:
+        """The GNC instances of an algorithm's component that this dictionary holds.
+
+        An instance is held when a command, channel or parameter of the dictionary is named under
+        its qualified name, as F´ names a deployment's entries.
+
+        Returns:
+            The instances, in `fsw.codegen.deployment.gnc_instances`' order.
+        """
+        kinds = ("commands", "telemetryChannels", "parameters")
+        held = {e["name"].rsplit(".", 1)[0] for kind in kinds for e in self._document[kind]}
+        algorithms = _algorithm_components()
+        return tuple(i for i in gnc_instances() if i.name in held and i.component in algorithms)
 
     @classmethod
     def from_component(cls, model: Sequence[Path], instance: Instance) -> "Dictionary":

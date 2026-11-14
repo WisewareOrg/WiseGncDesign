@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import algorithm_files, contract_files, gnc_instances
+from fsw.codegen.deployment import contract_files
 from fsw.codegen.fpp_model import Instance, read
 from ground.dictionary import Dictionary
 
@@ -449,8 +449,32 @@ def test_a_parameter_of_a_type_not_coded_does_not_stop_the_dictionary_loading(tm
     assert {"toy.pair", "toy.label"} <= names
 
 
+def test_the_algorithm_instances_are_the_gnc_instances_of_an_algorithm_it_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A GNC instance is one of the dictionary's when it has entries there and is an algorithm's.
+
+    The toy's dictionary holds `PyToy.toy`; a second instance of its component has no entries in
+    it, and while the toy is no algorithm's component neither instance is.
+
+    Args:
+        tmp_path: where the toy's model is written.
+        monkeypatch: gives the GNC sub-topologies the toy's instances, and the algorithms its
+            component.
+    """
+    toy = _toy(tmp_path)
+    held = Instance("PyToy.toy", "Toy.Toy", 0x1000)
+    absent = Instance("PyToy.other", "Toy.Toy", 0x2000)
+    monkeypatch.setattr("ground.dictionary.gnc_instances", lambda: (held, absent))
+    monkeypatch.setattr("ground.dictionary._algorithm_components", lambda: {"Toy.Toy"})
+
+    assert toy.algorithm_instances() == (held,)
+    monkeypatch.setattr("ground.dictionary._algorithm_components", lambda: set())
+    assert toy.algorithm_instances() == ()
+
+
 def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_parameter_ids():
-    """Each algorithm's GNC instance, generated alone, states WiseFsw's entries and parameter IDs.
+    """Each of WiseFsw's algorithm instances, generated alone, states its entries and parameter IDs.
 
     It also fails when an algorithm's `.fpp`, or a group it includes, changed and F´ was not
     rebuilt.
@@ -461,12 +485,7 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
         pytest.skip("the F´ build is absent; run `just fsw`")
     wise_fsw = Dictionary(DICTIONARY)
     components = read(contract_files()).components
-    algorithms = set(algorithm_files())
-    instances = [
-        i
-        for i in gnc_instances()
-        if i.component in components and components[i.component].file in algorithms
-    ]
+    instances = wise_fsw.algorithm_instances()
     assert instances
 
     def ids(dictionary: Dictionary, instance: str) -> dict[str, int]:

@@ -78,25 +78,24 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
 
 @pytest.fixture(scope="session")
 def case_parameters() -> tuple[Any, ...]:
-    """Each algorithm's GNC instance's parameters, every value zero, of its FPP shape.
+    """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
-    A zero holds for a numeric parameter or an array of them; a parameter of an enum, struct or
+    The instances are those the deployment's dictionary holds, so the case skips without it. A
+    zero holds for a numeric parameter or an array of them; a parameter of an enum, struct or
     string type gets none, and fails `parameters_from` or the `.dat`.
 
     Returns:
         Each instance's `<Name>Parameters` tuple.
     """
     from fsw.codegen import fpp_types
-    from fsw.codegen.deployment import algorithm_files, contract_files, gnc_instances
+    from fsw.codegen.deployment import contract_files
     from fsw.codegen.fpp_model import Array, read
+    from ground.dictionary import Dictionary
 
     model = read(contract_files())
-    algorithms = set(algorithm_files())
     tuples = []
-    for instance in gnc_instances():
-        component = model.components.get(instance.component)
-        if component is None or component.file not in algorithms:
-            continue
+    for instance in Dictionary(_dictionary()).algorithm_instances():
+        component = model.components[instance.component]
         values = {}
         for parameter in component.parameters:
             shape, type_name = (), parameter.type

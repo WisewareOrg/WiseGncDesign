@@ -13,18 +13,17 @@ from typing import Any
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import contract_files
+from fsw.codegen.deployment import fpp_files
 from fsw.codegen.fpp_model import read
+from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
+from lab import DICTIONARY
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000
 """ns per s."""
-
-GNC = Path(__file__).resolve().parents[1] / "fsw" / "fpp" / "gnc"
-"""The GNC sub-topologies."""
 
 STATE = {
     "epoch": 0.0,
@@ -213,25 +212,33 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
 
 
 def test_each_rate_group_runs_once_every_divider_ticks(
-    fsw: ModuleType, station: FprimeStation, prm: str, parameter_ids: list[int]
+    fsw: ModuleType,
+    station: FprimeStation,
+    tmp_path: Path,
+    prm: str,
+    parameter_ids: list[int],
 ):
     """Each rate group's `CycleCount` advances by one once every divider ticks, its own divider.
 
-    A rate group `<stem>RateGroup` runs at the constant `<stem>Divider` of its module in the GNC
-    sub-topologies. The count is taken over ten of the dividers' least common multiple, a whole
-    number of every divider, which holds whatever tick the driver starts on.
+    The deployment's configuration is the module of its algorithm instances, a GNC sub-topology
+    named for its file. A rate group `<stem>RateGroup` runs at the constant `<stem>Divider` of that
+    module. The count is taken over ten of the dividers' least common multiple, a whole number of
+    every divider, which holds whatever tick the driver starts on.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        tmp_path: where the configuration's topology is rendered.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
     """
-    constants = read((*contract_files(), *sorted(GNC.glob("*.fpp")))).constants
+    instances = Dictionary(DICTIONARY).algorithm_instances()
+    (configuration,) = {i.name.split(".", 1)[0] for i in instances}
+    constants = read(fpp_files(configuration, tmp_path)).constants
     dividers = {
-        name.rsplit(".", 1)[1].removesuffix("Divider") + "RateGroup": divider
+        name.removeprefix(f"{configuration}.").removesuffix("Divider") + "RateGroup": divider
         for name, divider in constants.items()
-        if name.endswith("Divider")
+        if name.startswith(f"{configuration}.") and name.endswith("Divider")
     }
     assert dividers
     ticks = 10 * math.lcm(*dividers.values())
