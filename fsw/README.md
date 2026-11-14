@@ -122,6 +122,10 @@ An F´ port's tests assert that its Python build's entries equal WiseFsw's, IDs 
 builds are held to one contract. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
+The bus structs are in `fsw/fpp/interfaces/Bus.fpp`, and `bus_test.py` beside it holds each to its
+Basilisk message. The reasoning is in
+[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+
 ## The FPP model
 
 `fsw.codegen.fpp_model` is the one module that reads FPP's model in Python: `read(files)` runs

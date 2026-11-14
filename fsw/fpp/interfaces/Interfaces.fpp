@@ -10,10 +10,13 @@ module Gnc {
   array Matrix3 = [3] Vector3
 
   @ One IMU reading, in the IMU platform frame P
-  port ImuReading(
+  struct ImuReading {
     angVelPlatform: Vector3 @< rad/s, the rate of the body frame with respect to ECI, in P
     accelPlatform: Vector3 @< m/s^2, non-gravitational acceleration, in P
-  )
+  }
+
+  @ Carries one IMU reading
+  port ImuReading(reading: ImuReading)
 
   @ The navigation filter's configuration
   port NavConfig(

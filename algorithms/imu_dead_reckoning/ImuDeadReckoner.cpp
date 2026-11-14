@@ -74,10 +74,9 @@ void ImuDeadReckoner::initNavState_cmdHandler(FwOpcodeType opCode, U32 cmdSeq, F
     this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::OK);
 }
 
-void ImuDeadReckoner::imuIn_handler(FwIndexType portNum, const Gnc::Vector3& angVelPlatform,
-                                    const Gnc::Vector3& accelPlatform) {
-    this->m_omega_P = vector(angVelPlatform);
-    this->m_accel_P = vector(accelPlatform);
+void ImuDeadReckoner::imuIn_handler(FwIndexType portNum, const Gnc::ImuReading& reading) {
+    this->m_omega_P = vector(reading.get_angVelPlatform());
+    this->m_accel_P = vector(reading.get_accelPlatform());
 }
 
 void ImuDeadReckoner::schedIn_handler(FwIndexType portNum, U32 context) {
