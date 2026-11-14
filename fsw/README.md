@@ -176,21 +176,21 @@ The reasoning is in
 
 ## The F´ host
 
-`lab.FprimeModule(imu, prm_path)` runs the WiseFsw F´ deployment in the
-simulation's process, with the parameters of the case's record at `prm_path`. The deployment's content is the dead reckoner, whose F´ component sits
-beside its notebook. `just fsw` builds the deployment into `lab` as the extension `_wise_fsw`,
-with the JSON dictionary F´ generates for it alongside. `just pinned` and `just local` run it as
-part of their sync, and `just test`, `just fly` and `just lab` run it first; a host built without
-it says to run `just fsw`. The module takes `AlgorithmModule`'s `period_s`, so the two builds fly
-at one rate.
+`lab.FprimeModule(imu, prm_path)` runs the WiseFsw F´ deployment in the simulation's process,
+with the parameters of the case's record at `prm_path`. The deployment's content is the dead
+reckoner, whose F´ component sits beside its notebook. `just fsw` builds the deployment into `lab`
+as the extension `_wise_fsw`, with the JSON dictionary F´ generates for it alongside. `just pinned`
+and `just local` run it as part of their sync, and `just test`, `just fly` and `just lab` run it
+first; a host built without it says to run `just fsw`. The module takes `AlgorithmModule`'s
+`period_s`, so the two builds fly at one rate.
 
 The module's reset power-cycles the deployment, as a vehicle is power-cycled between flights:
 `lab.power_cycle.power_cycle()`, the one entry point to the extension, loads a fresh copy of it,
 and the copy's `boot` sets its topology up and leaves nav idle. Booting, F´'s stock PrmDb loads the
 case's `.dat`, which `ground.parameters.dat` makes beside the record with F´'s own
-`fprime-prm-write` conversion, in-process, when the host is built; PrmDb's sandbox is that directory, never the root, and
-a parameter the load leaves invalid fails the boot, named by its ID. A copy boots once, and an F´
-assert raises `RuntimeError` in Python with F´'s own text.
+`fprime-prm-write` conversion, in-process, when `FprimeModule` is constructed. PrmDb's sandbox is
+that directory, never the root, and a parameter the load leaves invalid fails the boot, named by
+its ID. A copy boots once, and an F´ assert raises `RuntimeError` in Python with F´'s own text.
 
 The dead reckoner's GNC sub-topology, `fsw/fpp/gnc/ImuDeadReckoning.fpp`, holds nav, the F´ rate
 group that runs it, the rate-group driver, and its rate as the FPP constant `navDivider`; `phase`
