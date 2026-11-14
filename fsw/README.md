@@ -6,8 +6,8 @@
 The ground, `ground.procedures.Ground`, runs the scenario's procedure against either build's
 radio edge and records the flight; [RadioEdge](#radioedge) says which host presents it.
 
-`fsw.python` knows nothing about what any field means: it copies message fields to the
-algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm.
+`fsw.python.AlgorithmModule` knows nothing about what any field means: it copies message fields
+to the algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm.
 
 `fsw.python.AlgorithmModule(algorithm, inputs, instance=..., dictionary=...)` hosts an
 algorithm as the F´ instance `instance` would be hosted, held to `dictionary`, on a dict of
