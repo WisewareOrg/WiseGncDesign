@@ -52,17 +52,23 @@ def test_a_component_instanced_nowhere_is_refused(tmp_path: Path):
 
 
 @pytest.mark.skipif(not DICTIONARY.exists(), reason="the F´ build is absent; run `just fsw`")
-def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(tmp_path: Path):
+def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     """The `.dat` decodes, with `-o` so the record is never overwritten, to the record's values.
+
+    Making it prints nothing, so a campaign's output carries no line per case.
 
     Args:
         tmp_path: where the case's files are written.
+        capsys: captures what making the `.dat` prints.
     """
     record = parameters.write(NAV, tmp_path / "run_0000.prm.json")
     written = record.read_text()
 
     dat = parameters.dat(record, DICTIONARY)
 
+    assert capsys.readouterr().out == ""
     assert dat == tmp_path / "run_0000.prm.dat"
     decoded = tmp_path / "decoded.json"
     tool = Path(sys.executable).parent / "fprime-prm-decode"
