@@ -50,8 +50,9 @@ _DTYPES = {
 _STRUCTS: dict[type, tuple[Struct, dict[str, Struct | Enum | Array]]] = {}
 """Each struct's tuple, to its struct and the model's types, for `converter`."""
 
-_PARAMETERS: dict[type, tuple[Component, dict[str, Struct | Enum | Array]]] = {}
-"""Each parameters tuple, to its component and the model's types, for `parameters_from`."""
+_COMPONENTS: dict[str, tuple[Component, dict[str, Struct | Enum | Array]]] = {}
+"""Each algorithm's component, by its qualified name, with the model's types, for
+`parameters_from`."""
 
 
 def converter(source: type, target: type) -> Callable[[Any], Any]:
@@ -122,7 +123,7 @@ def parameters_from(tuple_type: type, values: Mapping[str, Any]) -> Any:
     Raises:
         ValueError: an array field's value is not of its FPP shape, naming the field.
     """
-    component, types = _PARAMETERS[tuple_type]
+    component, types = _COMPONENTS[tuple_type.component]
     converted = dict(values)
     for parameter in component.parameters:
         shape, element = _form(Member(parameter.name, parameter.type, None), types)
@@ -193,7 +194,8 @@ def _source_forms(source: type) -> dict[str, tuple[str, _Form]]:
 def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamespace]:
     """The tuples of a model's structs and of its algorithms' components, by top-level FPP module.
 
-    Each struct's tuple is recorded for `converter`.
+    Each struct's tuple is recorded for `converter`, and each algorithm's component for
+    `parameters_from`.
 
     Args:
         model: the model.
@@ -227,10 +229,9 @@ def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamesp
     files = {Path(f).resolve() for f in algorithms}
     for component in model.components.values():
         if component.file.resolve() in files:
+            _COMPONENTS[component.name] = component, model.types
             for suffix, cls in _component_tuples(component).items():
                 place(component.name + suffix, cls)
-                if suffix == "Parameters":
-                    _PARAMETERS[cls] = component, model.types
     return namespaces
 
 

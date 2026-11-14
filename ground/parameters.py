@@ -45,9 +45,8 @@ def write(parameters: Any, path: Path) -> Path:
 def dat(record: Path, dictionary: Path) -> Path:
     """Makes the record's `.dat` beside it with `fprime-prm-write`'s own conversion, in-process.
 
-    The output path is always given, so the tool never derives one from the record's, and what the
-    tool prints is discarded. A record the tool refuses, such as one naming a parameter the
-    dictionary lacks, raises the tool's own exception.
+    What the tool prints is discarded. A record the tool refuses, such as one naming a parameter
+    the dictionary lacks, raises the tool's own exception.
 
     Args:
         record: the case's record, `<name>.json`.

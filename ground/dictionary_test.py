@@ -397,8 +397,8 @@ _PARAMETERS = """    param get port prmGetOut
 """Parameters given to the toy, with the ports a component with parameters needs."""
 
 
-def test_each_parameter_is_listed_by_id_with_its_name_and_type(tmp_path: Path):
-    """The toy's two parameters come by ID, named `toy.<parameter>`, each with its type.
+def test_each_parameter_is_listed_by_id_with_its_name(tmp_path: Path):
+    """The toy's two parameters come by ID, named `toy.<parameter>`; their commands are marked.
 
     Args:
         tmp_path: where the toy's model is written.
@@ -409,22 +409,21 @@ def test_each_parameter_is_listed_by_id_with_its_name_and_type(tmp_path: Path):
 
     assert sorted(named) == ["toy.limit", "toy.mounting"]
     assert all(toy.parameters_by_id[p.id] is p for p in named.values())
-    assert named["toy.limit"].type.dtype == np.dtype(">f4")
-    assert named["toy.mounting"].type.dtype == np.dtype((">f8", (3, 3)))
     assert toy.command("toy.LIMIT_PRM_SET").kind == "set"
+    assert toy.command("toy.LIMIT_PRM_SAVE").kind == "save"
     assert toy.command("toy.setToy").kind == "sync"
 
 
-def test_a_parameter_of_a_type_not_coded_is_refused_at_load_naming_parameter_and_type(
-    tmp_path: Path,
-):
-    """A struct parameter fails the dictionary's load, naming the parameter and its type.
+def test_a_parameter_of_a_type_not_coded_does_not_stop_the_dictionary_loading(tmp_path: Path):
+    """A struct and a string parameter load: no consumer reads a parameter's type.
 
     Args:
         tmp_path: where the toy's model is written.
     """
     toy = TOY.replace("  passive", "  struct Pair { a: F64, b: F64 }\n\n  passive")
-    toy = toy.replace("    time get port", _PARAMETERS + "    param pair: Pair\n    time get port")
+    added = "    param pair: Pair\n    param label: string\n"
+    toy = toy.replace("    time get port", _PARAMETERS + added + "    time get port")
 
-    with pytest.raises(ValueError, match=r"parameter toy\.pair has type Toy\.Pair"):
-        _toy(tmp_path, toy=toy)
+    names = {p.name for p in _toy(tmp_path, toy=toy).parameters_by_id.values()}
+
+    assert {"toy.pair", "toy.label"} <= names
