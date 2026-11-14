@@ -61,7 +61,7 @@ _TEMPLATE = _REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in"
 
 
 def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
-    """Every file of a configuration's deployment model, its topology rendered into `directory`.
+    """Renders a configuration's deployment topology into `directory`, and lists its model's files.
 
     Args:
         configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`, such

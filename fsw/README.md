@@ -150,14 +150,15 @@ sync, and `just test`, `just fly` and `just lab` run it first; a host built with
 
 The dead reckoner's GNC sub-topology, `fsw/fpp/gnc/ImuDeadReckoning.fpp`, holds nav, the F´ rate
 group that runs it, the rate-group driver, and its rate as the FPP constant `navDivider`; `phase`
-blocks on the driver and the rate group pass the constant to their `configure()`. It exposes the
-ports `tickIn`, `imuIn` and `navConfigIn`. Each configuration's deployment, `WiseFsw.<Cfg>Fsw`, is
-rendered at build time from the templates in `fsw/fprime/deployment/`, one per file in
-`fsw/fpp/gnc/`, into the build directory, where it compiles its GNC sub-topology with it; the
-shared instances are in `fsw/fprime/deployment/instances.fpp`. The F´ build takes every directory
-under `algorithms/` with a `CMakeLists.txt`, and F´ finds which algorithms a configuration links
-from its FPP. Each `step` sets SimTime to the simulation's time, then SimTime ticks the driver once,
-so nav runs on every `navDivider`-th step.
+blocks on the driver and the rate group pass the constant to their `configure()`. Each GNC
+sub-topology exposes the ports `tickIn`, `imuIn` and `navConfigIn`, which the deployment wires.
+Each configuration's deployment, `WiseFsw.<Cfg>Fsw`, is rendered at build time from the templates
+in `fsw/fprime/deployment/`, one per file in `fsw/fpp/gnc/`, into the build directory, where it
+compiles its GNC sub-topology with it; the shared instances are in
+`fsw/fprime/deployment/instances.fpp`. The F´ build takes every directory under `algorithms/` with
+a `CMakeLists.txt`, and F´ finds which algorithms a configuration links from its FPP. Each `step`
+sets SimTime to the simulation's time, then SimTime ticks the driver once, so nav runs on every
+`navDivider`-th step.
 
 The rate group's health telemetry is recorded with every other channel; the deployment links F´'s
 stub `Os::RawTime`, so its cycle times read 0. A process's first case reproduces its rate-group

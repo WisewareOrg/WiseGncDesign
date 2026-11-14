@@ -1,3 +1,5 @@
+# Rendered for each GNC sub-topology in fsw/fpp/gnc/, which must expose the ports tickIn, imuIn and
+# navConfigIn.
 module WiseFsw {
 
   @ The flight software run inside the simulation: the @CONFIGURATION@ configuration's GNC, fed and

@@ -89,8 +89,8 @@ The partitions inside each build are ADR 0005 rev 1.
 - **One extension per configuration**, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
 - **Rates are FPP constants in the GNC sub-topology**, which owns its rate groups and their driver;
   platform supplies the base tick.
-- **Each configuration's deployment is generated from its GNC sub-topology**; nothing is written per
-  configuration.
+- **Each configuration's deployment is generated from its GNC sub-topology**; no deployment code is
+  written per configuration.
 - **The rate groups' health telemetry is recorded, with F´'s stub raw time.** Its cycle times read
   0, and each case flies a fresh copy of the deployment, so it repeats from the seed.
 
@@ -158,6 +158,10 @@ The partitions inside each build are ADR 0005 rev 1.
   channel per tick. Rejected.
 - **Filtering it out on the ground or in the lab.** Every write still moves each tick, and the
   dictionary carries no component type to filter on. Rejected.
+- **A deployment written by hand per configuration.** Each configuration repeats the same wiring and
+  set-up, and a new configuration means a new folder. Rejected.
+- **A generator that reads each sub-topology.** The sub-topology's ports give every configuration
+  the same interface, so a template filled with its name is enough. Rejected for the template.
 - **A separate FSW process bridged over a socket.** No lockstep with simulated time without a tick
   protocol of its own. Rejected.
 - **F´'s own timer, with components on OS threads.** It wakes on wall-clock time, so a case does not
