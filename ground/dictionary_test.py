@@ -67,13 +67,14 @@ ARGS = {
 }
 
 
-def _toy(directory: Path, toy: str = TOY, extra: str = EXTRA) -> Dictionary:
+def _toy(directory: Path, toy: str = TOY, extra: str = EXTRA, base_id: int = 0x1000) -> Dictionary:
     """The toy's dictionary, its model written into `directory`, instanced as `toy`.
 
     Args:
         directory: where the toy's `.fpp` and the `.fppi` it includes are written.
         toy: the component model.
         extra: the included group.
+        base_id: the instance's base ID.
 
     Returns:
         The dictionary `from_component` generates.
@@ -81,7 +82,7 @@ def _toy(directory: Path, toy: str = TOY, extra: str = EXTRA) -> Dictionary:
     (directory / "Toy.fpp").write_text(toy)
     (directory / "Extra.fppi").write_text(extra)
     return Dictionary.from_component(
-        [directory / "Toy.fpp"], Instance("Toy.toy", "Toy.Toy", 0x1000)
+        [directory / "Toy.fpp"], Instance("Toy.toy", "Toy.Toy", base_id)
     )
 
 
@@ -419,6 +420,20 @@ def test_each_parameter_is_listed_by_id_with_its_name(tmp_path: Path):
     assert toy.command("toy.setToy").kind == "sync"
 
 
+def test_the_instance_s_parameters_are_numbered_from_its_base_id(tmp_path: Path):
+    """Instanced at base ID 0x2000, the toy's two parameters are 0x2000 and 0x2001.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    toy = TOY.replace("    time get port", _PARAMETERS + "    time get port")
+
+    dictionary = _toy(tmp_path, toy=toy, base_id=0x2000)
+
+    named = dictionary.parameters_by_id.values()
+    assert {p.name: p.id for p in named} == {"toy.limit": 0x2000, "toy.mounting": 0x2001}
+
+
 def test_a_parameter_of_a_type_not_coded_does_not_stop_the_dictionary_loading(tmp_path: Path):
     """A struct and a string parameter load: no consumer reads a parameter's type.
 
@@ -470,5 +485,7 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
     for instance in instances:
         generated = Dictionary.from_component([components[instance.component].file], instance)
         short = instance.name.rsplit(".", 1)[-1]
-        assert generated.entries(short) == wise_fsw.entries(short), instance.name
+        expected = wise_fsw.entries(short)
+        assert expected["channels"] or expected["commands"] or ids(wise_fsw, short), instance.name
+        assert generated.entries(short) == expected, instance.name
         assert ids(generated, short) == ids(wise_fsw, short), instance.name
