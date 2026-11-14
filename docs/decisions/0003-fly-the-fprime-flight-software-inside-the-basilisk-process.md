@@ -88,7 +88,7 @@ The F´ build meets HardwareEdge as a hardware-in-the-loop rig would. The lab ho
 code.
 
 - **Bus structs** in `fsw/fpp/interfaces/` mirror Basilisk messages by hand, each held to the real
-  message's fields by a test.
+  message's fields by a test (issue 56 FPP types: the IMU bus struct held to Basilisk).
 - **The bus emulator** turns Basilisk messages into bus-struct bytes and back. It is generated from
   the bus structs.
 - **SimHub** takes those bytes on F´ `serial` ports and delivers them to typed ports, as F´'s
@@ -232,6 +232,7 @@ raises on a second call. PrmDb takes the path in its `configComponents` phase an
   deployment only in its threadless tasks, its three stand-ins and the pins.
 - A stale extension shows as a `projectVersion` that differs from the run file's
   `versions_caller_commit`.
-- The bus structs are a hand-kept mirror of Basilisk's messages; a test fails when one drifts.
+- The bus structs are a hand-kept mirror of Basilisk's messages; issue 56's test fails when one
+  drifts.
 - WiseDynamics' host module and actuator writers land first, since they make the homes this repo
   plugs into.
