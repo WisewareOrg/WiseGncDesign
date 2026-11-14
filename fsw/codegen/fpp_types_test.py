@@ -36,6 +36,13 @@ module Toy {
     inner: Reading
   }
 
+  array Rows = [2] Vector3
+
+  struct Shapes {
+    rows: Rows
+    counts: [2] U16
+  }
+
   port ReadingPort(reading: Reading)
 
   port Gain(value: F64)
@@ -250,6 +257,22 @@ def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(toy: Simple
     assert converted.rate.tolist() == [1.0, 2.0, 3.0]
     assert converted.count == 4
     assert converted.mode == "running"
+
+
+def test_a_converter_keeps_each_array_s_shape_and_element_type(toy: SimpleNamespace):
+    """An array of arrays keeps its nested shape, and an inline array its element's type.
+
+    Args:
+        toy: the toy's namespace.
+    """
+    source = toy.Shapes(rows=[[1, 2, 3], [4, 5, 6]], counts=[7, 8])
+
+    converted = converter(toy.Shapes, toy.Shapes)(source)
+
+    assert converted.rows.shape == (2, 3)
+    assert converted.rows.dtype == np.dtype("float64")
+    assert converted.counts.dtype == np.dtype("uint16")
+    assert converted.counts.tolist() == [7, 8]
 
 
 def test_a_converter_to_a_nested_struct_field_fails_naming_it(toy: SimpleNamespace):
