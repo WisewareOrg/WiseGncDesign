@@ -34,8 +34,7 @@ They ran on branch `spike/two_edges` against main `6f6276e`, F´ v4.4.2, fpp 3.4
 **Native `fpp to-json`: PASS** (`8c83a2a`, `spikes/fpp/`). The native binary, with no Java, gives
 the instances, connections with port numbers, constants and `@` annotations, through a topology that
 imports a GNC sub-topology. `fprime_fpp/fpp to-json -d out fpp/Gnc.fpp fpp/Top.fpp`, exit 0, 0.01 s
-on the scratch model (0.17 s on `6f6276e`'s topology, in the design review); `python3 -I
-reader.py out`, condensed:
+on the scratch model; `python3 -I reader.py out`, condensed:
 
 ```
 instances:   Gnc.nav:Nav  Gnc.ctrl:Ctrl  Gnc.log:Log  Gnc.rg:RateGroup  Top.drv:Driver

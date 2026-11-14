@@ -126,17 +126,16 @@ The partitions inside each build are ADR 0005 rev 1.
 
 - **A reset handler per stateful component, in place of a fresh copy.** Named as the fallback, not
   taken: the fresh copy passed with no state leak and no per-case cost, and needs no reset code in
-  any component.
+  any component. Reopened if a measured campaign's peak RSS per worker threatens the host.
 - **One process per case.** Pays process start-up and import on every case. Rejected.
+- **`FW_ASSERTIONS_ALWAYS_ABORT`, in place of an assert that raises in Python.** It kills the worker
+  and loses the case's failure, where a fault in an in-process F´ must fail the case. Rejected.
+- **A length check in the pins or the bus emulator, in place of the raising assert.** It is per-port
+  glue at the edge, and the emulator is generated from the same struct. Rejected.
 - **Typed ports in place of SimHub.** Named as the fallback, not taken: SimHub passed, and a real
   bus driver takes bytes.
 - **Per-algorithm sim glue, as at `6f6276e`.** Every added algorithm or sensor needs C++ in the
   bridge and the pins. Rejected for the lab, which names no algorithm.
-- **`FW_ASSERTIONS_ALWAYS_ABORT`, in place of an assert that raises in Python.** It kills the worker
-  and loses the case's failure. Rejected.
-- **A length check in the pins or the bus emulator, in place of the raising assert.** The pins would
-  need per-port size knowledge, which is per-port glue at the edge, and the emulator is generated
-  from the same struct. Rejected.
 - **An algorithm's configuration on an F´ port, sent at boot by the sim glue.** It is per-algorithm
   glue outside the FPP contract, and parity cannot see it. Rejected for F´ parameters
   (ADR 0004 rev 2).
@@ -165,8 +164,7 @@ The partitions inside each build are ADR 0005 rev 1.
 
 - An added sensor is a bus struct and FPP wiring; no sim glue is written for it.
 - A fresh copy per case has no measurable per-case cost, and each copy's memory stays with its
-  worker until the worker ends. Reopened if a measured campaign's peak RSS per worker threatens the
-  host: the choice is then recycling or reset handlers.
+  worker until the worker ends.
 - Copies share no state, so more than one F´ build can be booted in one process.
 - An F´ assert fails the case in Python with F´'s own text, instead of printing and flying on.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard
