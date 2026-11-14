@@ -43,9 +43,9 @@ kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. A P
 no F´ build, and the F´ build's tests skip when it is absent; where a Python build's dictionary
 comes from is in [`cdh/README.md`](cdh/README.md#the-dictionary). Why the F´ build flies inside
 the simulation, and how, is in
-[ADR 0003 rev 2](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md);
+[ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md);
 how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
-[ADR 0004 rev 1](docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
+[ADR 0004 rev 2](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ### Requirements and missions
 
