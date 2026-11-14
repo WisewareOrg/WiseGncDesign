@@ -296,6 +296,11 @@ def test_the_builder_builds_the_reckoner_on_its_record_s_parameters(
         """The reckoner, recording its parameters."""
 
         def __init__(self, parameters: Gnc.ImuDeadReckonerParameters) -> None:
+            """Records `parameters`, then builds the reckoner on them.
+
+            Args:
+                parameters: nav's parameters.
+            """
             built.append(parameters)
             super().__init__(parameters)
 
