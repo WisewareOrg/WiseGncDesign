@@ -1,0 +1,5 @@
+EVENT: (1543) (1:0,0) ACTIVITY_HI: (Spike.prmDb) PrmFileLoadComplete : Parameter file load completed. Database: ACTIVE, Records: 2 (2 added and 0 updated).
+nav.mu 398600441800000.0 valid
+nav.dcm_PB [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]] valid
+parametersLoaded calls 1
+CHECK B PASS

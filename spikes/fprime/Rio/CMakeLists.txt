@@ -1,0 +1,10 @@
+register_fprime_module(
+  AUTOCODER_INPUTS
+    "${CMAKE_CURRENT_LIST_DIR}/Rio.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/SimHub.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/ImuSink.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/SimHub.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/ImuSink.hpp"
+)

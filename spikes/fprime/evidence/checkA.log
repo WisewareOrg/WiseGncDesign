@@ -1,0 +1,14 @@
+EVENT: (1542) (1:0,0) WARNING_HI: (Spike.prmDb) PrmFileReadError : Parameter file read failed in stage OPEN (0) with record 0 and error 1
+EVENT: (1536) (1:0,0) WARNING_LO: (Spike.prmDb) PrmIdNotFound : Parameter ID 0x1000 not found
+EVENT: (1536) (1:0,0) WARNING_LO: (Spike.prmDb) PrmIdNotFound : Parameter ID 0x1001 not found
+IMU_SERIALIZED_SIZE 56 struct.calcsize 56
+python struct.pack: 0000001cbe991a083f847ae147ae147bbf947ae147ae147b3f9eb851eb851eb83ff8000000000000c00200000000000040239d013a92a305
+python numpy      : 0000001cbe991a083f847ae147ae147bbf947ae147ae147b3f9eb851eb851eb83ff8000000000000c00200000000000040239d013a92a305
+F´ serializeTo    : 0000001cbe991a083f847ae147ae147bbf947ae147ae147b3f9eb851eb851eb83ff8000000000000c00200000000000040239d013a92a305
+push status 0 -> imuSink got 1 123456789000 [0.01, -0.02, 0.03] [1.5, -2.25, 9.80665]
+echo via typed imuEcho -> SimHub.busIn[0] serial: ['0000001cbe991a083f847ae147ae147bbf947ae147ae147b3f9eb851eb851eb83ff8000000000000c00200000000000040239d013a92a305']
+little-endian push decodes as 583948143490498560 [7.688168988724143e+284, 7.688168988729721e+284, -2.2424848378554426e-38]
+Assert: "/tmp/claude-1000/-home-wise-code-WiseGncDesign/bd56cabc-aaa6-4c7e-8606-2979d069216a/scratchpad/spikes/fprime/build-fprime-automatic-native/Top/SpikeTopologyAc.cpp:511" 5
+short push (55 B): status 0 delivered count 3
+long push (57 B): status 0 delivered count 4
+CHECK A PASS

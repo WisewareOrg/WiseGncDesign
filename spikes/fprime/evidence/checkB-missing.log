@@ -1,0 +1,7 @@
+EVENT: (1542) (1:0,0) WARNING_HI: (Spike.prmDb) PrmFileReadError : Parameter file read failed in stage OPEN (0) with record 0 and error 1
+EVENT: (1536) (1:0,0) WARNING_LO: (Spike.prmDb) PrmIdNotFound : Parameter ID 0x1000 not found
+EVENT: (1536) (1:0,0) WARNING_LO: (Spike.prmDb) PrmIdNotFound : Parameter ID 0x1001 not found
+nav.mu 0.0 INVALID
+nav.dcm_PB [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] INVALID
+parametersLoaded calls 1
+CHECK B CONTROL PASS (missing file -> INVALID)

@@ -1,0 +1,16 @@
+register_fprime_module(
+  AUTOCODER_INPUTS
+    "${CMAKE_CURRENT_LIST_DIR}/topology.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/SpikeTopology.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/SpikeTopology.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SpikeTopologyDefs.hpp"
+  DEPENDS
+    Sim
+    Rio
+    Nav
+    Svc_CmdDispatcher
+    Svc_PrmDb
+    Svc_PassiveConsoleTextLogger
+)
