@@ -193,7 +193,7 @@ class Port(NamedTuple):
     Attributes:
         name: the port's name.
         size: its number of ports, 1 for a port that is not an array.
-        args: its port type's arguments, in order.
+        args: its port type's arguments, in order; none for a `serial` port.
     """
 
     name: str
@@ -526,8 +526,10 @@ def _component(
         if general and general["kind"] == "Output":
             node_id = general["aNode"]["astNodeId"]
             position = (0, specs[str(node_id)][0]) if str(node_id) in specs else (1, node_id)
-            port_type = nodes[str(general["ty"]["DefPort"]["symbol"]["Port"]["nodeId"])]
-            args = arguments(port_type.data["params"])
+            args: tuple[Argument, ...] = ()
+            if "DefPort" in general["ty"]:
+                port_type = nodes[str(general["ty"]["DefPort"]["symbol"]["Port"]["nodeId"])]
+                args = arguments(port_type.data["params"])
             outputs.append((position, Port(general["specifier"]["name"], general["size"], args)))
     return Component(
         node.name,
