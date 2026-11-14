@@ -155,8 +155,8 @@ Each `step` sets SimTime to the simulation's time, then SimTime ticks the driver
 on every `navDivider`-th step. The rate group is a health instance: its base ID is at or above
 `Ids.healthBase`, and GroundLink does not downlink its telemetry. `topology_test.py` beside the
 topology holds every rate group, and nothing else, to that range.
-`fsw.codegen.deployment.FPP_FILES` lists the deployment's FPP files for the reader. The reasoning
-is in [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
+`fsw.codegen.deployment.FPP_FILES` lists the deployment's FPP files for `fpp_model.read`. The
+reasoning is in [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
 and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
 
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
