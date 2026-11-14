@@ -30,6 +30,7 @@ __all__ = [
     "Parameter",
     "Port",
     "Struct",
+    "TopologyPort",
     "parse",
     "read",
 ]
@@ -81,6 +82,18 @@ class Connection(NamedTuple):
     to_instance: str
     to_port: str
     to_index: int
+
+
+class TopologyPort(NamedTuple):
+    """The instance port a topology's `port` declaration exposes.
+
+    Attributes:
+        instance: the instance's qualified name.
+        port: the instance's port.
+    """
+
+    instance: str
+    port: str
 
 
 class Member(NamedTuple):
@@ -232,6 +245,7 @@ class Model(NamedTuple):
         instances: every component instance.
         topologies: each topology's connections, an imported topology's among them, sorted by
             `(from_instance, from_port, from_index)`.
+        ports: each topology's ports, by `<topology>.<port>`.
         constants: every integer and float constant.
         types: every struct, enum and array type.
         components: every component.
@@ -241,6 +255,7 @@ class Model(NamedTuple):
 
     instances: dict[str, Instance]
     topologies: dict[str, tuple[Connection, ...]]
+    ports: dict[str, TopologyPort]
     constants: dict[str, int | float]
     types: dict[str, Struct | Enum | Array]
     components: dict[str, Component]
@@ -315,6 +330,11 @@ def parse(directory: Path) -> Model:
         _qualified(topology): _connections(topology, instance_map)
         for topology in analysis["topologyMap"].values()
     }
+    ports = {
+        f"{_qualified(topology)}.{name}": TopologyPort(*_port_end(port["pii"], instance_map))
+        for topology in analysis["topologyMap"].values()
+        for name, port in topology["portMap"].items()
+    }
 
     constants = {}
     types: dict[str, Struct | Enum | Array] = {}
@@ -337,7 +357,7 @@ def parse(directory: Path) -> Model:
         components[component.name] = component
 
     annotations = {n.name: n.annotation for n in nodes.values() if n.kind in _ANNOTATED}
-    return Model(instances, topologies, constants, types, components, annotations)
+    return Model(instances, topologies, ports, constants, types, components, annotations)
 
 
 def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tuple[str, _Node]]:
@@ -361,6 +381,21 @@ def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tup
             yield from _definitions(node["data"]["members"], (*qualifier, node["data"]["name"]))
 
 
+def _port_end(port: dict[str, Any], instance_map: dict[str, Any]) -> tuple[str, str]:
+    """An instance's port, as a connection's end or a topology port names it.
+
+    Args:
+        port: the analysis's port instance identifier.
+        instance_map: the analysis's component instances, by AST node id.
+
+    Returns:
+        The instance's qualified name and the port's name.
+    """
+    instance = port["interfaceInstance"]["InterfaceComponentInstance"]["astNodeId"]
+    ((_, port_instance),) = port["portInstance"].items()
+    return _qualified(instance_map[str(instance)]), port_instance["specifier"]["name"]
+
+
 def _connections(topology: dict[str, Any], instance_map: dict[str, Any]) -> tuple[Connection, ...]:
     """A topology's connections, each port number resolved.
 
@@ -373,26 +408,11 @@ def _connections(topology: dict[str, Any], instance_map: dict[str, Any]) -> tupl
     """
     from_numbers = {_key(c): n for c, n in topology["fromPortNumberMap"]}
     to_numbers = {_key(c): n for c, n in topology["toPortNumberMap"]}
-
-    def end(side: dict[str, Any]) -> tuple[str, str]:
-        """One end of a connection.
-
-        Args:
-            side: the connection's `from` or `to`.
-
-        Returns:
-            The instance's qualified name and the port's name.
-        """
-        port = side["port"]
-        instance = port["interfaceInstance"]["InterfaceComponentInstance"]["astNodeId"]
-        ((_, port_instance),) = port["portInstance"].items()
-        return _qualified(instance_map[str(instance)]), port_instance["specifier"]["name"]
-
     connections = []
     for group in topology["connectionMap"].values():
         for c in group:
-            from_instance, from_port = end(c["from"])
-            to_instance, to_port = end(c["to"])
+            from_instance, from_port = _port_end(c["from"]["port"], instance_map)
+            to_instance, to_port = _port_end(c["to"]["port"], instance_map)
             from_index, to_index = from_numbers[_key(c)], to_numbers[_key(c)]
             connections.append(
                 Connection(from_instance, from_port, from_index, to_instance, to_port, to_index)

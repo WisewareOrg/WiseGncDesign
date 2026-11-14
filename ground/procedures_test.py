@@ -1,7 +1,7 @@
 """The ground driven tick by tick against a stub edge: its waits, its commands and its record.
 
 The stub edge holds a toy component's dictionary, generated from FPP alone, and answers and writes
-what each test gives it; the tests that fly Leo500 host a toy algorithm for that component.
+what each test gives it; the tests that fly Leo500 host it, as a stub build, in `FswHost`.
 """
 
 import json
@@ -10,9 +10,9 @@ from typing import Any
 
 import numpy as np
 import pytest
+from wise_dynamics.basilisk import FswHost
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
-from fsw.python import AlgorithmModule
 from ground.dictionary import Dictionary
 from ground.procedures import CommandFailed, Ground
 
@@ -503,38 +503,42 @@ async def _returns(ground: Ground) -> None:
     """
 
 
-class Toy:
-    """A toy algorithm for the toy component: it writes the time as `offset` every tick."""
+class StubBuild(StubEdge):
+    """The stub edge as a build `FswHost` hosts, for the flights: it plays the toy component.
 
-    def setMode(self, mode: str) -> dict:
-        """Takes the mode and writes it.
+    Each tick answers every command uplinked since the last tick `OK`, writes `setMode`'s mode,
+    and writes the tick's time as `offset`.
+    """
+
+    def __init__(self, dictionary: Dictionary) -> None:
+        """Holds the dictionary, with nothing uplinked.
 
         Args:
-            mode: the mode's constant name.
+            dictionary: the toy's dictionary.
+        """
+        super().__init__(dictionary)
+        self._run = 0
+
+    def boot(self) -> None:
+        """Boots with nothing to do."""
+
+    def tick(self, t_ns: int, messages_by_role: dict[str, Any]) -> dict[str, Any]:
+        """Runs the commands uplinked since the last tick, then writes the time.
+
+        Args:
+            t_ns: ns, the tick's time.
+            messages_by_role: the vehicle's messages, unread.
 
         Returns:
-            `mode`.
+            No actuator command.
         """
-        return {"mode": mode}
-
-    def setOffset(self, offset: np.ndarray, gain: float) -> None:
-        """Takes the offset, writing nothing.
-
-        Args:
-            offset: (3,) the offset.
-            gain: the gain.
-        """
-
-    def step(self, t: float) -> dict:
-        """Writes the time.
-
-        Args:
-            t: s, the tick's time.
-
-        Returns:
-            `offset`, `(t, 0, 0)`.
-        """
-        return {"offset": np.array([t, 0.0, 0.0])}
+        for name, args, context in self.uplinked[self._run :]:
+            self.answers.append((context, "OK", None))
+            if name == "toy.setMode":
+                self.writes.append(("toy.mode", t_ns, args["mode"]))
+        self._run = len(self.uplinked)
+        self.writes.append(("toy.offset", t_ns, np.array([t_ns / NS, 0.0, 0.0])))
+        return {}
 
 
 async def _commands_the_toy(ground: Ground) -> None:
@@ -563,12 +567,12 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
     flights = {}
     for period_s, stops in ((1.0, False), (1.0, True), (10.0, True)):
         scenario = Leo500()
-        readers = scenario.vehicle.readers()
-        fsw = AlgorithmModule(Toy(), readers, instance="toy", dictionary=dictionary)
+        fsw = StubBuild(dictionary)
         stop = scenario.stop_ground if stops else lambda: None
         tracking = scenario.vehicle.tracking()
         ground = Ground(_commands_the_toy, fsw, tracking, stop, period_s=period_s)
-        datasets = scenario.run(fsw, {}, duration_s=120.0, ground=ground)
+        host = FswHost(fsw, scenario.vehicle)
+        datasets = scenario.run(host, {}, duration_s=120.0, ground=ground)
         flights[period_s, stops] = (datasets | ground.telemetry_datasets(), ground.now_s)
 
     ticking, last_tick_s = flights.pop((1.0, False))
@@ -586,27 +590,10 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
             assert flown[name][1] == units
 
 
-class RecordingToy(Toy):
-    """The toy algorithm, keeping the arguments each `setOffset` receives."""
-
-    def __init__(self) -> None:
-        """Starts with nothing received."""
-        self.received: list[dict] = []
-
-    def setOffset(self, offset: np.ndarray, gain: float) -> None:
-        """Keeps the arguments.
-
-        Args:
-            offset: (3,) the offset.
-            gain: the gain.
-        """
-        self.received.append({"offset": offset, "gain": gain})
-
-
-def test_a_handler_in_the_python_build_gets_its_arguments_as_f_prime_s_handler_would(
+def test_the_ground_sends_a_command_s_arguments_as_f_prime_s_handler_gets_them(
     dictionary: Dictionary,
 ):
-    """Sent through the ground to the Python host, the F32 arrives as F32 holds it, the array whole.
+    """Sent through the ground to a build, the F32 arrives as F32 holds it, the array whole.
 
     Args:
         dictionary: the toy's dictionary.
@@ -621,13 +608,13 @@ def test_a_handler_in_the_python_build_gets_its_arguments_as_f_prime_s_handler_w
         await ground.send("toy.setOffset", offset=[1.0, 2.0, 3.0], gain=0.1)
 
     scenario = Leo500()
-    toy = RecordingToy()
-    fsw = AlgorithmModule(toy, scenario.vehicle.readers(), instance="toy", dictionary=dictionary)
+    fsw = StubBuild(dictionary)
     ground = Ground(procedure, fsw, scenario.vehicle.tracking(), scenario.stop_ground)
 
-    scenario.run(fsw, {}, duration_s=5.0, ground=ground)
+    scenario.run(FswHost(fsw, scenario.vehicle), {}, duration_s=5.0, ground=ground)
 
-    [received] = toy.received
+    [(name, received, _)] = fsw.uplinked
+    assert name == "toy.setOffset"
     assert received["gain"] == float(np.float32(0.1))
     assert isinstance(received["offset"], np.ndarray)
     np.testing.assert_array_equal(received["offset"], [1.0, 2.0, 3.0])

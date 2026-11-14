@@ -427,3 +427,20 @@ def test_a_parameter_of_a_type_not_coded_does_not_stop_the_dictionary_loading(tm
     names = {p.name for p in _toy(tmp_path, toy=toy).parameters_by_id.values()}
 
     assert {"toy.pair", "toy.label"} <= names
+
+
+def test_a_configuration_s_dictionary_holds_its_gnc_instances_as_each_component_s_does():
+    """`from_sub_topology` names nav's entries as the component's own dictionary does, once.
+
+    The configuration's dictionary also holds its rate groups' entries, which the Python build
+    never writes.
+    """
+    import algorithms.imu_dead_reckoning as reckoner
+
+    configuration = Dictionary.from_sub_topology("ImuDeadReckoning")
+    model = [Path(reckoner.__file__).with_name("ImuDeadReckoner.fpp")]
+    nav = Dictionary.from_component(model, "Gnc.ImuDeadReckoner", instance="nav")
+
+    assert configuration.entries("nav") == nav.entries("nav")
+    assert configuration.metadata["deploymentName"] == "PyImuDeadReckoning.PyImuDeadReckoning"
+    assert Dictionary.from_sub_topology("ImuDeadReckoning") is configuration

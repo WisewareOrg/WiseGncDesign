@@ -6,8 +6,8 @@
 The ground, `ground.procedures.Ground`, runs the scenario's procedure against either build's
 radio edge and records the flight; [RadioEdge](#radioedge) says which host presents it.
 
-`fsw.python` knows nothing about what any field means: it copies message fields to the
-algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm.
+`fsw.python.AlgorithmModule` knows nothing about what any field means: it copies message fields
+to the algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm.
 
 `fsw.python.AlgorithmModule(algorithm, inputs, instance=..., dictionary=...)` hosts an
 algorithm as the F´ instance `instance` would be hosted, held to `dictionary`, on a dict of
@@ -143,7 +143,8 @@ Basilisk message. The reasoning is in
 `fsw.codegen.fpp_model` is the one module that reads FPP's model in Python: `read(files)` runs
 the native `fpp` binary inside the `fprime_fpp` package, `fpp to-json`, into a temporary directory,
 and returns a `Model` of named tuples by qualified name: instances with their base IDs, each
-topology's connections with both port numbers resolved, numeric constants, struct, enum and array
+topology's connections with both port numbers resolved, the instance port each topology port
+exposes, numeric constants, struct, enum and array
 types, each component's commands, channels, parameters and general output ports with the file
 that defines it, and annotations. It needs no compiler,
 no Java and no F´ build, only the model's `.fpp` files, F´'s framework files among them from the

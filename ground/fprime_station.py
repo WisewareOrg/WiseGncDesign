@@ -19,8 +19,8 @@ __all__ = ["FprimeStation"]
 class FprimeStation:
     """The ground's radio edge to an F´ deployment, through the deployment's pins.
 
-    It supplies the edge's four methods; `lab.FprimeModule` holds it and supplies `period_s`,
-    `dictionary` and `failure`.
+    It supplies the edge's four methods; `lab.FprimeModule` holds it and supplies `period_s` and
+    `dictionary`.
     """
 
     def __init__(self, fsw: ModuleType, dictionary: Dictionary) -> None:
