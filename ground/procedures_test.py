@@ -110,7 +110,7 @@ class StubEdge:
         return drained
 
     def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
-        """Packs written values, as the Python host does.
+        """Packs written values, as the Python build's `GroundLink` does.
 
         Args:
             name: the channel's name.

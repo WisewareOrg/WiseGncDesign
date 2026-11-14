@@ -23,7 +23,9 @@ in `fsw/python/<partition>/`, and FPP gives each its structure:
   returns the actuator commands, `{}` while the build writes no actuator.
 - **CDH** dispatches each command by name to its algorithm's method of that name, with F´'s
   responses, converts each role's bus struct to its GNC input, logs every telemetry write tagged
-  with the tick's time, and reads each algorithm's parameters from the case's record at boot.
+  with the tick's time, and reads each algorithm's parameters from the case's record at boot. Its
+  `GroundLink` holds what the ground uplinks and drains, and the frame runner presents the radio
+  edge through it.
   `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each role, as its annotation states.
 - **GNC** runs the sub-topology's algorithms in its rate groups' order, routing each output to the
   input it is wired to.
@@ -163,8 +165,8 @@ topology's connections with both port numbers resolved, the instance port each t
 exposes, numeric constants, struct, enum and array types, each component's commands, channels,
 parameters and general output and input ports with the file that defines it, and annotations. It
 needs no compiler, no Java and no F´ build, only the model's `.fpp` files, F´'s framework files
-among them from the clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned compiler internals,
-so a key the module reads that is missing raises `KeyError`. The reasoning is in
+among them from the clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned
+compiler internals, so a key the module reads that is missing raises `KeyError`. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## FPP types in Python
