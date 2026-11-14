@@ -4,11 +4,15 @@ Skipped without the deployment `just fsw` builds.
 """
 
 import importlib.util
+import math
+from pathlib import Path
 from types import ModuleType
 
 import numpy as np
 import pytest
 
+from fsw.codegen.deployment import contract_files
+from fsw.codegen.fpp_model import read
 from ground.fprime_station import FprimeStation
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
@@ -16,6 +20,9 @@ if importlib.util.find_spec("lab._wise_fsw") is None:
 
 NS = 1_000_000_000
 """ns per s."""
+
+GNC = Path(__file__).resolve().parents[1] / "fsw" / "fpp" / "gnc"
+"""The GNC sub-topologies."""
 
 STATE = {
     "epoch": 0.0,
@@ -202,6 +209,43 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
     assert not values("MaxCycleTime").any()
     assert np.diff(values("CycleCount")).tolist() == [1] * (ticks - 1)
     assert len(values("CycleCount")) == ticks
+
+
+def test_each_rate_group_runs_once_every_divider_ticks(
+    fsw: ModuleType, station: FprimeStation, prm: str, parameter_ids: list[int]
+):
+    """Each rate group's `CycleCount` advances by one once every divider ticks, its own divider.
+
+    A rate group `<stem>RateGroup` runs at the constant `<stem>Divider` of its module in the GNC
+    sub-topologies. The count is taken over ten of the dividers' least common multiple, a whole
+    number of every divider, which holds whatever tick the driver starts on.
+
+    Args:
+        fsw: the test's copy of the deployment.
+        station: the station on it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
+    """
+    constants = read((*contract_files(), *sorted(GNC.glob("*.fpp")))).constants
+    dividers = {
+        name.rsplit(".", 1)[1].removesuffix("Divider") + "RateGroup": divider
+        for name, divider in constants.items()
+        if name.endswith("Divider")
+    }
+    assert dividers
+    ticks = 10 * math.lcm(*dividers.values())
+    fsw.boot(prm, parameter_ids)
+    station.telemetry()
+
+    for tick in range(1, ticks + 1):
+        _step(fsw, tick * NS)
+
+    writes = station.telemetry()
+    for group, divider in dividers.items():
+        name = f"{group}.CycleCount"
+        counts = station.values(name, [raw for written, _, raw in writes if written == name])
+        assert len(counts) == ticks // divider, group
+        assert np.diff(counts).tolist() == [1] * (len(counts) - 1), group
 
 
 def test_the_pump_raises_naming_a_queue_its_bound_leaves_holding_messages(

@@ -191,17 +191,14 @@ def test_init_nav_state_starts_the_reckoner_at_its_epoch(
     _assert_matches(station, python)
 
 
-def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(
+def test_one_scheduled_run_writes_nav_state_once(
     fsw: ModuleType,
     station: FprimeStation,
     tmp_path: Path,
     prm: str,
     parameter_ids: list[int],
 ):
-    """Nav writes its state once per run, so `10 * navDivider` ticks give exactly 10 writes.
-
-    The count is taken over a whole number of dividers, which holds whatever tick the driver
-    starts on.
+    """Over `navDivider` ticks the rate group runs nav once, and nav writes `navState` once.
 
     Args:
         fsw: the test's copy of the deployment.
@@ -211,15 +208,14 @@ def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(
         parameter_ids: every parameter's ID, which boot holds valid.
     """
     divider = read(fpp_files("ImuDeadReckoning", tmp_path)).constants["ImuDeadReckoning.navDivider"]
-    ticks = 10 * divider
     fsw.boot(prm, parameter_ids)
     station.telemetry()
 
-    for tick in range(1, ticks + 1):
+    for tick in range(1, divider + 1):
         fsw.step(t_ns=tick * NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
     writes = [name for name, _, _ in station.telemetry() if name == "nav.navState"]
-    assert len(writes) == ticks // divider
+    assert writes == ["nav.navState"]
 
 
 @pytest.mark.parametrize("nav_parameters", [NAV._replace(mu=4.9048695e12)], ids=["moon"])
