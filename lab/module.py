@@ -9,6 +9,7 @@ import numpy as np
 from Basilisk.architecture import sysModel
 
 from fsw.python import AlgorithmModule
+from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab.power_cycle import power_cycle, source
@@ -26,11 +27,11 @@ class FprimeModule(sysModel.SysModel):
     """Runs the WiseFsw deployment each tick, and presents the ground's radio edge to it.
 
     `Reset` power-cycles the deployment: it loads a fresh copy and boots it at t = 0 with the dead
-    reckoner idle, so a case keeps nothing of an earlier one. Each `UpdateState` whose time lies
-    after the last tick's sets the clock, runs the uplinked commands through F´'s command
-    dispatcher, sends the IMU reading and ticks the rate groups. The radio edge is an
-    `FprimeStation` on the copy's pins: it encodes each command into F´'s packet, and the
-    responses and every telemetry write, each with its F´ time tag, come down through it.
+    reckoner idle and PrmDb loading the case's `.dat`, so a case keeps nothing of an earlier one.
+    Each `UpdateState` whose time lies after the last tick's sets the clock, runs the uplinked
+    commands through F´'s command dispatcher, sends the IMU reading and ticks the rate groups. The
+    radio edge is an `FprimeStation` on the copy's pins: it encodes each command into F´'s packet,
+    and the responses and every telemetry write, each with its F´ time tag, come down through it.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in, the Python
@@ -50,22 +51,20 @@ class FprimeModule(sysModel.SysModel):
     _station: FprimeStation
     """The radio edge on that copy; unset before the first `Reset`."""
 
-    def __init__(self, imu: Any, mu: float, dcm_PB: np.ndarray) -> None:
-        """Holds what `Reset` boots the deployment with, once `source` has checked the build.
+    def __init__(self, imu: Any, prm_path: Path) -> None:
+        """Makes the case's `.dat` beside its record, once `source` has checked the build.
 
         A deployment not built, or rebuilt since this process first checked it, raises as `source`
-        does.
+        does, and a record F´'s tool refuses raises as `ground.parameters.dat` does.
 
         Args:
             imu: the IMU reader, subscribed by the caller.
-            mu: m^3/s^2, the central body's gravitational parameter.
-            dcm_PB: (3, 3) the IMU's mounting [PB], v_P = [PB] v_B.
+            prm_path: the case's parameter record, JSON, which `Reset` boots the deployment with.
         """
         super().__init__()
         source()
         self._imu = imu
-        self._mu = float(mu)
-        self._dcm_PB = np.asarray(dcm_PB, dtype=float)
+        self._dat = parameters.dat(prm_path, DICTIONARY)
         self.dictionary = Dictionary(DICTIONARY)
         self.failure = None
         self.build = {
@@ -120,8 +119,8 @@ class FprimeModule(sysModel.SysModel):
             CurrentSimNanos: ns, the reset time, as Basilisk passes it.
 
         Raises:
-            RuntimeError: naming an extension rebuilt after this process loaded it, or an IMU
-                reader that is not subscribed.
+            RuntimeError: naming an extension rebuilt after this process loaded it, an IMU reader
+                that is not subscribed, or each parameter the `.dat` leaves invalid.
             BaseException: the reset's exception, kept whole in `failure`.
         """
         try:
@@ -130,7 +129,7 @@ class FprimeModule(sysModel.SysModel):
             if not self._imu.isLinked():
                 raise RuntimeError("the IMU reader is not subscribed to any message")
             self._t_ns = CurrentSimNanos
-            self._fsw.boot(mu=self._mu, dcm_PB=self._dcm_PB)
+            self._fsw.boot(str(self._dat.resolve()), sorted(self.dictionary.parameters_by_id))
         except BaseException as error:
             self.failure = error
             raise

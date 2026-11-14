@@ -36,21 +36,28 @@ write is pushed rather than sampled, is in
 
 This example runs in a notebook or at a prompt, with the `sim` group installed
 (`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
-at its nominal configuration, and boots the dead reckoner idle on that vehicle. A ground procedure
+at its nominal configuration, writes the case's parameter record from the notebook's
+`parameters(scenario)`, as the harness does beside each run file, and boots the dead reckoner idle
+on that vehicle with the values the Python build reads back from the record. A ground procedure
 gives nav its state from tracking at t = 0, and the run lasts one minute, with the dynamics, the IMU
 and the dead reckoner all stepping at 1 Hz. The ground's record is then compared with the
 vehicle's truth:
 
 ```python
+>>> import tempfile
+>>> from pathlib import Path
 >>> import numpy as np
 >>> from wise_dynamics.basilisk import ImuSpacecraft
 >>> from wise_dynamics.basilisk.scenarios.leo500 import Leo500
->>> from algorithms.imu_dead_reckoning import dead_reckoner
+>>> from algorithms.imu_dead_reckoning import dead_reckoner, parameters
+>>> from ground.parameters import write
 >>> from ground.procedures import Ground
 >>> scenario = Leo500()
 >>> isinstance(scenario.vehicle, ImuSpacecraft)
 True
->>> fsw = dead_reckoner(scenario)
+>>> case = tempfile.TemporaryDirectory()
+>>> record = write(parameters(scenario), Path(case.name) / "run_0000.prm.json")
+>>> fsw = dead_reckoner(scenario, record)
 >>> async def procedure(ground):
 ...     truth = ground.truth()
 ...     await ground.send(
@@ -73,6 +80,7 @@ True
 >>> truth_r_N, _ = datasets["truth/r_N"]
 >>> bool(np.linalg.norm(written["tlm/nav.bodyEciPos"][0][-1] - truth_r_N[-1]) < 1.0)
 True
+>>> case.cleanup()
 
 ```
 
@@ -81,10 +89,14 @@ True
 ## Adding an algorithm
 
 Write the algorithm in `algorithms`, with its component model, `<Name>.fpp`, beside its
-notebook: the ports its GNC sub-topology wires, and the commands and telemetry it implements. Its
-`step(t=..., **inputs)` takes plain arrays by keyword, each named as the message field it reads; it
-has a method per command; and both return the telemetry they write. Its builder hosts it with the
-dictionary `Dictionary.from_component` generates from that model.
+notebook: the ports its GNC sub-topology wires, the commands and telemetry it implements, and its
+parameters. Its `step(t=..., **inputs)` takes plain arrays by keyword, each named as the message
+field it reads; it has a method per command; and both return the telemetry they write. Its
+notebook's `parameters(scenario)` gives its `<Name>Parameters` tuple for a case, which the ground
+writes as the case's record, keyed by the algorithm's instance in its GNC sub-topology; its builder
+takes the scenario and the record's path, reads its parameters back with
+`fsw.python.cdh.parameters.read`, and hosts it with the dictionary `Dictionary.from_component`
+generates from that model.
 
 ## The dictionary
 
@@ -164,23 +176,26 @@ The reasoning is in
 
 ## The F´ host
 
-`lab.FprimeModule(imu, mu, dcm_PB)` runs the WiseFsw F´ deployment in the
-simulation's process. The deployment's content is the dead reckoner, whose F´ component sits
-beside its notebook. `just fsw` builds the deployment into `lab` as the extension `_wise_fsw`,
-with the JSON dictionary F´ generates for it alongside. `just pinned` and `just local` run it as
-part of their sync, and `just test`, `just fly` and `just lab` run it first; a host built without
-it says to run `just fsw`. The module takes `AlgorithmModule`'s `period_s`, so the two builds fly
-at one rate.
+`lab.FprimeModule(imu, prm_path)` runs the WiseFsw F´ deployment in the simulation's process,
+with the parameters of the case's record at `prm_path`. The deployment's content is the dead
+reckoner, whose F´ component sits beside its notebook. `just fsw` builds the deployment into `lab`
+as the extension `_wise_fsw`, with the JSON dictionary F´ generates for it alongside. `just pinned`
+and `just local` run it as part of their sync, and `just test`, `just fly` and `just lab` run it
+first; a host built without it says to run `just fsw`. The module takes `AlgorithmModule`'s
+`period_s`, so the two builds fly at one rate.
 
 The module's reset power-cycles the deployment, as a vehicle is power-cycled between flights:
 `lab.power_cycle.power_cycle()`, the one entry point to the extension, loads a fresh copy of it,
-and the copy's `boot` sets its topology up and leaves nav idle with `mu` and the IMU's mounting.
-A copy boots once, and an F´ assert raises `RuntimeError` in Python with F´'s own text.
+and the copy's `boot` sets its topology up and leaves nav idle. Booting, F´'s stock PrmDb loads the
+case's `.dat`, which `ground.parameters.dat` makes beside the record with F´'s own
+`fprime-prm-write` conversion, in-process, when `FprimeModule` is constructed. PrmDb's sandbox is
+that directory, never the root, and a parameter the load leaves invalid fails the boot, named by
+its ID. A copy boots once, and an F´ assert raises `RuntimeError` in Python with F´'s own text.
 
 The dead reckoner's GNC sub-topology, `fsw/fpp/gnc/ImuDeadReckoning.fpp`, holds nav, the F´ rate
 group that runs it, the rate-group driver, and its rate as the FPP constant `navDivider`; `phase`
 blocks on the driver and the rate group pass the constant to their `configure()`. Each GNC
-sub-topology exposes the ports `tickIn`, `imuIn` and `navConfigIn`, which the deployment wires.
+sub-topology exposes the ports `tickIn` and `imuIn`, which the deployment wires.
 Each configuration's deployment, `WiseFsw.<Cfg>Fsw`, is rendered at build time from the templates
 in `fsw/fprime/deployment/`, one per file in `fsw/fpp/gnc/`, into the build directory, where it
 compiles its GNC sub-topology with it; the shared instances are in

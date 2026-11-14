@@ -6,6 +6,7 @@ Flight conditions with closed forms check the algorithm alone, with no simulator
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -13,7 +14,8 @@ from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk import ImuSpacecraft
 
 from algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
-from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner, _q_dot
+from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner, _q_dot, parameters
+from fsw.codegen.fpp_types import Gnc
 from fsw.python import AlgorithmModule
 from harness.notebook import run_notebook
 
@@ -53,7 +55,7 @@ def _propagate(
     Returns:
         The stepped `ImuDeadReckoner`, holding `t`, `q_BN`, `r_BN_N` and `v_BN_N`.
     """
-    reckoner = ImuDeadReckoner(mu=mu, dcm_PB=_IDENTITY)
+    reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=mu, dcm_PB=_IDENTITY))
     reckoner.initNavState(epoch=0.0, attitude=q0, position=r0, velocity=v0)
     dt = total_t / n_steps
     for i in range(1, n_steps + 1):
@@ -63,7 +65,7 @@ def _propagate(
 
 def test_it_boots_idle_and_writes_only_navstate_until_commanded():
     """Booted, each step writes `navState` idle and nothing else, holding no state."""
-    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+    reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=0.0, dcm_PB=_IDENTITY))
 
     written = reckoner.step(t=1.0, AngVelPlatform=_ZERO3, AccelPlatform=_ZERO3)
 
@@ -76,7 +78,7 @@ def test_the_command_writes_navstate_alone_and_the_next_step_propagates_from_its
 
     At rest with mu = 0, a state at epoch 60 s with velocity v is at r0 + v (61 - 60) at t = 61 s.
     """
-    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+    reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=0.0, dcm_PB=_IDENTITY))
     velocity = np.array([1.0, 2.0, 3.0])
 
     commanded = reckoner.initNavState(
@@ -124,7 +126,7 @@ def test_a_commanded_quaternion_with_w_negative_is_held_with_w_nonnegative():
     """Commanded with -q, W < 0, the reckoner holds q."""
     q = Rotation.from_rotvec([0.3, -0.2, 0.1]).as_quat(scalar_first=True)
 
-    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+    reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=0.0, dcm_PB=_IDENTITY))
     reckoner.initNavState(epoch=0.0, attitude=-q, position=_AWAY_FROM_ORIGIN, velocity=_ZERO3)
 
     np.testing.assert_array_equal(reckoner.q_BN, q)
@@ -173,7 +175,7 @@ def test_the_kinematics_match_the_dcm_derivative_for_a_nonaligned_rate():
     """
     q0 = Rotation.from_rotvec([0.4, 0.0, 0.0]).as_quat(scalar_first=True)
     omega = np.array([0.0, 0.0, 0.3])
-    reckoner = ImuDeadReckoner(mu=0.0, dcm_PB=_IDENTITY)
+    reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=0.0, dcm_PB=_IDENTITY))
     reckoner.initNavState(epoch=0.0, attitude=q0, position=_AWAY_FROM_ORIGIN, velocity=_ZERO3)
     dt = 1e-5
 
@@ -251,6 +253,21 @@ def test_a_longer_step_lowers_each_sample_s_noise(monkeypatch: pytest.MonkeyPatc
     assert inputs["step_s"] == 4.0
     assert inputs["gyro_noise_std_rad_s"] == ImuSpacecraft.gyro_noise_density_rad_s_rthz / 2
     assert inputs["accel_noise_std_m_s2"] == ImuSpacecraft.accel_noise_density_m_s2_rthz / 2
+
+
+def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() -> None:
+    """`mu` is the scenario's Earth's, and `dcm_PB` the vehicle's IMU mounting, as given."""
+    mounting = [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    scenario = SimpleNamespace(
+        mu_m3_s2={"earth": 4.9048695e12, "moon": 1.0},
+        vehicle=SimpleNamespace(imu=SimpleNamespace(dcm_PB=mounting)),
+    )
+
+    nav = parameters(scenario)
+
+    assert type(nav) is Gnc.ImuDeadReckonerParameters
+    assert nav.mu == 4.9048695e12
+    np.testing.assert_array_equal(nav.dcm_PB, mounting)
 
 
 @pytest.mark.xdist_group("notebooks")

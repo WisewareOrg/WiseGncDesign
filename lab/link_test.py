@@ -20,9 +20,6 @@ if importlib.util.find_spec("lab._wise_fsw") is None:
 WISE_FSW = Dictionary(DICTIONARY)
 """The deployment's dictionary, which the build generated."""
 
-MU = 3.986004360e14
-"""m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
-
 NS = 1_000_000_000
 """ns per s."""
 
@@ -56,15 +53,6 @@ def station(fsw: ModuleType) -> FprimeStation:
         The station.
     """
     return FprimeStation(fsw, WISE_FSW)
-
-
-def _boot(fsw: ModuleType) -> None:
-    """Boots a copy idle, mounted at identity.
-
-    Args:
-        fsw: the copy.
-    """
-    fsw.boot(mu=MU, dcm_PB=np.eye(3))
 
 
 def _step(fsw: ModuleType, t_ns: int) -> None:
@@ -109,14 +97,18 @@ def _responses(station: FprimeStation) -> list[tuple[int, str]]:
 def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
     fsw: ModuleType,
     station: FprimeStation,
+    prm: str,
+    parameter_ids: list[int],
 ):
     """An uplinked command waits for the next step, then answers `OK` under the ground's context.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
 
     station.uplink("nav.initNavState", STATE, 42)
     assert _responses(station) == []
@@ -138,6 +130,8 @@ def test_a_packet_larger_than_f_prime_s_buffer_is_refused_naming_its_size(fsw: M
 def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     fsw: ModuleType,
     station: FprimeStation,
+    prm: str,
+    parameter_ids: list[int],
 ):
     """Nav's writes of two ticks come down in the order written, each tagged with its tick's time.
 
@@ -146,8 +140,10 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
     station.uplink("nav.initNavState", STATE, 1)
     _step(fsw, NS)
     _step(fsw, 2 * NS)
@@ -171,14 +167,18 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
 def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
     fsw: ModuleType,
     station: FprimeStation,
+    prm: str,
+    parameter_ids: list[int],
 ):
     """A tick at 1.500007 s tags its write with that time in ns, microseconds included.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
     t_ns = NS + 500_000_000 + 7_000
 
     _step(fsw, t_ns)
@@ -186,7 +186,9 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
     assert _writes(station) == [("nav.navState", t_ns, "idle")]
 
 
-def test_the_rate_group_s_health_repeats_on_the_stub_clock(fsw: ModuleType, station: FprimeStation):
+def test_the_rate_group_s_health_repeats_on_the_stub_clock(
+    fsw: ModuleType, station: FprimeStation, prm: str, parameter_ids: list[int]
+):
     """With nav propagating, every cycle time the rate group writes is 0, on F´'s stub clock.
 
     On the wall clock some cycles take a microsecond or more, so a cycle time that is not 0 shows a
@@ -196,9 +198,11 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(fsw: ModuleType, stat
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
     ticks = 500
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
     station.uplink("nav.initNavState", STATE, 1)
     station.telemetry()
 
@@ -232,14 +236,18 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(fsw: ModuleType, stat
 def test_the_pump_raises_naming_a_queue_its_bound_leaves_holding_messages(
     fsw: ModuleType,
     station: FprimeStation,
+    prm: str,
+    parameter_ids: list[int],
 ):
     """A queue still holding messages after the pump's rounds raises, naming it, never hangs.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
     station.uplink("cmdDisp.CMD_NO_OP", {}, 3)
 
     with pytest.raises(

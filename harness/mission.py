@@ -22,7 +22,9 @@ from typing import Any
 
 import pytest
 from wise_dynamics.basilisk.vehicles import VEHICLES
+from wise_dynamics.sessions import run_path
 
+from ground import parameters
 from ground.procedures import Ground
 from harness import requirements_tree
 
@@ -64,9 +66,11 @@ class Mission:
 
     Attributes:
         vehicle: the vehicle every scenario flies, by its name in WiseDynamics' `VEHICLES`.
-        fsw: builds the flight software for one case from its dispersed scenario, and claims its
-            capabilities with `provides`.
+        fsw: builds the flight software for one case from its dispersed scenario and the path of
+            the case's parameter record, and claims its capabilities with `provides`.
         scenarios: the TST items to fly.
+        parameters: gives the algorithm's parameters tuple for one case from its dispersed
+            scenario, which the ground writes as the case's record.
         rungs: the SRS items to judge, or None for every rung each flight reaches (see
             `requirements_tree.flight_rungs`).
         check: optionally, every way one case's run file fails the FSW's own per-case check,
@@ -74,8 +78,9 @@ class Mission:
     """
 
     vehicle: str
-    fsw: Callable[[Any], Any]
+    fsw: Callable[[Any, Path], Any]
     scenarios: tuple[str, ...]
+    parameters: Callable[[Any], Any]
     rungs: tuple[str, ...] | None = None
     check: Callable[[Path], list[str]] | None = None
 
@@ -220,10 +225,11 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     """The Monte Carlo test flying a mission through one scenario.
 
     The TST item's reference names the scenario's definition, its ground procedure, whose `sim_`
-    marks say how it is flown; the test carries them and the mission's vehicle. A `Ground` flies
-    the procedure against the FSW host and records the run file. An exception the host or the
-    procedure raised is re-raised whole, and a procedure still waiting when the flight ends fails
-    the case.
+    marks say how it is flown; the test carries them and the mission's vehicle. The ground writes
+    the case's parameter record beside its run file, as `run_<NNNN>.prm.json`, and the FSW is built
+    with its path. A `Ground` flies the procedure against the FSW host and records the run file.
+    An exception the host or the procedure raised is re-raised whole, and a procedure still
+    waiting when the flight ends fails the case.
 
     Args:
         mission: the mission.
@@ -246,6 +252,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         sim_duration_s: float,
         sim_run_file: Callable[..., Path],
         sim_test_directory: Path,
+        sim_case_index: int,
     ) -> None:
         """One case of the mission in the scenario writes its run file and passes the check.
 
@@ -255,13 +262,16 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_duration_s: s, the case's simulated duration.
             sim_run_file: writes the case's run file.
             sim_test_directory: the test's directory in the session.
+            sim_case_index: the case's number, which names its run file.
 
         Raises:
             failure: the exception the flight software or the procedure kept, re-raised whole in
                 place of what the run raised.
             BaseException: what the run raised, when neither kept an exception.
         """
-        fsw = mission.fsw(sim_scenario)
+        record = run_path(sim_test_directory, sim_case_index).with_suffix(".prm.json")
+        parameters.write(mission.parameters(sim_scenario), record)
+        fsw = mission.fsw(sim_scenario, record)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
         # The simulation holds the ground, so a strong reference back would keep every case.
         scenario = weakref.ref(sim_scenario)

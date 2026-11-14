@@ -8,6 +8,7 @@ it.
 import importlib.util
 import json
 import struct
+from pathlib import Path
 from types import ModuleType
 
 import numpy as np
@@ -66,9 +67,6 @@ ARGS = {
     "count": 7,
 }
 
-MU = 3.986004360e14
-"""m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
-
 NS = 1_000_000_000
 """ns per s."""
 
@@ -125,16 +123,18 @@ def wise_fsw() -> ModuleType:
 
 
 @pytest.fixture
-def station(wise_fsw: ModuleType) -> FprimeStation:
+def station(wise_fsw: ModuleType, prm: str, parameter_ids: list[int]) -> FprimeStation:
     """A station on the deployment, booted idle and mounted at identity.
 
     Args:
         wise_fsw: the test's copy of the deployment.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
 
     Returns:
         The station.
     """
-    wise_fsw.boot(mu=MU, dcm_PB=np.eye(3))
+    wise_fsw.boot(prm, parameter_ids)
     return FprimeStation(wise_fsw, WISE_FSW)
 
 
@@ -317,9 +317,13 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
 
 
 @pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")
-def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host():
-    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, no reason."""
-    module = FprimeModule(messaging.IMUSensorMsgReader(), mu=MU, dcm_PB=np.eye(3))
+def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host(prm_record: Path):
+    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, no reason.
+
+    Args:
+        prm_record: the case's parameter record.
+    """
+    module = FprimeModule(messaging.IMUSensorMsgReader(), prm_record)
     imu = messaging.IMUSensorMsg()
     imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
     module._imu.subscribeTo(imu)

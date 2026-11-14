@@ -14,12 +14,13 @@ Each component an algorithm's `.fpp` defines has three tuples in its FPP module,
 
 An output or telemetry field defaults to `None`, not written, which no FPP value is. A parameter
 has a default only when its FPP declaration gives one, so the required parameters come first, each
-group in FPP's order. Why named tuples is in ADR 0004 rev 2.
+group in FPP's order. A parameters tuple's `component` is its component's qualified name, and
+`parameters_from` builds one from plain values. Why named tuples is in ADR 0004 rev 2.
 """
 
 import functools
 from collections import namedtuple
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -29,7 +30,7 @@ import numpy as np
 from fsw.codegen.deployment import algorithm_files, contract_files
 from fsw.codegen.fpp_model import Array, Component, Enum, Member, Model, Struct, read
 
-__all__ = ["converter"]
+__all__ = ["converter", "parameters_from"]
 
 _DTYPES = {
     "F32": np.dtype("float32"),
@@ -48,6 +49,10 @@ _DTYPES = {
 
 _STRUCTS: dict[type, tuple[Struct, dict[str, Struct | Enum | Array]]] = {}
 """Each struct's tuple, to its struct and the model's types, for `converter`."""
+
+_COMPONENTS: dict[str, tuple[Component, dict[str, Struct | Enum | Array]]] = {}
+"""Each algorithm's component, by its qualified name, with the model's types, for
+`parameters_from`."""
 
 
 def converter(source: type, target: type) -> Callable[[Any], Any]:
@@ -100,6 +105,36 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
         return target._make([to(getattr(value, field)) for field, to in plan])
 
     return convert
+
+
+def parameters_from(tuple_type: type, values: Mapping[str, Any]) -> Any:
+    """A component's parameters tuple from plain values, such as a JSON object's.
+
+    An array field becomes a fresh array of its FPP shape and type; a scalar or an enum name passes
+    as it is. A field missing from `values`, or one the tuple lacks, raises as the tuple does.
+
+    Args:
+        tuple_type: a component's `<Name>Parameters` tuple.
+        values: each parameter's value by name.
+
+    Returns:
+        The tuple.
+
+    Raises:
+        ValueError: an array field's value is not of its FPP shape, naming the field.
+    """
+    component, types = _COMPONENTS[tuple_type.component]
+    converted = dict(values)
+    for parameter in component.parameters:
+        shape, element = _form(Member(parameter.name, parameter.type, None), types)
+        if shape and parameter.name in converted:
+            value = np.array(converted[parameter.name], dtype=element)
+            if value.shape != shape:
+                raise ValueError(
+                    f"{component.name}.{parameter.name} is {shape}, but its value is {value.shape}"
+                )
+            converted[parameter.name] = value
+    return tuple_type(**converted)
 
 
 def _same(value: Any) -> Any:
@@ -159,7 +194,8 @@ def _source_forms(source: type) -> dict[str, tuple[str, _Form]]:
 def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamespace]:
     """The tuples of a model's structs and of its algorithms' components, by top-level FPP module.
 
-    Each struct's tuple is recorded for `converter`.
+    Each struct's tuple is recorded for `converter`, and each algorithm's component for
+    `parameters_from`.
 
     Args:
         model: the model.
@@ -193,6 +229,7 @@ def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamesp
     files = {Path(f).resolve() for f in algorithms}
     for component in model.components.values():
         if component.file.resolve() in files:
+            _COMPONENTS[component.name] = component, model.types
             for suffix, cls in _component_tuples(component).items():
                 place(component.name + suffix, cls)
     return namespaces
@@ -221,14 +258,16 @@ def _component_tuples(component: Component) -> dict[str, type]:
     channels = [c.name for c in component.channels]
     required = [p.name for p in component.parameters if p.default is None]
     defaulted = [p for p in component.parameters if p.default is not None]
+    parameters = namedtuple(
+        f"{name}Parameters",
+        [*required, *(p.name for p in defaulted)],
+        defaults=[p.default for p in defaulted],
+    )
+    parameters.component = component.name
     return {
         "Outputs": namedtuple(f"{name}Outputs", outputs, defaults=[None] * len(outputs)),
         "Telemetry": namedtuple(f"{name}Telemetry", channels, defaults=[None] * len(channels)),
-        "Parameters": namedtuple(
-            f"{name}Parameters",
-            [*required, *(p.name for p in defaulted)],
-            defaults=[p.default for p in defaulted],
-        ),
+        "Parameters": parameters,
     }
 
 

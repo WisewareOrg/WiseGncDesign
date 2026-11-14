@@ -20,7 +20,7 @@
   "packageRules": [
     {
       "groupName": "fprime",
-      "matchPackageNames": ["nasa/fprime", "fprime-tools", "fprime-fpp"]
+      "matchPackageNames": ["nasa/fprime", "fprime-tools", "fprime-fpp", "fprime-gds"]
     },
     {
       "matchPackageNames": ["cmake", "ninja"],

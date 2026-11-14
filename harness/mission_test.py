@@ -18,6 +18,7 @@ import h5py
 import pytest
 import yaml
 
+from algorithms.imu_dead_reckoning import parameters
 from harness import requirements_tree
 from harness.mission import Mission, mission_tests, provides
 
@@ -101,11 +102,12 @@ def claiming(*capabilities: str, name: str = "build"):
         The builder.
     """
 
-    def fsw(scenario: object) -> None:
+    def fsw(scenario: object, prm_path: Path) -> None:
         """Build nothing.
 
         Args:
             scenario: unused.
+            prm_path: unused.
         """
 
     fsw.__name__ = name
@@ -191,7 +193,7 @@ def test_a_mission_has_no_rung_filter_by_default(tree: Path) -> None:
     Args:
         tree: the tree.
     """
-    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901",))
+    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901",), parameters=parameters)
 
     assert mission.rungs is None
 
@@ -203,7 +205,7 @@ def test_a_filter_rung_outside_the_scenarios_is_refused(tree: Path) -> None:
         tree: the tree.
     """
     with pytest.raises(ValueError, match="SRS904"):
-        Mission(VEHICLE, claiming("SYS901"), ("TST901",), rungs=("SRS904",))
+        Mission(VEHICLE, claiming("SYS901"), ("TST901",), parameters=parameters, rungs=("SRS904",))
 
 
 def test_a_flight_with_no_rungs_is_refused(tree: Path) -> None:
@@ -213,7 +215,7 @@ def test_a_flight_with_no_rungs_is_refused(tree: Path) -> None:
         tree: the tree.
     """
     with pytest.raises(ValueError, match="TST902"):
-        Mission(VEHICLE, claiming("SYS902"), ("TST902",))
+        Mission(VEHICLE, claiming("SYS902"), ("TST902",), parameters=parameters)
 
 
 def test_a_filter_that_empties_one_scenarios_flight_is_refused_naming_it(tree: Path) -> None:
@@ -223,7 +225,13 @@ def test_a_filter_that_empties_one_scenarios_flight_is_refused_naming_it(tree: P
         tree: the tree.
     """
     with pytest.raises(ValueError, match="TST902"):
-        Mission(VEHICLE, claiming("SYS901"), ("TST901", "TST902"), rungs=("SRS901",))
+        Mission(
+            VEHICLE,
+            claiming("SYS901"),
+            ("TST901", "TST902"),
+            parameters=parameters,
+            rungs=("SRS901",),
+        )
 
 
 def test_a_filter_answered_by_every_scenarios_flight_is_accepted(tree: Path) -> None:
@@ -232,7 +240,9 @@ def test_a_filter_answered_by_every_scenarios_flight_is_accepted(tree: Path) -> 
     Args:
         tree: the tree.
     """
-    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901", "TST902"), rungs=("SRS902",))
+    mission = Mission(
+        VEHICLE, claiming("SYS901"), ("TST901", "TST902"), parameters=parameters, rungs=("SRS902",)
+    )
 
     assert mission.rungs == ("SRS902",)
 
@@ -244,7 +254,7 @@ def test_an_fsw_claiming_nothing_one_scenario_links_is_refused_naming_it(tree: P
         tree: the tree.
     """
     with pytest.raises(ValueError, match="TST902"):
-        Mission(VEHICLE, claiming("SYS902"), ("TST901", "TST902"))
+        Mission(VEHICLE, claiming("SYS902"), ("TST901", "TST902"), parameters=parameters)
 
 
 @pytest.mark.parametrize(
@@ -263,7 +273,12 @@ def test_unknown_names_are_refused(tree: Path, changes: dict, unknown: str) -> N
         changes: the field replaced.
         unknown: the name it holds.
     """
-    fields = {"vehicle": VEHICLE, "fsw": claiming("SYS901"), "scenarios": ("TST901",)}
+    fields = {
+        "vehicle": VEHICLE,
+        "fsw": claiming("SYS901"),
+        "scenarios": ("TST901",),
+        "parameters": parameters,
+    }
 
     with pytest.raises(ValueError, match=unknown):
         Mission(**{**fields, **changes})
@@ -276,8 +291,8 @@ def test_two_missions_flying_the_same_flight_are_refused(tree: Path) -> None:
         tree: the tree.
     """
     fsw = claiming("SYS901")
-    one = Mission(VEHICLE, fsw, ("TST901",), rungs=("SRS901",))
-    two = Mission(VEHICLE, fsw, ("TST901",), rungs=("SRS902",))
+    one = Mission(VEHICLE, fsw, ("TST901",), parameters=parameters, rungs=("SRS901",))
+    two = Mission(VEHICLE, fsw, ("TST901",), parameters=parameters, rungs=("SRS902",))
 
     with pytest.raises(ValueError, match="TST901"):
         mission_tests(one, two)
@@ -332,24 +347,28 @@ def test_flight_json_survives_a_case_that_crashes_before_it_flies(
     monkeypatch.setattr(SCENARIOS["leo500"], "disperse", boom)
     project.makepyfile(
         test_flights="""
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 
 
 @provides("SYS902", "SYS901")
-def everything(scenario):
+def everything(scenario, prm_path):
     raise AssertionError("never built")
 
 
 @provides("SYS901")
-def narrowed(scenario):
+def narrowed(scenario, prm_path):
     raise AssertionError("never built")
 
 
 globals().update(
     mission_tests(
-        Mission(vehicle="imu_spacecraft", fsw=everything, scenarios=("TST901",)),
         Mission(
-            vehicle="imu_spacecraft", fsw=narrowed, scenarios=("TST901",), rungs=("SRS902",)
+            vehicle="imu_spacecraft", fsw=everything, scenarios=("TST901",), parameters=parameters
+        ),
+        Mission(
+            vehicle="imu_spacecraft", fsw=narrowed, scenarios=("TST901",), rungs=("SRS902",),
+            parameters=parameters,
         ),
     )
 )
@@ -395,11 +414,12 @@ def test_a_failing_check_fails_the_case_with_its_messages_and_the_run_file_is_pl
     project.makepyfile(
         test_flights=STUB_HOST
         + """
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 
 
 @provides("SYS901")
-def stub_fsw(scenario):
+def stub_fsw(scenario, prm_path):
     return StubHost()
 
 
@@ -410,7 +430,8 @@ def check(path):
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), check=check
+            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), check=check,
+            parameters=parameters,
         )
     )
 )
@@ -442,11 +463,12 @@ def test_a_check_is_given_the_cases_run_file_and_a_passing_check_passes(
         + """
 import h5py
 
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 
 
 @provides("SYS901")
-def stub_fsw(scenario):
+def stub_fsw(scenario, prm_path):
     return StubHost()
 
 
@@ -460,7 +482,8 @@ def check(path):
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), check=check
+            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), check=check,
+            parameters=parameters,
         )
     )
 )
@@ -483,6 +506,7 @@ def test_a_notebook_can_fly_a_scenario_it_defines_before_its_missions(
         test_self="""
 import pytest
 
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 
 
@@ -494,12 +518,16 @@ def alpha():
 
 
 @provides("SYS901")
-def fsw(scenario):
+def fsw(scenario, prm_path):
     raise AssertionError("never built")
 
 
 globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=fsw, scenarios=("TST901",)))
+    mission_tests(
+        Mission(
+            vehicle="imu_spacecraft", fsw=fsw, scenarios=("TST901",), parameters=parameters
+        )
+    )
 )
 """
     )
@@ -520,7 +548,7 @@ def test_a_scenario_file_that_raised_on_import_is_imported_afresh_once_fixed(
     scenarios = tree / "scenarios"
     scenarios.mkdir()
     (scenarios / "alpha.py").write_text('raise RuntimeError("alpha is broken")\n')
-    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901",))
+    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901",), parameters=parameters)
 
     with pytest.raises(RuntimeError, match="alpha is broken"):
         mission_tests(mission)
@@ -543,16 +571,21 @@ def test_flying_a_scenario_before_defining_it_is_an_error(project: pytest.Pytest
         test_self="""
 import pytest
 
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 
 
 @provides("SYS901")
-def fsw(scenario):
+def fsw(scenario, prm_path):
     raise AssertionError("never built")
 
 
 globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=fsw, scenarios=("TST901",)))
+    mission_tests(
+        Mission(
+            vehicle="imu_spacecraft", fsw=fsw, scenarios=("TST901",), parameters=parameters
+        )
+    )
 )
 
 
@@ -600,16 +633,21 @@ class StubHost(sysModel.SysModel):
 
 
 STUB_FLIGHT = """
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 
 
 @provides("SYS901")
-def stub_fsw(scenario):
+def stub_fsw(scenario, prm_path):
     return StubHost()
 
 
 globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
+    mission_tests(
+        Mission(
+            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), parameters=parameters
+        )
+    )
 )
 """
 
@@ -647,6 +685,49 @@ def test_a_flight_runs_the_procedure_on_the_host_s_radio_edge_for_the_scenario_s
         "fsw": "stub_fsw",
         "build": {"host": "stub", "revision": "r1"},
     }
+
+
+RECORDED_FLIGHT = """
+from algorithms.imu_dead_reckoning import parameters
+from harness.mission import Mission, mission_tests, provides
+
+
+@provides("SYS901")
+def recorded(scenario, prm_path):
+    assert prm_path.name == "run_0000.prm.json"
+    assert prm_path.is_file()
+    return StubHost()
+
+
+globals().update(
+    mission_tests(
+        Mission(
+            vehicle="imu_spacecraft", fsw=recorded, scenarios=("TST901",), parameters=parameters
+        )
+    )
+)
+"""
+
+
+def test_a_case_s_parameter_record_is_written_beside_its_run_file_before_its_fsw_is_built(
+    project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
+) -> None:
+    """The builder is given the record's path, already written from the mission's `parameters`.
+
+    Args:
+        project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
+    """
+    project.makepyfile(test_flights=STUB_HOST + RECORDED_FLIGHT)
+
+    result = fly_in_a_subprocess(project)
+
+    result.assert_outcomes(passed=1)
+    [run] = project.path.rglob("run_0000.h5")
+    record = json.loads(run.with_suffix(".prm.json").read_text())
+    assert list(record) == ["ImuDeadReckoning.nav"]
+    assert record["ImuDeadReckoning.nav"]["mu"] == 3.986004360e14
+    assert len(record["ImuDeadReckoning.nav"]["dcm_PB"]) == 3
 
 
 def test_the_definition_s_ground_period_mark_sets_the_ground_s_period(
@@ -775,6 +856,7 @@ from pathlib import Path
 
 from fsw.python import AlgorithmModule
 from ground.dictionary import Dictionary
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 
 
@@ -784,7 +866,7 @@ class Broken:
 
 
 @provides("SYS901")
-def toy(scenario):
+def toy(scenario, prm_path):
     model = [Path(__file__).with_name("Toy.fpp")]
     dictionary = Dictionary.from_component(model, "Toy.Toy", instance="toy")
     readers = scenario.vehicle.readers()
@@ -792,7 +874,11 @@ def toy(scenario):
 
 
 globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=toy, scenarios=("TST901",)))
+    mission_tests(
+        Mission(
+            vehicle="imu_spacecraft", fsw=toy, scenarios=("TST901",), parameters=parameters
+        )
+    )
 )
 """
     )
@@ -822,13 +908,14 @@ def test_a_later_cases_base_write_keeps_the_build_an_earlier_case_merged(
     project.makepyfile(
         test_flights=STUB_HOST
         + """
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 
 BUILT = []
 
 
 @provides("SYS901")
-def stub_fsw(scenario):
+def stub_fsw(scenario, prm_path):
     BUILT.append(scenario)
     if len(BUILT) > 1:
         raise RuntimeError("the second case cannot build its host")
@@ -836,7 +923,11 @@ def stub_fsw(scenario):
 
 
 globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",)))
+    mission_tests(
+        Mission(
+            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), parameters=parameters
+        )
+    )
 )
 """
     )

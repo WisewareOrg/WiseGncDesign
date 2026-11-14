@@ -2,12 +2,12 @@
 
 `parity.py`, a second notebook, holds its Python and F´ builds to parity.
 
-`ImuDeadReckoner` and `dead_reckoner` import from here. They live in the notebook,
+`ImuDeadReckoner`, `dead_reckoner` and `parameters` import from here. They live in the notebook,
 `imu_dead_reckoning.py`, imported on first use so that importing `gross_check` alone, as the
 notebook itself does, does not run the notebook a second time.
 """
 
-__all__ = ["ImuDeadReckoner", "dead_reckoner"]
+__all__ = ["ImuDeadReckoner", "dead_reckoner", "parameters"]
 
 
 def __getattr__(name: str) -> object:

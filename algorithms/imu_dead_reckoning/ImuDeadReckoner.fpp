@@ -9,9 +9,6 @@ module Gnc {
     @ The IMU's latest reading, held until the next step
     sync input port imuIn: Gnc.ImuReading
 
-    @ Boots the estimator idle with its configuration
-    sync input port configureIn: Gnc.NavConfig
-
     @ The deployment's clock
     time get port timeCaller
 
@@ -26,6 +23,18 @@ module Gnc {
 
     @ Command responses
     command resp port cmdResponseOut
+
+    @ Parameter reads
+    param get port prmGetOut
+
+    @ Parameter saves to PrmDb
+    param set port prmSetOut
+
+    @ m^3/s^2, the central body's gravitational parameter
+    param mu: F64
+
+    @ The IMU's mounting [PB], v_P = [PB] v_B
+    param dcm_PB: Gnc.Matrix3
 
     include "../../fsw/fpp/interfaces/Nav/InitNavState.fppi"
     include "../../fsw/fpp/interfaces/Nav/NavState.fppi"

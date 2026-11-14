@@ -20,9 +20,6 @@ from lab.power_cycle import power_cycle
 if importlib.util.find_spec("lab._wise_fsw") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
 
-MU = 3.986004360e14
-"""m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
-
 NS = 1_000_000_000
 """ns per s."""
 
@@ -38,23 +35,20 @@ STATE = {
 """`nav.initNavState`'s arguments: a state at t = 0."""
 
 FLIGHT = """
-import numpy as np
-
+from algorithms.imu_dead_reckoning import parameters
 from harness.mission import Mission, mission_tests, provides
 from lab import FprimeModule
 
 
 @provides("SYS001")
-def fprime(scenario):
-    return FprimeModule(
-        scenario.vehicle.readers()["imu"],
-        mu=scenario.mu_m3_s2["earth"],
-        dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB),
-    )
+def fprime(scenario, prm_path):
+    return FprimeModule(scenario.vehicle.readers()["imu"], prm_path)
 
 
 globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=fprime, scenarios=("TST001",)))
+    mission_tests(
+        Mission(vehicle="imu_spacecraft", fsw=fprime, scenarios=("TST001",), parameters=parameters)
+    )
 )
 """
 """The F´ build flown through the repository's leo500 scenario, TST001."""
@@ -121,11 +115,17 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
         np.testing.assert_equal(first, alone)
 
 
-def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy():
+def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
+    prm: str, parameter_ids: list[int]
+):
     """A pin called before boot trips an F´ assert, raised in Python with F´'s own text.
 
     The copy that raised is never handed out again: the next power cycle is another module, which
     boots and steps. Neither copy is in `sys.modules`.
+
+    Args:
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
     raised = power_cycle()
 
@@ -134,28 +134,32 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy():
 
     fresh = power_cycle()
     assert fresh is not raised
-    fresh.boot(mu=MU, dcm_PB=np.eye(3))
+    fresh.boot(prm, parameter_ids)
     fresh.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
     assert fresh.telemetry()
     assert raised not in sys.modules.values()
     assert fresh not in sys.modules.values()
 
 
-def test_two_copies_in_one_process_share_no_state():
+def test_two_copies_in_one_process_share_no_state(prm: str, parameter_ids: list[int]):
     """A copy left mid-flight, a command queued and its link undrained, reaches no later copy.
 
     The later copy boots idle and answers nothing; the earlier one flies on from its own state.
+
+    Args:
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
     zero = {"angVelPlatform": np.zeros(3), "accelPlatform": np.zeros(3)}
     earlier, later = power_cycle(), power_cycle()
     earlier_station = FprimeStation(earlier, DICTIONARY)
     later_station = FprimeStation(later, DICTIONARY)
-    earlier.boot(mu=MU, dcm_PB=np.eye(3))
+    earlier.boot(prm, parameter_ids)
     earlier_station.uplink("nav.initNavState", STATE, 1)
     earlier.step(t_ns=NS, **zero)
     earlier_station.uplink("nav.initNavState", STATE, 2)
 
-    later.boot(mu=MU, dcm_PB=np.eye(3))
+    later.boot(prm, parameter_ids)
     later.step(t_ns=NS, **zero)
     earlier.step(t_ns=2 * NS, **zero)
 
@@ -178,10 +182,15 @@ def test_two_copies_in_one_process_share_no_state():
     assert [context for context, _, _ in earlier_station.responses()] == [1, 2]
 
 
-def test_a_copy_boots_once():
-    """A second boot of one copy is refused: a copy is powered on once."""
+def test_a_copy_boots_once(prm: str, parameter_ids: list[int]):
+    """A second boot of one copy is refused: a copy is powered on once.
+
+    Args:
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
+    """
     copy = power_cycle()
-    copy.boot(mu=MU, dcm_PB=np.eye(3))
+    copy.boot(prm, parameter_ids)
 
     with pytest.raises(RuntimeError, match="already booted"):
-        copy.boot(mu=MU, dcm_PB=np.eye(3))
+        copy.boot(prm, parameter_ids)
