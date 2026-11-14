@@ -47,8 +47,9 @@ res/fresh100_gc.log: n=100 time mean 0.282 median 0.281 | rss start 261 end 334 
 first and third in 3, 7, 3, and on the shared extension; case 7 differs from case 3, so a leak would
 have shown as unequal datasets. A copy loaded under the spec name `_wise_fsw` returned the first
 copy's module, because pybind11 caches a module by spec name; a unique dotted name per copy fixed
-it. The driver did not reproduce the growth in issue 49 every case flown with a ground stays in memory,
-so that growth was neither counted nor excluded.
+it. The driver did not reproduce the growth in issue 49 every case flown with a ground stays in
+memory, so that growth was neither counted nor excluded. Not covered: the copies ran setup at import,
+so a fresh copy, `boot(prm_path)` and PrmDb's load were never run together.
 
 **SimHub on F´ serial ports: PASS** (`9eccec3`, `spikes/fprime/`). Bytes Python's `struct.pack`
 writes for a bus struct equal F´'s serialization, and SimHub delivers them as the typed struct.
@@ -63,7 +64,8 @@ little-endian push decodes as 583948143490498560 [7.688e+284, …]
 
 The little-endian push is the failure the comparison would have shown. The format is big-endian,
 unpadded and unframed, in declaration order (`struct.Struct(">Q3d3d")`). A 55-byte push asserted,
-printed, and delivered a partly filled struct.
+printed, and delivered a partly filled struct. Not covered: an assert thrown through F´ into
+pybind11.
 
 **boot(prm_path): PASS** (`9eccec3`). Setup moves out of import into `boot(prm_path)`, and PrmDb
 reads the case's file there. `python spike_check.py b <case>.dat` from two processes with two files:
@@ -99,7 +101,11 @@ Each tick is one frame: RIO in, CDH in, GNC, CDH out, RIO out.
 - **An algorithm sits in `algorithms/<name>/`**: its notebook, its `<Name>.fpp` and an optional C++
   component. `fsw/fprime/configurations/` holds one deployment per configuration, importing the
   partitions.
-- **No file under `fsw/fprime/`, `fsw/python/` or `lab/` names an algorithm.**
+- **No file in the generic code names an algorithm:** `fsw/fprime/cdh/`, `fsw/fprime/rio/`,
+  `fsw/fprime/platform/`, `fsw/python/` and `lab/`.
+- **A configuration in `fsw/fprime/configurations/` is named for the configuration**, and reaches
+  algorithms only through its GNC sub-topology in `fsw/fpp/gnc/`, so no file under
+  `configurations/` names an `algorithms/` path.
 
 ### Inside or outside `_wise_fsw`
 
@@ -136,8 +142,9 @@ code.
 - **The generated CDH component** converts bus types to the GNC's FPP types and back. The generator
   is ADR 0004 rev 2's.
 - **The pins** boot, tick, push and drain bytes by port, take command packets in and give telemetry
-  writes out. Nothing runs at import: `boot(prm_path)` sets up the topology, and PrmDb reads the
-  case's parameter file there (ADR 0004 rev 2). A second `boot` in one copy raises.
+  writes out. Nothing runs at import: `boot(prm_path, prm_ids)` sets up the topology, PrmDb reads
+  the case's parameter file there, and boot raises unless every parameter is valid (ADR 0004 rev 2).
+  A second `boot` in one copy raises.
 - **The power cycle is a fresh copy of the extension per case.** One entry point, the lab's
   power-cycle function, copies and loads it, and nothing else imports `_wise_fsw`:
   - the `.so` is copied into a per-process temp dir under a counter-numbered name, and each copy is
@@ -219,7 +226,8 @@ code.
   file stays on disk until the process exits (RAM where the temp dir is tmpfs). Reopened if a
   measured campaign's peak RSS per worker threatens the host: the choice is then recycling or reset
   handlers.
-- An F´ assert fails the case in Python with F´'s own text.
+- The pins register a throwing hook, so that an F´ assert fails the case in Python with F´'s own
+  text.
 - Copies share no state, so more than one F´ build can be booted in one process.
 - A rebuilt extension needs a kernel restart, though the power cycle would allow picking it up.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard

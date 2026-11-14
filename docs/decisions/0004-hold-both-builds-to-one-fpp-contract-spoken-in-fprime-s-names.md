@@ -45,11 +45,12 @@ annotations: "provides: SRS010 free text, with spaces", "post-annotation on inst
 
 A missing imported group, an unresolved port number or a lost annotation would have shown in
 `Top.Deploy`'s connections or the annotation list. A port number the FPP leaves implicit is `"None"`
-in the connection itself and resolved only in the topology's port-number maps.
+in the connection itself and resolved only in the topology's port-number maps. Not covered: real F´
+components (the components were scratch ones), auto-numbered port arrays, and types, struct member
+order and parameter entries.
 
 **`fprime-prm-write` and stock PrmDb: PASS** (`9eccec3`, `spikes/fprime/`). F´'s tool turns a case's
-JSON into the `.dat` stock PrmDb loads at boot, here against a scratch deployment's dictionary.
-`fprime-prm-write dat prm/nav_case.json -d
+JSON into the `.dat` stock PrmDb loads at boot. `fprime-prm-write dat prm/nav_case.json -d
 SpikeTopologyDictionary.json`, then `python spike_check.py b prm/nav_case.dat`:
 
 ```
@@ -60,7 +61,8 @@ nav.dcm_PB [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]] valid
 
 With the file missing, PrmDb reports `PrmFileReadError` and both parameters stay invalid, so a load
 that failed would have shown. The tool refuses, writing no `.dat`, an unqualified instance name, a
-wrong parameter name, a wrong array length and a wrong type.
+wrong parameter name, a wrong array length and a wrong type. Not covered: this deployment's
+dictionary; the check used a scratch deployment's.
 
 ## Decision
 
@@ -96,13 +98,17 @@ wrong parameter name, a wrong array length and a wrong type.
   into the tree, it races between parallel test workers and is a build product in source.
 - **Python reads FPP's model through the native `fpp to-json`,** called directly, since F´'s wrapper
   sends `to-json` to its Java JAR. One module parses the output and extracts only instances,
-  connections, port numbers, constants and annotations. A contract test on the real flight
-  software's FPP fails loudly when an `fprime-fpp` bump changes the JSON's shape. It needs only the native `fpp`, so it runs without an F´ build and never skips,
-  and a breaking bump fails on its Renovate PR.
+  connections and port numbers, constants, annotations, type definitions (structs, arrays, enums,
+  aliases), and each component's commands, telemetry channels and parameters. Nothing else reads
+  FPP's model. The design review's run on the baseline's topology found all of these in the output:
+  `typeMap` holds its structs, arrays and enums, and `componentMap` carries each component's
+  `commandMap`, `tlmChannelMap` and `paramMap`. A contract test on the real flight software's FPP
+  fails loudly when an `fprime-fpp` bump changes the JSON's shape. It needs only the native `fpp`,
+  so it runs without an F´ build and never skips, and a breaking bump fails on its Renovate PR.
 
 ### The generator and its named tuples
 
-- **`fsw/codegen/` generates each build's CDH from FPP**, read with the native `fpp`, with no
+- **`fsw/codegen/` generates each build's CDH from FPP**, through that one module, with no
   compiler and no F´ build. Fields map by name, ignoring case, and a missing ICD field fails. It
   makes the Python converters at import, into a temp dir; the F´ CDH component when CMake calls it;
   and the bus emulator's serializers.
@@ -126,7 +132,14 @@ wrong parameter name, a wrong array length and a wrong type.
 - **`fprime-gds`, pinned by F´ v4.4.2 at 4.4.0, joins the uv environment.** No Python code parses or
   writes F´'s binary parameter format.
 - **PrmDb's sandbox root is the directory that holds the case's parameter file**, derived in the
-  boot pin from the one absolute `prm_path`. PrmDb refuses every open until a sandbox is configured.
+  boot pin from the absolute `prm_path`. PrmDb refuses every open until a sandbox is configured.
+- **Boot fails the case unless every parameter in the configuration's dictionary is valid after the
+  load.** The pins take the parameter IDs with the path, ask PrmDb's own `getPrm` port for each, and
+  raise naming every ID that is not valid. That one check catches a missing file, a bad CRC, the
+  sandbox, the path length and a parameter absent from the JSON.
+- **The case's parameter record is the JSON.** The `.dat` is made from it and is the F´ build's
+  on-board file, which `PRM_SAVE_FILE` may rewrite as on a vehicle; nothing reads it back as the
+  record.
 
 ### Parity is an analyzer whose spec is a minimum
 
@@ -179,8 +192,9 @@ wrong parameter name, a wrong array length and a wrong type.
   build's, IDs aside, so a stale F´ build fails it.
 - `to-json`'s layout is unversioned compiler internals. One module reads it and a contract test
   holds it, so a bump that moves it fails on its Renovate PR and never mis-wires the Python build.
-- A parameter-file path longer than F´'s 240-character `FileNameStringSize` asserts in PrmDb's
-  sandbox, which raises in Python; session paths stay under it or the deployment raises the limit.
+- A parameter-file path beyond F´'s 240-character `FileNameStringSize` fails PrmDb's load (the open
+  is refused as outside the sandbox), and boot then fails the case. A sandbox directory of 239 or
+  more characters asserts.
 - A new channel or command while prototyping is two edits: the `.fpp` line and the Python that writes
   or handles it.
 - Generating a Python build's dictionary takes 0.1–0.3 s, once per process for each model.
