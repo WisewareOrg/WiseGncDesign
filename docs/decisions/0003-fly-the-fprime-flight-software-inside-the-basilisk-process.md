@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Decided:** 2026-11-14 (issue 51 two edges design; issue 52 tooling checks; issue 57 GNC
-sub-topology)
+sub-topology; issue 61 Python frame runner)
 **Rev:** 3
 
 ## Revisions

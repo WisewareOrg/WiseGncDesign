@@ -111,7 +111,8 @@ def _q_dot(q: np.ndarray, omega: np.ndarray) -> np.ndarray:
 # \end{pmatrix}$$
 #
 # $a_B$ is the accelerometer's body-frame reading of non-gravitational acceleration, and $\mu$ is
-# the gravitational parameter, supplied by the host so truth and estimate share one constant.
+# the gravitational parameter, which the case's parameter record gives from the scenario so truth
+# and estimate share one constant.
 
 
 # %%

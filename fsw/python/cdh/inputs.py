@@ -1,9 +1,8 @@
 """The Python build's CDH-in: each sensor role's bus struct, converted to its GNC input's FPP type.
 
-The pairing is FPP's: `Cdh.BusConverter` has, per role, a `<role>In` typed by the role's bus struct
-and a `<role>Out` typed by the GNC's struct, and a configuration takes the role at its GNC
-sub-topology's port `<role>In`. A `Pair` names the four. The bus struct is converted to the ICD
-struct field by field with `fsw.codegen.fpp_types.converter`, every array a fresh copy.
+The pairing is FPP's, `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp`, whose annotation states
+its rule; a `Pair` names one role's. The bus struct is converted to the ICD struct field by field
+with `fsw.codegen.fpp_types.converter`, every array a fresh copy.
 """
 
 import functools

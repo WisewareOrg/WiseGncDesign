@@ -1,7 +1,8 @@
 module Cdh {
 
   @ Converts each sensor role's bus struct to the GNC's FPP type: a role's port pair, its stem the
-  @ role, its input typed by the bus struct and its output by the GNC struct
+  @ role, its input `<role>In` typed by the bus struct and its output `<role>Out` by the GNC struct;
+  @ a configuration takes the role at its GNC sub-topology's port `<role>In`
   passive component BusConverter {
 
     @ The IMU's message, as the bus carries it
