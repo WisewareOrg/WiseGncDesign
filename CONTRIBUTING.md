@@ -14,6 +14,8 @@ Every pull request against the default branch runs `process-gates.yml`:
 - `pr-title` — the PR title is a Conventional Commits subject (PROC-009).
 - `repo-floor` — the repository's rulesets meet [`repository-floor.yml`](https://github.com/WisewareOrg/.github/blob/main/repository-floor.yml)
   (PROC-011).
+- `check-adrs` — `docs/decisions/` agrees with its index, and every ADR citation pins the ADR's
+  current rev ([`docs/decisions/README.md`](docs/decisions/README.md)).
 
 A PR whose base is not the default branch needs the Development-field link written by hand — see
 WiseKiosk's [`link-pr` skill](https://github.com/WisewareOrg/WiseKiosk/blob/main/.claude/skills/link-pr/SKILL.md)
