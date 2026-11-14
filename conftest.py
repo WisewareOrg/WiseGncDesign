@@ -1,8 +1,8 @@
 """Fixtures every package's tests share: an F´ copy and its station, a case's parameters and IDs.
 
 A test module flying other values overrides `nav_parameters`. The `.dat` and the IDs need the F´
-build, which the tests that ask for them skip without. The copy and its station need it too, and a
-test asking for either skips without it.
+build's dictionary, so a test asking for either skips without it. The copy and its station need the
+F´ build, and a test asking for either skips without it too.
 """
 
 from __future__ import annotations
@@ -91,6 +91,7 @@ def prm(prm_record: Path) -> str:
     Returns:
         The `.dat`'s path, as `boot` takes it.
     """
+    _skip_without_the_build()
     return str(parameters.dat(prm_record, DICTIONARY))
 
 
@@ -101,4 +102,11 @@ def parameter_ids() -> list[int]:
     Returns:
         The IDs, sorted.
     """
+    _skip_without_the_build()
     return sorted(Dictionary(DICTIONARY).parameters_by_id)
+
+
+def _skip_without_the_build() -> None:
+    """Skips the test asking when `just fsw` has not built the deployment's dictionary."""
+    if not DICTIONARY.exists():
+        pytest.skip("the F´ build is absent; run `just fsw`")

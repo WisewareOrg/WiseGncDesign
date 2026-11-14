@@ -37,11 +37,11 @@ Vector3d vector(const Gnc::Vector3& v) {
 }
 
 Eigen::Matrix3d matrix(const Gnc::Matrix3& m) {
-    Eigen::Matrix3d matrix;
+    Eigen::Matrix3d out;
     for (FwIndexType row = 0; row < 3; row++) {
-        matrix.row(row) = vector(m[row]).transpose();
+        out.row(row) = vector(m[row]).transpose();
     }
-    return matrix;
+    return out;
 }
 
 }  // namespace
