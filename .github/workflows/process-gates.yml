@@ -1,10 +1,9 @@
 name: process-gates
 
-# Satisfies the `process-gates` ruleset's required-status-check contexts (`check-adrs`,
-# `check-branch`, `pr-title`, `repo-floor`): each job is top-level and named for its context.
-# `merge_group` is a deliberate addition over wise-ci's own workflow: WiseKiosk's merge queue
-# re-runs its required checks there, and these four skip rather than repeat work a pull_request run
-# already did.
+# Satisfies the `process-gates` ruleset's required-status-check contexts (`check-branch`,
+# `pr-title`, `repo-floor`): each job is top-level and named for its context. `merge_group` is a
+# deliberate addition over wise-ci's own workflow: WiseKiosk's merge queue re-runs its required
+# checks there, and these three skip rather than repeat work a pull_request run already did.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
@@ -46,17 +45,3 @@ jobs:
       contents: read
     steps:
       - uses: WisewareOrg/wise-ci/repo-floor@4b3554d330465dee925aa10e0c62355903b1488a
-
-  # docs/decisions/ agrees with its index, and every ADR citation in the tracked tree pins the
-  # ADR's current rev. It reads the checkout, so it checks one out first.
-  check-adrs:
-    name: check-adrs
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: WisewareOrg/wise-ci/check-adrs@4b3554d330465dee925aa10e0c62355903b1488a

@@ -89,3 +89,13 @@ jobs:
           out="$(git status --porcelain)"
           echo "$out"
           test -z "$out"
+
+  check-adrs:
+    name: check-adrs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # docs/decisions/ agrees with its index, and every ADR citation pins the ADR's current rev.
+      - uses: WisewareOrg/wise-ci/check-adrs@4b3554d330465dee925aa10e0c62355903b1488a

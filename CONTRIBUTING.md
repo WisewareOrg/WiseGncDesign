@@ -14,14 +14,14 @@ Every pull request against the default branch runs `process-gates.yml`:
 - `pr-title` — the PR title is a Conventional Commits subject (PROC-009).
 - `repo-floor` — the repository's rulesets meet [`repository-floor.yml`](https://github.com/WisewareOrg/.github/blob/main/repository-floor.yml)
   (PROC-011).
-- `check-adrs` — `docs/decisions/` agrees with its index, and every ADR citation pins the ADR's
-  current rev ([`docs/decisions/README.md`](docs/decisions/README.md)).
 
 A PR whose base is not the default branch needs the Development-field link written by hand — see
 WiseKiosk's [`link-pr` skill](https://github.com/WisewareOrg/WiseKiosk/blob/main/.claude/skills/link-pr/SKILL.md)
 for the GraphQL mutation; `Closes #N` in the body only writes that record on a default-base PR.
 
-`checks.yml` runs the lint, requirements and test jobs; see the
+`checks.yml` runs the lint, requirements and test jobs, and `check-adrs`: `docs/decisions/`
+agrees with its index, and every ADR citation pins the ADR's current rev
+([`docs/decisions/README.md`](docs/decisions/README.md)). See the
 [README's Recipes and CI section](README.md#recipes-and-ci).
 
 ## Generated code

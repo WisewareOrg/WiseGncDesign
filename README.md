@@ -113,4 +113,5 @@ at `report/matrix.md`. How a verdict is reached is in
 ### Recipes and CI
 
 `just --list` shows every recipe with its description. `.github/workflows/checks.yml` is the
-authority on what CI runs: lint and docstring coverage, `just reqs`, and the suite.
+authority on what CI runs: lint and docstring coverage, `just reqs`, the suite, and wise-ci's
+`check-adrs` over `docs/decisions/`.
