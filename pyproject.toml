@@ -30,7 +30,7 @@ sim = ["wise-dynamics[notebook]"]
 notebooks = ["ipykernel>=6.29", "ipython>=9.0", "jupyterlab>=4.4", "jupytext>=1.17", "notebook", "pip"]
 # The F´ toolchain at the versions the F´ clone pins (held to them by fsw/fprime/pins_test.py),
 # packaging, which that test parses with, and pybind11 for the deployment's Python module.
-fprime = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-tools==4.4.0", "ninja==1.11.1.4", "packaging", "pybind11>=2.13"]
+fprime = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-gds==4.4.0", "fprime-tools==4.4.0", "ninja==1.11.1.4", "packaging", "pybind11>=2.13"]
 
 [tool.uv.sources]
 # The WiseDynamics commit this repository's scenario tests verify against.
