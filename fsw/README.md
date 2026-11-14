@@ -163,5 +163,6 @@ The deployment takes commands through F´'s own command dispatcher, which runs o
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
 and `_wise_fsw.responses()` returns each response under its context. `_wise_fsw.telemetry()`
 drains every telemetry write since the last call, each with its F´ time tag, and `boot` runs the
-commands left queued, clears GroundLink's held responses and writes, and leaves nav idle. The module's radio edge is an `FprimeStation` on these pins. The reasoning is in
+commands left queued, clears GroundLink's held responses and writes, and leaves nav idle. The
+module's radio edge is an `FprimeStation` on these pins. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
