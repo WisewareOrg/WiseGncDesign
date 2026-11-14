@@ -33,9 +33,6 @@ class GroundLink final : public GroundLinkComponentBase {
     //! The responses since the last call, oldest first.
     std::vector<Response> takeResponses();
 
-    //! Forgets every write and response.
-    void clear();
-
   private:
     void cmdResponseIn_handler(FwIndexType portNum, FwOpcodeType opCode, U32 cmdSeq,
                                const Fw::CmdResponse& response) override;
