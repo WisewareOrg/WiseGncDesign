@@ -7,7 +7,7 @@
 
 #include "Os/Os.hpp"
 #include "fsw/fprime/platform/Cooperative.hpp"
-#include "fsw/fprime/configurations/imu_dead_reckoning/WiseFswTopology.hpp"
+#include WISE_FSW_TOPOLOGY_HEADER
 
 namespace py = pybind11;
 
@@ -68,10 +68,11 @@ PYBIND11_MODULE(_wise_fsw, m) {
             WiseFsw::simTime.set(t_ns);
             g_cooperative.pump();
             WiseFsw::simBridge.sendImu(vector3(angVelPlatform), vector3(accelPlatform));
-            WiseFsw::simBridge.tick();
+            WiseFsw::simTime.tick();
         },
         py::arg("t_ns"), py::arg("angVelPlatform"), py::arg("accelPlatform"),
-        "Sets the clock to t_ns (ns), runs the queued commands, sends the IMU reading and runs the schedule once.");
+        "Sets the clock to t_ns (ns), runs the queued commands, sends the IMU reading and ticks the rate groups "
+        "once.");
 
     m.def(
         "pump", [](int rounds) { g_cooperative.pump(rounds); }, py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},

@@ -1,4 +1,4 @@
-#include "fsw/fprime/configurations/imu_dead_reckoning/WiseFswTopology.hpp"
+#include "fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopology.hpp"
 
 namespace WiseFsw {
 

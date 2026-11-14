@@ -1,0 +1,38 @@
+# Rendered for each GNC sub-topology in fsw/fpp/gnc/, which must expose the ports tickIn, imuIn and
+# navConfigIn.
+module WiseFsw {
+
+  @ The flight software run inside the simulation: the @CONFIGURATION@ configuration's GNC, fed and
+  @ ticked by the simulation, commanded and read by the ground
+  deployment topology @CONFIGURATION@Fsw {
+
+    instance @CONFIGURATION@.Gnc
+
+    instance simTime
+    instance groundLink
+    instance simBridge
+    instance cmdDisp
+
+    time connections instance simTime
+
+    command connections instance cmdDisp
+
+    telemetry connections instance groundLink
+
+    connections RateGroups {
+      simTime.CycleOut -> @CONFIGURATION@.Gnc.tickIn
+    }
+
+    connections Simulation {
+      simBridge.navConfigOut -> @CONFIGURATION@.Gnc.navConfigIn
+      simBridge.imuOut -> @CONFIGURATION@.Gnc.imuIn
+    }
+
+    connections Ground {
+      groundLink.cmdOut -> cmdDisp.seqCmdBuff[0]
+      cmdDisp.seqCmdStatus[0] -> groundLink.cmdResponseIn
+    }
+
+  }
+
+}

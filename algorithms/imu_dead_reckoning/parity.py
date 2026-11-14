@@ -73,7 +73,8 @@ globals().update(mission_tests(*MISSIONS))
 #
 # The cells below run in the notebook only: the judged rungs, then the builds' parity. Case for
 # case, the builds write the same datasets, with the same dtypes, units and write times, and the
-# same command log. Every value is equal but the estimate's, which agrees to `TOLERANCE`: position
+# same command log; the F´ build also records its rate group's health, which is its own and not
+# compared. Every value is equal but the estimate's, which agrees to `TOLERANCE`: position
 # and velocity relative to the vector's norm, attitude as the principal angle between the two. A
 # disagreement fails the cell, and with it the notebook's test.
 
@@ -99,7 +100,9 @@ globals().update(mission_tests(*MISSIONS))
 #         assert p["attrs"]["case"] == f["attrs"]["case"], case
 #         assert p["attrs"]["commands"] == f["attrs"]["commands"], case
 #         p, f = p["datasets"], f["datasets"]
-#         assert sorted(p) == sorted(f), case
+#         assert set(p) <= set(f), case
+#         fprime_only = {name.split("/", 1)[1] for name in set(f) - set(p)}
+#         assert all(name.startswith("navRateGroup.") for name in fprime_only), case
 #         assert {*vectors, attitude} <= set(p), case
 #         for name, (values, units) in p.items():
 #             assert values.dtype == f[name][0].dtype, f"{case} {name}"

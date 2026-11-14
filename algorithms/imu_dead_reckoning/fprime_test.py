@@ -10,6 +10,8 @@ import pytest
 from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
+from fsw.codegen.deployment import fpp_files
+from fsw.codegen.fpp_model import read
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import DICTIONARY, extension
@@ -38,12 +40,15 @@ STATION = FprimeStation(_wise_fsw, WISE_FSW)
 
 
 def _telemetry() -> dict[str, object]:
-    """Drains the telemetry writes and keeps each channel's last, by name.
+    """Drains the telemetry writes and keeps each of nav's channels' last, by name.
 
     Returns:
-        Channel name, `<instance>.<channel>`, to its last value written since the previous drain.
+        Channel name, `nav.<channel>`, to its last value written since the previous drain.
     """
-    return {name: STATION.values(name, [raw])[0] for name, _, raw in STATION.telemetry()}
+    writes = STATION.telemetry()
+    return {
+        name: STATION.values(name, [raw])[0] for name, _, raw in writes if name.startswith("nav.")
+    }
 
 
 def test_the_python_build_and_the_fprime_build_hold_nav_to_one_contract():
@@ -178,6 +183,27 @@ def test_a_rebooted_reckoner_keeps_nothing_of_the_previous_flight():
     _wise_fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
     assert _telemetry() == {"nav.navState": "idle"}
+
+
+def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(tmp_path: Path):
+    """Nav writes its state once per run, so `10 * navDivider` ticks give exactly 10 writes.
+
+    The driver's tick count carries over from earlier tests in the process, so the count is taken
+    over a whole number of dividers, which holds whatever tick the driver starts on.
+
+    Args:
+        tmp_path: where the deployment's topology is rendered.
+    """
+    divider = read(fpp_files("ImuDeadReckoning", tmp_path)).constants["ImuDeadReckoning.navDivider"]
+    ticks = 10 * divider
+    _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
+    STATION.telemetry()
+
+    for tick in range(1, ticks + 1):
+        _wise_fsw.step(t_ns=tick * NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+
+    writes = [name for name, _, _ in STATION.telemetry() if name == "nav.navState"]
+    assert len(writes) == ticks // divider
 
 
 def test_a_second_flight_matches_a_fresh_notebook_reckoner():

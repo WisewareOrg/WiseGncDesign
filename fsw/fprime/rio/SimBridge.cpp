@@ -12,10 +12,4 @@ void SimBridge::sendImu(const Gnc::Vector3& angVelPlatform, const Gnc::Vector3& 
     this->imuOut_out(0, Gnc::ImuReading(angVelPlatform, accelPlatform));
 }
 
-void SimBridge::tick() {
-    for (FwIndexType port = 0; port < this->getNum_schedOut_OutputPorts(); port++) {
-        this->schedOut_out(port, 0);
-    }
-}
-
 }  // namespace Sim

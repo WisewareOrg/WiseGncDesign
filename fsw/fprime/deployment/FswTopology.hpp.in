@@ -1,0 +1,13 @@
+// Sets up the @CONFIGURATION@Fsw deployment.
+#ifndef WISEFSW_@CONFIGURATION@FSWTOPOLOGY_HPP
+#define WISEFSW_@CONFIGURATION@FSWTOPOLOGY_HPP
+
+#include "fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopologyAc.hpp"
+
+namespace WiseFsw {
+
+void setupTopology(const TopologyState& state);
+
+}  // namespace WiseFsw
+
+#endif

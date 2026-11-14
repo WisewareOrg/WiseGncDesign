@@ -21,3 +21,13 @@ for the GraphQL mutation; `Closes #N` in the body only writes that record on a d
 
 `checks.yml` runs the lint, requirements and test jobs; see the
 [README's Recipes and CI section](README.md#recipes-and-ci).
+
+## Generated code
+
+**Generated code is never committed.** Only hand-written sources are tracked: FPP, `.in`
+templates, CMake, Python, C++ and docs. Anything rendered or generated (rendered templates, F´
+autocoder output, generated converters, dictionaries, built extensions) is produced at build or
+import time into a build or temp directory and stays untracked. A Python build's dictionary is one
+case, generated into a temp dir as
+[ADR 0004 rev 2](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md)
+records.

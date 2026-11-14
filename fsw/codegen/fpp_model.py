@@ -2,9 +2,9 @@
 
 The binary is the native one inside the `fprime_fpp` package, run directly. A key the reader needs
 that is missing from the output raises `KeyError`. Every name is FPP's qualified name, such as
-`WiseFsw.nav` or `Gnc.Vector3`. A type reference is a primitive's name (`F64`, `U8`, `bool`),
-`string`, or a named type's qualified name; an alias reads as the type it names. Why one module
-reads `to-json` directly is in ADR 0004 rev 2.
+`ImuDeadReckoning.nav` or `Gnc.Vector3`. A type reference is a primitive's name (`F64`, `U8`,
+`bool`), `string`, or a named type's qualified name; an alias reads as the type it names. Why one
+module reads `to-json` directly is in ADR 0004 rev 2.
 """
 
 import json
@@ -52,7 +52,7 @@ class Instance(NamedTuple):
     """A component instance.
 
     Attributes:
-        name: its qualified name, such as `WiseFsw.nav`.
+        name: its qualified name, such as `ImuDeadReckoning.nav`.
         component: its component's qualified name, such as `Gnc.ImuDeadReckoner`.
         base_id: its base ID.
     """
@@ -542,7 +542,7 @@ def _qualified(entry: dict[str, Any]) -> str:
         entry: an analysis entry with a `qualifiedName`.
 
     Returns:
-        The name, such as `WiseFsw.nav`.
+        The name, such as `ImuDeadReckoning.nav`.
     """
     name = entry["qualifiedName"]
     return ".".join((*name["qualifier"], name["base"]))

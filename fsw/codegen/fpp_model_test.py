@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from fsw.codegen.deployment import CLONE, fpp_files
 from fsw.codegen.fpp_model import (
     _FPP,
     Argument,
@@ -26,45 +27,6 @@ from fsw.codegen.fpp_model import (
     parse,
     read,
 )
-
-_REPOSITORY = Path(__file__).resolve().parents[2]
-_CLONE = _REPOSITORY / "fsw" / "fprime" / "lib" / "fprime"
-
-_FRAMEWORK = (
-    "Fw/Buffer/Buffer.fpp",
-    "Fw/Cmd/Cmd.fpp",
-    "Fw/Com/Com.fpp",
-    "Fw/Dp/Dp.fpp",
-    "Fw/Log/Log.fpp",
-    "Fw/Time/Time.fpp",
-    "Fw/Tlm/Tlm.fpp",
-    "Fw/Types/Types.fpp",
-    "Svc/Ccsds/Types/Types.fpp",
-    "Svc/CmdDispatcher/CmdDispatcher.fpp",
-    "Svc/DpCompressProc/Types/CompressionTypes.fpp",
-    "Svc/Interfaces/Time.fpp",
-    "Svc/Ping/Ping.fpp",
-    "Svc/Sched/Sched.fpp",
-    "cmake/platform/unix/Platform/PlatformTypes.fpp",
-    "default/config/AcConstants.fpp",
-    "default/config/ComCfg.fpp",
-    "default/config/DpCfg.fpp",
-    "default/config/FpConfig.fpp",
-    "default/config/FpConstants.fpp",
-    "default/config/FpySequencerCfg.fpp",
-    "default/config/WasmSequencerCfg.fpp",
-)
-"""The F´ framework files, in the clone, that the WiseFsw deployment's model imports."""
-
-_DEPLOYMENT = (
-    "algorithms/imu_dead_reckoning/ImuDeadReckoner.fpp",
-    "fsw/fpp/interfaces/Interfaces.fpp",
-    "fsw/fprime/cdh/GroundLink.fpp",
-    "fsw/fprime/platform/SimTime.fpp",
-    "fsw/fprime/rio/SimBridge.fpp",
-    "fsw/fprime/configurations/imu_dead_reckoning/topology.fpp",
-)
-"""The repository's files of the WiseFsw deployment's model."""
 
 _TOY_FRAMEWORK = (
     "Fw/Cmd/Cmd.fpp",
@@ -207,7 +169,7 @@ def _toy_files(directory: Path, gnc: str = GNC) -> list[Path]:
     (directory / "Gnc.fpp").write_text(gnc)
     (directory / "Top.fpp").write_text(TOP)
     return [
-        *(_CLONE / path for path in _TOY_FRAMEWORK),
+        *(CLONE / path for path in _TOY_FRAMEWORK),
         directory / "Gnc.fpp",
         directory / "Top.fpp",
     ]
@@ -226,36 +188,54 @@ def toy(tmp_path_factory: pytest.TempPathFactory) -> Model:
     return read(_toy_files(tmp_path_factory.mktemp("toy")))
 
 
-def test_the_deployment_reads_back_with_every_connection_its_topology_declares():
-    """WiseFsw's instances and every connection, its pattern connections included, are read."""
-    files = [*(_CLONE / path for path in _FRAMEWORK), *(_REPOSITORY / path for path in _DEPLOYMENT)]
+def test_the_deployment_reads_back_with_every_connection_its_topology_declares(tmp_path: Path):
+    """The dead reckoner's deployment: its instances and every connection, patterns included, read.
 
-    model = read(files)
+    Args:
+        tmp_path: where the deployment's topology is rendered.
+    """
+    model = read(fpp_files("ImuDeadReckoning", tmp_path))
 
     assert model.instances == {
         "WiseFsw.simTime": Instance("WiseFsw.simTime", "Sim.SimTime", 0x100),
         "WiseFsw.groundLink": Instance("WiseFsw.groundLink", "Sim.GroundLink", 0x200),
         "WiseFsw.simBridge": Instance("WiseFsw.simBridge", "Sim.SimBridge", 0x300),
         "WiseFsw.cmdDisp": Instance("WiseFsw.cmdDisp", "Svc.CommandDispatcher", 0x500),
-        "WiseFsw.nav": Instance("WiseFsw.nav", "Gnc.ImuDeadReckoner", 0x1000),
+        "ImuDeadReckoning.rateGroupDriver": Instance(
+            "ImuDeadReckoning.rateGroupDriver", "Svc.RateGroupDriver", 0x400
+        ),
+        "ImuDeadReckoning.nav": Instance("ImuDeadReckoning.nav", "Gnc.ImuDeadReckoner", 0x1000),
+        "ImuDeadReckoning.navRateGroup": Instance(
+            "ImuDeadReckoning.navRateGroup", "Svc.PassiveRateGroup", 0x1100
+        ),
     }
-    assert model.topologies["WiseFsw.WiseFsw"] == (
-        Connection("WiseFsw.cmdDisp", "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 0),
+    dead_reckoner, rate_group = "ImuDeadReckoning.nav", "ImuDeadReckoning.navRateGroup"
+    driver = "ImuDeadReckoning.rateGroupDriver"
+    assert model.topologies["WiseFsw.ImuDeadReckoningFsw"] == (
+        Connection(dead_reckoner, "cmdRegOut", 0, "WiseFsw.cmdDisp", "compCmdReg", 0),
+        Connection(dead_reckoner, "cmdResponseOut", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
+        Connection(dead_reckoner, "timeCaller", 0, "WiseFsw.simTime", "timeGetPort", 0),
+        Connection(dead_reckoner, "tlmOut", 0, "WiseFsw.groundLink", "tlmIn", 0),
+        Connection(rate_group, "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 1),
+        Connection(rate_group, "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
+        Connection(rate_group, "RateGroupMemberOut", 0, dead_reckoner, "schedIn", 0),
+        Connection(rate_group, "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
+        Connection(rate_group, "Tlm", 0, "WiseFsw.groundLink", "tlmIn", 0),
+        Connection(driver, "CycleOut", 0, rate_group, "CycleIn", 0),
+        Connection("WiseFsw.cmdDisp", "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 2),
         Connection("WiseFsw.cmdDisp", "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
         Connection("WiseFsw.cmdDisp", "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
         Connection("WiseFsw.cmdDisp", "Tlm", 0, "WiseFsw.groundLink", "tlmIn", 0),
-        Connection("WiseFsw.cmdDisp", "compCmdSend", 0, "WiseFsw.cmdDisp", "CmdDisp", 0),
-        Connection("WiseFsw.cmdDisp", "compCmdSend", 1, "WiseFsw.nav", "cmdIn", 0),
+        Connection("WiseFsw.cmdDisp", "compCmdSend", 0, dead_reckoner, "cmdIn", 0),
+        Connection("WiseFsw.cmdDisp", "compCmdSend", 1, rate_group, "CmdDisp", 0),
+        Connection("WiseFsw.cmdDisp", "compCmdSend", 2, "WiseFsw.cmdDisp", "CmdDisp", 0),
         Connection("WiseFsw.cmdDisp", "seqCmdStatus", 0, "WiseFsw.groundLink", "cmdResponseIn", 0),
         Connection("WiseFsw.groundLink", "cmdOut", 0, "WiseFsw.cmdDisp", "seqCmdBuff", 0),
-        Connection("WiseFsw.nav", "cmdRegOut", 0, "WiseFsw.cmdDisp", "compCmdReg", 1),
-        Connection("WiseFsw.nav", "cmdResponseOut", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
-        Connection("WiseFsw.nav", "timeCaller", 0, "WiseFsw.simTime", "timeGetPort", 0),
-        Connection("WiseFsw.nav", "tlmOut", 0, "WiseFsw.groundLink", "tlmIn", 0),
-        Connection("WiseFsw.simBridge", "imuOut", 0, "WiseFsw.nav", "imuIn", 0),
-        Connection("WiseFsw.simBridge", "navConfigOut", 0, "WiseFsw.nav", "configureIn", 0),
-        Connection("WiseFsw.simBridge", "schedOut", 0, "WiseFsw.nav", "schedIn", 0),
+        Connection("WiseFsw.simBridge", "imuOut", 0, dead_reckoner, "imuIn", 0),
+        Connection("WiseFsw.simBridge", "navConfigOut", 0, dead_reckoner, "configureIn", 0),
+        Connection("WiseFsw.simTime", "CycleOut", 0, driver, "CycleIn", 0),
     )
+    assert model.constants["ImuDeadReckoning.navDivider"] == 1
     nav = model.components["Gnc.ImuDeadReckoner"]
     assert nav.commands == (
         Command(
@@ -275,10 +255,10 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares()
         Channel("bodyEciAttitude", "Gnc.Quaternion"),
     )
     assert model.types["Gnc.Matrix3"] == Array("Gnc.Matrix3", 3, "Gnc.Vector3")
-    assert model.annotations["WiseFsw.WiseFsw"] == (
-        "The flight software run inside the simulation: the dead reckoner, fed and ticked by the"
-        " simulation,",
-        "commanded and read by the ground",
+    assert model.annotations["WiseFsw.ImuDeadReckoningFsw"] == (
+        "The flight software run inside the simulation: the ImuDeadReckoning configuration's GNC,"
+        " fed and",
+        "ticked by the simulation, commanded and read by the ground",
     )
 
 

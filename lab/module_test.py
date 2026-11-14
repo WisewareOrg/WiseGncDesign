@@ -65,8 +65,8 @@ def test_a_tick_refuses_an_imu_never_written_and_keeps_the_exception():
     assert module.failure is raised.value
 
 
-def test_the_edge_carries_a_command_up_and_its_response_and_every_write_down():
-    """A command runs at the next tick, answered with no reason; each write comes down by name.
+def test_the_edge_carries_a_command_up_and_its_response_and_nav_s_writes_down():
+    """A command runs at the next tick, answered with no reason; nav's writes come down by name.
 
     The handler writes `navState` alone, before the step writes it with the estimate, both tagged
     with the tick's time.
@@ -80,7 +80,7 @@ def test_the_edge_carries_a_command_up_and_its_response_and_every_write_down():
     module.uplink("nav.initNavState", STATE, 5)
     assert module.responses() == []
     module.UpdateState(ONE_SECOND_NS)
-    writes = module.telemetry()
+    writes = [write for write in module.telemetry() if write[0].startswith("nav.")]
 
     assert module.responses() == [(5, "OK", None)]
     assert module.failure is None

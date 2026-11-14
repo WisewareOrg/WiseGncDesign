@@ -1,0 +1,16 @@
+// What the topology autocoder requires of the @CONFIGURATION@Fsw deployment.
+#ifndef WISEFSW_@CONFIGURATION@FSWTOPOLOGYDEFS_HPP
+#define WISEFSW_@CONFIGURATION@FSWTOPOLOGYDEFS_HPP
+
+#include "fsw/fprime/deployment/@CONFIGURATION@/FppConstantsAc.hpp"
+
+namespace PingEntries {}
+
+namespace WiseFsw {
+
+//! The state the topology is set up with: none.
+struct TopologyState {};
+
+}  // namespace WiseFsw
+
+#endif

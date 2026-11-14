@@ -1,8 +1,8 @@
 """An F´ JSON dictionary as the hosts and the ground use it: names and types.
 
-Entries are named `<instance>.<entry>` with the deployment prefix dropped, so
-`WiseFsw.nav.navState` is `nav.navState`. A type's numpy dtype is big-endian, as F´ serializes it;
-the bytes themselves are the F´ ground station's, `ground.fprime_station`.
+Entries are named `<instance>.<entry>` with the instance's module dropped, so
+`ImuDeadReckoning.nav.navState` is `nav.navState`. A type's numpy dtype is big-endian, as F´
+serializes it; the bytes themselves are the F´ ground station's, `ground.fprime_station`.
 """
 
 import functools
@@ -206,7 +206,7 @@ class Channel:
 
 
 class Dictionary:
-    """One deployment's F´ JSON dictionary, its names without the deployment prefix.
+    """One deployment's F´ JSON dictionary, its names without their instances' modules.
 
     Attributes:
         metadata: the dictionary's `metadata` object.
@@ -318,7 +318,7 @@ class Dictionary:
     def entries(self, instance: str) -> dict[str, Any]:
         """An instance's commands and channels as the contract states them.
 
-        The deployment prefix, IDs and opcodes are dropped, and each type is replaced by its full
+        The module prefix, IDs and opcodes are dropped, and each type is replaced by its full
         definition without annotations, so two dictionaries compare equal when the contract is.
 
         Args:

@@ -259,15 +259,20 @@ def _step(wise_fsw: ModuleType, t_ns: int) -> None:
 
 
 def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
-    """Drains the telemetry writes, as values.
+    """Drains the telemetry writes and keeps nav's, as values.
 
     Args:
         station: the station.
 
     Returns:
-        Each write's channel name, F´ time tag in ns and value, oldest first.
+        Each of nav's writes' channel name, F´ time tag in ns and value, oldest first.
     """
-    return [(name, t, station.values(name, [raw])[0]) for name, t, raw in station.telemetry()]
+    writes = station.telemetry()
+    return [
+        (name, t, station.values(name, [raw])[0])
+        for name, t, raw in writes
+        if name.startswith("nav.")
+    ]
 
 
 @pytest.mark.parametrize(
