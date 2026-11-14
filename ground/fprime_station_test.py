@@ -34,6 +34,7 @@ module Toy {
       mounting: Gnc.Matrix3
       count: U8
     )
+    sync command label(note: string)
     telemetry gain: F32
     telemetry enabled: bool
     telemetry mode: Mode
@@ -159,6 +160,30 @@ def test_a_command_the_dictionary_lacks_is_refused_naming_it(toy: FprimeStation)
     """
     with pytest.raises(KeyError, match="'toy.setTyo'"):
         toy.encode_command("toy.setTyo", {})
+
+
+@pytest.mark.parametrize(
+    ("name", "args", "error", "match"),
+    [
+        ("toy.setToy", {k: v for k, v in ARGS.items() if k != "mode"}, KeyError, "'mode'"),
+        ("toy.label", {"note": "hello"}, ValueError, r"toy\.label has a parameter type"),
+    ],
+    ids=["missing-argument", "type-not-coded"],
+)
+def test_a_command_the_station_cannot_encode_is_refused_naming_what(
+    toy: FprimeStation, name: str, args: dict, error: type, match: str
+):
+    """A missing argument, or a parameter of a type not coded, raises naming it.
+
+    Args:
+        toy: the toy's station.
+        name: the command encoded.
+        args: its arguments.
+        error: what encoding raises.
+        match: what the error names.
+    """
+    with pytest.raises(error, match=match):
+        toy.encode_command(name, args)
 
 
 def test_serialized_writes_become_values_in_one_batch(toy: FprimeStation):

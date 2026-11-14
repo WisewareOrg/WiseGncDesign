@@ -174,13 +174,14 @@ def test_arguments_are_typed_as_f_prime_s_handler_gets_them(toy: Dictionary):
     ("args", "match"),
     [
         ({k: v for k, v in ARGS.items() if k != "mode"}, r"takes \['gain'"),
+        (ARGS | {"extra": 1}, r"takes \['gain'"),
         (ARGS | {"offset": [1.0, 2.0]}, "parameter offset"),
         (ARGS | {"gain": None}, "parameter gain"),
         (ARGS | {"mode": "standby"}, "parameter mode"),
         (ARGS | {"count": 300}, "parameter count"),
         (ARGS | {"count": -1}, "parameter count"),
     ],
-    ids=["missing", "short-array", "none", "no-constant", "above-u8", "below-u8"],
+    ids=["missing", "extra", "short-array", "none", "no-constant", "above-u8", "below-u8"],
 )
 def test_arguments_that_will_not_fit_are_refused_naming_what(
     toy: Dictionary, args: dict, match: str
@@ -194,6 +195,24 @@ def test_arguments_that_will_not_fit_are_refused_naming_what(
     """
     with pytest.raises(ValueError, match=match):
         toy.arguments("toy.setToy", args)
+
+
+def test_a_command_with_a_parameter_type_not_coded_loads_and_refuses_its_arguments(
+    tmp_path: Path,
+):
+    """A string parameter does not stop the load; typing that command's arguments is refused.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    labelled = _toy(
+        tmp_path,
+        toy=TOY.replace("    @ Sets", "    sync command label(note: string)\n\n    @ Sets"),
+    )
+
+    assert labelled.command("toy.label").types is None
+    with pytest.raises(ValueError, match=r"toy\.label has a parameter type .* does not code"):
+        labelled.arguments("toy.label", {"note": "hello"})
 
 
 def test_a_mistyped_name_is_refused_naming_it(toy: Dictionary):

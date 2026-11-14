@@ -586,6 +586,73 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
             assert flown[name][1] == units
 
 
+class RecordingToy(Toy):
+    """The toy algorithm, keeping the arguments each `setOffset` receives."""
+
+    def __init__(self) -> None:
+        """Starts with nothing received."""
+        self.received: list[dict] = []
+
+    def setOffset(self, offset: np.ndarray, gain: float) -> None:
+        """Keeps the arguments.
+
+        Args:
+            offset: (3,) the offset.
+            gain: the gain.
+        """
+        self.received.append({"offset": offset, "gain": gain})
+
+
+def test_a_handler_in_the_python_build_gets_its_arguments_as_f_prime_s_handler_would(
+    dictionary: Dictionary,
+):
+    """Sent through the ground to the Python host, the F32 arrives as F32 holds it, the array whole.
+
+    Args:
+        dictionary: the toy's dictionary.
+    """
+
+    async def procedure(ground: Ground) -> None:
+        """Sends `setOffset` with a list and a float.
+
+        Args:
+            ground: the ground running it.
+        """
+        await ground.send("toy.setOffset", offset=[1.0, 2.0, 3.0], gain=0.1)
+
+    scenario = Leo500()
+    toy = RecordingToy()
+    fsw = AlgorithmModule(toy, scenario.vehicle.readers(), instance="toy", dictionary=dictionary)
+    ground = Ground(procedure, fsw, scenario.vehicle.tracking(), scenario.stop_ground)
+
+    scenario.run(fsw, {}, duration_s=5.0, ground=ground)
+
+    [received] = toy.received
+    assert received["gain"] == float(np.float32(0.1))
+    assert isinstance(received["offset"], np.ndarray)
+    np.testing.assert_array_equal(received["offset"], [1.0, 2.0, 3.0])
+    assert ground.command_log[0]["response"] == "OK"
+
+
+def test_tlm_refuses_a_channel_the_dictionary_lacks(dictionary: Dictionary):
+    """A mistyped channel raises `KeyError` naming it, rather than reading `None` forever.
+
+    Args:
+        dictionary: the toy's dictionary.
+    """
+
+    async def procedure(ground: Ground) -> None:
+        """Reads a misspelled channel.
+
+        Args:
+            ground: the ground running it.
+        """
+        ground.tlm("toy.ofset")
+
+    with pytest.raises(KeyError, match="'toy.ofset'"):
+        _ground(StubEdge(dictionary), procedure)
+
+
 def test_a_procedure_that_cannot_start_is_kept_whole(dictionary: Dictionary):
     """A procedure that does not take the ground fails at `Reset`, kept whole in `failure`.
 
