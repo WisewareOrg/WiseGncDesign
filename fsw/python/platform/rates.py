@@ -2,7 +2,9 @@
 
 from collections.abc import Sequence
 
-__all__ = ["RateGroupDriver"]
+from fsw.codegen.fpp_model import Model
+
+__all__ = ["RateGroupDriver", "dividers"]
 
 
 class RateGroupDriver:
@@ -35,3 +37,30 @@ class RateGroupDriver:
         fired = [i for i, d in enumerate(self._dividers) if d and self._ticks % d == 0]
         self._ticks = (self._ticks + 1) % self._rollover
         return fired
+
+
+def dividers(model: Model, rate_groups: Sequence[str]) -> tuple[int, ...]:
+    """Each rate group's divider: `<stem>RateGroup` takes the constant `<stem>Divider`.
+
+    The constant is in the rate group's own module, as `navRateGroup` takes `navDivider`.
+
+    Args:
+        model: the model holding the rate groups and the constants.
+        rate_groups: the rate groups' qualified names, in their driver's `CycleOut` order.
+
+    Returns:
+        Their dividers, in that order.
+
+    Raises:
+        KeyError: a rate group's divider constant is not in the model, naming it, or its name does
+            not end in `RateGroup`.
+    """
+    found = []
+    for group in rate_groups:
+        if not group.endswith("RateGroup"):
+            raise KeyError(f"{group} is not named <stem>RateGroup, so it has no divider constant")
+        constant = group.removesuffix("RateGroup") + "Divider"
+        if constant not in model.constants:
+            raise KeyError(f"{group} has no divider constant {constant}")
+        found.append(model.constants[constant])
+    return tuple(found)
