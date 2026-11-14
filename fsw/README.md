@@ -28,7 +28,9 @@ station, `ground.fprime_station.FprimeStation`, the only F´ codec in the reposi
 F´'s real ground data system replaces: F´ packets exist only between it and `_wise_fsw`.
 
 Each host also has `build`, its build identity, which the harness records in the flight's
-`flight.json`. How commands and telemetry travel between the ground and each build, and why every
+`flight.json`, as
+[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
+records. How commands and telemetry travel between the ground and each build, and why every
 write is pushed rather than sampled, is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
@@ -197,7 +199,8 @@ every case reproduces its rate-group datasets from the seed, as it does nav's.
 and lists its deployment's FPP files, the algorithms the F´ build takes among them, for
 `fpp_model.read`. The reasoning is on
 [issue 57 GNC sub-topology](https://github.com/WisewareOrg/WiseGncDesign/issues/57) and in
-[ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
+[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
+and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
 
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,

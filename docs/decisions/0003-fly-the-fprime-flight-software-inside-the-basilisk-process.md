@@ -89,15 +89,17 @@ an assert thrown through F´ into pybind11.
 - Copies share no state, so more than one F´ build can be booted in one process.
 - An F´ assert fails the case in Python with F´'s own text, instead of printing and flying on.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard
-  deployment only in its threadless tasks, its stub raw time and the lab's stand-ins.
+  deployment only in its threadless tasks, its stub raw time, and the lab's stand-ins and pins.
 - Each configuration's deployment is generated from its GNC sub-topology, and each configuration
   flies its own extension, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
 - The rate groups' health telemetry is recorded on F´'s stub raw time, so it repeats from the seed
   with cycle times of 0; the trade is on issue 57 GNC sub-topology, and its cost is issue 80
   telemetry recording cost.
-- F´ and Eigen are pinned by release tag, with no git submodule. Renovate bumps F´'s tag with
-  `fprime-tools` and `fprime-fpp` as one update, and a test holds those and `cmake` and `ninja` to
-  F´'s pins.
-- Each flight's `flight.json` records which FSW flew: `fsw`, and `build`, whose F´ `projectVersion`
-  names the commit built from (`-dirty` when uncommitted), so two builds of one commit are told
-  apart. `build` is merged in per case without a lock, so it can rarely be missing after a crash.
+- F´ and Eigen are pinned by release tag, with no git submodule, and Renovate bumps both tags. F´'s
+  arrives with `fprime-tools` and `fprime-fpp` as one update, and a test holds those and `cmake`
+  and `ninja` to F´'s pins.
+- Each flight's `flight.json` records which FSW flew: `fsw` and `build` tell two builds of one
+  commit apart, and the F´ build's `projectVersion` names the commit built from (`-dirty` when
+  uncommitted), so a stale extension shows against the run file's `versions_caller_commit`.
+- `build` is merged in per case without a lock, so it can rarely be missing from a flight with a
+  crashed case; any later successful case restores it.
