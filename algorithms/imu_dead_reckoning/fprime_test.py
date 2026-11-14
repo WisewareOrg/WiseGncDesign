@@ -44,12 +44,28 @@ NAV = Gnc.ImuDeadReckonerParameters(mu=MU, dcm_PB=MOUNTING)
 
 @pytest.fixture
 def nav_parameters() -> Gnc.ImuDeadReckonerParameters:
-    """The case's parameters for this module: `NAV`, its mounting not the identity.
+    """Nav's parameters for this module's cases: `NAV`, its mounting not the identity.
 
     Returns:
         `NAV`.
     """
     return NAV
+
+
+@pytest.fixture
+def case_parameters(
+    case_parameters: tuple[Any, ...], nav_parameters: Gnc.ImuDeadReckonerParameters
+) -> tuple[Any, ...]:
+    """The deployment's case parameters, nav's tuple replaced by `nav_parameters`.
+
+    Args:
+        case_parameters: the deployment's, each zero, as the root conftest gives them.
+        nav_parameters: nav's parameters.
+
+    Returns:
+        The tuples.
+    """
+    return tuple(nav_parameters if type(t) is type(nav_parameters) else t for t in case_parameters)
 
 
 def _latest(writes: list[tuple[str, int, Any]]) -> dict[str, Any]:
