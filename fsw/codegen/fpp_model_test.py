@@ -202,7 +202,7 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares()
         "WiseFsw.cmdDisp": Instance("WiseFsw.cmdDisp", "Svc.CommandDispatcher", 0x500),
         "ImuDeadReckoning.nav": Instance("ImuDeadReckoning.nav", "Gnc.ImuDeadReckoner", 0x1000),
         "ImuDeadReckoning.navRateGroup": Instance(
-            "ImuDeadReckoning.navRateGroup", "Svc.PassiveRateGroup", 0xF0000100
+            "ImuDeadReckoning.navRateGroup", "Svc.PassiveRateGroup", 0x1100
         ),
     }
     dead_reckoner, rate_group = "ImuDeadReckoning.nav", "ImuDeadReckoning.navRateGroup"

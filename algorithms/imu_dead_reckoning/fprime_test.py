@@ -38,12 +38,15 @@ STATION = FprimeStation(_wise_fsw, WISE_FSW)
 
 
 def _telemetry() -> dict[str, object]:
-    """Drains the telemetry writes and keeps each channel's last, by name.
+    """Drains the telemetry writes and keeps each of nav's channels' last, by name.
 
     Returns:
-        Channel name, `<instance>.<channel>`, to its last value written since the previous drain.
+        Channel name, `nav.<channel>`, to its last value written since the previous drain.
     """
-    return {name: STATION.values(name, [raw])[0] for name, _, raw in STATION.telemetry()}
+    writes = STATION.telemetry()
+    return {
+        name: STATION.values(name, [raw])[0] for name, _, raw in writes if name.startswith("nav.")
+    }
 
 
 def test_the_python_build_and_the_fprime_build_hold_nav_to_one_contract():

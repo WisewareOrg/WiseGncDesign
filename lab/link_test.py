@@ -46,12 +46,17 @@ def _step(t_ns: int) -> None:
 
 
 def _writes() -> list[tuple[str, int, object]]:
-    """Drains the telemetry writes, as values.
+    """Drains the telemetry writes and keeps nav's, as values.
 
     Returns:
-        Each write's channel name, F´ time tag in ns and value, oldest first.
+        Each of nav's writes' channel name, F´ time tag in ns and value, oldest first.
     """
-    return [(name, t, STATION.values(name, [raw])[0]) for name, t, raw in STATION.telemetry()]
+    writes = STATION.telemetry()
+    return [
+        (name, t, STATION.values(name, [raw])[0])
+        for name, t, raw in writes
+        if name.startswith("nav.")
+    ]
 
 
 def _responses() -> list[tuple[int, str]]:
@@ -80,8 +85,8 @@ def test_a_packet_larger_than_f_prime_s_buffer_is_refused_naming_its_size():
         _wise_fsw.uplink(bytes(10_000), 1)
 
 
-def test_every_write_comes_down_once_in_order_with_its_f_prime_time():
-    """The writes of two ticks come down in the order written, each tagged with its tick's time.
+def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time():
+    """Nav's writes of two ticks come down in the order written, each tagged with its tick's time.
 
     The command's handler writes `navState` alone, before the step writes the estimate.
     """
@@ -116,15 +121,43 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond():
     assert _writes() == [("nav.navState", t_ns, "idle")]
 
 
-def test_no_health_instance_s_telemetry_comes_down():
-    """The rate group writes its health channels every tick; GroundLink downlinks none of them."""
+def test_the_rate_group_s_health_repeats_on_the_stub_clock():
+    """With nav propagating, every cycle time the rate group writes is 0, on F´'s stub clock.
+
+    On the wall clock some cycles take a microsecond or more, so a cycle time that is not 0 shows a
+    deployment without the stub; on a much faster host it could still read 0. The cycle count
+    carries over from earlier tests in the process, so it is held to one more per tick.
+    """
+    ticks = 500
     _boot()
+    STATION.uplink("nav.initNavState", STATE, 1)
+    STATION.telemetry()
 
-    _step(NS)
-    _step(2 * NS)
+    for tick in range(1, ticks + 1):
+        _wise_fsw.step(
+            t_ns=tick * NS,
+            angVelPlatform=np.array([0.01, -0.02, 0.03]),
+            accelPlatform=np.array([0.1, 0.2, -0.3]),
+        )
 
-    assert Dictionary(DICTIONARY).entries("navRateGroup")["channels"]
-    assert {name for name, _, _ in _writes()} == {"nav.navState"}
+    writes = STATION.telemetry()
+
+    def values(channel: str) -> np.ndarray:
+        """The values the rate group wrote to one channel.
+
+        Args:
+            channel: the channel's name within `navRateGroup`.
+
+        Returns:
+            Its values, oldest first.
+        """
+        name = f"navRateGroup.{channel}"
+        return STATION.values(name, [raw for written, _, raw in writes if written == name])
+
+    assert values("CycleTime").tolist() == [0] * ticks
+    assert not values("MaxCycleTime").any()
+    assert np.diff(values("CycleCount")).tolist() == [1] * (ticks - 1)
+    assert len(values("CycleCount")) == ticks
 
 
 def test_boot_leaves_nothing_of_the_previous_case():

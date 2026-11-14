@@ -1,5 +1,4 @@
-// The ground's side of the deployment: commands up; responses and every telemetry write except health instances'
-// down.
+// The ground's side of the deployment: commands up, responses and every telemetry write down.
 #ifndef SIM_GROUNDLINK_HPP
 #define SIM_GROUNDLINK_HPP
 
@@ -28,7 +27,7 @@ class GroundLink final : public GroundLinkComponentBase {
     //! Sends one command packet to the dispatcher under the ground's context.
     void uplink(Fw::ComBuffer& packet, U32 context);
 
-    //! The telemetry writes since the last call, oldest first, health channels left out.
+    //! The telemetry writes since the last call, oldest first.
     std::vector<Write> takeWrites();
 
     //! The responses since the last call, oldest first.

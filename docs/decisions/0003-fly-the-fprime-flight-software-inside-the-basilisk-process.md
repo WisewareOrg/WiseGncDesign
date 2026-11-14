@@ -11,8 +11,8 @@ sub-topology)
   fresh copy per case, one extension per configuration and rates as FPP constants, with the checks
   that support them; the partitions are ADR 0005 rev 1; reverses rev 2's configuration on an F´
   port for F´ parameters (ADR 0004 rev 2); corrects rev 2's "an `FW_ASSERT` aborts the process"
-  (issue 52 tooling checks); the rate groups' health telemetry is not downlinked (issue 57 GNC
-  sub-topology).
+  (issue 52 tooling checks); the rate groups' health telemetry is recorded, on F´'s stub raw time
+  (issue 57 GNC sub-topology).
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
   telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
@@ -88,9 +88,8 @@ The partitions inside each build are ADR 0005 rev 1.
 - **One extension per configuration**, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
 - **Rates are FPP constants in the GNC sub-topology**, which owns its rate groups; F´'s
   configuration code passes the generated constants to `configure()`.
-- **The rate groups' health telemetry is not downlinked.** Health instances take base IDs from a
-  reserved range that the comm-stack stand-in drops, so a new component is recorded with nothing
-  registered for it.
+- **The rate groups' health telemetry is recorded, with F´'s stub raw time** so that it repeats from
+  the seed.
 
 ### The lab: a hardware-in-the-loop rig
 
@@ -147,12 +146,15 @@ The partitions inside each build are ADR 0005 rev 1.
   (ADR 0004 rev 2).
 - **Rates in F´'s C++ configuration only.** The Python build cannot read C++, so the two builds
   would carry two copies of each rate. Rejected for FPP constants.
-- **A list of the recorded instances, kept by hand or generated.** It needs a registration per
-  component, or an autocoder. Rejected for the reserved range.
-- **Recording the health telemetry with a simulated clock.** It records a row per channel per tick
-  of constant data. Rejected.
-- **Filtering the health telemetry on the ground or in the lab.** Every write still moves each
-  tick, and the dictionary carries no component type to filter on. Rejected.
+- **Recording the health telemetry on the wall clock.** Its cycle times differ run to run, so a
+  case does not repeat from its seed. Rejected.
+- **Leaving it unconnected, by a list of the recorded instances.** The list needs a registration
+  per component, by hand or by an autocoder. Rejected.
+- **Leaving it undownlinked, by a reserved health base-ID range the comm-stack stand-in drops.**
+  It takes a range, a drop and a test holding every rate group to the range, to save a row per
+  channel per tick. Rejected.
+- **Filtering it out on the ground or in the lab.** Every write still moves each tick, and the
+  dictionary carries no component type to filter on. Rejected.
 - **A separate FSW process bridged over a socket.** No lockstep with simulated time without a tick
   protocol of its own. Rejected.
 - **F´'s own timer, with components on OS threads.** It wakes on wall-clock time, so a case does not
@@ -180,9 +182,9 @@ The partitions inside each build are ADR 0005 rev 1.
 - Copies share no state, so more than one F´ build can be booted in one process.
 - An F´ assert fails the case in Python with F´'s own text, instead of printing and flying on.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard
-  deployment only in its threadless tasks, its three stand-ins and the pins.
-- Adding a rate group is one more line, its base ID in the reserved range, and a test fails if one
-  is outside it.
+  deployment only in its threadless tasks, its stub raw time, its three stand-ins and the pins.
+- The run file holds every rate group's health telemetry, a row per channel per tick, its cycle
+  times 0; its cost is followed up in issue 80 telemetry recording cost.
 - A stale extension shows as a `projectVersion` that differs from the run file's
   `versions_caller_commit`.
 - Each case merges `build` into `flight.json` atomically, without a lock, so `build` can rarely be

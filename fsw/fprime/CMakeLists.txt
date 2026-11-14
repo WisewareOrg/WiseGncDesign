@@ -41,7 +41,7 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     target_link_libraries(_wise_fsw PRIVATE fsw_fprime_configurations_imu_dead_reckoning wise_eigen)
     # The platform implementations (Os and the like) F´ chooses at link time, as for a deployment.
     # Its Os::Task has no thread, so the tick runs the active components.
-    fprime_target_implementations(_wise_fsw Os_Task_Sim)
+    fprime_target_implementations(_wise_fsw Os_Task_Sim Os_RawTime_Stub)
     set_target_properties(_wise_fsw PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${FPRIME_PROJECT_ROOT}/lab")
     # The dictionary ships beside the extension: Python names and decodes the telemetry with it.

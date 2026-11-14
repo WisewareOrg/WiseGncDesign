@@ -64,8 +64,8 @@ class FprimeModule(sysModel.SysModel):
     with the dead reckoner idle. Each `UpdateState` whose time lies after the last tick's sets the
     clock, runs the uplinked commands through F´'s command dispatcher, sends the IMU reading and
     ticks the rate groups. The radio edge is an `FprimeStation` on the deployment's pins: it
-    encodes each command into F´'s packet, and the responses and every telemetry write but a
-    health instance's, each with its F´ time tag, come down through it.
+    encodes each command into F´'s packet, and the responses and every telemetry write, each with
+    its F´ time tag, come down through it.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in, the Python

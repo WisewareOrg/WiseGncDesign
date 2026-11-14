@@ -152,9 +152,9 @@ The dead reckoner's GNC sub-topology, `fsw/fpp/gnc/ImuDeadReckoning.fpp`, holds 
 group that runs it, and its rate as the FPP constant `navDivider`. The deployment imports it, and
 its configuration code passes the generated constant to the rate-group driver's `configure()`.
 Each `step` sets SimTime to the simulation's time, then SimTime ticks the driver once, so nav runs
-on every `navDivider`-th step. The rate group is a health instance: its base ID is at or above
-`Ids.healthBase`, and GroundLink does not downlink its telemetry. `topology_test.py` beside the
-topology holds every rate group, and nothing else, to that range.
+on every `navDivider`-th step. The rate group's health telemetry is recorded with every other
+channel; the deployment links F´'s stub `Os::RawTime`, so its cycle times read 0 and a case repeats
+from its seed.
 `fsw.codegen.deployment.FPP_FILES` lists the deployment's FPP files for `fpp_model.read`. The
 reasoning is in [ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
 and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
@@ -162,7 +162,6 @@ and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gn
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
 and `_wise_fsw.responses()` returns each response under its context. `_wise_fsw.telemetry()`
-drains every telemetry write since the last call but a health instance's, each with its F´ time
-tag, and `boot` runs the commands left queued, clears GroundLink's held responses and writes, and
-leaves nav idle. The module's radio edge is an `FprimeStation` on these pins. The reasoning is in
+drains every telemetry write since the last call, each with its F´ time tag, and `boot` runs the
+commands left queued, clears GroundLink's held responses and writes, and leaves nav idle. The module's radio edge is an `FprimeStation` on these pins. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).

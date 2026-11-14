@@ -76,8 +76,8 @@ deployment's.
 
 ### Telemetry is pushed, and typed after the run
 
-- **Every telemetry write the flight software downlinks is logged with its time tag, in the order
-  written.** Nothing on the sim side samples or decimates it.
+- **Every telemetry write is logged with the flight software's time tag, in the order written.**
+  Nothing on the sim side samples or decimates it.
 - **The recorder keeps raw writes during the run** and types them with the dictionary after it.
 - **A vector or quaternion is one channel of an array type**, written in one write.
 
