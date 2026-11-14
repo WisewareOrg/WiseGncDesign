@@ -340,6 +340,48 @@ def test_a_backward_edge_is_refused_naming_it(tmp_path: Path):
         GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
 
 
+def test_a_self_loop_is_refused_as_a_backward_edge(tmp_path: Path):
+    """An edge from a member to itself reaches it only at its next run, a delayed feedback.
+
+    Args:
+        tmp_path: where the toy is written.
+    """
+    toy = TOY.replace(
+        "    output port echoOut: Value\n",
+        "    output port echoOut: Value\n    output port loopOut: Value\n"
+        "    sync input port loopIn: Value\n",
+    ).replace(
+        "      source.echoOut -> slow.valueIn\n",
+        "      source.echoOut -> slow.valueIn\n      source.loopOut -> source.loopIn\n",
+    )
+
+    with pytest.raises(ValueError, match=r"source\.loopOut -> source\.loopIn is a backward edge"):
+        GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
+
+
+def test_an_output_feeding_more_than_one_input_is_refused_naming_it(tmp_path: Path):
+    """FPP fans one output out only through a port array; the partition refuses it, naming it.
+
+    Args:
+        tmp_path: where the toy is written.
+    """
+    toy = (
+        TOY.replace("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n")
+        .replace(
+            "      source.valueOut -> sink.valueIn\n",
+            "      source.valueOut[0] -> sink.valueIn\n      source.valueOut[1] -> slow.doubleIn\n",
+        )
+        .replace(
+            "    sync input port valueIn: Value\n  }\n\n  instance",
+            "    sync input port valueIn: Value\n    sync input port doubleIn: Value\n  }\n\n"
+            "  instance",
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"source\.valueOut routes to more than one input"):
+        GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
+
+
 def test_a_sub_topology_without_exactly_one_rate_group_driver_is_refused(tmp_path: Path):
     """A second driver leaves the partition no one base tick.
 
