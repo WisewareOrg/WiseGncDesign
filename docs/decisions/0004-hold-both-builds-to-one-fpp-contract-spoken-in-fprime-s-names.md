@@ -118,8 +118,12 @@ dictionary; the check used a scratch deployment's.
 - **Each algorithm's outputs, telemetry and parameters are generated named tuples too**, e.g.
   `NavOutputs`, `NavTelemetry`, `NavParameters`. `step(t, <one argument per input>)` and command
   handlers return `NavOutputs(…), NavTelemetry(…)`, and `parameters(scenario)` returns
-  `NavParameters(…)`. Every field defaults to not written, so a channel written only at some ticks
-  stays honest, and a misspelled field fails at once.
+  `NavParameters(…)`. A misspelled field fails at once.
+- **Telemetry and output fields default to not written**, so a channel written only at some ticks
+  stays honest.
+- **A `<Name>Parameters` field has no default.** A missing parameter raises when the tuple is built,
+  unless its FPP declaration gives a `default`, which both builds then use. A missing parameter
+  therefore fails both builds alike.
 - **Convention lookups fail loudly:** a component with no Python class, or a `@ provides` claim the
   requirements tree does not hold, is an error.
 

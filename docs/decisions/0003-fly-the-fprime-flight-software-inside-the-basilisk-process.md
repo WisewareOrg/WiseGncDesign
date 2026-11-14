@@ -101,11 +101,11 @@ Each tick is one frame: RIO in, CDH in, GNC, CDH out, RIO out.
 - **An algorithm sits in `algorithms/<name>/`**: its notebook, its `<Name>.fpp` and an optional C++
   component. `fsw/fprime/configurations/` holds one deployment per configuration, importing the
   partitions.
-- **No file in the generic code names an algorithm:** `fsw/fprime/cdh/`, `fsw/fprime/rio/`,
-  `fsw/fprime/platform/`, `fsw/python/` and `lab/`.
+- **No file in the generic code names an algorithm:** `fsw/fprime/{cdh,rio,platform}/`,
+  `fsw/python/{cdh,rio,platform}/` and `lab/`.
 - **A configuration in `fsw/fprime/configurations/` is named for the configuration**, and reaches
-  algorithms only through its GNC sub-topology in `fsw/fpp/gnc/`, so no file under
-  `configurations/` names an `algorithms/` path.
+  algorithms only through its GNC sub-topology in `fsw/fpp/gnc/`, never through an `algorithms/`
+  path.
 
 ### Inside or outside `_wise_fsw`
 
