@@ -92,16 +92,15 @@ wrong parameter name, a wrong array length and a wrong type.
 - **Python reads FPP's model through the native `fpp to-json`,** called directly, since F´'s wrapper
   sends `to-json` to its Java JAR. One module parses the output and extracts only instances,
   connections, port numbers, constants and annotations. A contract test on the real flight
-  software's FPP, added by issue 55 read FPP's model in Python, fails loudly if an `fprime-fpp` bump
-  changes the shape. It needs only the native `fpp`, so it runs without an F´ build and never skips,
+  software's FPP fails loudly when an `fprime-fpp` bump changes the JSON's shape. It needs only the native `fpp`, so it runs without an F´ build and never skips,
   and a breaking bump fails on its Renovate PR.
 
 ### The generator and its named tuples
 
 - **`fsw/codegen/` generates each build's CDH from FPP**, read with the native `fpp`, with no
-  compiler and no F´ build. Fields map by name, ignoring case, and a missing ICD field fails (issue
-  58 CDH generator, Python half). It makes the Python converters at import, into a temp dir; the F´
-  CDH component when CMake calls it; and the bus emulator's serializers.
+  compiler and no F´ build. Fields map by name, ignoring case, and a missing ICD field fails. It
+  makes the Python converters at import, into a temp dir; the F´ CDH component when CMake calls it;
+  and the bus emulator's serializers.
 - **Every FPP struct is a generated named tuple in Python:** arrays as numpy arrays, scalars as
   numbers, enums by name; immutable, and passable field by field into numba.
 - **Each algorithm's outputs, telemetry and parameters are generated named tuples too**, e.g.
@@ -110,8 +109,7 @@ wrong parameter name, a wrong array length and a wrong type.
   `NavParameters(…)`. Every field defaults to not written, so a channel written only at some ticks
   stays honest, and a misspelled field fails at once.
 - **Convention lookups fail loudly:** a component with no Python class, or a `@ provides` claim the
-  requirements tree does not hold, is an error (issue 65 missions name a GNC sub-topology and a
-  build).
+  requirements tree does not hold, is an error.
 
 ### Parameters: JSON per case, F´'s tool makes the `.dat`
 
@@ -127,8 +125,7 @@ wrong parameter name, a wrong array length and a wrong type.
 
 ### Parity is an analyzer whose spec is a minimum
 
-- **Parity is an analyzer in `analysis/` over run files**, with a stated reason for each tolerance
-  (issue 66 parity is an analyzer over run files).
+- **Parity is an analyzer in `analysis/` over run files**, with a stated reason for each tolerance.
 - **It compares GNC telemetry, parameter values, and the command log of every command sent to a GNC
   component:** time sent, name, arguments, response code and response time.
 - **A build may add anything beyond that, and extras are never compared:** free-text reasons,
@@ -175,12 +172,10 @@ wrong parameter name, a wrong array length and a wrong type.
 - Both builds answer in `Fw.CmdResponse` codes. Free-text reasons are an extra the Python build adds.
 - A ported algorithm's F´ test asserts that its Python build's dictionary entries equal the F´
   build's, IDs aside, so a stale F´ build fails it.
-- `to-json`'s layout is unversioned compiler internals. One module reads it, and issue 55's contract
-  test holds it, so a bump that moves it fails on its Renovate PR and never mis-wires the Python
-  build.
-- The case's parameter path must stay under 240 characters, F´'s `FileNameStringSize`: a longer one
-  asserts in PrmDb's sandbox, which raises in Python. Issue 60 parameters from a per-case file either
-  keeps session paths short or raises the limit in the deployment's config.
+- `to-json`'s layout is unversioned compiler internals. One module reads it and a contract test
+  holds it, so a bump that moves it fails on its Renovate PR and never mis-wires the Python build.
+- A parameter-file path longer than F´'s 240-character `FileNameStringSize` asserts in PrmDb's
+  sandbox, which raises in Python; session paths stay under it or the deployment raises the limit.
 - A new channel or command while prototyping is two edits: the `.fpp` line and the Python that writes
   or handles it.
 - Generating a Python build's dictionary takes 0.1–0.3 s, once per process for each model.

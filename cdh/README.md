@@ -9,8 +9,8 @@ commands up, responses and every telemetry write down, in the form F´ uses. The
 scenario's procedure against it and records the flight. `AlgorithmModule` and the F´ host,
 `FprimeModule`, each present it, so one procedure and one set of analyzers fly either build. The
 link's docstrings say what each method does. Each host also has `build`, its build identity,
-which the harness records in the flight's `flight.json`. Why every write is pushed rather than
-sampled, and which side of the link speaks F´'s packets, is in
+which the harness records in the flight's `flight.json`. How commands and telemetry travel
+between the ground and each build, and why every write is pushed rather than sampled, is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the

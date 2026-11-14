@@ -46,8 +46,8 @@ res/fresh100_gc.log: n=100 time mean 0.282 median 0.281 | rss start 261 end 334 
 first and third in 3, 7, 3, and on the shared extension; case 7 differs from case 3, so a leak would
 have shown as unequal datasets. A copy loaded under the spec name `_wise_fsw` returned the first
 copy's module, because pybind11 caches a module by spec name; a unique dotted name per copy fixed
-it. The driver did not reproduce the issue 49 growth (cases flown with a ground stay in memory), so
-it was neither counted nor excluded.
+it. The driver did not reproduce the growth in issue 49 every case flown with a ground stays in memory,
+so that growth was neither counted nor excluded.
 
 **SimHub on F´ serial ports: PASS** (`9eccec3`, `spikes/fprime/`). Bytes Python's `struct.pack`
 writes for a bus struct equal F´'s serialization, and SimHub delivers them as the typed struct.
@@ -126,7 +126,7 @@ The F´ build meets HardwareEdge as a hardware-in-the-loop rig would. The lab ho
 code.
 
 - **Bus structs** in `fsw/fpp/interfaces/` mirror Basilisk messages by hand, each held to the real
-  message's fields by a test (issue 56 FPP types: the IMU bus struct held to Basilisk).
+  message's fields by a test.
 - **The bus emulator** turns Basilisk messages into bus-struct bytes and back. It is generated from
   the bus structs.
 - **SimHub** takes those bytes on F´ `serial` ports and delivers them to typed ports, as F´'s
@@ -172,9 +172,9 @@ code.
   in any component.
 - **One process per case.** Pays process start-up and import on every case.
 - **Recycling a worker every K cases.** Not built: campaigns run on pytest-xdist workers that end
-  with the session, which at the power-cycle check's slope is about 85 MB per worker for a 920-case
-  campaign on 8 workers, and xdist has no restart-after-N. Issue 59 power-cycle the F´ build per case reports peak RSS per worker on the full
-  campaign; recycling is designed only if a measured campaign needs it.
+  with the session, so a worker's growth is bounded by its share of one campaign, and xdist has no
+  restart-after-N. Peak RSS per worker is reported on a full campaign; recycling is designed only if
+  one needs it.
 - **A copy's spec name from the case index.** A kernel can fly the same case twice, and the repeated
   name returns the cached, already-flown copy. Rejected for a process counter.
 - **Typed ports in place of SimHub.** Named as the fallback, not taken: SimHub passed, and a real
@@ -191,8 +191,8 @@ code.
   reproduce from its seed. Rejected.
 - **FSW telemetry in Basilisk message structs.** It limits the FSW to fields Basilisk defines.
   Rejected.
-- **fprime-python's autocoder in place of the hand-written binding.** Issue 31's second spike
-  measured it from clean checkouts:
+- **fprime-python's autocoder in place of the hand-written binding.** The second spike of
+  issue 31 F´ in Basilisk measured it from clean checkouts:
   443 s to build against 32 s, 0.85 s per case against 0.76 s, no less glue, a clock that cannot be
   set from Python, unbound telemetry buffers, and a segfault at exit unless torn down first.
   Rejected.
@@ -218,7 +218,6 @@ code.
   deployment only in its threadless tasks, its three stand-ins and the pins.
 - A stale extension shows as a `projectVersion` that differs from the run file's
   `versions_caller_commit`.
-- The bus structs are a hand-kept mirror of Basilisk's messages; issue 56's test fails when one
-  drifts.
+- The bus structs are a hand-kept mirror of Basilisk's messages; a test fails when one drifts.
 - WiseDynamics' host module and actuator writers land first, since they make the homes this repo
   plugs into.
