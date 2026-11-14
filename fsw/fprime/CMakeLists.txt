@@ -43,9 +43,10 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     find_package(pybind11 CONFIG REQUIRED PATHS "${WISE_PYBIND11_CMAKEDIR}")
     pybind11_add_module(_wise_fsw "${FPRIME_PROJECT_ROOT}/lab/pins/WiseFswModule.cpp")
     # The one configuration the extension flies.
-    target_link_libraries(_wise_fsw PRIVATE fsw_fprime_deployment_ImuDeadReckoning wise_eigen)
+    set(WISE_FSW_CONFIGURATION ImuDeadReckoning)
+    target_link_libraries(_wise_fsw PRIVATE fsw_fprime_deployment_${WISE_FSW_CONFIGURATION} wise_eigen)
     target_compile_definitions(_wise_fsw PRIVATE
-        WISE_FSW_TOPOLOGY_HEADER="fsw/fprime/deployment/ImuDeadReckoning/ImuDeadReckoningFswTopology.hpp")
+        WISE_FSW_TOPOLOGY_HEADER="fsw/fprime/deployment/${WISE_FSW_CONFIGURATION}/${WISE_FSW_CONFIGURATION}FswTopology.hpp")
     # The platform implementations (Os and the like) F´ chooses at link time, as for a deployment.
     # Its Os::Task has no thread, so the tick runs the active components.
     fprime_target_implementations(_wise_fsw Os_Task_Sim Os_RawTime_Stub)
@@ -55,8 +56,8 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     # A target without outputs runs on every build, so the copy tracks the dictionary the build just wrote.
     add_custom_target(wise_fsw_dictionary
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${CMAKE_BINARY_DIR}/fsw/fprime/deployment/ImuDeadReckoning/ImuDeadReckoningFswTopologyDictionary.json"
+            "${CMAKE_BINARY_DIR}/fsw/fprime/deployment/${WISE_FSW_CONFIGURATION}/${WISE_FSW_CONFIGURATION}FswTopologyDictionary.json"
             "${FPRIME_PROJECT_ROOT}/lab/WiseFswTopologyDictionary.json"
-        DEPENDS fsw_fprime_deployment_ImuDeadReckoning_dictionary)
+        DEPENDS fsw_fprime_deployment_${WISE_FSW_CONFIGURATION}_dictionary)
     add_dependencies(_wise_fsw wise_fsw_dictionary)
 endif()
