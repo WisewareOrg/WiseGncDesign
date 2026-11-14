@@ -8,8 +8,9 @@
 
 - **rev 3** — 2026-11-13 — the F´ build meets the sim as a hardware-in-the-loop rig: the lab, a
   fresh copy per case, one extension per configuration and rates as FPP constants, with the checks
-  that support them; the partitions are ADR 0005 rev 1; corrects rev 2's "an `FW_ASSERT` aborts the
-  process" (issue 52 tooling checks).
+  that support them; the partitions are ADR 0005 rev 1; reverses rev 2's configuration on an F´
+  port for F´ parameters (ADR 0004 rev 2); corrects rev 2's "an `FW_ASSERT` aborts the process"
+  (issue 52 tooling checks).
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
   telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
@@ -22,12 +23,12 @@ software telemetry or command is a Basilisk message. The sim must stay fast, and
 with F´'s real ground data system must stay possible.
 
 The sim this repository plugs into is WiseDynamics' FSW host. It gives a build Basilisk messages by
-role and takes actuator commands back by role, through `period_s`, `boot()` and `tick()`. In the
-baseline build, the F´ side's glue to it is wired by hand for one algorithm.
+role and takes actuator commands back by role, through `period_s`, `boot()` and `tick()`. At
+`6f6276e`, the F´ build's glue to the sim was wired by hand for one algorithm.
 
 ### The checks
 
-They ran on branch `spike/two_edges` against the baseline: main `6f6276e`, F´ v4.4.2, fpp 3.4.0,
+They ran on branch `spike/two_edges` against main `6f6276e`, F´ v4.4.2, fpp 3.4.0,
 pybind11 3.1.0.
 
 **Power cycle: PASS** (`f618d9e`, `spikes/power/`). A fresh copy of the extension per case leaks no
@@ -39,9 +40,10 @@ res/fresh100_gc.log: n=100 time mean 0.282 median 0.281 | rss start 261 end 334 
 ```
 
 `compare.py` found case 3's command log and 15 datasets bytewise equal flown alone, after case 7,
-first and third in 3, 7, 3, and on the shared extension; case 7 differs from case 3, so a leak would
-have shown as unequal datasets. A copy needs its own module name: pybind11 caches a module by name,
-so a second copy under the same one is the first. The driver did not reproduce the growth issue 49
+flown first and third in the sequence 3, 7, 3, and on the shared extension; case 7 differs from case
+3, so a leak would have shown as unequal datasets. A copy loaded under the same module name as an
+earlier one returned the earlier copy's module, because pybind11 caches a module by name; a unique
+name per copy fixed it. The driver did not reproduce the growth issue 49
 reports (every case flown with a ground stays in memory), so that growth was neither counted nor
 excluded. Not covered: the copies ran setup at import, so a fresh copy, `boot(prm_path)` and PrmDb's
 load were never run together.
@@ -64,6 +66,8 @@ and returns. Not covered: an assert thrown through F´ into pybind11.
 **boot(prm_path): PASS** (`9eccec3`). Setup moves out of import into `boot(prm_path)`, and PrmDb
 reads the case's file there. `python spike_check.py b <case>.dat` from two processes with two files:
 each read its own case's `mu`, so a path that never reached PrmDb would have shown as equal values.
+The path enters per case: each case builds its own FSW object with the case's path, and that object
+hands it to its copy's `boot`.
 
 ## Decision
 
@@ -97,13 +101,13 @@ The partitions inside each build are ADR 0005 rev 1.
 - **A flight's end belongs to the scenario**, never to a fixed length. The simulator stops only on
   time, so the one stopping rule the harness binds is the TST definition's duration.
 - **Each flight's `flight.json` records which FSW flew**, beside the facts ADR 0002 rev 1 records
-  there for the judge. `fsw` is the FSW builder's name, and `build` is the host's build identity:
-  - for the F´ host, the host, `frameworkVersion` (the F´ tag) and `projectVersion`, read from the
-    dictionary's metadata;
-  - for the Python host, the host.
+  there for the judge. `fsw` is the FSW builder's name, and `build` is the build's identity:
+  - for the F´ build, its host's name, `frameworkVersion` (the F´ tag) and `projectVersion`, read
+    from the dictionary's metadata;
+  - for the Python build, its host's name.
 
   The base facts are written before a case flies. `build` is merged in once a case has built its
-  host. `just fsw` forces F´'s version stamp on every build, so `projectVersion` names the commit
+  build. `just fsw` forces F´'s version stamp on every build, so `projectVersion` names the commit
   the extension was built from, with a `-dirty` suffix when built from an uncommitted tree.
 
 ### Dependencies
@@ -126,8 +130,13 @@ The partitions inside each build are ADR 0005 rev 1.
 - **One process per case.** Pays process start-up and import on every case. Rejected.
 - **Typed ports in place of SimHub.** Named as the fallback, not taken: SimHub passed, and a real
   bus driver takes bytes.
-- **The baseline's per-algorithm sim glue.** Every new algorithm or sensor needs C++ in the bridge
-  and the pins. Rejected for the lab, which names no algorithm.
+- **Per-algorithm sim glue, as at `6f6276e`.** Every added algorithm or sensor needs C++ in the
+  bridge and the pins. Rejected for the lab, which names no algorithm.
+- **`FW_ASSERTIONS_ALWAYS_ABORT`, in place of an assert that raises in Python.** It kills the worker
+  and loses the case's failure. Rejected.
+- **A length check in the pins or the bus emulator, in place of the raising assert.** The pins would
+  need per-port size knowledge, which is per-port glue at the edge, and the emulator is generated
+  from the same struct. Rejected.
 - **An algorithm's configuration on an F´ port, sent at boot by the sim glue.** It is per-algorithm
   glue outside the FPP contract, and parity cannot see it. Rejected for F´ parameters
   (ADR 0004 rev 2).
@@ -154,9 +163,11 @@ The partitions inside each build are ADR 0005 rev 1.
 
 ## Consequences
 
-- A new sensor is a bus struct and FPP wiring; no sim glue is written for it.
+- An added sensor is a bus struct and FPP wiring; no sim glue is written for it.
 - A fresh copy per case has no measurable per-case cost, and each copy's memory stays with its
-  worker until the worker ends.
+  worker until the worker ends. Reopened if a measured campaign's peak RSS per worker threatens the
+  host: the choice is then recycling or reset handlers.
+- Copies share no state, so more than one F´ build can be booted in one process.
 - An F´ assert fails the case in Python with F´'s own text, instead of printing and flying on.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard
   deployment only in its threadless tasks, its three stand-ins and the pins.

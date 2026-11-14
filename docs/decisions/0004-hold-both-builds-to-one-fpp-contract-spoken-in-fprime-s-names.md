@@ -21,20 +21,20 @@ judge both. An algorithm flies in Python before any F´ build of it exists, with
 build runs inside Basilisk with nothing on a thread of its own (ADR 0003 rev 3), and each build has
 its own CDH (ADR 0005 rev 1).
 
-In the baseline build, the Python build imitates F´'s wire format: it decodes F´ command packets,
-imitates F´'s responses and packs telemetry into F´'s types. That is a Python version of F´ written
-as glue. Flying the F´ build with F´'s real ground data system must stay possible, so names and
+At `6f6276e`, the Python build imitated F´'s wire format: it decoded F´ command packets, imitated
+F´'s responses and packed telemetry into F´'s types. That is a Python version of F´ written as
+glue. Flying the F´ build with F´'s real ground data system must stay possible, so names and
 values never move inside `_wise_fsw`, the generated dictionary JSON stays, and telemetry leaves
 through F´'s telemetry ports.
 
 ### The checks
 
-They ran on branch `spike/two_edges` against the baseline: main `6f6276e`, F´ v4.4.2, fpp 3.4.0.
+They ran on branch `spike/two_edges` against main `6f6276e`, F´ v4.4.2, fpp 3.4.0.
 
 **Native `fpp to-json`: PASS** (`8c83a2a`, `spikes/fpp/`). The native binary, with no Java, gives
 the instances, connections with port numbers, constants and `@` annotations, through a topology that
 imports a GNC sub-topology. `fprime_fpp/fpp to-json -d out fpp/Gnc.fpp fpp/Top.fpp`, exit 0, 0.01 s
-on the scratch model (0.17 s on the baseline's topology, in the design review); `python3 -I
+on the scratch model (0.17 s on `6f6276e`'s topology, in the design review); `python3 -I
 reader.py out`, condensed:
 
 ```
@@ -50,7 +50,8 @@ were scratch ones), auto-numbered port arrays, and types, struct member order an
 
 **`fprime-prm-write` and stock PrmDb: PASS** (`9eccec3`, `spikes/fprime/`). F´'s tool turns a case's
 JSON into the `.dat` stock PrmDb loads at boot. `fprime-prm-write dat prm/nav_case.json -d
-SpikeTopologyDictionary.json`, then `python spike_check.py b prm/nav_case.dat`:
+SpikeTopologyDictionary.json`, then `python spike_check.py b prm/nav_case.dat`. The JSON form it
+takes is `{"<deployment>.<instance>": {"<param>": value}}`:
 
 ```
 PrmFileLoadComplete : Parameter file load completed. Database: ACTIVE, Records: 2 (2 added and 0 updated).
@@ -103,7 +104,8 @@ deployment's.
 - **The case's parameter record is JSON**, written by the ground from each algorithm's
   `parameters(scenario)` and saved beside the run file. The Python build reads it.
 - **F´'s `fprime-prm-write` makes the `.dat` from it**, which stock PrmDb loads at boot. `fprime-gds`
-  joins the uv environment, and no Python code parses or writes F´'s binary parameter format.
+  joins the uv environment, and none of this repository's code parses or writes F´'s binary
+  parameter format.
 - **A load that leaves any parameter invalid fails the case.**
 
 ### Parity is an analyzer whose spec is a minimum
@@ -150,8 +152,8 @@ deployment's.
   build's, IDs aside, so a stale F´ build fails it.
 - `to-json`'s layout is unversioned compiler internals, so an `fprime-fpp` bump that moves it fails
   the contract test on its Renovate PR and never mis-wires the Python build.
-- A new channel or command while prototyping is two edits: the `.fpp` line and the Python that writes
-  or handles it.
+- Adding a channel or command while prototyping is two edits: the `.fpp` line and the Python that
+  writes or handles it.
 - Generating a Python build's dictionary takes 0.1–0.3 s, once per process for each model.
 - Reopened if an F´ release drops the cooperative task routine, a component needs to block, a
   consumer needs one vector component written apart, or the per-write log shows in a per-case
