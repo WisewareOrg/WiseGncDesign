@@ -188,7 +188,7 @@ The module's reset power-cycles the deployment, as a vehicle is power-cycled bet
 `lab.power_cycle.power_cycle()`, the one entry point to the extension, loads a fresh copy of it,
 and the copy's `boot` sets its topology up and leaves nav idle. Booting, F´'s stock PrmDb loads the
 case's `.dat`, which `ground.parameters.dat` makes beside the record with F´'s own
-`fprime-prm-write` when the host is built; PrmDb's sandbox is that directory, never the root, and
+`fprime-prm-write` conversion, in-process, when the host is built; PrmDb's sandbox is that directory, never the root, and
 a parameter the load leaves invalid fails the boot, named by its ID. A copy boots once, and an F´
 assert raises `RuntimeError` in Python with F´'s own text.
 

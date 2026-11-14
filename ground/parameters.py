@@ -1,17 +1,17 @@
 """A case's parameters, as the ground hands them to the flight software.
 
 The record is JSON, `{"<qualified instance>": {"<parameter>": value}}`, written beside the case's
-run file; both builds fly from it. F´'s own `fprime-prm-write` makes the `.dat` the F´ build's
-PrmDb loads, so nothing here parses or writes F´'s binary format. Why is in ADR 0004 rev 2.
+run file; both builds fly from it. F´'s own `fprime-prm-write` conversion, called in-process,
+makes the `.dat` the F´ build's PrmDb loads, so nothing here parses or writes F´'s binary format.
+Why is in ADR 0004 rev 2.
 """
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from fprime_gds.common.tools.params import convert_json
 
 from fsw.codegen.deployment import gnc_instance
 
@@ -41,7 +41,11 @@ def write(parameters: Any, path: Path) -> Path:
 
 
 def dat(record: Path, dictionary: Path) -> Path:
-    """Makes the record's `.dat` beside it with F´'s `fprime-prm-write`.
+    """Makes the record's `.dat` beside it with `fprime-prm-write`'s own conversion, in-process.
+
+    The output path is always given, so the tool never derives one from the record's. A record the
+    tool refuses, such as one naming a parameter the dictionary lacks, raises the tool's own
+    exception.
 
     Args:
         record: the case's record, `<name>.json`.
@@ -49,14 +53,7 @@ def dat(record: Path, dictionary: Path) -> Path:
 
     Returns:
         The `.dat`, `<name>.dat`.
-
-    Raises:
-        RuntimeError: carrying the tool's output, when it refuses the record.
     """
     output = record.with_suffix(".dat")
-    tool = Path(sys.executable).parent / "fprime-prm-write"
-    command = [tool, "dat", record, "-d", dictionary, "-o", output]
-    result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode:
-        raise RuntimeError(f"fprime-prm-write refused {record}:\n{result.stdout}{result.stderr}")
+    convert_json(record, dictionary, output, "dat")
     return output

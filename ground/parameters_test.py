@@ -73,7 +73,7 @@ def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(tmp_
 
 @pytest.mark.skipif(not DICTIONARY.exists(), reason="the F´ build is absent; run `just fsw`")
 def test_a_record_naming_a_parameter_the_dictionary_lacks_makes_no_dat(tmp_path: Path):
-    """F´'s tool refuses it, and the error carries what the tool said.
+    """F´'s tool refuses it with its own error, naming the parameter.
 
     Args:
         tmp_path: where the case's files are written.
