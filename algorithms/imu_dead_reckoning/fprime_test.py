@@ -414,3 +414,32 @@ def test_a_parameter_missing_from_the_record_fails_both_builds(fsw: ModuleType, 
         fsw.boot(str(parameters.dat(record, DICTIONARY)), IDS)
     with pytest.raises(TypeError, match="mu"):
         cdh_parameters.read(record, Gnc.ImuDeadReckonerParameters)
+
+
+def test_the_fprime_build_flies_the_mu_its_record_gives(
+    fsw: ModuleType, station: FprimeStation, tmp_path: Path
+):
+    """Booted on a record with the Moon's mu, nav propagates as the notebook does on that mu.
+
+    Earth's mu differs by a factor of 81, so a nav flying any other mu than the record's fails.
+
+    Args:
+        fsw: the test's copy of the deployment.
+        station: the station on it.
+        tmp_path: the case's directory.
+    """
+    moon = NAV._replace(mu=4.9048695e12)
+    record = parameters.write(moon, tmp_path / "run_0000.prm.json")
+    fsw.boot(str(parameters.dat(record, DICTIONARY)), IDS)
+    python = ImuDeadReckoner(moon)
+    python.initNavState(epoch=0.0, attitude=Q0, position=R0, velocity=V0)
+    state = {"epoch": 0.0, "attitude": Q0, "position": R0, "velocity": V0}
+    station.uplink("nav.initNavState", state, 1)
+    rng = np.random.default_rng(13)
+
+    for k in range(1, 61):
+        omega, accel = 0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)
+        python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
+        fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
+
+    _assert_matches(station, python)

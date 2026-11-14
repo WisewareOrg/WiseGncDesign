@@ -157,20 +157,56 @@ def test_a_relative_path_or_one_in_the_root_is_refused(fsw: ModuleType, path: st
         fsw.boot(path, IDS)
 
 
-def test_a_path_longer_than_f_prime_s_file_names_fails_the_boot(fsw: ModuleType, tmp_path: Path):
-    """A path past F´'s 240-character file names cannot be read, so the boot fails.
+def _of_length(directory: Path, length: int, fill: str) -> Path:
+    """A path in `directory` of exactly `length` characters, its last name made of `fill`.
+
+    Args:
+        directory: where the path ends.
+        length: its length in characters.
+        fill: the character its last name repeats.
+
+    Returns:
+        The path.
+    """
+    path = directory / (fill * (length - len(str(directory)) - 1))
+    assert len(str(path)) == length, f"{directory} is too long to make a {length}-character path"
+    return path
+
+
+@pytest.mark.parametrize(("length", "boots"), [(239, True), (240, False)])
+def test_a_file_s_path_fits_f_prime_s_file_names_up_to_239_characters(
+    tmp_path: Path, length: int, boots: bool
+):
+    """F´'s 240-character file names hold a path of 239; one of 240 cannot be read.
+
+    Args:
+        tmp_path: the case's directory.
+        length: the path's length in characters.
+        boots: whether the copy boots on it.
+    """
+    path = _of_length(tmp_path, length, "x")
+    shutil.copyfile(_case(tmp_path), path)
+
+    if boots:
+        power_cycle().boot(str(path), IDS)
+    else:
+        with pytest.raises(RuntimeError, match="are not valid"):
+            power_cycle().boot(str(path), IDS)
+
+
+def test_a_case_directory_of_239_characters_trips_f_prime_s_assert(fsw: ModuleType, tmp_path: Path):
+    """A sandbox directory of 239 characters is past what F´'s sandbox holds, and asserts.
 
     Args:
         fsw: the test's copy.
-        tmp_path: the case's directory.
+        tmp_path: where the case's directory is made.
     """
-    dat = _case(tmp_path)
-    long = dat.with_name("x" * (250 - len(str(tmp_path))) + ".dat")
-    shutil.copyfile(dat, long)
-    assert len(str(long)) > 240
+    directory = _of_length(tmp_path, 239, "d")
+    directory.mkdir()
+    shutil.copyfile(_case(tmp_path), directory / "a")
 
-    with pytest.raises(RuntimeError, match="are not valid"):
-        fsw.boot(str(long), IDS)
+    with pytest.raises(RuntimeError, match=r'^Assert: ".*SandboxedFile\.cpp:\d+"'):
+        fsw.boot(str(directory / "a"), IDS)
 
 
 def _load_file(station: FprimeStation, path: Path) -> bytes:

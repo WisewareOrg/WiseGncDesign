@@ -387,3 +387,44 @@ def test_entries_are_equal_when_only_ids_and_opcodes_differ(tmp_path: Path):
 
     assert moved.channel("toy.gain").id != original.channel("toy.gain").id
     assert moved.entries("toy") == original.entries("toy")
+
+
+_PARAMETERS = """    param get port prmGetOut
+    param set port prmSetOut
+    param limit: F32
+    param mounting: Gnc.Matrix3
+"""
+"""Parameters given to the toy, with the ports a component with parameters needs."""
+
+
+def test_each_parameter_is_listed_by_id_with_its_name_and_type(tmp_path: Path):
+    """The toy's two parameters come by ID, named `toy.<parameter>`, each with its type.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    toy = _toy(tmp_path, toy=TOY.replace("    time get port", _PARAMETERS + "    time get port"))
+
+    named = {p.name: p for p in toy.parameters_by_id.values()}
+
+    assert sorted(named) == ["toy.limit", "toy.mounting"]
+    assert all(toy.parameters_by_id[p.id] is p for p in named.values())
+    assert named["toy.limit"].type.dtype == np.dtype(">f4")
+    assert named["toy.mounting"].type.dtype == np.dtype((">f8", (3, 3)))
+    assert toy.command("toy.LIMIT_PRM_SET").kind == "set"
+    assert toy.command("toy.setToy").kind == "sync"
+
+
+def test_a_parameter_of_a_type_not_coded_is_refused_at_load_naming_parameter_and_type(
+    tmp_path: Path,
+):
+    """A struct parameter fails the dictionary's load, naming the parameter and its type.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    toy = TOY.replace("  passive", "  struct Pair { a: F64, b: F64 }\n\n  passive")
+    toy = toy.replace("    time get port", _PARAMETERS + "    param pair: Pair\n    time get port")
+
+    with pytest.raises(ValueError, match=r"parameter toy\.pair has type Toy\.Pair"):
+        _toy(tmp_path, toy=toy)

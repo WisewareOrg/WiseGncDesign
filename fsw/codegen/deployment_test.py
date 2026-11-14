@@ -42,3 +42,22 @@ def test_a_component_s_gnc_instance_is_its_one_instance_in_the_gnc_sub_topologie
     )
     with pytest.raises(ValueError, match=r"Svc\.PrmDb is instanced 0 times in fsw/fpp/gnc"):
         gnc_instance("Svc.PrmDb")
+
+
+def test_a_component_instanced_twice_is_refused_naming_both_instances(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Two GNC instances of one component leave no one key; both are named.
+
+    Args:
+        monkeypatch: gives the lookup a second instance of nav's component.
+    """
+    nav = gnc_instance("Gnc.ImuDeadReckoner")
+    twice = (nav, nav._replace(name="Other.nav", base_id=0x2000))
+    monkeypatch.setattr("fsw.codegen.deployment._gnc_instances", lambda: twice)
+
+    with pytest.raises(
+        ValueError,
+        match=r"instanced 2 times in fsw/fpp/gnc: \['ImuDeadReckoning\.nav', 'Other\.nav'\]",
+    ):
+        gnc_instance("Gnc.ImuDeadReckoner")
