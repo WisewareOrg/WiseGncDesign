@@ -9,7 +9,7 @@ namespace {
 //! Each driver output's divider of the base tick, from the GNC sub-topology's constants; 0 leaves an output idle.
 const Svc::RateGroupDriver::DividerSet rateGroupDividers{{{ImuDeadReckoning::navDivider, 0}, {0, 0}, {0, 0}}};
 
-//! The context each rate group passes its members: unused.
+//! The context nav's rate group passes its members: unused.
 const Svc::PassiveRateGroup::ContextArray navRateGroupContexts(0);
 
 void configureTopology() {

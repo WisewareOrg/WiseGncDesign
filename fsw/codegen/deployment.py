@@ -2,10 +2,12 @@
 
 from pathlib import Path
 
-__all__ = ["FPP_FILES"]
+__all__ = ["CLONE", "FPP_FILES"]
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
-_CLONE = _REPOSITORY / "fsw" / "fprime" / "lib" / "fprime"
+
+CLONE = _REPOSITORY / "fsw" / "fprime" / "lib" / "fprime"
+"""The F´ framework clone `just _sync` fetches."""
 
 _FRAMEWORK = (
     "Drv/Interfaces/Tick.fpp",
@@ -50,7 +52,7 @@ _PROJECT = (
 """The repository's files of the deployment's model."""
 
 FPP_FILES: tuple[Path, ...] = (
-    *(_CLONE / path for path in _FRAMEWORK),
+    *(CLONE / path for path in _FRAMEWORK),
     *(_REPOSITORY / path for path in _PROJECT),
 )
 """Every file of the WiseFsw deployment's model, absolute: the framework's, then the project's."""

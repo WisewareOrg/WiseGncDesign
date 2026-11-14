@@ -1,7 +1,7 @@
 module Sim {
 
-  @ The ground's side of the deployment: commands up, responses and every telemetry write but
-  @ health's down
+  @ The ground's side of the deployment: commands up; responses and every telemetry write except
+  @ health instances' down
   passive component GroundLink {
     @ Command packets to the dispatcher
     output port cmdOut: Fw.Com

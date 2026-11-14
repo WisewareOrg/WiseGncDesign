@@ -1,4 +1,5 @@
-// The ground's side of the deployment: commands up, responses and every telemetry write but health's down.
+// The ground's side of the deployment: commands up; responses and every telemetry write except health instances'
+// down.
 #ifndef SIM_GROUNDLINK_HPP
 #define SIM_GROUNDLINK_HPP
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import FPP_FILES
+from fsw.codegen.deployment import CLONE, FPP_FILES
 from fsw.codegen.fpp_model import (
     _FPP,
     Argument,
@@ -27,8 +27,6 @@ from fsw.codegen.fpp_model import (
     parse,
     read,
 )
-
-_CLONE = Path(__file__).resolve().parents[2] / "fsw" / "fprime" / "lib" / "fprime"
 
 _TOY_FRAMEWORK = (
     "Fw/Cmd/Cmd.fpp",
@@ -171,7 +169,7 @@ def _toy_files(directory: Path, gnc: str = GNC) -> list[Path]:
     (directory / "Gnc.fpp").write_text(gnc)
     (directory / "Top.fpp").write_text(TOP)
     return [
-        *(_CLONE / path for path in _TOY_FRAMEWORK),
+        *(CLONE / path for path in _TOY_FRAMEWORK),
         directory / "Gnc.fpp",
         directory / "Top.fpp",
     ]
