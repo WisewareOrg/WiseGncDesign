@@ -5,8 +5,10 @@ without the deployment `just fsw` builds.
 """
 
 import importlib.util
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pytest
@@ -50,29 +52,25 @@ def nav_parameters() -> Gnc.ImuDeadReckonerParameters:
     return NAV
 
 
-def _telemetry(station: FprimeStation) -> dict[str, object]:
-    """Drains the telemetry writes and keeps each of nav's channels' last, by name.
+def _latest(writes: list[tuple[str, int, Any]]) -> dict[str, Any]:
+    """Each of nav's channels' last value among drained writes.
 
     Args:
-        station: the station on the copy.
+        writes: drained writes, as `decoded` gives them.
 
     Returns:
-        Channel name, `nav.<channel>`, to its last value written since the previous drain.
+        Channel name, `nav.<channel>`, to its last value.
     """
-    writes = station.telemetry()
-    return {
-        name: station.values(name, [raw])[0] for name, _, raw in writes if name.startswith("nav.")
-    }
+    return {name: value for name, _, value in writes if name.startswith("nav.")}
 
 
-def _assert_matches(station: FprimeStation, python: ImuDeadReckoner) -> None:
+def _assert_matches(tlm: dict[str, Any], python: ImuDeadReckoner) -> None:
     """The copy's latest telemetry is a propagated state that agrees with `python`'s.
 
     Args:
-        station: the station on the copy.
+        tlm: nav's latest telemetry, as `_latest` gives it.
         python: the notebook's reckoner, stepped through the same readings.
     """
-    tlm = _telemetry(station)
     assert tlm["nav.navState"] == "propagated"
     assert tlm["nav.bodyEciAttitude"][0] >= 0.0
     np.testing.assert_allclose(tlm["nav.bodyEciAttitude"], python.q_BN, rtol=0, atol=1e-12)
@@ -81,26 +79,32 @@ def _assert_matches(station: FprimeStation, python: ImuDeadReckoner) -> None:
 
 
 def test_a_booted_reckoner_reports_idle_and_no_state(
-    fsw: ModuleType, station: FprimeStation, prm: str, parameter_ids: list[int]
+    fsw: ModuleType,
+    station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
+    prm: str,
+    parameter_ids: list[int],
 ):
     """Booted, the deployment reports `navState` idle and writes no position.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
     """
     fsw.boot(prm, parameter_ids)
     fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
-    assert _telemetry(station) == {"nav.navState": "idle"}
+    assert _latest(decoded(station)) == {"nav.navState": "idle"}
 
 
 @pytest.mark.parametrize("sign", [1.0, -1.0], ids=["w-positive", "w-negative"])
 def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     fsw: ModuleType,
     station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
     sign: float,
     prm: str,
     parameter_ids: list[int],
@@ -110,6 +114,7 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        decoded: drains the station's telemetry as values.
         sign: the sign the initial quaternion is given with.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
@@ -119,7 +124,8 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     station.uplink("nav.initNavState", state, 1)
     fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
-    np.testing.assert_allclose(_telemetry(station)["nav.bodyEciAttitude"], Q0, rtol=0, atol=1e-15)
+    attitude = _latest(decoded(station))["nav.bodyEciAttitude"]
+    np.testing.assert_allclose(attitude, Q0, rtol=0, atol=1e-15)
 
 
 @pytest.mark.parametrize(
@@ -130,6 +136,7 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
 def test_the_fprime_build_matches_the_notebook_reading_for_reading(
     fsw: ModuleType,
     station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
     rate_rad_s: float,
     step_ns: int,
     prm: str,
@@ -143,6 +150,7 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        decoded: drains the station's telemetry as values.
         rate_rad_s: rad/s, the gyro reading's magnitude.
         step_ns: ns between readings.
         prm: the case's parameter file.
@@ -160,11 +168,15 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
         python.step(t=k * step_ns / NS, AngVelPlatform=omega, AccelPlatform=accel)
         fsw.step(t_ns=k * step_ns, angVelPlatform=omega, accelPlatform=accel)
 
-    _assert_matches(station, python)
+    _assert_matches(_latest(decoded(station)), python)
 
 
 def test_init_nav_state_starts_the_reckoner_at_its_epoch(
-    fsw: ModuleType, station: FprimeStation, prm: str, parameter_ids: list[int]
+    fsw: ModuleType,
+    station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
+    prm: str,
+    parameter_ids: list[int],
 ):
     """Commanded with a state as of t = 60 s, the deployment agrees with a notebook started at 60 s.
 
@@ -173,6 +185,7 @@ def test_init_nav_state_starts_the_reckoner_at_its_epoch(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
     """
@@ -191,7 +204,7 @@ def test_init_nav_state_starts_the_reckoner_at_its_epoch(
         fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
 
     assert station.responses() == [(1, "OK", None)]
-    _assert_matches(station, python)
+    _assert_matches(_latest(decoded(station)), python)
 
 
 def test_one_scheduled_run_writes_nav_state_once(
@@ -225,6 +238,7 @@ def test_one_scheduled_run_writes_nav_state_once(
 def test_the_fprime_build_flies_the_mu_its_record_gives(
     fsw: ModuleType,
     station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
     nav_parameters: Gnc.ImuDeadReckonerParameters,
     prm: str,
     parameter_ids: list[int],
@@ -236,6 +250,7 @@ def test_the_fprime_build_flies_the_mu_its_record_gives(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        decoded: drains the station's telemetry as values.
         nav_parameters: `NAV` with the Moon's mu.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
@@ -252,11 +267,13 @@ def test_the_fprime_build_flies_the_mu_its_record_gives(
         python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
         fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
 
-    _assert_matches(station, python)
+    _assert_matches(_latest(decoded(station)), python)
 
 
 def test_the_f_prime_host_mounts_the_imu_as_its_record_gives_it(
-    nav_parameters: Gnc.ImuDeadReckonerParameters, prm_record: Path
+    nav_parameters: Gnc.ImuDeadReckonerParameters,
+    prm_record: Path,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
 ):
     """On `NAV`'s mounting, which is not the identity, the F´ host's estimate is the notebook's.
 
@@ -265,6 +282,7 @@ def test_the_f_prime_host_mounts_the_imu_as_its_record_gives_it(
     Args:
         nav_parameters: `NAV`.
         prm_record: the case's parameter record.
+        decoded: drains the host's telemetry as values.
     """
     state = {
         "epoch": 0.0,
@@ -294,7 +312,7 @@ def test_the_f_prime_host_mounts_the_imu_as_its_record_gives_it(
             AccelPlatform=np.array(reading.AccelPlatform),
         )
 
-    latest = {name: module.values(name, [raw])[0] for name, _, raw in module.telemetry()}
+    latest = _latest(decoded(module))
     np.testing.assert_allclose(latest["nav.bodyEciAttitude"], python.q_BN, rtol=0, atol=1e-12)
     np.testing.assert_allclose(latest["nav.bodyEciPos"], python.r_BN_N, rtol=1e-12)
     np.testing.assert_allclose(latest["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)

@@ -8,8 +8,10 @@ it.
 import importlib.util
 import json
 import struct
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pytest
@@ -250,23 +252,6 @@ def _step(fsw: ModuleType, t_ns: int) -> None:
     fsw.step(t_ns=t_ns, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
 
-def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
-    """Drains the telemetry writes and keeps nav's, as values.
-
-    Args:
-        station: the station.
-
-    Returns:
-        Each of nav's writes' channel name, F´ time tag in ns and value, oldest first.
-    """
-    writes = station.telemetry()
-    return [
-        (name, t, station.values(name, [raw])[0])
-        for name, t, raw in writes
-        if name.startswith("nav.")
-    ]
-
-
 @pytest.mark.parametrize(
     ("change", "response"),
     [
@@ -287,13 +272,18 @@ def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
     ],
 )
 def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
-    fsw: ModuleType, booted_station: FprimeStation, change: object, response: str
+    fsw: ModuleType,
+    booted_station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
+    change: object,
+    response: str,
 ):
     """F´ answers a bad packet with its `Fw.CmdResponse`, named, with no reason, and runs nothing.
 
     Args:
         fsw: the test's copy of the deployment.
         booted_station: the station on it.
+        decoded: drains the station's telemetry as values.
         change: makes the bad packet from a good `nav.initNavState`.
         response: the response F´ gives it.
     """
@@ -301,7 +291,8 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
     _step(fsw, NS)
 
     assert booted_station.responses() == [(7, response, None)]
-    assert _writes(booted_station) == [("nav.navState", NS, "idle")]
+    writes = [write for write in decoded(booted_station) if write[0].startswith("nav.")]
+    assert writes == [("nav.navState", NS, "idle")]
 
 
 @pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")

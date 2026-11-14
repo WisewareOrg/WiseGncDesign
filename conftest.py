@@ -1,17 +1,18 @@
-"""Fixtures every package's tests share: an F´ copy and its station, a case's parameters and IDs.
+"""Fixtures every package's tests share: an F´ copy, its station, a drain, a case's parameters.
 
-A case's parameters are every algorithm's GNC instance's, each zero; an algorithm's tests flying
-its own values override `case_parameters`. The `.dat` and the IDs need the F´ build's dictionary, so
-a test asking for either skips without it. The copy and its station need the
-F´ build, and a test asking for either skips without it too. Every pytest run loads this file, the
-judge's included, so the FPP model, Basilisk and F´ are imported only by the fixtures that need
-them.
+`decoded` drains an edge's telemetry as values. A case's parameters are every algorithm's GNC
+instance's, each zero; an algorithm's tests flying its own values override `case_parameters`. The
+`.dat` and the IDs need the F´ build's dictionary, so a test asking for either skips without it.
+The copy and its station need the F´ build, and a test asking for either skips without it too.
+Every pytest run loads this file, the judge's included, so the FPP model, Basilisk and F´ are
+imported only by the fixtures that need them.
 """
 
 from __future__ import annotations
 
 import functools
 import importlib.util
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -52,6 +53,30 @@ def station(fsw: ModuleType) -> FprimeStation:
     from lab import DICTIONARY
 
     return FprimeStation(fsw, Dictionary(DICTIONARY))
+
+
+@pytest.fixture
+def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
+    """A drain of an edge's telemetry, each write decoded to its value by the edge.
+
+    Returns:
+        A function taking an edge, such as an `FprimeStation` or a `lab.FprimeModule`, and giving
+        each write since the edge's last drain as `(<instance>.<channel>, time tag in ns, value)`,
+        oldest first.
+    """
+
+    def drain(edge: Any) -> list[tuple[str, int, Any]]:
+        """Drains the edge's telemetry writes, each as its value.
+
+        Args:
+            edge: the edge.
+
+        Returns:
+            Each write's channel name, time tag in ns and value, oldest first.
+        """
+        return [(name, t_ns, edge.values(name, [raw])[0]) for name, t_ns, raw in edge.telemetry()]
+
+    return drain
 
 
 @pytest.fixture(scope="session")

@@ -5,8 +5,10 @@ Skipped without the deployment `just fsw` builds.
 
 import importlib.util
 import math
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pytest
@@ -43,21 +45,16 @@ def _step(fsw: ModuleType, t_ns: int) -> None:
     fsw.step(t_ns=t_ns, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
 
-def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
-    """Drains the telemetry writes and keeps nav's, as values.
+def _nav(writes: list[tuple[str, int, Any]]) -> list[tuple[str, int, Any]]:
+    """Nav's writes among drained ones.
 
     Args:
-        station: the station on the copy.
+        writes: drained writes, as `decoded` gives them.
 
     Returns:
-        Each of nav's writes' channel name, F´ time tag in ns and value, oldest first.
+        Those of nav's channels, in order.
     """
-    writes = station.telemetry()
-    return [
-        (name, t, station.values(name, [raw])[0])
-        for name, t, raw in writes
-        if name.startswith("nav.")
-    ]
+    return [write for write in writes if write[0].startswith("nav.")]
 
 
 def _responses(station: FprimeStation) -> list[tuple[int, str]]:
@@ -108,6 +105,7 @@ def test_a_packet_larger_than_f_prime_s_buffer_is_refused_naming_its_size(fsw: M
 def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     fsw: ModuleType,
     station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
     prm: str,
     parameter_ids: list[int],
 ):
@@ -118,6 +116,7 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
     """
@@ -126,7 +125,7 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     _step(fsw, NS)
     _step(fsw, 2 * NS)
 
-    writes = _writes(station)
+    writes = _nav(decoded(station))
 
     estimate = ["nav.navState", "nav.bodyEciPos", "nav.bodyEciVel", "nav.bodyEciAttitude"]
     assert [(name, t) for name, t, _ in writes] == [
@@ -139,12 +138,13 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
         "propagated",
         "propagated",
     ]
-    assert _writes(station) == []
+    assert _nav(decoded(station)) == []
 
 
 def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
     fsw: ModuleType,
     station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
     prm: str,
     parameter_ids: list[int],
 ):
@@ -153,6 +153,7 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
     """
@@ -161,7 +162,7 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
 
     _step(fsw, t_ns)
 
-    assert _writes(station) == [("nav.navState", t_ns, "idle")]
+    assert _nav(decoded(station)) == [("nav.navState", t_ns, "idle")]
 
 
 def test_the_rate_group_s_health_repeats_on_the_stub_clock(
