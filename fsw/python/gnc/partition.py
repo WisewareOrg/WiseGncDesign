@@ -188,15 +188,15 @@ class GncPartition:
         telemetry = []
         for group in fired:
             for member in self._members[group]:
-                inputs = self._held[member]
-                unwritten = sorted(self._keywords[member] - set(inputs))
-                if unwritten:
-                    names = [f"{_name(member)}.{k}In" for k in unwritten]
+                name, inputs = _name(member), self._held[member]
+                if len(inputs) < len(self._keywords[member]):
+                    unwritten = sorted(self._keywords[member] - set(inputs))
+                    names = [f"{name}.{k}In" for k in unwritten]
                     raise RuntimeError(f"inputs {names} have not been written at t = {t} s")
-                outputs, tlm = self.algorithms[_name(member)].step(t, **inputs)
-                for port, value in outputs._asdict().items():
+                outputs, tlm = self.algorithms[name].step(t, **inputs)
+                for port, value in zip(outputs._fields, outputs, strict=True):
                     if value is not None and (member, port) in self._routes:
                         target, keyword = self._routes[member, port]
                         self._held[target][keyword] = value
-                telemetry.append((_name(member), tlm))
+                telemetry.append((name, tlm))
         return telemetry
