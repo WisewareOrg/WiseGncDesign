@@ -5,6 +5,7 @@ reach the deployment crafted or malformed need the deployment `just fsw` builds,
 it.
 """
 
+import importlib.util
 import json
 import struct
 from types import ModuleType
@@ -16,6 +17,9 @@ from Basilisk.architecture import messaging
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import DICTIONARY, FprimeModule
+
+BUILT = importlib.util.find_spec("lab._wise_fsw") is not None
+"""Whether `just fsw` built the deployment; the tests that need it skip without it."""
 
 TOY = """\
 module Toy {
@@ -107,31 +111,18 @@ def toy(toy_dictionary: Dictionary) -> FprimeStation:
     return FprimeStation(ModuleType("no_deployment"), toy_dictionary)
 
 
-@pytest.fixture(scope="module")
-def wise_fsw() -> ModuleType:
-    """The deployment's extension, or a skip without the build.
-
-    Returns:
-        `_wise_fsw`.
-    """
-    pytest.importorskip("lab._wise_fsw", reason="the F´ build is absent; run `just fsw`")
-    from lab import extension
-
-    return extension()
-
-
 @pytest.fixture
-def station(wise_fsw: ModuleType) -> FprimeStation:
+def booted_station(fsw: ModuleType) -> FprimeStation:
     """A station on the deployment, booted idle and mounted at identity.
 
     Args:
-        wise_fsw: the deployment's extension.
+        fsw: the test's copy of the deployment.
 
     Returns:
         The station.
     """
-    wise_fsw.boot(mu=MU, dcm_PB=np.eye(3))
-    return FprimeStation(wise_fsw, WISE_FSW)
+    fsw.boot(mu=MU, dcm_PB=np.eye(3))
+    return FprimeStation(fsw, WISE_FSW)
 
 
 def test_a_command_packet_is_f_prime_s(toy: FprimeStation, toy_dictionary: Dictionary):
@@ -248,14 +239,14 @@ def _unknown_opcode() -> int:
     return max(c["opcode"] for c in json.loads(DICTIONARY.read_text())["commands"]) + 1
 
 
-def _step(wise_fsw: ModuleType, t_ns: int) -> None:
+def _step(fsw: ModuleType, t_ns: int) -> None:
     """Steps the deployment to `t_ns` on a zero IMU reading.
 
     Args:
-        wise_fsw: the deployment's extension.
+        fsw: the test's copy of the deployment.
         t_ns: ns, the tick's time.
     """
-    wise_fsw.step(t_ns=t_ns, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+    fsw.step(t_ns=t_ns, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
 
 def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
@@ -295,29 +286,26 @@ def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
     ],
 )
 def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
-    wise_fsw: ModuleType, station: FprimeStation, change: object, response: str
+    fsw: ModuleType, booted_station: FprimeStation, change: object, response: str
 ):
     """F´ answers a bad packet with its `Fw.CmdResponse`, named, with no reason, and runs nothing.
 
     Args:
-        wise_fsw: the deployment's extension.
-        station: the station on it.
+        fsw: the test's copy of the deployment.
+        booted_station: the station on it.
         change: makes the bad packet from a good `nav.initNavState`.
         response: the response F´ gives it.
     """
-    wise_fsw.uplink(change(_init()), 7)
-    _step(wise_fsw, NS)
+    fsw.uplink(change(_init()), 7)
+    _step(fsw, NS)
 
-    assert station.responses() == [(7, response, None)]
-    assert _writes(station) == [("nav.navState", NS, "idle")]
+    assert booted_station.responses() == [(7, response, None)]
+    assert _writes(booted_station) == [("nav.navState", NS, "idle")]
 
 
-def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host(wise_fsw: ModuleType):
-    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, with no reason.
-
-    Args:
-        wise_fsw: the deployment's extension.
-    """
+@pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")
+def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host():
+    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, no reason."""
     module = FprimeModule(messaging.IMUSensorMsgReader(), mu=MU, dcm_PB=np.eye(3))
     imu = messaging.IMUSensorMsg()
     imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
@@ -325,7 +313,7 @@ def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host(wise_fsw: M
     module.Reset(0)
     init = _init()
 
-    wise_fsw.uplink(init[:2] + _unknown_opcode().to_bytes(4, "big") + init[6:], 9)
+    module._fsw.uplink(init[:2] + _unknown_opcode().to_bytes(4, "big") + init[6:], 9)
     module.UpdateState(NS)
 
     assert module.responses() == [(9, "INVALID_OPCODE", None)]

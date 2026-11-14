@@ -27,11 +27,6 @@ std::vector<GroundLink::Response> GroundLink::takeResponses() {
     return responses;
 }
 
-void GroundLink::clear() {
-    this->m_writes.clear();
-    this->m_responses.clear();
-}
-
 void GroundLink::cmdResponseIn_handler(FwIndexType portNum, FwOpcodeType opCode, U32 cmdSeq,
                                        const Fw::CmdResponse& response) {
     // The dispatcher returns the uplink's context in place of its own sequence number.

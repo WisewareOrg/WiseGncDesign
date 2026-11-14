@@ -3,6 +3,7 @@
 Skipped without the deployment `just fsw` builds.
 """
 
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -15,7 +16,8 @@ from scipy.spatial.transform import Rotation
 from algorithms.imu_dead_reckoning import ImuDeadReckoner
 from lab import FprimeModule
 
-pytest.importorskip("lab._wise_fsw", reason="the F´ build is absent; run `just fsw`")
+if importlib.util.find_spec("lab._wise_fsw") is None:
+    pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
 
 REPOSITORY = Path(__file__).parents[1]
 
@@ -153,7 +155,7 @@ def test_a_host_refuses_an_extension_rebuilt_after_the_process_loaded_it(
         monkeypatch: records a different file as the one this process loaded.
     """
     built_before = _module()
-    monkeypatch.setattr("lab.module._loaded_stamp", (-1, -1))
+    monkeypatch.setattr("lab.power_cycle._loaded_stamp", (-1, -1))
 
     with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
         _module()

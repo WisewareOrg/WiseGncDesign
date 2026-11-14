@@ -3,6 +3,6 @@
 `FprimeModule` runs the deployment `just fsw` builds into this package, `_wise_fsw`.
 """
 
-from lab.module import DICTIONARY, FprimeModule, extension
+from lab.module import DICTIONARY, FprimeModule
 
-__all__ = ["DICTIONARY", "FprimeModule", "extension"]
+__all__ = ["DICTIONARY", "FprimeModule"]

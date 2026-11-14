@@ -1,10 +1,12 @@
 // The deployment's Python interface: a hand-written pybind11 module.
-// One deployment per process: its component instances are the topology's globals.
+// One deployment per loaded copy: its component instances are the topology's globals.
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
 
+#include <stdexcept>
 #include <string>
 
+#include "Fw/Types/Assert.hpp"
 #include "Os/Os.hpp"
 #include "fsw/fprime/platform/Cooperative.hpp"
 #include WISE_FSW_TOPOLOGY_HEADER
@@ -15,6 +17,19 @@ namespace {
 
 WiseFsw::TopologyState g_state;
 Sim::Cooperative g_cooperative;
+bool g_booted = false;
+
+//! Raises an F´ assert in Python as a std::runtime_error carrying F´'s own text.
+class RaisingAssertHook final : public Fw::AssertHook {
+  public:
+    void printAssert(const CHAR* msg) override { this->m_text = msg; }
+    void doAssert() override { throw std::runtime_error(this->m_text); }
+
+  private:
+    std::string m_text;
+};
+
+RaisingAssertHook g_assertHook;
 
 Gnc::Vector3 vector3(const Eigen::Vector3d& v) {
     return Gnc::Vector3({v.x(), v.y(), v.z()});
@@ -28,24 +43,26 @@ Gnc::Matrix3 matrix3(const Eigen::Matrix3d& m) {
 }  // namespace
 
 PYBIND11_MODULE(_wise_fsw, m) {
-    m.doc() = "The WiseFsw F´ deployment, run inside the simulation's process; set up on import.";
+    m.doc() = "The WiseFsw F´ deployment, run inside the simulation's process; set up by boot, once per copy.";
 
-    Os::init();
-    Os::Task::registerTaskRegistry(&g_cooperative);
-    Os::Queue::setRegistry(&g_cooperative);
-    WiseFsw::setupTopology(g_state);
+    g_assertHook.registerHook();
 
     m.def(
         "boot",
-        [](double mu, const Eigen::Matrix3d& dcm_PB) {
-            WiseFsw::simTime.set(0U);
-            g_cooperative.pump();
-            WiseFsw::groundLink.clear();
+        [](double mu, const Eigen::Matrix3d& dcm_PB, const std::string& prm_path) {
+            if (g_booted) {
+                throw std::runtime_error("already booted: power-cycle by loading a fresh copy");
+            }
+            g_booted = true;
+            Os::init();
+            Os::Task::registerTaskRegistry(&g_cooperative);
+            Os::Queue::setRegistry(&g_cooperative);
+            WiseFsw::setupTopology(g_state);
             WiseFsw::simBridge.configureNav(mu, matrix3(dcm_PB));
         },
-        py::arg("mu"), py::arg("dcm_PB"),
-        "Boots the deployment at t = 0 s: the commands left queued run, the link is cleared, and the dead "
-        "reckoner is idle with mu (m^3/s^2) and the IMU's mounting [PB].");
+        py::kw_only(), py::arg("mu"), py::arg("dcm_PB"), py::arg("prm_path") = std::string(),
+        "Sets the topology up and boots it at t = 0 s, the dead reckoner idle with mu (m^3/s^2) and the IMU's "
+        "mounting [PB]; prm_path is unused. A copy boots once: a second boot raises RuntimeError.");
 
     m.def(
         "uplink",
