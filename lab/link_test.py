@@ -3,18 +3,37 @@
 Skipped without the deployment `just fsw` builds.
 """
 
+import importlib.util
+from types import ModuleType
+
 import numpy as np
 import pytest
 
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import DICTIONARY, extension
+from lab import DICTIONARY
+from lab.power_cycle import power_cycle
 
-pytest.importorskip("lab._wise_fsw", reason="the F´ build is absent; run `just fsw`")
-_wise_fsw = extension()
+if importlib.util.find_spec("lab._wise_fsw") is None:
+    pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
 
-STATION = FprimeStation(_wise_fsw, Dictionary(DICTIONARY))
-"""The ground station on the deployment, with the dictionary the build generated."""
+WISE_FSW = Dictionary(DICTIONARY)
+"""The deployment's dictionary, which the build generated."""
+
+_wise_fsw: ModuleType
+"""The test's fresh copy of the deployment."""
+
+STATION: FprimeStation
+"""The ground station on the test's copy."""
+
+
+@pytest.fixture(autouse=True)
+def _fresh_copy() -> None:
+    """Power-cycles the deployment for each test, with a station on the fresh copy."""
+    global _wise_fsw, STATION
+    _wise_fsw = power_cycle()
+    STATION = FprimeStation(_wise_fsw, WISE_FSW)
+
 
 MU = 3.986004360e14
 """m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
@@ -125,8 +144,8 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock():
     """With nav propagating, every cycle time the rate group writes is 0, on F´'s stub clock.
 
     On the wall clock some cycles take a microsecond or more, so a cycle time that is not 0 shows a
-    deployment without the stub; on a much faster host it could still read 0. The cycle count
-    carries over from earlier tests in the process, so it is held to one more per tick.
+    deployment without the stub; on a much faster host it could still read 0. The cycle count is
+    held to one more per tick.
     """
     ticks = 500
     _boot()
@@ -158,23 +177,6 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock():
     assert not values("MaxCycleTime").any()
     assert np.diff(values("CycleCount")).tolist() == [1] * (ticks - 1)
     assert len(values("CycleCount")) == ticks
-
-
-def test_boot_leaves_nothing_of_the_previous_case():
-    """A case that ends with a command queued and GroundLink undrained leaves nothing to the next.
-
-    The queued command runs at boot, before nav is configured idle, and GroundLink is cleared after.
-    """
-    _boot()
-    STATION.uplink("nav.initNavState", STATE, 1)
-    _step(NS)
-    STATION.uplink("nav.initNavState", STATE, 2)
-
-    _boot()
-    _step(NS)
-
-    assert _writes() == [("nav.navState", NS, "idle")]
-    assert _responses() == []
 
 
 def test_the_pump_raises_naming_a_queue_its_bound_leaves_holding_messages():

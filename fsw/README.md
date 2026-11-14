@@ -166,11 +166,16 @@ The reasoning is in
 
 `lab.FprimeModule(imu, mu, dcm_PB)` runs the WiseFsw F´ deployment in the
 simulation's process. The deployment's content is the dead reckoner, whose F´ component sits
-beside its notebook, and the module's reset boots it idle with `mu` and the IMU's mounting.
-`just fsw` builds the deployment into `lab` as the extension `_wise_fsw`, with the JSON
-dictionary F´ generates for it alongside. `just pinned` and `just local` run it as part of their
-sync, and `just test`, `just fly` and `just lab` run it first; a host built without it says to run
-`just fsw`. The module takes `AlgorithmModule`'s `period_s`, so the two builds fly at one rate.
+beside its notebook. `just fsw` builds the deployment into `lab` as the extension `_wise_fsw`,
+with the JSON dictionary F´ generates for it alongside. `just pinned` and `just local` run it as
+part of their sync, and `just test`, `just fly` and `just lab` run it first; a host built without
+it says to run `just fsw`. The module takes `AlgorithmModule`'s `period_s`, so the two builds fly
+at one rate.
+
+The module's reset power-cycles the deployment, as a vehicle is power-cycled between flights:
+`lab.power_cycle.power_cycle()`, the one entry point to the extension, loads a fresh copy of it,
+and the copy's `boot` sets its topology up and leaves nav idle with `mu` and the IMU's mounting.
+A copy boots once, and an F´ assert raises `RuntimeError` in Python with F´'s own text.
 
 The dead reckoner's GNC sub-topology, `fsw/fpp/gnc/ImuDeadReckoning.fpp`, holds nav, the F´ rate
 group that runs it, the rate-group driver, and its rate as the FPP constant `navDivider`; `phase`
@@ -185,10 +190,8 @@ sets SimTime to the simulation's time, then SimTime ticks the driver once, so na
 `navDivider`-th step.
 
 The rate group's health telemetry is recorded with every other channel; the deployment links F´'s
-stub `Os::RawTime`, so its cycle times read 0. A process's first case reproduces its rate-group
-datasets from the seed; a later case carries the rate group's `CycleCount` over from the cases
-before it and lacks the channels written only on change. Issue 59 Power-cycle the F´ build per case
-closes that gap. Nav's datasets reproduce bitwise in every case.
+stub `Os::RawTime`, so its cycle times read 0. Each case flies a fresh copy of the deployment, so
+every case reproduces its rate-group datasets from the seed, as it does nav's.
 
 `fsw.codegen.deployment.fpp_files(configuration, directory)` renders a configuration's topology
 and lists its deployment's FPP files, the algorithms the F´ build takes among them, for
@@ -199,7 +202,6 @@ and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gn
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
 and `_wise_fsw.responses()` returns each response under its context. `_wise_fsw.telemetry()`
-drains every telemetry write since the last call, each with its F´ time tag, and `boot` runs the
-commands left queued, clears GroundLink's held responses and writes, and leaves nav idle. The
-module's radio edge is an `FprimeStation` on these pins. The reasoning is in
+drains every telemetry write since the last call, each with its F´ time tag. The module's radio
+edge is an `FprimeStation` on these pins. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
