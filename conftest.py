@@ -7,8 +7,8 @@ only by the fixtures that need them.
 
 from __future__ import annotations
 
-import functools
 import importlib.util
+import operator
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -80,6 +80,9 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
 def case_parameters() -> tuple[Any, ...]:
     """Each algorithm's GNC instance's parameters, every value zero, of its FPP shape.
 
+    A zero holds for a numeric parameter or an array of them; a parameter of an enum, struct or
+    string type gets none, and fails `parameters_from` or the `.dat`.
+
     Returns:
         Each instance's `<Name>Parameters` tuple.
     """
@@ -100,7 +103,7 @@ def case_parameters() -> tuple[Any, ...]:
             while isinstance(array := model.types.get(type_name), Array):
                 shape, type_name = (*shape, array.size), array.element
             values[parameter.name] = np.zeros(shape).tolist()
-        tuple_type = functools.reduce(getattr, f"{component.name}Parameters".split("."), fpp_types)
+        tuple_type = operator.attrgetter(f"{component.name}Parameters")(fpp_types)
         tuples.append(fpp_types.parameters_from(tuple_type, values))
     return tuple(tuples)
 

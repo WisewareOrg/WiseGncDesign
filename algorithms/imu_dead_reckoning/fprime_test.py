@@ -286,9 +286,9 @@ def test_the_f_prime_host_mounts_the_imu_as_its_record_gives_it(
     """
     state = {
         "epoch": 0.0,
-        "attitude": [1.0, 0.0, 0.0, 0.0],
-        "position": [6871.0e3, 0.0, 0.0],
-        "velocity": [0.0, 5.4e3, 5.4e3],
+        "attitude": np.array([1.0, 0.0, 0.0, 0.0]),
+        "position": R0,
+        "velocity": V0,
     }
     module = FprimeModule(messaging.IMUSensorMsgReader(), prm_record)
     imu = messaging.IMUSensorMsg()

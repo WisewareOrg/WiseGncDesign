@@ -185,13 +185,13 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
 
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)
     fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
-    decoded = tmp_path / "decoded.json"
+    image = tmp_path / "image.json"
     tool = Path(sys.executable).parent / "fprime-prm-decode"
-    command = [tool, dat, "-d", DICTIONARY_PATH, "-o", decoded]
+    command = [tool, dat, "-d", DICTIONARY_PATH, "-o", image]
     subprocess.run(command, check=True, capture_output=True)
 
     assert station.responses() == [(1, "OK", None)]
-    assert json.loads(decoded.read_text()) == edited
+    assert json.loads(image.read_text()) == edited
 
 
 @pytest.mark.parametrize("path", ["run_0000.prm.dat", "/run_0000.prm.dat"])
