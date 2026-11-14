@@ -7,7 +7,7 @@
 
 #include "Os/Os.hpp"
 #include "fsw/fprime/platform/Cooperative.hpp"
-#include "fsw/fprime/configurations/imu_dead_reckoning/WiseFswTopology.hpp"
+#include WISE_FSW_TOPOLOGY_HEADER
 
 namespace py = pybind11;
 

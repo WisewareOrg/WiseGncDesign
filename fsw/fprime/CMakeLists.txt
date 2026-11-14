@@ -28,7 +28,7 @@ add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/cdh")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/rio")
 add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/algorithms/imu_dead_reckoning")
 add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/fsw/fpp/gnc")
-add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/configurations/imu_dead_reckoning")
+add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/deployment")
 
 # The hand-written pybind11 module that hosts the deployment in the simulation's process.
 # The F´ sub-builds only gather model information and compile nothing.
@@ -38,7 +38,10 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
         OUTPUT_VARIABLE WISE_PYBIND11_CMAKEDIR OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
     find_package(pybind11 CONFIG REQUIRED PATHS "${WISE_PYBIND11_CMAKEDIR}")
     pybind11_add_module(_wise_fsw "${FPRIME_PROJECT_ROOT}/lab/pins/WiseFswModule.cpp")
-    target_link_libraries(_wise_fsw PRIVATE fsw_fprime_configurations_imu_dead_reckoning wise_eigen)
+    # The one configuration the extension flies.
+    target_link_libraries(_wise_fsw PRIVATE fsw_fprime_deployment_ImuDeadReckoning wise_eigen)
+    target_compile_definitions(_wise_fsw PRIVATE
+        WISE_FSW_TOPOLOGY_HEADER="fsw/fprime/deployment/ImuDeadReckoning/ImuDeadReckoningFswTopology.hpp")
     # The platform implementations (Os and the like) F´ chooses at link time, as for a deployment.
     # Its Os::Task has no thread, so the tick runs the active components.
     fprime_target_implementations(_wise_fsw Os_Task_Sim Os_RawTime_Stub)
@@ -48,8 +51,8 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     # A target without outputs runs on every build, so the copy tracks the dictionary the build just wrote.
     add_custom_target(wise_fsw_dictionary
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${CMAKE_BINARY_DIR}/fsw/fprime/configurations/imu_dead_reckoning/WiseFswTopologyDictionary.json"
+            "${CMAKE_BINARY_DIR}/fsw/fprime/deployment/ImuDeadReckoning/ImuDeadReckoningFswTopologyDictionary.json"
             "${FPRIME_PROJECT_ROOT}/lab/WiseFswTopologyDictionary.json"
-        DEPENDS fsw_fprime_configurations_imu_dead_reckoning_dictionary)
+        DEPENDS fsw_fprime_deployment_ImuDeadReckoning_dictionary)
     add_dependencies(_wise_fsw wise_fsw_dictionary)
 endif()

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import CLONE, FPP_FILES
+from fsw.codegen.deployment import CLONE, fpp_files
 from fsw.codegen.fpp_model import (
     _FPP,
     Argument,
@@ -188,25 +188,30 @@ def toy(tmp_path_factory: pytest.TempPathFactory) -> Model:
     return read(_toy_files(tmp_path_factory.mktemp("toy")))
 
 
-def test_the_deployment_reads_back_with_every_connection_its_topology_declares():
-    """WiseFsw's instances and every connection, its pattern connections included, are read."""
-    model = read(FPP_FILES)
+def test_the_deployment_reads_back_with_every_connection_its_topology_declares(tmp_path: Path):
+    """The dead reckoner's deployment: its instances and every connection, patterns included, read.
+
+    Args:
+        tmp_path: where the deployment's topology is rendered.
+    """
+    model = read(fpp_files("ImuDeadReckoning", tmp_path))
 
     assert model.instances == {
         "WiseFsw.simTime": Instance("WiseFsw.simTime", "Sim.SimTime", 0x100),
         "WiseFsw.groundLink": Instance("WiseFsw.groundLink", "Sim.GroundLink", 0x200),
         "WiseFsw.simBridge": Instance("WiseFsw.simBridge", "Sim.SimBridge", 0x300),
-        "WiseFsw.rateGroupDriver": Instance(
-            "WiseFsw.rateGroupDriver", "Svc.RateGroupDriver", 0x400
-        ),
         "WiseFsw.cmdDisp": Instance("WiseFsw.cmdDisp", "Svc.CommandDispatcher", 0x500),
+        "ImuDeadReckoning.rateGroupDriver": Instance(
+            "ImuDeadReckoning.rateGroupDriver", "Svc.RateGroupDriver", 0x400
+        ),
         "ImuDeadReckoning.nav": Instance("ImuDeadReckoning.nav", "Gnc.ImuDeadReckoner", 0x1000),
         "ImuDeadReckoning.navRateGroup": Instance(
             "ImuDeadReckoning.navRateGroup", "Svc.PassiveRateGroup", 0x1100
         ),
     }
     dead_reckoner, rate_group = "ImuDeadReckoning.nav", "ImuDeadReckoning.navRateGroup"
-    assert model.topologies["WiseFsw.WiseFsw"] == (
+    driver = "ImuDeadReckoning.rateGroupDriver"
+    assert model.topologies["WiseFsw.ImuDeadReckoningFsw"] == (
         Connection(dead_reckoner, "cmdRegOut", 0, "WiseFsw.cmdDisp", "compCmdReg", 0),
         Connection(dead_reckoner, "cmdResponseOut", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
         Connection(dead_reckoner, "timeCaller", 0, "WiseFsw.simTime", "timeGetPort", 0),
@@ -216,6 +221,7 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares()
         Connection(rate_group, "RateGroupMemberOut", 0, dead_reckoner, "schedIn", 0),
         Connection(rate_group, "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
         Connection(rate_group, "Tlm", 0, "WiseFsw.groundLink", "tlmIn", 0),
+        Connection(driver, "CycleOut", 0, rate_group, "CycleIn", 0),
         Connection("WiseFsw.cmdDisp", "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 2),
         Connection("WiseFsw.cmdDisp", "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
         Connection("WiseFsw.cmdDisp", "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
@@ -225,10 +231,9 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares()
         Connection("WiseFsw.cmdDisp", "compCmdSend", 2, "WiseFsw.cmdDisp", "CmdDisp", 0),
         Connection("WiseFsw.cmdDisp", "seqCmdStatus", 0, "WiseFsw.groundLink", "cmdResponseIn", 0),
         Connection("WiseFsw.groundLink", "cmdOut", 0, "WiseFsw.cmdDisp", "seqCmdBuff", 0),
-        Connection("WiseFsw.rateGroupDriver", "CycleOut", 0, rate_group, "CycleIn", 0),
         Connection("WiseFsw.simBridge", "imuOut", 0, dead_reckoner, "imuIn", 0),
         Connection("WiseFsw.simBridge", "navConfigOut", 0, dead_reckoner, "configureIn", 0),
-        Connection("WiseFsw.simTime", "CycleOut", 0, "WiseFsw.rateGroupDriver", "CycleIn", 0),
+        Connection("WiseFsw.simTime", "CycleOut", 0, driver, "CycleIn", 0),
     )
     assert model.constants["ImuDeadReckoning.navDivider"] == 1
     nav = model.components["Gnc.ImuDeadReckoner"]
@@ -250,10 +255,10 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares()
         Channel("bodyEciAttitude", "Gnc.Quaternion"),
     )
     assert model.types["Gnc.Matrix3"] == Array("Gnc.Matrix3", 3, "Gnc.Vector3")
-    assert model.annotations["WiseFsw.WiseFsw"] == (
-        "The flight software run inside the simulation: the dead reckoner, fed and ticked by the"
-        " simulation,",
-        "commanded and read by the ground",
+    assert model.annotations["WiseFsw.ImuDeadReckoningFsw"] == (
+        "The flight software run inside the simulation: the ImuDeadReckoning configuration's GNC,"
+        " fed and",
+        "ticked by the simulation, commanded and read by the ground",
     )
 
 

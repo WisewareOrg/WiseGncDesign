@@ -1,0 +1,14 @@
+#include "fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopology.hpp"
+
+namespace WiseFsw {
+
+void setupTopology(const TopologyState& state) {
+    initComponents(state);
+    setBaseIds();
+    connectComponents();
+    configComponents(state);
+    regCommands();
+    startTasks(state);
+}
+
+}  // namespace WiseFsw

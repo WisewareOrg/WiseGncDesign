@@ -10,7 +10,7 @@ import pytest
 from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
-from fsw.codegen.deployment import FPP_FILES
+from fsw.codegen.deployment import fpp_files
 from fsw.codegen.fpp_model import read
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
@@ -185,13 +185,16 @@ def test_a_rebooted_reckoner_keeps_nothing_of_the_previous_flight():
     assert _telemetry() == {"nav.navState": "idle"}
 
 
-def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks():
+def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(tmp_path: Path):
     """Nav writes its state once per run, so `10 * navDivider` ticks give exactly 10 writes.
 
     The driver's tick count carries over from earlier tests in the process, so the count is taken
     over a whole number of dividers, which holds whatever tick the driver starts on.
+
+    Args:
+        tmp_path: where the deployment's topology is rendered.
     """
-    divider = read(FPP_FILES).constants["ImuDeadReckoning.navDivider"]
+    divider = read(fpp_files("ImuDeadReckoning", tmp_path)).constants["ImuDeadReckoning.navDivider"]
     ticks = 10 * divider
     _wise_fsw.boot(mu=MU, dcm_PB=MOUNTING)
     STATION.telemetry()

@@ -1,8 +1,12 @@
-"""The WiseFsw deployment's FPP files, the one list `fsw.codegen.fpp_model.read` is given for it."""
+"""A WiseFsw deployment's FPP files, the list `fsw.codegen.fpp_model.read` is given for it.
+
+A configuration's deployment topology is rendered from the template the F´ build renders, by the
+same `@CONFIGURATION@` token.
+"""
 
 from pathlib import Path
 
-__all__ = ["CLONE", "FPP_FILES"]
+__all__ = ["CLONE", "fpp_files"]
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
 
@@ -11,6 +15,7 @@ CLONE = _REPOSITORY / "fsw" / "fprime" / "lib" / "fprime"
 
 _FRAMEWORK = (
     "Drv/Interfaces/Tick.fpp",
+    "Fpp/ToCpp.fpp",
     "Fw/Buffer/Buffer.fpp",
     "Fw/Cmd/Cmd.fpp",
     "Fw/Com/Com.fpp",
@@ -43,16 +48,34 @@ _FRAMEWORK = (
 _PROJECT = (
     "algorithms/imu_dead_reckoning/ImuDeadReckoner.fpp",
     "fsw/fpp/interfaces/Interfaces.fpp",
-    "fsw/fpp/gnc/ImuDeadReckoning.fpp",
     "fsw/fprime/cdh/GroundLink.fpp",
     "fsw/fprime/platform/SimTime.fpp",
     "fsw/fprime/rio/SimBridge.fpp",
-    "fsw/fprime/configurations/imu_dead_reckoning/topology.fpp",
+    "fsw/fprime/deployment/instances.fpp",
 )
-"""The repository's files of the deployment's model."""
+"""The repository's files of every deployment's model, its GNC sub-topology aside."""
 
-FPP_FILES: tuple[Path, ...] = (
-    *(CLONE / path for path in _FRAMEWORK),
-    *(_REPOSITORY / path for path in _PROJECT),
-)
-"""Every file of the WiseFsw deployment's model, absolute: the framework's, then the project's."""
+_TEMPLATE = _REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in"
+"""The deployment topology's template, rendered per configuration."""
+
+
+def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
+    """Every file of a configuration's deployment model, its topology rendered into `directory`.
+
+    Args:
+        configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`, such
+            as `ImuDeadReckoning`.
+        directory: where the rendered `<configuration>Fsw.fpp` is written.
+
+    Returns:
+        The files, absolute: the framework's, the repository's, the configuration's GNC
+        sub-topology, then its rendered deployment topology.
+    """
+    topology = directory / f"{configuration}Fsw.fpp"
+    topology.write_text(_TEMPLATE.read_text().replace("@CONFIGURATION@", configuration))
+    return (
+        *(CLONE / path for path in _FRAMEWORK),
+        *(_REPOSITORY / path for path in _PROJECT),
+        _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
+        topology,
+    )
