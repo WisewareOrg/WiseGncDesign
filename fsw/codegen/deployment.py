@@ -1,4 +1,4 @@
-"""A WiseFsw deployment's FPP files, the list `fsw.codegen.fpp_model.read` is given for it.
+"""The FPP files `fsw.codegen.fpp_model.read` is given: the contract's, and a WiseFsw deployment's.
 
 A configuration's deployment topology is rendered from `fsw/fprime/deployment/Fsw.fpp.in`, the
 template CMake's `configure_file` renders for the F´ build, by the same `@CONFIGURATION@` token. The
@@ -8,7 +8,7 @@ algorithms are those the F´ build takes: every directory under `algorithms/` wi
 
 from pathlib import Path
 
-__all__ = ["CLONE", "fpp_files"]
+__all__ = ["CLONE", "algorithm_files", "contract_files", "fpp_files"]
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
 
@@ -48,6 +48,7 @@ _FRAMEWORK = (
 """The F´ framework files the deployment's model imports, in the clone `just _sync` fetches."""
 
 _PROJECT = (
+    "fsw/fpp/interfaces/Bus.fpp",
     "fsw/fpp/interfaces/Interfaces.fpp",
     "fsw/fprime/cdh/GroundLink.fpp",
     "fsw/fprime/platform/SimTime.fpp",
@@ -58,6 +59,29 @@ _PROJECT = (
 
 _TEMPLATE = _REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in"
 """The deployment topology's template, rendered per configuration."""
+
+
+def algorithm_files() -> tuple[Path, ...]:
+    """Every algorithm's FPP files: the `.fpp` files beside each `algorithms/*/CMakeLists.txt`.
+
+    Returns:
+        The files, absolute, sorted.
+    """
+    algorithms = sorted(_REPOSITORY.glob("algorithms/*/CMakeLists.txt"))
+    return tuple(fpp for build in algorithms for fpp in sorted(build.parent.glob("*.fpp")))
+
+
+def contract_files() -> tuple[Path, ...]:
+    """The files of the model every configuration shares, its GNC sub-topology and deployment aside.
+
+    Returns:
+        The files, absolute: the framework's, the repository's, then every algorithm's.
+    """
+    return (
+        *(CLONE / path for path in _FRAMEWORK),
+        *(_REPOSITORY / path for path in _PROJECT),
+        *algorithm_files(),
+    )
 
 
 def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
@@ -74,11 +98,8 @@ def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
     """
     topology = directory / f"{configuration}Fsw.fpp"
     topology.write_text(_TEMPLATE.read_text().replace("@CONFIGURATION@", configuration))
-    algorithms = sorted(_REPOSITORY.glob("algorithms/*/CMakeLists.txt"))
     return (
-        *(CLONE / path for path in _FRAMEWORK),
-        *(_REPOSITORY / path for path in _PROJECT),
-        *(fpp for build in algorithms for fpp in sorted(build.parent.glob("*.fpp"))),
+        *contract_files(),
         _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
         topology,
     )
