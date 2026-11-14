@@ -28,6 +28,7 @@ __all__ = [
     "Member",
     "Model",
     "Parameter",
+    "Port",
     "Struct",
     "parse",
     "read",
@@ -186,22 +187,42 @@ class Parameter(NamedTuple):
     default: int | float | bool | str | None
 
 
-class Component(NamedTuple):
-    """A component's commands, channels and parameters, each in FPP's order.
+class Port(NamedTuple):
+    """A general output port a component declares.
 
-    F´'s implicit parameter set and save commands are not among the commands.
+    Attributes:
+        name: the port's name.
+        size: its number of ports, 1 for a port that is not an array.
+        args: its port type's arguments, in order.
+    """
+
+    name: str
+    size: int
+    args: tuple[Argument, ...]
+
+
+class Component(NamedTuple):
+    """A component's commands, channels, parameters and general output ports, each in FPP's order.
+
+    F´'s implicit parameter set and save commands are not among the commands, and special ports,
+    such as `telemetry port`, are not among the outputs. Output ports imported from an interface
+    follow the component's own, in the order `to-json` parsed them.
 
     Attributes:
         name: its qualified name.
         commands: its commands.
         channels: its telemetry channels.
         parameters: its parameters.
+        outputs: its general output ports.
+        file: the absolute path of the file that defines it.
     """
 
     name: str
     commands: tuple[Command, ...]
     channels: tuple[Channel, ...]
     parameters: tuple[Parameter, ...]
+    outputs: tuple[Port, ...]
+    file: Path
 
 
 class Model(NamedTuple):
@@ -270,13 +291,15 @@ def parse(directory: Path) -> Model:
     that is not a scalar raises `ValueError`, naming the parameter.
 
     Args:
-        directory: where `to-json` wrote `fpp-analysis.json` and `fpp-ast.json`.
+        directory: where `to-json` wrote `fpp-analysis.json`, `fpp-ast.json` and
+            `fpp-loc-map.json`.
 
     Returns:
         The model.
     """
     analysis = json.loads((directory / "fpp-analysis.json").read_text())["analysis"]
     ast = json.loads((directory / "fpp-ast.json").read_text())["ast"]
+    locations = json.loads((directory / "fpp-loc-map.json").read_text())["locationMap"]
     nodes = dict(node for unit in ast for node in _definitions(unit["members"], ()))
     instance_map = analysis["componentInstanceMap"]
     type_map = analysis["typeMap"]
@@ -309,7 +332,8 @@ def parse(directory: Path) -> Model:
 
     components = {}
     for node_id, entry in analysis["componentMap"].items():
-        component = _component(nodes[node_id], entry, type_map, nodes)
+        file = Path(locations[node_id]["file"])
+        component = _component(nodes[node_id], entry, type_map, nodes, file)
         components[component.name] = component
 
     annotations = {n.name: n.annotation for n in nodes.values() if n.kind in _ANNOTATED}
@@ -429,15 +453,20 @@ def _array(node: _Node, array: dict[str, Any], nodes: dict[str, _Node]) -> Array
 
 
 def _component(
-    node: _Node, entry: dict[str, Any], type_map: dict[str, Any], nodes: dict[str, _Node]
+    node: _Node,
+    entry: dict[str, Any],
+    type_map: dict[str, Any],
+    nodes: dict[str, _Node],
+    file: Path,
 ) -> Component:
-    """A component's declared commands, channels and parameters.
+    """A component's declared commands, channels, parameters and general output ports.
 
     Args:
         node: the component's definition.
         entry: its analysis entry.
         type_map: the analysis's types, by AST node id.
         nodes: every definition, by AST node id.
+        file: the file that defines it.
 
     Returns:
         The component, each kind of entry in FPP's order.
@@ -458,16 +487,27 @@ def _component(
         """
         return specs[str(analysis_entry["aNode"]["astNodeId"])]
 
+    def arguments(params: list[Any]) -> tuple[Argument, ...]:
+        """A command's or port type's formal parameters, as arguments.
+
+        Args:
+            params: the AST's `params`.
+
+        Returns:
+            The arguments, in order.
+        """
+        args = []
+        for _, arg, _ in params:
+            arg_data = arg["AstNode"]["data"]
+            type_node = arg_data["typeName"]["AstNode"]["id"]
+            args.append(Argument(arg_data["name"], _type_name(type_map[str(type_node)], nodes)))
+        return tuple(args)
+
     commands = []
     for command in entry["commandMap"].values():
         if "Param" not in command:
             position, data = spec(command["NonParam"])
-            args = []
-            for _, arg, _ in data["params"]:
-                arg_data = arg["AstNode"]["data"]
-                type_node = arg_data["typeName"]["AstNode"]["id"]
-                args.append(Argument(arg_data["name"], _type_name(type_map[str(type_node)], nodes)))
-            commands.append((position, Command(data["name"], tuple(args))))
+            commands.append((position, Command(data["name"], arguments(data["params"]))))
     channels = []
     for channel in entry["tlmChannelMap"].values():
         position, data = spec(channel)
@@ -480,11 +520,22 @@ def _component(
         default = _default(data["name"], parameter["default"])
         parameter_type = _type_name(parameter["paramType"], nodes)
         parameters.append((position, Parameter(data["name"], parameter_type, default)))
+    outputs = []
+    for port in entry["portInterface"]["portMap"].values():
+        general = port.get("General")
+        if general and general["kind"] == "Output":
+            node_id = general["aNode"]["astNodeId"]
+            position = (0, specs[str(node_id)][0]) if str(node_id) in specs else (1, node_id)
+            port_type = nodes[str(general["ty"]["DefPort"]["symbol"]["Port"]["nodeId"])]
+            args = arguments(port_type.data["params"])
+            outputs.append((position, Port(general["specifier"]["name"], general["size"], args)))
     return Component(
         node.name,
         tuple(c for _, c in sorted(commands)),
         tuple(c for _, c in sorted(channels)),
         tuple(p for _, p in sorted(parameters)),
+        tuple(p for _, p in sorted(outputs)),
+        file,
     )
 
 
