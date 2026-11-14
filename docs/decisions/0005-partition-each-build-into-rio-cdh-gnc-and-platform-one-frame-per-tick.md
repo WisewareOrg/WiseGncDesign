@@ -33,7 +33,8 @@ way through, partitioned as real flight software is.
 - **Each build has its own CDH**, however thin.
 - **An algorithm's code lives in `algorithms/<name>/`, and GNC wires it in.** A configuration
   reaches its algorithms only through its GNC sub-topology.
-- **RIO, CDH, platform and the lab (ADR 0008 rev 1) name no algorithm.**
+- **RIO, CDH and platform name no algorithm**, as ADR 0008 rev 1 holds the lab and the sim glue
+  to.
 - **RIO, CDH and platform live in `fsw/<build>/<partition>/`; GNC is one sub-topology in
   `fsw/fpp/gnc/` that both builds fly.** The Python frame runner is nothing but these partitions.
 

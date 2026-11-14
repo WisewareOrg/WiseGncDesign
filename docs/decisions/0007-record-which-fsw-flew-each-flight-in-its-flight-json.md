@@ -1,4 +1,4 @@
-# 0007 — End a flight with its scenario, and record which FSW flew it
+# 0007 — Record which FSW flew each flight in its flight.json
 
 **Status:** accepted
 **Decided:** 2026-11-12 (issue 31 F´ in Basilisk)
@@ -17,8 +17,6 @@ the judge's session has to tell them apart.
 
 ## Decision
 
-- **A flight's end belongs to the scenario**, never to a fixed length. The simulator stops only on
-  time, so the one stopping rule the harness binds is the TST definition's duration.
 - **Each flight's `flight.json` records which FSW flew**, beside the facts ADR 0002 rev 1 records
   there for the judge. `fsw` is the FSW builder's name, and `build` is the build's identity:
   - for the F´ build, its host's name, `frameworkVersion` (the F´ tag) and `projectVersion`, read

@@ -53,7 +53,7 @@ load were never run together.
 from two processes with two files: each read its own case's `mu`, so a path that never reached PrmDb
 would have shown as equal values.
 
-**An assert in a Release build** (`9eccec3`). A 55-byte push into a struct port asserted, printed,
+**An assert in a Release build** (`9eccec3`). A 55-byte push through SimHub asserted, printed,
 and delivered a partly filled struct: F´'s default assert handler prints and returns. Not covered:
 an assert thrown through F´ into pybind11.
 
@@ -85,7 +85,7 @@ an assert thrown through F´ into pybind11.
 - **`FW_ASSERTIONS_ALWAYS_ABORT`, in place of an assert that raises in Python.** It kills the worker
   and loses the case's failure, where a fault in an in-process F´ must fail the case. Rejected.
 - **A length check in the pins or the bus emulator, in place of the raising assert.** It is per-port
-  glue at the edge, and the emulator is generated from the same struct. Rejected.
+  glue at the edge, and the emulator is generated from the same struct (ADR 0008 rev 1). Rejected.
 
 ## Consequences
 

@@ -12,8 +12,8 @@
 ## Context
 
 The F´ build flies inside Basilisk's process (ADR 0003 rev 3). The lab is the test rig between
-that build and the sim: the stand-ins inside `_wise_fsw` and the pins that move bytes in and out
-of it. The sim this repository plugs into,
+that build and the sim: the bus structs, the bus emulator, the stand-ins inside `_wise_fsw` and
+the pins that move bytes in and out of it. The sim this repository plugs into,
 WiseDynamics' FSW host, gives a build Basilisk messages by role and takes actuator commands back by
 role. Real flight software meets its hardware through a bus driver that takes bytes. At `6f6276e`,
 the F´ build's glue to the sim was wired by hand for one algorithm, so every added algorithm or
@@ -41,12 +41,12 @@ The little-endian push is the failure the comparison would have shown.
 
 - **If a real F´ deployment would have it, it is inside `_wise_fsw`.** Each stand-in replaces one
   real thing: SimHub the bus driver, GroundLink the whole comm stack, SimTime the clock, its time
-  source and its timer. Everything else is ground segment (ADR 0004 rev 2) or lab; the lab's pins
-  are compiled in as a test connector.
+  source and its timer. Anything a real deployment would not have is ground segment
+  (ADR 0004 rev 2) or the lab's own; the lab's pins are compiled in as a test connector.
 - **Bus structs in FPP mirror Basilisk messages**, each held to the real message by a test.
 - **A bus emulator, generated from the bus structs, turns Basilisk messages into their bytes.**
 - **SimHub takes the bytes on F´ `serial` ports** and delivers typed bus structs.
-- **No sim glue names an algorithm.**
+- **No part of the lab, and no sim glue, names an algorithm.**
 
 ## Alternatives considered
 

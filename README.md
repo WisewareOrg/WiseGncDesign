@@ -37,7 +37,8 @@ Tests sit beside the code they test. The suite needs the simulator installed, fr
 system C++ compiler and git. The F´ framework and Eigen are fetched by tag into gitignored folders
 under `fsw/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
 GitLab only the first time, or when a tag changes. Each sync rebuilds the F´ build cache from
-scratch, which needs no network.
+scratch, which needs no network. Why they are fetched by tag is in
+[ADR 0006 rev 1](docs/decisions/0006-fetch-fprime-and-eigen-by-tag-with-no-git-submodule.md).
 
 `just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
 picked up. That rebuild reuses the existing cache, so after switching branches run `just pinned` or
@@ -62,7 +63,9 @@ every item and link is reviewed and that no file a TST references has changed si
 A mission is a vehicle, an FSW builder and the scenarios to fly, defined as a value in a notebook.
 The builder claims its capabilities with `@provides("SYS...")`, and a flight is judged on the rungs
 its scenario links to that sit under those capabilities. `mission_tests` turns missions into Monte
-Carlo tests: a class per vehicle holding a test per FSW and scenario. The reasoning is in
+Carlo tests: a class per vehicle holding a test per FSW and scenario. A flight's end belongs to its
+scenario, never to a fixed length: the simulator stops only on time, so the one stopping rule the
+harness binds is the TST definition's duration. The reasoning is in
 [ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
 
 ### Notebooks

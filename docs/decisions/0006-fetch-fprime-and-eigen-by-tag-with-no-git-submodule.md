@@ -18,8 +18,9 @@ needs a pinned version that a dependency bot can bump and that CI proves before 
 
 - **F´ and Eigen are pinned by release tag and fetched by it, with no git submodule.**
 - **Renovate bumps the tags.**
-- **F´'s tag and the tools it pins arrive as one update**, which CI proves together.
-- **A test holds the tools to the versions F´ pins.**
+- **F´'s tag, `fprime-tools` and `fprime-fpp` arrive as one update**, which CI proves together.
+- **Renovate leaves `cmake` and `ninja` alone, and a test holds all four tools to the versions F´
+  pins.**
 
 ## Alternatives considered
 
@@ -30,5 +31,5 @@ needs a pinned version that a dependency bot can bump and that CI proves before 
 
 ## Consequences
 
-- An F´ release bump arrives as one Renovate update with the tools F´ pins, and a tool pin that
-  drifts from F´'s fails a test.
+- An F´ release bump arrives as one Renovate update with `fprime-tools` and `fprime-fpp`, and any
+  of the four tool pins that drifts from F´'s fails a test.
