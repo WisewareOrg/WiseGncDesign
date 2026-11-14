@@ -69,6 +69,8 @@ each read its own case's `mu`, so a path that never reached PrmDb would have sho
 
 ### The deployment
 
+The partitions inside each build are ADR 0005 rev 1.
+
 - **F´ runs in Basilisk's process, ticked on simulated time.** Nothing in it runs on a thread of its
   own, so a tick finishes before the call returns and a case reproduces from its seed.
 - **The binding is a small hand-written pybind11 module**, with no fprime-python dependency.

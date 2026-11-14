@@ -114,7 +114,7 @@ deployment's.
 
 ## Alternatives considered
 
-- **The Python build speaking F´ packets, as in rev 1.** It keeps F´'s codec inside the Python
+- **The Python build speaking F´ packets.** It keeps F´'s codec inside the Python
   build: a Python version of F´. Rejected for names at the ground and a ground station for the F´
   build.
 - **`fpp to-layout` in place of the reader.** Named as the fallback, not taken. Its instance names

@@ -14,10 +14,10 @@ The algorithms are written in Python first and flown with no F´ build, and F´ 
 software in its own right, not a mirror of the Python build. Each build meets the world at two
 edges: the ground (ADR 0004 rev 2) and the sim (ADR 0003 rev 3).
 
-In the baseline build, one object per build does bus I/O, unit conversion, commands, telemetry and
-the algorithm, wired by hand for one algorithm. A second algorithm has no place to sit, and the glue
-grows with every algorithm. Components should be semi-realistic all the way through, partitioned as
-real flight software is.
+In the baseline build, main `6f6276e`, one object per build does bus I/O, unit conversion,
+commands, telemetry and the algorithm, wired by hand for one algorithm. A second algorithm has no
+place to sit, and the glue grows with every algorithm. Components should be semi-realistic all the
+way through, partitioned as real flight software is.
 
 ## Decision
 
