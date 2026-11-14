@@ -7,8 +7,8 @@ sub-topology)
 
 ## Revisions
 
-- **rev 4** — 2026-11-14 — health instances, the rate groups, take base IDs from `Ids.healthBase`
-  up, and the ground-link stand-in does not downlink their telemetry (issue 57 GNC sub-topology,
+- **rev 4** — 2026-11-14 — the rate groups' health telemetry is not downlinked: health instances
+  take base IDs from a reserved range the comm-stack stand-in drops (issue 57 GNC sub-topology,
   E1 rate-group telemetry).
 - **rev 3** — 2026-11-13 — the F´ build meets the sim as a hardware-in-the-loop rig: the lab, a
   fresh copy per case, one extension per configuration and rates as FPP constants, with the checks
@@ -89,6 +89,9 @@ The partitions inside each build are ADR 0005 rev 1.
 - **One extension per configuration**, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
 - **Rates are FPP constants in the GNC sub-topology**, which owns its rate groups; F´'s
   configuration code passes the generated constants to `configure()`.
+- **The rate groups' health telemetry is not downlinked.** Health instances take base IDs from a
+  reserved range that the comm-stack stand-in drops, so a new component is recorded with nothing
+  registered for it.
 
 ### The lab: a hardware-in-the-loop rig
 
@@ -145,6 +148,12 @@ The partitions inside each build are ADR 0005 rev 1.
   (ADR 0004 rev 2).
 - **Rates in F´'s C++ configuration only.** The Python build cannot read C++, so the two builds
   would carry two copies of each rate. Rejected for FPP constants.
+- **A list of the recorded instances, kept by hand or generated.** It needs a registration per
+  component, or an autocoder. Rejected for the reserved range.
+- **Recording the health telemetry with a simulated clock.** The data is constant, and it adds
+  about 17k rows and 37% to each case's run file. Rejected.
+- **Filtering the health telemetry on the ground or in the lab.** Every write still moves each
+  tick, and the dictionary carries no component type to filter on. Rejected.
 - **A separate FSW process bridged over a socket.** No lockstep with simulated time without a tick
   protocol of its own. Rejected.
 - **F´'s own timer, with components on OS threads.** It wakes on wall-clock time, so a case does not
@@ -173,9 +182,8 @@ The partitions inside each build are ADR 0005 rev 1.
 - An F´ assert fails the case in Python with F´'s own text, instead of printing and flying on.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard
   deployment only in its threadless tasks, its three stand-ins and the pins.
-- Health instances, the rate groups, take base IDs from `Ids.healthBase` up; the ground-link
-  stand-in does not downlink their telemetry, and a test holds every rate group, and nothing else,
-  to that range.
+- Adding a rate group is one more line, its base ID in the reserved range, and a test fails if one
+  is outside it.
 - A stale extension shows as a `projectVersion` that differs from the run file's
   `versions_caller_commit`.
 - Each case merges `build` into `flight.json` atomically, without a lock, so `build` can rarely be
