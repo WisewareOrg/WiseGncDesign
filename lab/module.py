@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -44,6 +45,10 @@ class FprimeModule(sysModel.SysModel):
     dictionary: Dictionary
     failure: BaseException | None
     build: dict[str, str]
+    _fsw: ModuleType
+    """The copy of the deployment the last `Reset` loaded; unset before the first."""
+    _station: FprimeStation
+    """The radio edge on that copy; unset before the first `Reset`."""
 
     def __init__(self, imu: Any, mu: float, dcm_PB: np.ndarray) -> None:
         """Holds what `Reset` boots the deployment with, once `source` has checked the build.
