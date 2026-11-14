@@ -8,6 +8,8 @@ void setupTopology(const TopologyState& state) {
     connectComponents();
     configComponents(state);
     regCommands();
+    readParameters();
+    loadParameters();
     startTasks(state);
 }
 

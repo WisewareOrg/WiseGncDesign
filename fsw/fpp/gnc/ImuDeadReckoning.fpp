@@ -37,8 +37,6 @@ module ImuDeadReckoning {
     port tickIn = rateGroupDriver.CycleIn
     @ The IMU reading of this tick
     port imuIn = nav.imuIn
-    @ The navigation filter's configuration
-    port navConfigIn = nav.configureIn
 
   }
 

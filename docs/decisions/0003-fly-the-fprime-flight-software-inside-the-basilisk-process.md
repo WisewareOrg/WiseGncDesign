@@ -96,8 +96,8 @@ an assert thrown through F´ into pybind11.
   with cycle times of 0; the trade is on issue 57 GNC sub-topology, and its cost is issue 80
   telemetry recording cost.
 - F´ and Eigen are pinned by release tag, with no git submodule, and Renovate bumps both tags. F´'s
-  arrives with `fprime-tools` and `fprime-fpp` as one update, and a test holds those and `cmake`
-  and `ninja` to F´'s pins.
+  arrives with `fprime-tools`, `fprime-fpp` and `fprime-gds` as one update, and a test holds those
+  and `cmake` and `ninja` to F´'s pins.
 - Each flight's `flight.json` records which FSW flew: `fsw` and `build` tell two builds of one
   commit apart, and the F´ build's `projectVersion` names the commit built from (`-dirty` when
   uncommitted), so a stale extension shows against the run file's `versions_caller_commit`.

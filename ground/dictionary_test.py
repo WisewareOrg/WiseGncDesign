@@ -1,6 +1,7 @@
 """The dictionary against a toy component's, generated from FPP alone: names and types.
 
-Needs the F´ framework clone `just _sync` fetches, not an F´ build.
+Needs the F´ framework clone `just _sync` fetches. Holding each GNC instance's generated dictionary
+to WiseFsw's also needs the deployment `just fsw` builds, and skips without it.
 """
 
 from pathlib import Path
@@ -8,6 +9,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from fsw.codegen.deployment import contract_files
+from fsw.codegen.fpp_model import Instance, read
 from ground.dictionary import Dictionary
 
 TOY = """\
@@ -64,20 +67,23 @@ ARGS = {
 }
 
 
-def _toy(directory: Path, toy: str = TOY, extra: str = EXTRA) -> Dictionary:
+def _toy(directory: Path, toy: str = TOY, extra: str = EXTRA, base_id: int = 0x1000) -> Dictionary:
     """The toy's dictionary, its model written into `directory`, instanced as `toy`.
 
     Args:
         directory: where the toy's `.fpp` and the `.fppi` it includes are written.
         toy: the component model.
         extra: the included group.
+        base_id: the instance's base ID.
 
     Returns:
         The dictionary `from_component` generates.
     """
     (directory / "Toy.fpp").write_text(toy)
     (directory / "Extra.fppi").write_text(extra)
-    return Dictionary.from_component([directory / "Toy.fpp"], "Toy.Toy", instance="toy")
+    return Dictionary.from_component(
+        [directory / "Toy.fpp"], Instance("Toy.toy", "Toy.Toy", base_id)
+    )
 
 
 @pytest.fixture
@@ -387,3 +393,118 @@ def test_entries_are_equal_when_only_ids_and_opcodes_differ(tmp_path: Path):
 
     assert moved.channel("toy.gain").id != original.channel("toy.gain").id
     assert moved.entries("toy") == original.entries("toy")
+
+
+_PARAMETERS = """    param get port prmGetOut
+    param set port prmSetOut
+    param limit: F32
+    param mounting: Gnc.Matrix3
+"""
+"""Parameters given to the toy, with the ports a component with parameters needs."""
+
+
+def test_each_parameter_is_listed_by_id_with_its_name(tmp_path: Path):
+    """The toy's two parameters come by ID, named `toy.<parameter>`; their commands are marked.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    toy = _toy(tmp_path, toy=TOY.replace("    time get port", _PARAMETERS + "    time get port"))
+
+    named = {p.name: p for p in toy.parameters_by_id.values()}
+
+    assert sorted(named) == ["toy.limit", "toy.mounting"]
+    assert all(toy.parameters_by_id[p.id] is p for p in named.values())
+    assert toy.command("toy.LIMIT_PRM_SET").kind == "set"
+    assert toy.command("toy.LIMIT_PRM_SAVE").kind == "save"
+    assert toy.command("toy.setToy").kind == "sync"
+
+
+def test_the_instance_s_parameters_are_numbered_from_its_base_id(tmp_path: Path):
+    """Instanced at base ID 0x2000, the toy's two parameters are 0x2000 and 0x2001.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    toy = TOY.replace("    time get port", _PARAMETERS + "    time get port")
+
+    dictionary = _toy(tmp_path, toy=toy, base_id=0x2000)
+
+    named = dictionary.parameters_by_id.values()
+    assert {p.name: p.id for p in named} == {"toy.limit": 0x2000, "toy.mounting": 0x2001}
+
+
+def test_a_parameter_of_a_type_not_coded_does_not_stop_the_dictionary_loading(tmp_path: Path):
+    """A struct and a string parameter load: no consumer reads a parameter's type.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    toy = TOY.replace("  passive", "  struct Pair { a: F64, b: F64 }\n\n  passive")
+    added = "    param pair: Pair\n    param label: string\n"
+    toy = toy.replace("    time get port", _PARAMETERS + added + "    time get port")
+
+    names = {p.name for p in _toy(tmp_path, toy=toy).parameters_by_id.values()}
+
+    assert {"toy.pair", "toy.label"} <= names
+
+
+def test_the_algorithm_instances_are_the_gnc_instances_of_an_algorithm_it_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A GNC instance is one of the dictionary's when it has entries there and is an algorithm's.
+
+    The toy's dictionary holds `PyToy.toy`; a second instance of its component has no entries in
+    it, and while the toy is no algorithm's component neither instance is.
+
+    Args:
+        tmp_path: where the toy's model is written.
+        monkeypatch: gives the GNC sub-topologies the toy's instances, and the algorithms its
+            component.
+    """
+    toy = _toy(tmp_path)
+    held = Instance("PyToy.toy", "Toy.Toy", 0x1000)
+    absent = Instance("PyToy.other", "Toy.Toy", 0x2000)
+    monkeypatch.setattr("ground.dictionary.gnc_instances", lambda: (held, absent))
+    monkeypatch.setattr("ground.dictionary._algorithm_components", lambda: {"Toy.Toy"})
+
+    assert toy.algorithm_instances() == (held,)
+    monkeypatch.setattr("ground.dictionary._algorithm_components", lambda: set())
+    assert toy.algorithm_instances() == ()
+
+
+def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_parameter_ids():
+    """Each of WiseFsw's algorithm instances, generated alone, states its entries and parameter IDs.
+
+    It also fails when an algorithm's `.fpp`, or a group it includes, changed and F´ was not
+    rebuilt.
+    """
+    from lab import DICTIONARY
+
+    if not DICTIONARY.exists():
+        pytest.skip("the F´ build is absent; run `just fsw`")
+    wise_fsw = Dictionary(DICTIONARY)
+    components = read(contract_files()).components
+    instances = wise_fsw.algorithm_instances()
+    assert instances
+
+    def ids(dictionary: Dictionary, instance: str) -> dict[str, int]:
+        """Each of an instance's parameters' ID.
+
+        Args:
+            dictionary: a dictionary.
+            instance: the instance's unqualified name.
+
+        Returns:
+            ID by `<instance>.<parameter>`.
+        """
+        named = dictionary.parameters_by_id.values()
+        return {p.name: p.id for p in named if p.name.startswith(f"{instance}.")}
+
+    for instance in instances:
+        generated = Dictionary.from_component([components[instance.component].file], instance)
+        short = instance.name.rsplit(".", 1)[-1]
+        expected = wise_fsw.entries(short)
+        assert expected["channels"] or expected["commands"] or ids(wise_fsw, short), instance.name
+        assert generated.entries(short) == expected, instance.name
+        assert ids(generated, short) == ids(wise_fsw, short), instance.name

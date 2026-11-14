@@ -2,9 +2,11 @@
 // One deployment per loaded copy: its component instances are the topology's globals.
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "Fw/Types/Assert.hpp"
 #include "Os/Os.hpp"
@@ -15,7 +17,6 @@ namespace py = pybind11;
 
 namespace {
 
-WiseFsw::TopologyState g_state;
 Sim::Cooperative g_cooperative;
 bool g_booted = false;
 
@@ -35,11 +36,6 @@ Gnc::Vector3 vector3(const Eigen::Vector3d& v) {
     return Gnc::Vector3({v.x(), v.y(), v.z()});
 }
 
-Gnc::Matrix3 matrix3(const Eigen::Matrix3d& m) {
-    return Gnc::Matrix3({Gnc::Vector3({m(0, 0), m(0, 1), m(0, 2)}), Gnc::Vector3({m(1, 0), m(1, 1), m(1, 2)}),
-                         Gnc::Vector3({m(2, 0), m(2, 1), m(2, 2)})});
-}
-
 }  // namespace
 
 PYBIND11_MODULE(_wise_fsw, m) {
@@ -49,20 +45,36 @@ PYBIND11_MODULE(_wise_fsw, m) {
 
     m.def(
         "boot",
-        [](double mu, const Eigen::Matrix3d& dcm_PB, const std::string& prm_path) {
+        [](const std::string& prm_path, const std::vector<FwPrmIdType>& parameter_ids) {
             if (g_booted) {
                 throw std::runtime_error("already booted: power-cycle by loading a fresh copy");
+            }
+            const std::string directory = prm_path.substr(0, prm_path.rfind('/'));
+            if (prm_path.empty() || prm_path.front() != '/' || directory.empty()) {
+                throw py::value_error("the parameter file " + prm_path +
+                                      " is not an absolute path in a directory below the root");
             }
             g_booted = true;
             Os::init();
             Os::Task::registerTaskRegistry(&g_cooperative);
             Os::Queue::setRegistry(&g_cooperative);
-            WiseFsw::setupTopology(g_state);
-            WiseFsw::simBridge.configureNav(mu, matrix3(dcm_PB));
+            WiseFsw::setupTopology(WiseFsw::TopologyState{prm_path.c_str(), directory.c_str()});
+            std::string invalid;
+            for (const FwPrmIdType id : parameter_ids) {
+                Fw::ParamBuffer value;
+                if (WiseFsw::prmDb.getPrm_handlerBase(0, id, value) != Fw::ParamValid::VALID) {
+                    invalid += (invalid.empty() ? "" : ", ") + std::to_string(id);
+                }
+            }
+            if (!invalid.empty()) {
+                throw std::runtime_error("parameters " + invalid + " are not valid after loading " + prm_path);
+            }
         },
-        py::kw_only(), py::arg("mu"), py::arg("dcm_PB"), py::arg("prm_path") = std::string(),
-        "Sets the topology up and boots it at t = 0 s, the dead reckoner idle with mu (m^3/s^2) and the IMU's "
-        "mounting [PB]; prm_path is unused. A copy boots once: a second boot raises RuntimeError.");
+        py::arg("prm_path"), py::arg("parameter_ids"),
+        "Sets the topology up and boots it at t = 0 s, the dead reckoner idle: PrmDb loads prm_path, an absolute "
+        "path whose directory is its sandbox. Raises ValueError for a relative path or one in the root directory, "
+        "and RuntimeError naming each of parameter_ids that is not valid once loaded. A copy boots once: a second "
+        "boot raises RuntimeError.");
 
     m.def(
         "uplink",

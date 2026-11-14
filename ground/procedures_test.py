@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
+from fsw.codegen.fpp_model import Instance
 from fsw.python import AlgorithmModule
 from ground.dictionary import Dictionary
 from ground.procedures import CommandFailed, Ground
@@ -55,7 +56,7 @@ def dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
     """
     model = tmp_path_factory.mktemp("toy") / "Toy.fpp"
     model.write_text(TOY)
-    return Dictionary.from_component([model], "Toy.Toy", instance="toy")
+    return Dictionary.from_component([model], Instance("Toy.toy", "Toy.Toy", 0x1000))
 
 
 class StubEdge:

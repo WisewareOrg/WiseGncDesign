@@ -19,32 +19,19 @@ from typing import Any
 
 import numpy as np
 
-from fsw.codegen.deployment import CLONE
+from fsw.codegen.deployment import (
+    CLONE,
+    algorithm_files,
+    contract_files,
+    framework_files,
+    gnc_instances,
+)
+from fsw.codegen.fpp_model import Instance, read
 
-__all__ = ["Channel", "Command", "Dictionary", "Type"]
+__all__ = ["Channel", "Command", "Dictionary", "Parameter", "Type"]
 
 _REPOSITORY = Path(__file__).resolve().parents[1]
 _INTERFACES = _REPOSITORY / "fsw" / "fpp" / "interfaces"
-_FRAMEWORK = (
-    "Fw/Buffer/Buffer.fpp",
-    "Fw/Cmd/Cmd.fpp",
-    "Fw/Dp/Dp.fpp",
-    "Fw/Log/Log.fpp",
-    "Fw/Time/Time.fpp",
-    "Fw/Tlm/Tlm.fpp",
-    "Fw/Types/Types.fpp",
-    "Svc/Ccsds/Types/Types.fpp",
-    "Svc/DpCompressProc/Types/CompressionTypes.fpp",
-    "Svc/Sched/Sched.fpp",
-    "cmake/platform/unix/Platform/PlatformTypes.fpp",
-    "default/config/ComCfg.fpp",
-    "default/config/DpCfg.fpp",
-    "default/config/FpConfig.fpp",
-    "default/config/FpConstants.fpp",
-    "default/config/FpySequencerCfg.fpp",
-    "default/config/WasmSequencerCfg.fpp",
-)
-"""The F´ framework files, in the clone, that a component's model imports."""
 
 _PRIMITIVES = {
     "F32": ">f4",
@@ -138,12 +125,28 @@ class Command:
         opcode: the command's opcode.
         params: the parameter names, in order.
         types: each parameter's type, in order, or `None` when one is of a type not coded.
+        kind: the dictionary's `commandKind`, such as `sync`, or `set` and `save` for the commands
+            F´ generates for a parameter.
     """
 
     name: str
     opcode: int
     params: tuple[str, ...]
     types: tuple[Type, ...] | None
+    kind: str
+
+
+@dataclass(frozen=True)
+class Parameter:
+    """One parameter of an instance.
+
+    Attributes:
+        id: the parameter's ID.
+        name: `<instance>.<parameter>`.
+    """
+
+    id: int
+    name: str
 
 
 @dataclass(frozen=True)
@@ -206,6 +209,18 @@ class Channel:
             raise ValueError(f"channel {self.name} has no constant {error}") from error
 
 
+@functools.cache
+def _algorithm_components() -> frozenset[str]:
+    """The components an algorithm's `.fpp` defines, read once per process.
+
+    Returns:
+        Their qualified names.
+    """
+    algorithms = set(algorithm_files())
+    components = read(contract_files()).components.values()
+    return frozenset(c.name for c in components if c.file in algorithms)
+
+
 class Dictionary:
     """One deployment's F´ JSON dictionary, its names without their instances' modules.
 
@@ -213,11 +228,13 @@ class Dictionary:
         metadata: the dictionary's `metadata` object.
         responses: `Fw.CmdResponse`'s constants by name.
         channels_by_id: every channel by its ID.
+        parameters_by_id: every parameter by its ID.
     """
 
     metadata: Mapping[str, Any]
     responses: Mapping[str, int]
     channels_by_id: Mapping[int, Channel]
+    parameters_by_id: Mapping[int, Parameter]
 
     def __init__(self, path: Path) -> None:
         """Parses the dictionary.
@@ -248,7 +265,9 @@ class Dictionary:
                 types = tuple(self.type(p["type"]["name"]) for p in entry["formalParams"])
             except ValueError:
                 types = None
-            self._commands[name] = Command(name, entry["opcode"], params, types)
+            self._commands[name] = Command(
+                name, entry["opcode"], params, types, entry["commandKind"]
+            )
         self._channels: dict[str, Channel] = {}
         for entry in document["telemetryChannels"]:
             name = entry["name"].split(".", 1)[1]
@@ -259,27 +278,44 @@ class Dictionary:
                 raise ValueError(f"channel {name} has {error}") from error
             self._channels[name] = Channel(entry["id"], name, units[1] if units else "", ftype)
         self.channels_by_id = {c.id: c for c in self._channels.values()}
+        self.parameters_by_id = {
+            entry["id"]: Parameter(entry["id"], entry["name"].split(".", 1)[1])
+            for entry in document["parameters"]
+        }
+
+    def algorithm_instances(self) -> tuple[Instance, ...]:
+        """The GNC instances of an algorithm's component that this dictionary holds.
+
+        An instance is held when a command, channel or parameter of the dictionary is named under
+        its qualified name, as F´ names a deployment's entries.
+
+        Returns:
+            The instances, in `fsw.codegen.deployment.gnc_instances`' order.
+        """
+        kinds = ("commands", "telemetryChannels", "parameters")
+        held = {e["name"].rsplit(".", 1)[0] for kind in kinds for e in self._document[kind]}
+        algorithms = _algorithm_components()
+        return tuple(i for i in gnc_instances() if i.name in held and i.component in algorithms)
 
     @classmethod
-    def from_component(
-        cls, model: Sequence[Path], component: str, *, instance: str
-    ) -> "Dictionary":
+    def from_component(cls, model: Sequence[Path], instance: Instance) -> "Dictionary":
         """The dictionary of one component instanced alone, generated from FPP with `fpp-to-dict`.
 
-        The deployment, `Py<Component>`, holds the one instance and is written only into the
-        temporary directory `fpp-to-dict` runs in, so nothing is written in the tree. The model is
-        `fsw/fpp/interfaces/Interfaces.fpp` and `model`, against the F´ framework files in the
-        clone under `fsw/fprime/lib`; `fpp-to-dict` follows the `.fppi` includes. A dictionary is
-        generated once per process for each content of its inputs, which the key hashes: the
-        deployment, the model, every `.fpp` and `.fppi` under `fsw/fpp/interfaces`, every
-        `.fppi` beside a file of `model`, the framework files and the clone's tag.
+        The deployment, `Py<Component>`, holds the one instance, under its unqualified name and at
+        its base ID, so its entries are named and numbered as in WiseFsw. It is written only into
+        the temporary directory `fpp-to-dict` runs in, so nothing is written in the tree. The
+        model is `fsw/fpp/interfaces/Interfaces.fpp` and `model`, against the F´ framework files in
+        the clone under `fsw/fprime/lib`; `fpp-to-dict` follows the `.fppi` includes. A dictionary
+        is generated once per process for each content of its inputs, which the key hashes: the
+        deployment, the model, every `.fpp` and `.fppi` under `fsw/fpp/interfaces`, every `.fppi`
+        beside a file of `model`, the framework files and the clone's tag.
         A generated dictionary with a channel of a type not coded fails its load with the
         `ValueError` `Dictionary` raises.
 
         Args:
             model: the component's `.fpp` files.
-            component: the component's qualified FPP name, such as `Gnc.ImuDeadReckoner`.
-            instance: the instance name, such as `nav`, which prefixes the dictionary's entries.
+            instance: the instance, such as `fsw.codegen.deployment.gnc_instance` gives it; its
+                unqualified name, such as `nav`, prefixes the dictionary's entries.
 
         Returns:
             The dictionary.
@@ -287,15 +323,17 @@ class Dictionary:
         Raises:
             RuntimeError: `fpp-to-dict` rejected the model, with its stderr.
         """
+        component = instance.component
         name = f"Py{component.rsplit('.', 1)[-1]}"
+        short = instance.name.rsplit(".", 1)[-1]
         deployment = (
             f"module {name} {{\n"
-            f"  instance {instance}: {component} base id 0x1000\n"
-            f"  deployment topology {name} {{\n    instance {instance}\n  }}\n}}\n"
+            f"  instance {short}: {component} base id {instance.base_id:#x}\n"
+            f"  deployment topology {name} {{\n    instance {short}\n  }}\n}}\n"
         )
         sources = [Path(p).resolve() for p in model]
         files = [_INTERFACES / "Interfaces.fpp", *sources]
-        imports = [CLONE / path for path in _FRAMEWORK]
+        imports = list(framework_files())
         hashed = [*sources, *sorted(_INTERFACES.rglob("*.fpp*")), *imports]
         hashed += sorted({f for p in sources for f in p.parent.glob("*.fppi")})
         tag = _tag()

@@ -4,18 +4,23 @@ Skipped without the deployment `just fsw` builds.
 """
 
 import importlib.util
+import math
+from collections.abc import Callable
+from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pytest
 
+from fsw.codegen.deployment import fpp_files
+from fsw.codegen.fpp_model import read
+from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
+from lab import DICTIONARY
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
-
-MU = 3.986004360e14
-"""m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
 
 NS = 1_000_000_000
 """ns per s."""
@@ -29,15 +34,6 @@ STATE = {
 """`nav.initNavState`'s arguments: a state at t = 0."""
 
 
-def _boot(fsw: ModuleType) -> None:
-    """Boots a copy idle, mounted at identity.
-
-    Args:
-        fsw: the copy.
-    """
-    fsw.boot(mu=MU, dcm_PB=np.eye(3))
-
-
 def _step(fsw: ModuleType, t_ns: int) -> None:
     """Steps a copy to `t_ns` on a zero IMU reading.
 
@@ -48,21 +44,16 @@ def _step(fsw: ModuleType, t_ns: int) -> None:
     fsw.step(t_ns=t_ns, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
 
 
-def _writes(station: FprimeStation) -> list[tuple[str, int, object]]:
-    """Drains the telemetry writes and keeps nav's, as values.
+def _nav(writes: list[tuple[str, int, Any]]) -> list[tuple[str, int, Any]]:
+    """Nav's writes among drained ones.
 
     Args:
-        station: the station on the copy.
+        writes: drained writes, as `decoded` gives them.
 
     Returns:
-        Each of nav's writes' channel name, F´ time tag in ns and value, oldest first.
+        Those of nav's channels, in order.
     """
-    writes = station.telemetry()
-    return [
-        (name, t, station.values(name, [raw])[0])
-        for name, t, raw in writes
-        if name.startswith("nav.")
-    ]
+    return [write for write in writes if write[0].startswith("nav.")]
 
 
 def _responses(station: FprimeStation) -> list[tuple[int, str]]:
@@ -80,14 +71,18 @@ def _responses(station: FprimeStation) -> list[tuple[int, str]]:
 def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
     fsw: ModuleType,
     station: FprimeStation,
+    prm: str,
+    parameter_ids: list[int],
 ):
     """An uplinked command waits for the next step, then answers `OK` under the ground's context.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
 
     station.uplink("nav.initNavState", STATE, 42)
     assert _responses(station) == []
@@ -109,6 +104,9 @@ def test_a_packet_larger_than_f_prime_s_buffer_is_refused_naming_its_size(fsw: M
 def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     fsw: ModuleType,
     station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
+    prm: str,
+    parameter_ids: list[int],
 ):
     """Nav's writes of two ticks come down in the order written, each tagged with its tick's time.
 
@@ -117,13 +115,16 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        decoded: drains the station's telemetry as values.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
     station.uplink("nav.initNavState", STATE, 1)
     _step(fsw, NS)
     _step(fsw, 2 * NS)
 
-    writes = _writes(station)
+    writes = _nav(decoded(station))
 
     estimate = ["nav.navState", "nav.bodyEciPos", "nav.bodyEciVel", "nav.bodyEciAttitude"]
     assert [(name, t) for name, t, _ in writes] == [
@@ -136,40 +137,50 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
         "propagated",
         "propagated",
     ]
-    assert _writes(station) == []
+    assert _nav(decoded(station)) == []
 
 
 def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
     fsw: ModuleType,
     station: FprimeStation,
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
+    prm: str,
+    parameter_ids: list[int],
 ):
     """A tick at 1.500007 s tags its write with that time in ns, microseconds included.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        decoded: drains the station's telemetry as values.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
     t_ns = NS + 500_000_000 + 7_000
 
     _step(fsw, t_ns)
 
-    assert _writes(station) == [("nav.navState", t_ns, "idle")]
+    assert _nav(decoded(station)) == [("nav.navState", t_ns, "idle")]
 
 
-def test_the_rate_group_s_health_repeats_on_the_stub_clock(fsw: ModuleType, station: FprimeStation):
+def test_the_rate_group_s_health_repeats_on_the_stub_clock(
+    fsw: ModuleType, station: FprimeStation, prm: str, parameter_ids: list[int]
+):
     """With nav propagating, every cycle time the rate group writes is 0, on F´'s stub clock.
 
     On the wall clock some cycles take a microsecond or more, so a cycle time that is not 0 shows a
-    deployment without the stub; on a much faster host it could still read 0. The cycle count is
-    held to one more per tick.
+    deployment without the stub; on a much faster host it could still read 0. How often the rate
+    group runs is `test_each_rate_group_runs_once_every_divider_ticks`'s.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
     ticks = 500
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
     station.uplink("nav.initNavState", STATE, 1)
     station.telemetry()
 
@@ -194,23 +205,72 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(fsw: ModuleType, stat
         name = f"navRateGroup.{channel}"
         return station.values(name, [raw for written, _, raw in writes if written == name])
 
-    assert values("CycleTime").tolist() == [0] * ticks
+    cycle_times = values("CycleTime")
+    assert cycle_times.size
+    assert not cycle_times.any()
     assert not values("MaxCycleTime").any()
-    assert np.diff(values("CycleCount")).tolist() == [1] * (ticks - 1)
-    assert len(values("CycleCount")) == ticks
+
+
+def test_each_rate_group_runs_once_every_divider_ticks(
+    fsw: ModuleType,
+    station: FprimeStation,
+    tmp_path: Path,
+    prm: str,
+    parameter_ids: list[int],
+):
+    """Each rate group's `CycleCount` advances by one once every divider ticks, its own divider.
+
+    The deployment's configuration is the module of its algorithm instances, a GNC sub-topology
+    named for its file. A rate group `<stem>RateGroup` runs at the constant `<stem>Divider` of that
+    module. The count is taken over ten of the dividers' least common multiple, a whole number of
+    every divider, which holds whatever tick the driver starts on.
+
+    Args:
+        fsw: the test's copy of the deployment.
+        station: the station on it.
+        tmp_path: where the configuration's topology is rendered.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
+    """
+    instances = Dictionary(DICTIONARY).algorithm_instances()
+    (configuration,) = {i.name.split(".", 1)[0] for i in instances}
+    constants = read(fpp_files(configuration, tmp_path)).constants
+    dividers = {
+        name.removeprefix(f"{configuration}.").removesuffix("Divider") + "RateGroup": divider
+        for name, divider in constants.items()
+        if name.startswith(f"{configuration}.") and name.endswith("Divider")
+    }
+    assert dividers
+    ticks = 10 * math.lcm(*dividers.values())
+    fsw.boot(prm, parameter_ids)
+    station.telemetry()
+
+    for tick in range(1, ticks + 1):
+        _step(fsw, tick * NS)
+
+    writes = station.telemetry()
+    for group, divider in dividers.items():
+        name = f"{group}.CycleCount"
+        counts = station.values(name, [raw for written, _, raw in writes if written == name])
+        assert len(counts) == ticks // divider, group
+        assert np.diff(counts).tolist() == [1] * (len(counts) - 1), group
 
 
 def test_the_pump_raises_naming_a_queue_its_bound_leaves_holding_messages(
     fsw: ModuleType,
     station: FprimeStation,
+    prm: str,
+    parameter_ids: list[int],
 ):
     """A queue still holding messages after the pump's rounds raises, naming it, never hangs.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    _boot(fsw)
+    fsw.boot(prm, parameter_ids)
     station.uplink("cmdDisp.CMD_NO_OP", {}, 3)
 
     with pytest.raises(
