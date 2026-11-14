@@ -151,7 +151,7 @@ The partitions inside each build are ADR 0005 rev 1.
 - **A list of the recorded instances, kept by hand or generated.** It needs a registration per
   component, or an autocoder. Rejected for the reserved range.
 - **Recording the health telemetry with a simulated clock.** It records a row per channel per tick
-  of constant data: about 17k rows and 37% of a LEO500 case's run file, as measured. Rejected.
+  of constant data. Rejected.
 - **Filtering the health telemetry on the ground or in the lab.** Every write still moves each
   tick, and the dictionary carries no component type to filter on. Rejected.
 - **A separate FSW process bridged over a socket.** No lockstep with simulated time without a tick
