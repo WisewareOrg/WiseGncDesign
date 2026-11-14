@@ -19,7 +19,7 @@ from typing import Any
 
 import numpy as np
 
-from fsw.codegen.deployment import CLONE, framework_files
+from fsw.codegen.deployment import CLONE, algorithm_files, contract_files, framework_files
 
 __all__ = ["Channel", "Command", "Dictionary", "Parameter", "Type"]
 
@@ -43,7 +43,8 @@ _PRIMITIVES = {
 `FW_SERIALIZE_TRUE_VALUE` or `FW_SERIALIZE_FALSE_VALUE`."""
 
 _generated: dict[str, "Dictionary"] = {}
-"""The dictionaries `from_component` generated in this process, by the hash of their inputs."""
+"""The dictionaries `from_component` and `from_sub_topology` generated in this process, by the hash
+of their inputs."""
 
 
 @functools.cache
@@ -278,7 +279,8 @@ class Dictionary:
         deployment, the model, every `.fpp` and `.fppi` under `fsw/fpp/interfaces`, every
         `.fppi` beside a file of `model`, the framework files and the clone's tag.
         A generated dictionary with a channel of a type not coded fails its load with the
-        `ValueError` `Dictionary` raises.
+        `ValueError` `Dictionary` raises, and a model `fpp-to-dict` rejects raises `RuntimeError`
+        with the tool's stderr.
 
         Args:
             model: the component's `.fpp` files.
@@ -286,10 +288,7 @@ class Dictionary:
             instance: the instance name, such as `nav`, which prefixes the dictionary's entries.
 
         Returns:
-            The dictionary.
-
-        Raises:
-            RuntimeError: `fpp-to-dict` rejected the model, with its stderr.
+            The dictionary, as `_generate` gives it.
         """
         name = f"Py{component.rsplit('.', 1)[-1]}"
         deployment = (
@@ -299,12 +298,70 @@ class Dictionary:
         )
         sources = [Path(p).resolve() for p in model]
         files = [_INTERFACES / "Interfaces.fpp", *sources]
-        imports = list(framework_files())
-        hashed = [*sources, *sorted(_INTERFACES.rglob("*.fpp*")), *imports]
+        hashed = [*sources, *sorted(_INTERFACES.rglob("*.fpp*"))]
         hashed += sorted({f for p in sources for f in p.parent.glob("*.fppi")})
+        return cls._generate(name, deployment, files, hashed, component)
+
+    @classmethod
+    def from_sub_topology(cls, configuration: str) -> "Dictionary":
+        """A configuration's GNC sub-topology's dictionary, generated from FPP with `fpp-to-dict`.
+
+        The deployment, `Py<configuration>`, imports the sub-topology `<configuration>.Gnc` of
+        `fsw/fpp/gnc/<configuration>.fpp` and is written only into the temporary directory
+        `fpp-to-dict` runs in. The model is the contract, `fsw.codegen.deployment.contract_files()`,
+        and the sub-topology. Its rate groups' entries are in it beside the algorithms'. As with
+        `from_component`, a dictionary is generated once per process for each content of its
+        inputs: the deployment, every file of the model, every `.fppi` under
+        `fsw/fpp/interfaces` and beside an algorithm, and the clone's tag; a model `fpp-to-dict`
+        rejects raises `RuntimeError` with the tool's stderr.
+
+        Args:
+            configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`,
+                such as `ImuDeadReckoning`.
+
+        Returns:
+            The dictionary, as `_generate` gives it.
+        """
+        name = f"Py{configuration}"
+        deployment = (
+            f"module {name} {{\n"
+            f"  deployment topology {name} {{\n    import {configuration}.Gnc\n  }}\n}}\n"
+        )
+        framework = set(framework_files())
+        files = [p for p in contract_files() if p not in framework]
+        files.append(_REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp")
+        hashed = [*files, *sorted(_INTERFACES.rglob("*.fppi"))]
+        hashed += sorted({f for p in algorithm_files() for f in p.parent.glob("*.fppi")})
+        return cls._generate(name, deployment, files, hashed, configuration)
+
+    @classmethod
+    def _generate(
+        cls,
+        name: str,
+        deployment: str,
+        files: Sequence[Path],
+        hashed: Sequence[Path],
+        subject: str,
+    ) -> "Dictionary":
+        """Runs `fpp-to-dict` on a deployment in a temporary directory, once per its inputs.
+
+        Args:
+            name: the deployment's name, which names the generated dictionary.
+            deployment: the deployment's FPP.
+            files: the model's files, the framework's aside.
+            hashed: the files whose content, with the framework's, keys the dictionary.
+            subject: what the deployment holds, named when the tool rejects it.
+
+        Returns:
+            The dictionary.
+
+        Raises:
+            RuntimeError: `fpp-to-dict` rejected the model, with its stderr.
+        """
+        imports = list(framework_files())
         tag = _tag()
         digest = hashlib.sha256(tag.encode() + b"\0" + deployment.encode())
-        for path in hashed:
+        for path in [*hashed, *imports]:
             digest.update(b"\0" + path.read_bytes())
         key = digest.hexdigest()
         if key not in _generated:
@@ -316,7 +373,7 @@ class Dictionary:
                 command += [*map(str, files), str(written)]
                 result = subprocess.run(command, capture_output=True, text=True)
                 if result.returncode:
-                    raise RuntimeError(f"fpp-to-dict rejected {component}:\n{result.stderr}")
+                    raise RuntimeError(f"fpp-to-dict rejected {subject}:\n{result.stderr}")
                 _generated[key] = cls(Path(out) / f"{name}TopologyDictionary.json")
         return _generated[key]
 
