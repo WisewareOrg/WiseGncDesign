@@ -1,0 +1,152 @@
+{
+ "instances": {
+  "Gnc.nav": {
+   "type": "Nav",
+   "baseId": 4096
+  },
+  "Gnc.ctrl": {
+   "type": "Ctrl",
+   "baseId": 8192
+  },
+  "Gnc.log": {
+   "type": "Log",
+   "baseId": 12288
+  },
+  "Gnc.rg": {
+   "type": "RateGroup",
+   "baseId": 16384
+  },
+  "Top.drv": {
+   "type": "Driver",
+   "baseId": 256
+  }
+ },
+ "constants": {
+  "navDivider": 1,
+  "ctrlDivider": 10,
+  "tickHz": 100,
+  "gain": 2.5,
+  "name": "gnc"
+ },
+ "connections": {
+  "Gnc.Gnc": [
+   {
+    "group": "Rates",
+    "from": "Gnc.rg.RateGroupMemberOut",
+    "fromNum": 0,
+    "to": "Gnc.nav.schedIn",
+    "toNum": 0
+   },
+   {
+    "group": "Rates",
+    "from": "Gnc.rg.RateGroupMemberOut",
+    "fromNum": 1,
+    "to": "Gnc.ctrl.schedIn",
+    "toNum": 0
+   },
+   {
+    "group": "Rates",
+    "from": "Gnc.rg.RateGroupMemberOut",
+    "fromNum": 2,
+    "to": "Gnc.log.schedIn",
+    "toNum": 0
+   }
+  ],
+  "Top.Deploy": [
+   {
+    "group": "Rates",
+    "from": "Gnc.rg.RateGroupMemberOut",
+    "fromNum": 0,
+    "to": "Gnc.nav.schedIn",
+    "toNum": 0
+   },
+   {
+    "group": "Rates",
+    "from": "Gnc.rg.RateGroupMemberOut",
+    "fromNum": 1,
+    "to": "Gnc.ctrl.schedIn",
+    "toNum": 0
+   },
+   {
+    "group": "Rates",
+    "from": "Gnc.rg.RateGroupMemberOut",
+    "fromNum": 2,
+    "to": "Gnc.log.schedIn",
+    "toNum": 0
+   },
+   {
+    "group": "Tick",
+    "from": "Top.drv.tickOut",
+    "fromNum": 0,
+    "to": "Gnc.rg.CycleIn",
+    "toNum": 0
+   }
+  ]
+ },
+ "annotations": {
+  "Gnc.nav": {
+   "pre": [
+    "pre-annotation on instance"
+   ],
+   "post": [
+    "post-annotation on instance nav"
+   ]
+  },
+  "Nav": {
+   "pre": [
+    "A navigation component",
+    "provides: SRS010 free text, with spaces"
+   ],
+   "post": []
+  },
+  "Gnc.ctrl": {
+   "pre": [],
+   "post": []
+  },
+  "Ctrl": {
+   "pre": [],
+   "post": []
+  },
+  "Gnc.log": {
+   "pre": [],
+   "post": []
+  },
+  "Log": {
+   "pre": [],
+   "post": []
+  },
+  "Gnc.rg": {
+   "pre": [],
+   "post": []
+  },
+  "RateGroup": {
+   "pre": [
+    "Rate group driver stand-in",
+    "provides: SYS001"
+   ],
+   "post": []
+  },
+  "Top.drv": {
+   "pre": [],
+   "post": []
+  },
+  "Driver": {
+   "pre": [],
+   "post": []
+  },
+  "Gnc.Gnc": {
+   "pre": [
+    "GNC sub-topology",
+    "provides: SYS002"
+   ],
+   "post": []
+  },
+  "Top.Deploy": {
+   "pre": [
+    "deployment",
+    "provides: SYS003"
+   ],
+   "post": []
+  }
+ }
+}
