@@ -117,14 +117,12 @@ class GncPartition:
 
         scheduling = {i for i, kind in component.items() if kind in (_DRIVER, _RATE_GROUP)}
         self._inputs: dict[str, set[str]] = {m: set() for m in members}
-        self._routes: dict[tuple[str, str], list[tuple[str, str]]] = {}
+        self._routes: dict[tuple[str, str], tuple[str, str]] = {}
         for c in connections:
             if c.from_instance not in scheduling:
                 keyword = _keyword(c.to_instance, c.to_port)
                 self._inputs[c.to_instance].add(keyword)
-                self._routes.setdefault((c.from_instance, c.from_port), []).append(
-                    (c.to_instance, keyword)
-                )
+                self._routes[c.from_instance, c.from_port] = c.to_instance, keyword
         self._ports: dict[str, tuple[str, str]] = {}
         for name, port in model.ports.items():
             if name.startswith(f"{topology}.") and port.instance != driver:
@@ -176,8 +174,8 @@ class GncPartition:
                     raise RuntimeError(f"inputs {names} have not been written at t = {t} s")
                 outputs, written = self.algorithms[_name(member)].step(t, **inputs)
                 for port, value in outputs._asdict().items():
-                    if value is not None:
-                        for target, keyword in self._routes.get((member, port), ()):
-                            self._written[target][keyword] = value
+                    if value is not None and (member, port) in self._routes:
+                        target, keyword = self._routes[member, port]
+                        self._written[target][keyword] = value
                 telemetry.append((_name(member), written))
         return telemetry

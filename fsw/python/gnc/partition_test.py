@@ -17,8 +17,6 @@ from fsw.python.platform.rates import RateGroupDriver, dividers
 TOY = """\
 module Toy {
 
-  @ s, the base tick's period
-  constant tickPeriod = 1.0
   constant fastDivider = 1
   constant slowDivider = 2
 
@@ -279,7 +277,10 @@ def test_boot_builds_every_algorithm_afresh(gnc: GncPartition):
 
 @pytest.mark.parametrize(
     ("classes", "named"),
-    [((Sink, Source), "Slow"), ((Sink, Slow, Source, Value), "Value")],
+    [
+        ((Sink, Source), r"need the classes \['Slow'\] and have none for \[\]"),
+        ((Sink, Slow, Source, Value), r"need the classes \[\] and have none for \['Value'\]"),
+    ],
     ids=["missing", "extra"],
 )
 def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
@@ -290,7 +291,7 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
     Args:
         model: the toy's model.
         classes: the classes given.
-        named: the class or component the error names.
+        named: the error, naming the class missing or the class matching no member.
     """
     with pytest.raises(ValueError, match=named):
         GncPartition(model, "Toy", classes)
