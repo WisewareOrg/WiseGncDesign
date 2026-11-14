@@ -132,10 +132,40 @@ Basilisk message. The reasoning is in
 the native `fpp` binary inside the `fprime_fpp` package, `fpp to-json`, into a temporary directory,
 and returns a `Model` of named tuples by qualified name: instances with their base IDs, each
 topology's connections with both port numbers resolved, numeric constants, struct, enum and array
-types, each component's commands, channels and parameters, and annotations. It needs no compiler,
+types, each component's commands, channels, parameters and general output ports with the file
+that defines it, and annotations. It needs no compiler,
 no Java and no F´ build, only the model's `.fpp` files, F´'s framework files among them from the
 clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned compiler internals,
 so a key the module reads that is missing raises `KeyError`. The reasoning is in
+[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+
+## FPP types in Python
+
+`fsw.codegen.fpp_types` is FPP's types as named tuples, generated when it is imported from the
+model every configuration shares, read once per process; nothing generated is written in the tree.
+Each top-level FPP module is a namespace: one tuple per struct, an array is a numpy array, and an
+enum value is its constant's name. Each component an algorithm's `.fpp` defines also has
+`<Name>Outputs`, `<Name>Telemetry` and `<Name>Parameters`. An output or telemetry field defaults to
+`None`, not written; a parameter has a default only when FPP gives one. A misspelt field raises.
+
+`converter(source, target)` maps fields by name, ignoring case, from a struct's tuple or a Basilisk
+payload; every field of the target must be found, or building the converter fails, naming it:
+
+```python
+>>> from Basilisk.architecture import messaging
+>>> from fsw.codegen.fpp_types import Bus, Gnc, converter
+>>> payload = messaging.IMUSensorMsgPayload()
+>>> payload.AngVelPlatform = [0.0, 0.0, 1.0e-3]
+>>> bus = converter(messaging.IMUSensorMsgPayload, Bus.ImuSensorMsg)(payload)
+>>> reading = converter(Bus.ImuSensorMsg, Gnc.ImuReading)(bus)
+>>> reading.angVelPlatform.tolist()
+[0.0, 0.0, 0.001]
+>>> Gnc.ImuDeadReckonerTelemetry(navState="initialized").bodyEciPos is None
+True
+
+```
+
+The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## The F´ host
