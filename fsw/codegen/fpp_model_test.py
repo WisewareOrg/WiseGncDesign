@@ -204,7 +204,7 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares()
         "WiseFsw.cmdDisp": Instance("WiseFsw.cmdDisp", "Svc.CommandDispatcher", 0x500),
         "ImuDeadReckoning.nav": Instance("ImuDeadReckoning.nav", "Gnc.ImuDeadReckoner", 0x1000),
         "ImuDeadReckoning.navRateGroup": Instance(
-            "ImuDeadReckoning.navRateGroup", "Svc.PassiveRateGroup", 0x1100
+            "ImuDeadReckoning.navRateGroup", "Svc.PassiveRateGroup", 0xF0000100
         ),
     }
     dead_reckoner, rate_group = "ImuDeadReckoning.nav", "ImuDeadReckoning.navRateGroup"
@@ -217,6 +217,7 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares()
         Connection(rate_group, "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
         Connection(rate_group, "RateGroupMemberOut", 0, dead_reckoner, "schedIn", 0),
         Connection(rate_group, "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
+        Connection(rate_group, "Tlm", 0, "WiseFsw.groundLink", "tlmIn", 0),
         Connection("WiseFsw.cmdDisp", "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 2),
         Connection("WiseFsw.cmdDisp", "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
         Connection("WiseFsw.cmdDisp", "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),

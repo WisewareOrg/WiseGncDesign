@@ -22,7 +22,7 @@ module WiseFsw {
 
     command connections instance cmdDisp
 
-    telemetry connections instance groundLink { cmdDisp, ImuDeadReckoning.nav }
+    telemetry connections instance groundLink
 
     connections RateGroups {
       simTime.CycleOut -> rateGroupDriver.CycleIn

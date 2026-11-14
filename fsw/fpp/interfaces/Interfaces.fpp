@@ -36,3 +36,10 @@ module Gnc {
   }
 
 }
+
+module Ids {
+
+  @ Base IDs at or above this are health instances, whose telemetry the comm stack does not downlink
+  constant healthBase = 0xF0000000
+
+}

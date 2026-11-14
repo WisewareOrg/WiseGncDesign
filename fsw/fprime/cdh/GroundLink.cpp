@@ -1,5 +1,7 @@
 #include "fsw/fprime/cdh/GroundLink.hpp"
 
+#include "fsw/fpp/interfaces/FppConstantsAc.hpp"
+
 namespace Sim {
 
 namespace {
@@ -39,6 +41,10 @@ void GroundLink::cmdResponseIn_handler(FwIndexType portNum, FwOpcodeType opCode,
 }
 
 void GroundLink::tlmIn_handler(FwIndexType portNum, FwChanIdType id, Fw::Time& timeTag, Fw::TlmBuffer& val) {
+    // Health telemetry is not downlinked, standing in for the packetizer's ignore list.
+    if (id >= Ids::healthBase) {
+        return;
+    }
     const U64 ns = timeTag.getSeconds() * NS_PER_S + timeTag.getUSeconds() * NS_PER_US;
     const U8* data = val.getBuffAddr();
     this->m_writes.push_back({id, ns, std::vector<U8>(data, data + val.getSize())});

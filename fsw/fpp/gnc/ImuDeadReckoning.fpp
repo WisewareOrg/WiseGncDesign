@@ -4,7 +4,7 @@ module ImuDeadReckoning {
   constant navDivider = 1
 
   instance nav: Gnc.ImuDeadReckoner base id 0x1000
-  instance navRateGroup: Svc.PassiveRateGroup base id 0x1100
+  instance navRateGroup: Svc.PassiveRateGroup base id Ids.healthBase + 0x100
 
   @ The GNC partition of the dead reckoner's configuration: nav, run by its rate group
   topology Gnc {

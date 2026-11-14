@@ -90,8 +90,8 @@ PYBIND11_MODULE(_wise_fsw, m) {
             }
             return writes;
         },
-        "Every telemetry write since the last call, oldest first: (channel ID, F´ time tag in ns, serialized "
-        "value).");
+        "Every telemetry write since the last call but a health instance's, oldest first: (channel ID, F´ time "
+        "tag in ns, serialized value).");
 
     m.def(
         "responses",

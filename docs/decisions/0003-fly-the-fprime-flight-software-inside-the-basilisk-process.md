@@ -7,9 +7,9 @@ sub-topology)
 
 ## Revisions
 
-- **rev 4** — 2026-11-14 — the rate groups' telemetry is not connected, and a test holds every
-  other instance with telemetry to the ground link (issue 57 GNC sub-topology, E1 rate-group
-  telemetry).
+- **rev 4** — 2026-11-14 — health instances, the rate groups, take base IDs from `Ids.healthBase`
+  up, and the ground-link stand-in does not downlink their telemetry (issue 57 GNC sub-topology,
+  E1 rate-group telemetry).
 - **rev 3** — 2026-11-13 — the F´ build meets the sim as a hardware-in-the-loop rig: the lab, a
   fresh copy per case, one extension per configuration and rates as FPP constants, with the checks
   that support them; the partitions are ADR 0005 rev 1; reverses rev 2's configuration on an F´
@@ -172,10 +172,10 @@ The partitions inside each build are ADR 0005 rev 1.
 - Copies share no state, so more than one F´ build can be booted in one process.
 - An F´ assert fails the case in Python with F´'s own text, instead of printing and flying on.
 - The deployment has F´'s real rate groups, CommandDispatcher and PrmDb, and differs from a standard
-  deployment only in its threadless tasks, its three stand-ins, the pins and its unconnected
-  rate-group telemetry.
-- The rate groups' telemetry is not connected; a test holds every other instance with telemetry to
-  the ground link.
+  deployment only in its threadless tasks, its three stand-ins and the pins.
+- Health instances, the rate groups, take base IDs from `Ids.healthBase` up; the ground-link
+  stand-in does not downlink their telemetry, and a test holds every rate group, and nothing else,
+  to that range.
 - A stale extension shows as a `projectVersion` that differs from the run file's
   `versions_caller_commit`.
 - Each case merges `build` into `flight.json` atomically, without a lock, so `build` can rarely be
