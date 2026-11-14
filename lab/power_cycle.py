@@ -68,12 +68,10 @@ def source() -> Path:
 def power_cycle() -> ModuleType:
     """A fresh copy of the extension, loaded and not yet booted: a new module on every call.
 
+    The source is checked first, so an extension not built or rebuilt raises as `source` does.
+
     Returns:
         The copy's module, whose `boot` sets its topology up once.
-
-    Raises:
-        ModuleNotFoundError: the extension is not built.
-        RuntimeError: the extension file changed after this process first checked it.
     """
     global _directory
     path = source()
