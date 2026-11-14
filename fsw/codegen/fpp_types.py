@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 
 from fsw.codegen.deployment import algorithm_files, contract_files
-from fsw.codegen.fpp_model import Array, Component, Enum, Model, Struct, read
+from fsw.codegen.fpp_model import Array, Component, Enum, Member, Model, Struct, read
 
 __all__ = ["converter"]
 
@@ -53,9 +53,9 @@ _STRUCTS: dict[type, tuple[Struct, dict[str, Struct | Enum | Array]]] = {}
 def converter(source: type, target: type) -> Callable[[Any], Any]:
     """A function converting a `source` value to a `target` tuple, each field taken by name.
 
-    Every field of `target` is taken from the `source` field of its name, ignoring case; fields of
-    `source` that `target` lacks are dropped. An array field becomes a fresh array of the FPP type;
-    a scalar or an enum name passes as it is.
+    Every field of `target` is taken from the `source` field of its name, ignoring case, which must
+    have its shape and element type; fields of `source` that `target` lacks are dropped. An array
+    field becomes a fresh array of the FPP type; a scalar or an enum name passes as it is.
 
     Args:
         source: a struct's tuple, or a Basilisk message payload's type.
@@ -65,25 +65,30 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
         The converter.
 
     Raises:
-        ValueError: a field of `target` is missing from `source`, or is a struct, naming it.
+        ValueError: `target` is not a struct's tuple, or a field of it is a struct, is missing from
+            `source`, or differs from it in shape or element type, naming it.
     """
+    if target not in _STRUCTS:
+        raise ValueError(f"{target.__name__} is not a struct's tuple")
     struct, types = _STRUCTS[target]
-    names = source._fields if hasattr(source, "_fields") else source.__dtype__.names
-    by_name = {name.lower(): name for name in names}
+    sources = _source_forms(source)
     plan = []
     for member in struct.members:
-        if member.name.lower() not in by_name:
-            raise ValueError(f"{source.__name__} has no field {member.name} for {struct.name}")
-        member_type = types.get(member.type)
-        if isinstance(member_type, Struct):
+        if isinstance(types.get(member.type), Struct):
             raise ValueError(f"{struct.name}.{member.name} is a struct, which is not converted")
-        if member.size is not None or isinstance(member_type, Array):
-            convert = functools.partial(np.array, dtype=_dtype(member.type, types))
-        else:
-            convert = _same
-        plan.append((by_name[member.name.lower()], convert))
+        if member.name.lower() not in sources:
+            raise ValueError(f"{source.__name__} has no field {member.name} for {struct.name}")
+        name, source_form = sources[member.name.lower()]
+        shape, element = _form(member, types)
+        if source_form != (shape, element):
+            raise ValueError(
+                f"{struct.name}.{member.name} is {shape} {element}, but {source.__name__}.{name}"
+                f" is {source_form[0]} {source_form[1]}"
+            )
+        to = functools.partial(np.array, dtype=element) if shape else _same
+        plan.append((name, to))
 
-    def convert_value(value: Any) -> Any:
+    def convert(value: Any) -> Any:
         """The `target` tuple of a `source` value.
 
         Args:
@@ -92,9 +97,9 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
         Returns:
             The tuple.
         """
-        return target._make([change(getattr(value, field)) for field, change in plan])
+        return target._make([to(getattr(value, field)) for field, to in plan])
 
-    return convert_value
+    return convert
 
 
 def _same(value: Any) -> Any:
@@ -109,23 +114,52 @@ def _same(value: Any) -> Any:
     return value
 
 
-def _dtype(type_name: str, types: dict[str, Struct | Enum | Array]) -> np.dtype:
-    """The numpy type of a type's numeric elements, through any arrays of arrays.
+_Form = tuple[tuple[int, ...], np.dtype | str]
+"""A field's shape, and its element's numpy type, or the name of its element's FPP type when that
+is not a number."""
+
+
+def _form(member: Member, types: dict[str, Struct | Enum | Array]) -> _Form:
+    """A struct member's shape and element type, through any arrays of arrays.
 
     Args:
-        type_name: a primitive's or an array type's name.
+        member: the member.
         types: the model's types.
 
     Returns:
-        The element's native-endian numpy type.
+        Its form.
     """
-    while isinstance(types.get(type_name), Array):
-        type_name = types[type_name].element
-    return _DTYPES[type_name]
+    shape = () if member.size is None else (member.size,)
+    type_name = member.type
+    while isinstance(array := types.get(type_name), Array):
+        shape += (array.size,)
+        type_name = array.element
+    return shape, _DTYPES.get(type_name, type_name)
+
+
+def _source_forms(source: type) -> dict[str, tuple[str, _Form]]:
+    """Each field of a converter's source, by its name in lower case.
+
+    Args:
+        source: a struct's tuple, or a Basilisk message payload's type.
+
+    Returns:
+        Each field's name and form.
+    """
+    if source in _STRUCTS:
+        struct, types = _STRUCTS[source]
+        return {m.name.lower(): (m.name, _form(m, types)) for m in struct.members}
+    fields = source.__dtype__.fields
+    return {
+        name.lower(): (name, (fields[name][0].shape, fields[name][0].base))
+        for name in source.__dtype__.names
+    }
 
 
 def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamespace]:
     """The tuples of a model's structs and of its algorithms' components, by top-level FPP module.
+
+    Each struct's tuple is recorded for `converter`.
 
     Args:
         model: the model.
@@ -137,14 +171,13 @@ def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamesp
     namespaces: dict[str, SimpleNamespace] = {}
 
     def place(qualified: str, cls: type) -> None:
-        """Puts a tuple in its module's namespace, named as FPP names it.
+        """Puts a tuple in its module's namespace, named as FPP names it, which pickle follows.
 
         Args:
             qualified: its FPP qualified name, such as `Gnc.ImuReading`.
             cls: the tuple.
         """
         *modules, name = qualified.split(".")
-        cls.__module__ = __name__
         cls.__qualname__ = qualified
         space = namespaces.setdefault(modules[0], SimpleNamespace())
         for module in modules[1:]:
