@@ -1,11 +1,8 @@
 """Fixtures every package's tests share: an F´ copy, its station, a drain, a case's parameters.
 
-`decoded` drains an edge's telemetry as values. A case's parameters are every algorithm's GNC
-instance's, each zero; an algorithm's tests flying its own values override `case_parameters`. The
-`.dat` and the IDs need the F´ build's dictionary, so a test asking for either skips without it.
-The copy and its station need the F´ build, and a test asking for either skips without it too.
-Every pytest run loads this file, the judge's included, so the FPP model, Basilisk and F´ are
-imported only by the fixtures that need them.
+A fixture needing the F´ build, or the dictionary it generates, skips its test without it. Every
+pytest run loads this file, the judge's included, so the FPP model, Basilisk and F´ are imported
+only by the fixtures that need them.
 """
 
 from __future__ import annotations
