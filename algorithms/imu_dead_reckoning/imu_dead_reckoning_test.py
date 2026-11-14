@@ -6,6 +6,7 @@ Flight conditions with closed forms check the algorithm alone, with no simulator
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -13,7 +14,7 @@ from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk import ImuSpacecraft
 
 from algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
-from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner, _q_dot
+from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner, _q_dot, parameters
 from fsw.codegen.fpp_types import Gnc
 from fsw.python import AlgorithmModule
 from harness.notebook import run_notebook
@@ -252,6 +253,21 @@ def test_a_longer_step_lowers_each_sample_s_noise(monkeypatch: pytest.MonkeyPatc
     assert inputs["step_s"] == 4.0
     assert inputs["gyro_noise_std_rad_s"] == ImuSpacecraft.gyro_noise_density_rad_s_rthz / 2
     assert inputs["accel_noise_std_m_s2"] == ImuSpacecraft.accel_noise_density_m_s2_rthz / 2
+
+
+def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() -> None:
+    """`mu` is the scenario's Earth's, and `dcm_PB` the vehicle's IMU mounting, as given."""
+    mounting = [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    scenario = SimpleNamespace(
+        mu_m3_s2={"earth": 4.9048695e12, "moon": 1.0},
+        vehicle=SimpleNamespace(imu=SimpleNamespace(dcm_PB=mounting)),
+    )
+
+    nav = parameters(scenario)
+
+    assert type(nav) is Gnc.ImuDeadReckonerParameters
+    assert nav.mu == 4.9048695e12
+    np.testing.assert_array_equal(nav.dcm_PB, mounting)
 
 
 @pytest.mark.xdist_group("notebooks")
