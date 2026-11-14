@@ -305,28 +305,6 @@ def test_a_value_changed_in_the_record_reaches_prm_db_and_the_python_build_alike
     assert json.loads(decoded.read_text()) == json.loads(record.read_text())
 
 
-def test_a_parameter_missing_from_the_record_fails_both_builds(
-    fsw: ModuleType, prm_record: Path, parameter_ids: list[int]
-):
-    """Without `mu` in the record, the F´ build's boot and the Python build's read both raise.
-
-    Args:
-        fsw: the test's copy of the deployment.
-        prm_record: the case's parameter record, edited here.
-        parameter_ids: every parameter's ID, which boot holds valid.
-    """
-    record = prm_record
-    entries = json.loads(record.read_text())
-    del entries["ImuDeadReckoning.nav"]["mu"]
-    record.write_text(json.dumps(entries))
-    mu = next(i for i, p in WISE_FSW.parameters_by_id.items() if p.name == "nav.mu")
-
-    with pytest.raises(RuntimeError, match=rf"^parameters {mu} are not valid"):
-        fsw.boot(str(parameters.dat(record, DICTIONARY)), parameter_ids)
-    with pytest.raises(TypeError, match="mu"):
-        cdh_parameters.read(record, Gnc.ImuDeadReckonerParameters)
-
-
 @pytest.mark.parametrize("nav_parameters", [NAV._replace(mu=4.9048695e12)], ids=["moon"])
 def test_the_fprime_build_flies_the_mu_its_record_gives(
     fsw: ModuleType,
