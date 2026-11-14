@@ -56,7 +56,7 @@ vehicle's truth:
 >>> isinstance(scenario.vehicle, ImuSpacecraft)
 True
 >>> case = tempfile.TemporaryDirectory()
->>> record = write(parameters(scenario), Path(case.name) / "run_0000.prm.json")
+>>> record = write([parameters(scenario)], Path(case.name) / "run_0000.prm.json")
 >>> fsw = dead_reckoner(scenario, record)
 >>> async def procedure(ground):
 ...     truth = ground.truth()

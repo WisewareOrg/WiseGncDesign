@@ -9,6 +9,7 @@ Why is in ADR 0004 rev 2.
 import contextlib
 import io
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -20,25 +21,32 @@ from fsw.codegen.deployment import gnc_instance
 __all__ = ["dat", "write"]
 
 
-def write(parameters: Any, path: Path) -> Path:
-    """Writes one component's parameters as the case's record.
+def write(parameters: Sequence[Any], path: Path) -> Path:
+    """Writes components' parameters as the case's record.
 
-    The key is the qualified name of the one instance of the tuple's component in the GNC
-    sub-topologies, and every field of the tuple is written, an array as nested lists.
+    Each tuple is keyed by the qualified name of the one instance of its component in the GNC
+    sub-topologies, and every field of it is written, an array as nested lists.
 
     Args:
-        parameters: a component's `<Name>Parameters` tuple.
+        parameters: each component's `<Name>Parameters` tuple.
         path: the record's path.
 
     Returns:
         `path`.
+
+    Raises:
+        ValueError: two tuples are of one component's instance, naming it.
     """
-    instance = gnc_instance(type(parameters).component)
-    values = {
-        name: value.tolist() if isinstance(value, np.ndarray) else value
-        for name, value in parameters._asdict().items()
-    }
-    path.write_text(json.dumps({instance.name: values}))
+    record = {}
+    for tuple_ in parameters:
+        instance = gnc_instance(type(tuple_).component).name
+        if instance in record:
+            raise ValueError(f"two parameters tuples are of {instance}")
+        record[instance] = {
+            name: value.tolist() if isinstance(value, np.ndarray) else value
+            for name, value in tuple_._asdict().items()
+        }
+    path.write_text(json.dumps(record))
     return path
 
 

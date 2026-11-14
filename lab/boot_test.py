@@ -42,16 +42,22 @@ def _id(name: str) -> int:
 
 
 def test_a_case_s_file_boots_every_parameter_valid(
-    fsw: ModuleType, prm: str, parameter_ids: list[int]
+    fsw: ModuleType, prm_record: Path, prm: str, parameter_ids: list[int]
 ):
-    """Booted on a file with every parameter, the copy steps.
+    """The case's record holds every parameter of the deployment, and booted on it the copy steps.
 
     Args:
         fsw: the test's copy.
+        prm_record: the case's parameter record.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
     """
-    assert sorted([_id("nav.mu"), _id("nav.dcm_PB")]) == parameter_ids
+    recorded = {
+        f"{instance.rsplit('.', 1)[1]}.{name}"
+        for instance, values in json.loads(prm_record.read_text()).items()
+        for name in values
+    }
+    assert recorded == {p.name for p in DICTIONARY.parameters_by_id.values()}
 
     fsw.boot(prm, parameter_ids)
     fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
@@ -68,9 +74,9 @@ def test_a_missing_file_fails_the_boot(fsw: ModuleType, tmp_path: Path, paramete
         parameter_ids: every parameter's ID, which boot holds valid.
     """
     missing = tmp_path / "run_0000.prm.dat"
-    first, second = parameter_ids
+    named = ", ".join(map(str, parameter_ids))
 
-    with pytest.raises(RuntimeError, match=f"parameters {first}, {second} are not valid"):
+    with pytest.raises(RuntimeError, match=f"parameters {named} are not valid"):
         fsw.boot(str(missing), parameter_ids)
 
 
@@ -111,7 +117,7 @@ def test_a_file_that_is_not_a_parameter_file_fails_the_boot(
 def test_a_parameter_missing_from_the_record_fails_the_boot(
     fsw: ModuleType, prm_record: Path, parameter_ids: list[int]
 ):
-    """A record without `dcm_PB` makes a `.dat` without it; boot names that parameter alone.
+    """A record without one parameter makes a `.dat` without it; boot names that parameter alone.
 
     Args:
         fsw: the test's copy.
@@ -119,11 +125,13 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
         parameter_ids: every parameter's ID, which boot holds valid.
     """
     entries = json.loads(prm_record.read_text())
-    (nav,) = entries.values()
-    del nav["dcm_PB"]
+    instance, values = next(iter(entries.items()))
+    parameter = next(iter(values))
+    del values[parameter]
     prm_record.write_text(json.dumps(entries))
+    dropped = _id(f"{instance.rsplit('.', 1)[1]}.{parameter}")
 
-    with pytest.raises(RuntimeError, match=rf"^parameters {_id('nav.dcm_PB')} are not valid"):
+    with pytest.raises(RuntimeError, match=rf"^parameters {dropped} are not valid"):
         fsw.boot(str(parameters.dat(prm_record, DICTIONARY_PATH)), parameter_ids)
 
 

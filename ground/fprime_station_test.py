@@ -112,7 +112,7 @@ def toy(toy_dictionary: Dictionary) -> FprimeStation:
 
 @pytest.fixture
 def booted_station(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> FprimeStation:
-    """A station on the deployment, booted idle and mounted at identity.
+    """A station on the deployment, booted idle on the case's parameters.
 
     Args:
         fsw: the test's copy of the deployment.

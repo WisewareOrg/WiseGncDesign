@@ -1,7 +1,8 @@
 """Fixtures every package's tests share: an F´ copy and its station, a case's parameters and IDs.
 
-A test module flying other values overrides `nav_parameters`. The `.dat` and the IDs need the F´
-build's dictionary, so a test asking for either skips without it. The copy and its station need the
+A case's parameters are every algorithm's GNC instance's, each zero; an algorithm's tests flying
+its own values override `case_parameters`. The `.dat` and the IDs need the F´ build's dictionary, so
+a test asking for either skips without it. The copy and its station need the
 F´ build, and a test asking for either skips without it too. Every pytest run loads this file, the
 judge's included, so the FPP model, Basilisk and F´ are imported only by the fixtures that need
 them.
@@ -9,16 +10,16 @@ them.
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
 
 if TYPE_CHECKING:
-    from fsw.codegen.fpp_types import Gnc
     from ground.fprime_station import FprimeStation
 
 
@@ -53,24 +54,41 @@ def station(fsw: ModuleType) -> FprimeStation:
     return FprimeStation(fsw, Dictionary(DICTIONARY))
 
 
-@pytest.fixture
-def nav_parameters() -> Gnc.ImuDeadReckonerParameters:
-    """Nav's parameters a case flies with: Earth's mu, the IMU mounted at identity.
+@pytest.fixture(scope="session")
+def case_parameters() -> tuple[Any, ...]:
+    """Each algorithm's GNC instance's parameters, every value zero, of its FPP shape.
 
     Returns:
-        The tuple.
+        Each instance's `<Name>Parameters` tuple.
     """
-    from fsw.codegen.fpp_types import Gnc
+    from fsw.codegen import fpp_types
+    from fsw.codegen.deployment import algorithm_files, contract_files, gnc_instances
+    from fsw.codegen.fpp_model import Array, read
 
-    return Gnc.ImuDeadReckonerParameters(mu=3.986004360e14, dcm_PB=np.eye(3))
+    model = read(contract_files())
+    algorithms = set(algorithm_files())
+    tuples = []
+    for instance in gnc_instances():
+        component = model.components.get(instance.component)
+        if component is None or component.file not in algorithms:
+            continue
+        values = {}
+        for parameter in component.parameters:
+            shape, type_name = (), parameter.type
+            while isinstance(array := model.types.get(type_name), Array):
+                shape, type_name = (*shape, array.size), array.element
+            values[parameter.name] = np.zeros(shape).tolist()
+        tuple_type = functools.reduce(getattr, f"{component.name}Parameters".split("."), fpp_types)
+        tuples.append(fpp_types.parameters_from(tuple_type, values))
+    return tuple(tuples)
 
 
 @pytest.fixture
-def prm_record(nav_parameters: Gnc.ImuDeadReckonerParameters, tmp_path: Path) -> Path:
+def prm_record(case_parameters: tuple[Any, ...], tmp_path: Path) -> Path:
     """A case's parameter record, written as the ground writes it, in a case directory of its own.
 
     Args:
-        nav_parameters: nav's parameters.
+        case_parameters: the case's parameters tuples.
         tmp_path: the test's directory, which holds the case directory `case`.
 
     Returns:
@@ -80,7 +98,7 @@ def prm_record(nav_parameters: Gnc.ImuDeadReckonerParameters, tmp_path: Path) ->
 
     case = tmp_path / "case"
     case.mkdir()
-    return parameters.write(nav_parameters, case / "run_0000.prm.json")
+    return parameters.write(case_parameters, case / "run_0000.prm.json")
 
 
 @pytest.fixture

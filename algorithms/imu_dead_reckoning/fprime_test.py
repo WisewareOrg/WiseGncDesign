@@ -1,6 +1,7 @@
 """The F´ build of the dead reckoner against the notebook's, driven directly with no simulator.
 
-Skipped without the deployment `just fsw` builds.
+One test drives it through the F´ host, `lab.FprimeModule`, on Basilisk's IMU message. Skipped
+without the deployment `just fsw` builds.
 """
 
 import importlib.util
@@ -9,6 +10,7 @@ from types import ModuleType
 
 import numpy as np
 import pytest
+from Basilisk.architecture import messaging
 from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
@@ -16,6 +18,7 @@ from fsw.codegen.deployment import fpp_files
 from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_types import Gnc
 from ground.fprime_station import FprimeStation
+from lab import FprimeModule
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
@@ -250,3 +253,48 @@ def test_the_fprime_build_flies_the_mu_its_record_gives(
         fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
 
     _assert_matches(station, python)
+
+
+def test_the_f_prime_host_mounts_the_imu_as_its_record_gives_it(
+    nav_parameters: Gnc.ImuDeadReckonerParameters, prm_record: Path
+):
+    """On `NAV`'s mounting, which is not the identity, the F´ host's estimate is the notebook's.
+
+    Ten readings are enough for a transposed mounting to show far above rounding.
+
+    Args:
+        nav_parameters: `NAV`.
+        prm_record: the case's parameter record.
+    """
+    state = {
+        "epoch": 0.0,
+        "attitude": [1.0, 0.0, 0.0, 0.0],
+        "position": [6871.0e3, 0.0, 0.0],
+        "velocity": [0.0, 5.4e3, 5.4e3],
+    }
+    module = FprimeModule(messaging.IMUSensorMsgReader(), prm_record)
+    imu = messaging.IMUSensorMsg()
+    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
+    module._imu.subscribeTo(imu)
+    module.Reset(0)
+    module.uplink("nav.initNavState", state, 1)
+    python = ImuDeadReckoner(nav_parameters)
+    python.initNavState(**state)
+    rng = np.random.default_rng(7)
+
+    for k in range(1, 11):
+        reading = messaging.IMUSensorMsgPayload()
+        reading.AngVelPlatform = (0.02 * rng.normal(size=3)).tolist()
+        reading.AccelPlatform = (1e-3 * rng.normal(size=3)).tolist()
+        imu.write(reading, k * NS, 0)
+        module.UpdateState(k * NS)
+        python.step(
+            t=float(k),
+            AngVelPlatform=np.array(reading.AngVelPlatform),
+            AccelPlatform=np.array(reading.AccelPlatform),
+        )
+
+    latest = {name: module.values(name, [raw])[0] for name, _, raw in module.telemetry()}
+    np.testing.assert_allclose(latest["nav.bodyEciAttitude"], python.q_BN, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(latest["nav.bodyEciPos"], python.r_BN_N, rtol=1e-12)
+    np.testing.assert_allclose(latest["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)

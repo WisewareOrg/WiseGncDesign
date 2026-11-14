@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from fsw.codegen.deployment import gnc_instances
+from fsw.codegen.fpp_model import Instance
 from fsw.codegen.fpp_types import Gnc
 from ground import parameters
 from lab import DICTIONARY
@@ -25,7 +27,7 @@ def test_the_record_holds_every_field_under_the_instance_s_qualified_name(tmp_pa
     Args:
         tmp_path: where the case's files are written.
     """
-    record = parameters.write(NAV, tmp_path / "run_0000.prm.json")
+    record = parameters.write([NAV], tmp_path / "run_0000.prm.json")
 
     assert record == tmp_path / "run_0000.prm.json"
     assert json.loads(record.read_text()) == {
@@ -34,6 +36,40 @@ def test_the_record_holds_every_field_under_the_instance_s_qualified_name(tmp_pa
             "dcm_PB": [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
         }
     }
+
+
+def test_the_record_holds_each_tuple_under_its_own_instance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Two components' tuples are written into one record, each under its instance's name.
+
+    Args:
+        tmp_path: where the case's files are written.
+        monkeypatch: gives the GNC sub-topologies a second component's instance.
+    """
+    stray = namedtuple("StrayParameters", ["gain"])
+    stray.component = "Gnc.Stray"
+    other = Instance("Other.stray", "Gnc.Stray", 0x2000)
+    instances = (*gnc_instances(), other)
+    monkeypatch.setattr("fsw.codegen.deployment.gnc_instances", lambda: instances)
+
+    record = parameters.write([NAV, stray(gain=0.5)], tmp_path / "run_0000.prm.json")
+
+    entries = json.loads(record.read_text())
+    assert entries.keys() == {"ImuDeadReckoning.nav", "Other.stray"}
+    assert entries["Other.stray"] == {"gain": 0.5}
+
+
+def test_two_tuples_of_one_component_are_refused_naming_its_instance(tmp_path: Path):
+    """Both would be written under one instance, so neither is; the record is not written.
+
+    Args:
+        tmp_path: where the case's files are written.
+    """
+    with pytest.raises(ValueError, match=r"ImuDeadReckoning\.nav"):
+        parameters.write([NAV, NAV], tmp_path / "run_0000.prm.json")
+
+    assert not (tmp_path / "run_0000.prm.json").exists()
 
 
 def test_a_component_instanced_nowhere_is_refused(tmp_path: Path):
@@ -46,7 +82,7 @@ def test_a_component_instanced_nowhere_is_refused(tmp_path: Path):
     stray.component = "Gnc.Stray"
 
     with pytest.raises(ValueError, match=r"Gnc\.Stray is instanced 0 times"):
-        parameters.write(stray(gain=1.0), tmp_path / "run_0000.prm.json")
+        parameters.write([stray(gain=1.0)], tmp_path / "run_0000.prm.json")
 
     assert not (tmp_path / "run_0000.prm.json").exists()
 
@@ -63,7 +99,7 @@ def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(
         tmp_path: where the case's files are written.
         capsys: captures what making the `.dat` prints.
     """
-    record = parameters.write(NAV, tmp_path / "run_0000.prm.json")
+    record = parameters.write([NAV], tmp_path / "run_0000.prm.json")
     written = record.read_text()
 
     dat = parameters.dat(record, DICTIONARY)
@@ -84,7 +120,7 @@ def test_a_record_naming_a_parameter_the_dictionary_lacks_makes_no_dat(tmp_path:
     Args:
         tmp_path: where the case's files are written.
     """
-    record = parameters.write(NAV, tmp_path / "run_0000.prm.json")
+    record = parameters.write([NAV], tmp_path / "run_0000.prm.json")
     entries = json.loads(record.read_text())
     entries["ImuDeadReckoning.nav"]["gain"] = 1.0
     record.write_text(json.dumps(entries))

@@ -11,10 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
-from scipy.spatial.transform import Rotation
 
-from algorithms.imu_dead_reckoning import ImuDeadReckoner
-from fsw.codegen.fpp_types import Gnc
 from lab import FprimeModule
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
@@ -23,9 +20,6 @@ if importlib.util.find_spec("lab._wise_fsw") is None:
 REPOSITORY = Path(__file__).parents[1]
 
 ONE_SECOND_NS = 1_000_000_000
-
-MU = 3.986004360e14
-"""m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
 
 STATE = {
     "epoch": 0.0,
@@ -37,7 +31,7 @@ STATE = {
 
 
 def _module(prm_record: Path) -> FprimeModule:
-    """A host on an unsubscribed IMU reader, mounted at identity.
+    """A host on an unsubscribed IMU reader, booting on the case's record.
 
     Args:
         prm_record: the case's parameter record.
@@ -113,52 +107,6 @@ def test_the_edge_carries_a_command_up_and_its_response_and_nav_s_writes_down(pr
     raws = [raw for name, _, raw in writes if name == "nav.bodyEciAttitude"]
     np.testing.assert_array_equal(module.values("nav.bodyEciAttitude", raws), [STATE["attitude"]])
     assert module.telemetry() == []
-
-
-MOUNTED = Gnc.ImuDeadReckonerParameters(
-    mu=MU, dcm_PB=Rotation.from_euler("zyx", [10.0, -20.0, 30.0], degrees=True).as_matrix()
-)
-"""Nav's parameters on a mounting that is not the identity."""
-
-
-@pytest.mark.parametrize("nav_parameters", [MOUNTED], ids=["mounted"])
-def test_the_host_mounts_the_imu_as_its_record_gives_it(
-    nav_parameters: Gnc.ImuDeadReckonerParameters, prm_record: Path
-):
-    """On a mounting that is not the identity, the host's estimate is the notebook's.
-
-    Ten readings are enough for a transposed mounting to show far above rounding.
-
-    Args:
-        nav_parameters: `MOUNTED`.
-        prm_record: the case's parameter record.
-    """
-    module = FprimeModule(messaging.IMUSensorMsgReader(), prm_record)
-    imu = messaging.IMUSensorMsg()
-    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
-    module._imu.subscribeTo(imu)
-    module.Reset(0)
-    module.uplink("nav.initNavState", STATE, 1)
-    python = ImuDeadReckoner(nav_parameters)
-    python.initNavState(**STATE)
-    rng = np.random.default_rng(7)
-
-    for k in range(1, 11):
-        reading = messaging.IMUSensorMsgPayload()
-        reading.AngVelPlatform = (0.02 * rng.normal(size=3)).tolist()
-        reading.AccelPlatform = (1e-3 * rng.normal(size=3)).tolist()
-        imu.write(reading, k * ONE_SECOND_NS, 0)
-        module.UpdateState(k * ONE_SECOND_NS)
-        python.step(
-            t=float(k),
-            AngVelPlatform=np.array(reading.AngVelPlatform),
-            AccelPlatform=np.array(reading.AccelPlatform),
-        )
-
-    latest = {name: module.values(name, [raw])[0] for name, _, raw in module.telemetry()}
-    np.testing.assert_allclose(latest["nav.bodyEciAttitude"], python.q_BN, rtol=0, atol=1e-12)
-    np.testing.assert_allclose(latest["nav.bodyEciPos"], python.r_BN_N, rtol=1e-12)
-    np.testing.assert_allclose(latest["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)
 
 
 def test_a_host_without_the_f_prime_build_says_to_build_it(
