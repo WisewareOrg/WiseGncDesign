@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 
 from fsw.codegen.deployment import CLONE, framework_files
+from fsw.codegen.fpp_model import Instance
 
 __all__ = ["Channel", "Command", "Dictionary", "Parameter", "Type"]
 
@@ -265,25 +266,24 @@ class Dictionary:
         }
 
     @classmethod
-    def from_component(
-        cls, model: Sequence[Path], component: str, *, instance: str
-    ) -> "Dictionary":
+    def from_component(cls, model: Sequence[Path], instance: Instance) -> "Dictionary":
         """The dictionary of one component instanced alone, generated from FPP with `fpp-to-dict`.
 
-        The deployment, `Py<Component>`, holds the one instance and is written only into the
-        temporary directory `fpp-to-dict` runs in, so nothing is written in the tree. The model is
-        `fsw/fpp/interfaces/Interfaces.fpp` and `model`, against the F´ framework files in the
-        clone under `fsw/fprime/lib`; `fpp-to-dict` follows the `.fppi` includes. A dictionary is
-        generated once per process for each content of its inputs, which the key hashes: the
-        deployment, the model, every `.fpp` and `.fppi` under `fsw/fpp/interfaces`, every
-        `.fppi` beside a file of `model`, the framework files and the clone's tag.
+        The deployment, `Py<Component>`, holds the one instance, under its unqualified name and at
+        its base ID, so its entries are named and numbered as in WiseFsw. It is written only into
+        the temporary directory `fpp-to-dict` runs in, so nothing is written in the tree. The
+        model is `fsw/fpp/interfaces/Interfaces.fpp` and `model`, against the F´ framework files in
+        the clone under `fsw/fprime/lib`; `fpp-to-dict` follows the `.fppi` includes. A dictionary
+        is generated once per process for each content of its inputs, which the key hashes: the
+        deployment, the model, every `.fpp` and `.fppi` under `fsw/fpp/interfaces`, every `.fppi`
+        beside a file of `model`, the framework files and the clone's tag.
         A generated dictionary with a channel of a type not coded fails its load with the
         `ValueError` `Dictionary` raises.
 
         Args:
             model: the component's `.fpp` files.
-            component: the component's qualified FPP name, such as `Gnc.ImuDeadReckoner`.
-            instance: the instance name, such as `nav`, which prefixes the dictionary's entries.
+            instance: the instance, such as `fsw.codegen.deployment.gnc_instance` gives it; its
+                unqualified name, such as `nav`, prefixes the dictionary's entries.
 
         Returns:
             The dictionary.
@@ -291,11 +291,13 @@ class Dictionary:
         Raises:
             RuntimeError: `fpp-to-dict` rejected the model, with its stderr.
         """
+        component = instance.component
         name = f"Py{component.rsplit('.', 1)[-1]}"
+        short = instance.name.rsplit(".", 1)[-1]
         deployment = (
             f"module {name} {{\n"
-            f"  instance {instance}: {component} base id 0x1000\n"
-            f"  deployment topology {name} {{\n    instance {instance}\n  }}\n}}\n"
+            f"  instance {short}: {component} base id {instance.base_id:#x}\n"
+            f"  deployment topology {name} {{\n    instance {short}\n  }}\n}}\n"
         )
         sources = [Path(p).resolve() for p in model]
         files = [_INTERFACES / "Interfaces.fpp", *sources]

@@ -1,6 +1,7 @@
 """The dictionary against a toy component's, generated from FPP alone: names and types.
 
-Needs the F´ framework clone `just _sync` fetches, not an F´ build.
+Needs the F´ framework clone `just _sync` fetches. Holding each GNC instance's generated dictionary
+to WiseFsw's also needs the deployment `just fsw` builds, and skips without it.
 """
 
 from pathlib import Path
@@ -8,6 +9,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from fsw.codegen.deployment import algorithm_files, contract_files, gnc_instances
+from fsw.codegen.fpp_model import Instance, read
 from ground.dictionary import Dictionary
 
 TOY = """\
@@ -77,7 +80,9 @@ def _toy(directory: Path, toy: str = TOY, extra: str = EXTRA) -> Dictionary:
     """
     (directory / "Toy.fpp").write_text(toy)
     (directory / "Extra.fppi").write_text(extra)
-    return Dictionary.from_component([directory / "Toy.fpp"], "Toy.Toy", instance="toy")
+    return Dictionary.from_component(
+        [directory / "Toy.fpp"], Instance("Toy.toy", "Toy.Toy", 0x1000)
+    )
 
 
 @pytest.fixture
@@ -427,3 +432,43 @@ def test_a_parameter_of_a_type_not_coded_does_not_stop_the_dictionary_loading(tm
     names = {p.name for p in _toy(tmp_path, toy=toy).parameters_by_id.values()}
 
     assert {"toy.pair", "toy.label"} <= names
+
+
+def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_parameter_ids():
+    """Each algorithm's GNC instance, generated alone, states WiseFsw's entries and parameter IDs.
+
+    It also fails when an algorithm's `.fpp`, or a group it includes, changed and F´ was not
+    rebuilt.
+    """
+    from lab import DICTIONARY
+
+    if not DICTIONARY.exists():
+        pytest.skip("the F´ build is absent; run `just fsw`")
+    wise_fsw = Dictionary(DICTIONARY)
+    components = read(contract_files()).components
+    algorithms = set(algorithm_files())
+    instances = [
+        i
+        for i in gnc_instances()
+        if i.component in components and components[i.component].file in algorithms
+    ]
+    assert instances
+
+    def ids(dictionary: Dictionary, instance: str) -> dict[str, int]:
+        """Each of an instance's parameters' ID.
+
+        Args:
+            dictionary: a dictionary.
+            instance: the instance's unqualified name.
+
+        Returns:
+            ID by `<instance>.<parameter>`.
+        """
+        named = dictionary.parameters_by_id.values()
+        return {p.name: p.id for p in named if p.name.startswith(f"{instance}.")}
+
+    for instance in instances:
+        generated = Dictionary.from_component([components[instance.component].file], instance)
+        short = instance.name.rsplit(".", 1)[-1]
+        assert generated.entries(short) == wise_fsw.entries(short), instance.name
+        assert ids(generated, short) == ids(wise_fsw, short), instance.name

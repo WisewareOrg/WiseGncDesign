@@ -20,7 +20,6 @@ from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_types import Gnc
 from fsw.python.cdh import parameters as cdh_parameters
 from ground import parameters
-from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import DICTIONARY
 
@@ -42,9 +41,6 @@ NS = 1_000_000_000
 
 NAV = Gnc.ImuDeadReckonerParameters(mu=MU, dcm_PB=MOUNTING)
 """Nav's parameters."""
-
-WISE_FSW = Dictionary(DICTIONARY)
-"""The deployment's dictionary, which the build generated."""
 
 
 @pytest.fixture
@@ -70,40 +66,6 @@ def _telemetry(station: FprimeStation) -> dict[str, object]:
     return {
         name: station.values(name, [raw])[0] for name, _, raw in writes if name.startswith("nav.")
     }
-
-
-def test_the_python_build_and_the_fprime_build_hold_nav_to_one_contract():
-    """The Python build's dictionary, from the `.fpp` alone, states WiseFsw's nav, IDs aside.
-
-    It also fails when the `.fpp` or a group it includes changed and F´ was not rebuilt.
-    """
-    model = [Path(__file__).with_name("ImuDeadReckoner.fpp")]
-    python = Dictionary.from_component(model, "Gnc.ImuDeadReckoner", instance="nav")
-
-    assert python.entries("nav")["channels"]
-    assert python.entries("nav")["commands"]
-    assert python.entries("nav") == WISE_FSW.entries("nav")
-
-
-def test_the_python_build_numbers_nav_s_parameters_as_the_fprime_build_does():
-    """Nav's parameters have the same IDs in the Python build's dictionary as in WiseFsw's."""
-    model = [Path(__file__).with_name("ImuDeadReckoner.fpp")]
-    python = Dictionary.from_component(model, "Gnc.ImuDeadReckoner", instance="nav")
-
-    def ids(dictionary: Dictionary) -> dict[str, int]:
-        """Each of nav's parameters' ID.
-
-        Args:
-            dictionary: a dictionary.
-
-        Returns:
-            ID by `nav.<parameter>`.
-        """
-        named = dictionary.parameters_by_id.values()
-        return {p.name: p.id for p in named if p.name.startswith("nav.")}
-
-    assert ids(python) == {"nav.mu": 0x1000, "nav.dcm_PB": 0x1001}
-    assert ids(python) == ids(WISE_FSW)
 
 
 def _assert_matches(station: FprimeStation, python: ImuDeadReckoner) -> None:

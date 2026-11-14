@@ -614,6 +614,7 @@ def test_a_flown_mission_is_judged_end_to_end(
 from pathlib import Path
 
 from algorithms.imu_dead_reckoning import parameters
+from fsw.codegen.fpp_model import Instance
 from fsw.python import AlgorithmModule
 from ground.dictionary import Dictionary
 from harness.mission import Mission, mission_tests, provides
@@ -631,7 +632,7 @@ class Toy:
 @provides("SYS901")
 def reckoner(scenario, prm_path):
     model = [Path(__file__).with_name("Toy.fpp")]
-    dictionary = Dictionary.from_component(model, "Toy.Toy", instance="nav")
+    dictionary = Dictionary.from_component(model, Instance("Toy.nav", "Toy.Toy", 0x1000))
     readers = scenario.vehicle.readers()
     return AlgorithmModule(Toy(), readers, instance="nav", dictionary=dictionary)
 

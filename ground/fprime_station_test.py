@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
+from fsw.codegen.fpp_model import Instance
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import DICTIONARY, FprimeModule
@@ -93,7 +94,7 @@ def toy_dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
     """
     model = tmp_path_factory.mktemp("toy") / "Toy.fpp"
     model.write_text(TOY)
-    return Dictionary.from_component([model], "Toy.Toy", instance="toy")
+    return Dictionary.from_component([model], Instance("Toy.toy", "Toy.Toy", 0x1000))
 
 
 @pytest.fixture(scope="module")

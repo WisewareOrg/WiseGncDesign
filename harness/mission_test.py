@@ -854,6 +854,7 @@ def test_an_exception_in_the_flight_software_fails_the_case_as_itself(
         test_flights="""
 from pathlib import Path
 
+from fsw.codegen.fpp_model import Instance
 from fsw.python import AlgorithmModule
 from ground.dictionary import Dictionary
 from algorithms.imu_dead_reckoning import parameters
@@ -868,7 +869,7 @@ class Broken:
 @provides("SYS901")
 def toy(scenario, prm_path):
     model = [Path(__file__).with_name("Toy.fpp")]
-    dictionary = Dictionary.from_component(model, "Toy.Toy", instance="toy")
+    dictionary = Dictionary.from_component(model, Instance("Toy.toy", "Toy.Toy", 0x1000))
     readers = scenario.vehicle.readers()
     return AlgorithmModule(Broken(), readers, instance="toy", dictionary=dictionary)
 

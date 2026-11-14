@@ -11,6 +11,7 @@ import pytest
 from Basilisk.architecture import messaging
 from Basilisk.utilities import SimulationBaseClass, macros
 
+from fsw.codegen.fpp_model import Instance
 from fsw.python import AlgorithmModule
 from ground.dictionary import Dictionary
 
@@ -55,7 +56,7 @@ def dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
     """
     model = tmp_path_factory.mktemp("toy") / "Toy.fpp"
     model.write_text(TOY)
-    return Dictionary.from_component([model], "Toy.Toy", instance="toy")
+    return Dictionary.from_component([model], Instance("Toy.toy", "Toy.Toy", 0x1000))
 
 
 class StubAlgorithm:
@@ -603,7 +604,7 @@ def test_a_parameter_s_own_commands_are_not_the_algorithm_s_and_answer_invalid_o
             "    param limit: F32\n",
         )
     )
-    dictionary = Dictionary.from_component([model], "Toy.Toy", instance="toy")
+    dictionary = Dictionary.from_component([model], Instance("Toy.toy", "Toy.Toy", 0x1000))
     assert dictionary.command("toy.LIMIT_PRM_SET").kind == "set"
     assert dictionary.command("toy.LIMIT_PRM_SAVE").kind == "save"
     module = _module(dictionary)

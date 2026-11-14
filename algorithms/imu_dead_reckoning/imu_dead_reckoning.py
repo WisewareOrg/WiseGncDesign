@@ -27,6 +27,7 @@ from wise_dynamics.basilisk import Scenario
 import algorithms.imu_dead_reckoning as package
 from algorithms.imu_dead_reckoning.gross_check import gross_check
 from algorithms.quaternion import dcm_NB, multiply
+from fsw.codegen.deployment import gnc_instance
 from fsw.codegen.fpp_types import Gnc
 from fsw.python import AlgorithmModule
 from fsw.python.cdh.parameters import read
@@ -373,8 +374,7 @@ def dead_reckoner(scenario: Scenario, prm_path: Path) -> AlgorithmModule:
     algorithm = ImuDeadReckoner(read(prm_path, Gnc.ImuDeadReckonerParameters))
     dictionary = Dictionary.from_component(
         [Path(package.__file__).with_name("ImuDeadReckoner.fpp")],
-        "Gnc.ImuDeadReckoner",
-        instance="nav",
+        gnc_instance("Gnc.ImuDeadReckoner"),
     )
     return AlgorithmModule(
         algorithm, scenario.vehicle.readers(), instance="nav", dictionary=dictionary

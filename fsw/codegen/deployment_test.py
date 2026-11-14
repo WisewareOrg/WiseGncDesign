@@ -54,7 +54,7 @@ def test_a_component_instanced_twice_is_refused_naming_both_instances(
     """
     nav = gnc_instance("Gnc.ImuDeadReckoner")
     twice = (nav, nav._replace(name="Other.nav", base_id=0x2000))
-    monkeypatch.setattr("fsw.codegen.deployment._gnc_instances", lambda: twice)
+    monkeypatch.setattr("fsw.codegen.deployment.gnc_instances", lambda: twice)
 
     with pytest.raises(
         ValueError,
