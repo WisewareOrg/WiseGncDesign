@@ -312,6 +312,34 @@ def test_a_data_input_not_named_in_ends_is_refused_naming_it(tmp_path: Path):
         GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
 
 
+def test_a_backward_edge_is_refused_naming_it(tmp_path: Path):
+    """An edge into a member that runs earlier in the frame is a delayed feedback, not supported.
+
+    Slow runs after sink, so `slow -> sink` would reach sink only at its next run.
+
+    Args:
+        tmp_path: where the toy is written.
+    """
+    toy = (
+        TOY.replace(
+            "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
+            "    sync input port valueIn: Value\n    sync input port backIn: Value\n  }\n\n"
+            "  passive component Slow",
+        )
+        .replace(
+            "    sync input port valueIn: Value\n  }\n\n  instance",
+            "    sync input port valueIn: Value\n    output port backOut: Value\n  }\n\n  instance",
+        )
+        .replace(
+            "      source.echoOut -> slow.valueIn\n",
+            "      source.echoOut -> slow.valueIn\n      slow.backOut -> sink.backIn\n",
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"slow\.backOut -> sink\.backIn is a backward edge"):
+        GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
+
+
 def test_a_sub_topology_without_exactly_one_rate_group_driver_is_refused(tmp_path: Path):
     """A second driver leaves the partition no one base tick.
 
