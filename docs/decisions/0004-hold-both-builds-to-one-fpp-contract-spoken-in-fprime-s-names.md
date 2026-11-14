@@ -95,7 +95,8 @@ dictionary; the check used a scratch deployment's.
   includes,** and a role is an instance name, so an entry reads `<role>.<entry>` in every build.
 - **F´'s generated JSON dictionary is the model's published form.** A Python build's dictionary is
   generated from FPP alone with `fpp-to-dict`, against the F´ source clone, into a temp dir: written
-  into the tree, it races between parallel test workers and is a build product in source.
+  into the tree, it races between parallel test workers and is a build product in source. The
+  dictionary is what the ground consumes; the model reader never reads it.
 - **Python reads FPP's model through the native `fpp to-json`,** called directly, since F´'s wrapper
   sends `to-json` to its Java JAR. One module parses the output and extracts only instances,
   connections and port numbers, constants, annotations, type definitions (structs, arrays, enums,
