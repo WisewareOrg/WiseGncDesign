@@ -1,4 +1,4 @@
-// The simulation's side of the deployment: feeds sensor readings in and drives the schedule.
+// The simulation's side of the deployment: feeds sensor readings in.
 #ifndef SIM_SIMBRIDGE_HPP
 #define SIM_SIMBRIDGE_HPP
 
@@ -15,9 +15,6 @@ class SimBridge final : public SimBridgeComponentBase {
 
     //! Sends one IMU reading to the deployment.
     void sendImu(const Gnc::Vector3& angVelPlatform, const Gnc::Vector3& accelPlatform);
-
-    //! Runs every scheduled component once.
-    void tick();
 };
 
 }  // namespace Sim

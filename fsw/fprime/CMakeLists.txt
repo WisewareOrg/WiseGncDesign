@@ -27,6 +27,7 @@ add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/platform")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/cdh")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/rio")
 add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/algorithms/imu_dead_reckoning")
+add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/fsw/fpp/gnc")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/configurations/imu_dead_reckoning")
 
 # The hand-written pybind11 module that hosts the deployment in the simulation's process.

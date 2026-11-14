@@ -11,5 +11,6 @@ register_fprime_module(
     fsw_fprime_cdh
     fsw_fprime_rio
     Svc_CmdDispatcher
-    algorithms_imu_dead_reckoning
+    Svc_RateGroupDriver
+    fsw_fpp_gnc
 )

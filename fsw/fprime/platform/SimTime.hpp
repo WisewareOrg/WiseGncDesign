@@ -1,4 +1,4 @@
-// The deployment's clock: the simulation sets it before each tick.
+// The deployment's clock and its tick: the simulation sets the clock, then ticks it.
 #ifndef SIM_SIMTIME_HPP
 #define SIM_SIMTIME_HPP
 
@@ -12,6 +12,9 @@ class SimTime final : public SimTimeComponentBase {
 
     //! Sets the time every component reads, in ns since the simulation's start.
     void set(U64 nanoseconds);
+
+    //! Emits one base tick on CycleOut.
+    void tick();
 
   private:
     void timeGetPort_handler(FwIndexType portNum, Fw::Time& time) override;
