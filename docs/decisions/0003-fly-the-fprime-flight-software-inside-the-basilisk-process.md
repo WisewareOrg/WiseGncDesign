@@ -107,7 +107,7 @@ The partitions inside each build are ADR 0005 rev 1.
   - for the Python build, its host's name.
 
   The base facts are written before a case flies. `build` is merged in once a case has built its
-  build. `just fsw` forces F´'s version stamp on every build, so `projectVersion` names the commit
+  host. `just fsw` forces F´'s version stamp on every build, so `projectVersion` names the commit
   the extension was built from, with a `-dirty` suffix when built from an uncommitted tree.
 
 ### Dependencies
