@@ -16,7 +16,6 @@ from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import DICTIONARY as DICTIONARY_PATH
-from lab.power_cycle import power_cycle
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
@@ -38,16 +37,6 @@ def _id(name: str) -> int:
         Its ID.
     """
     return next(i for i, p in DICTIONARY.parameters_by_id.items() if p.name == name)
-
-
-@pytest.fixture
-def fsw() -> ModuleType:
-    """A fresh copy of the deployment, not yet booted.
-
-    Returns:
-        The copy.
-    """
-    return power_cycle()
 
 
 def test_a_case_s_file_boots_every_parameter_valid(
