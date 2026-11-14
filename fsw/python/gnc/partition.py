@@ -51,7 +51,7 @@ def _keyword(instance: str, port: str) -> str:
     Raises:
         ValueError: the port's name does not end in `In`, naming it.
     """
-    if not port.endswith("In") or port == "In":
+    if not port.endswith("In"):
         raise ValueError(
             f"{_name(instance)}.{port} is a data input whose name does not end in In, so it"
             " names no step keyword"
@@ -63,7 +63,8 @@ class GncPartition:
     """A configuration's GNC sub-topology's algorithms, wired and ordered as its FPP says.
 
     Attributes:
-        rate_groups: each rate group's qualified name, in its driver's `CycleOut` order.
+        rate_groups: each rate group's qualified name, in its driver's `CycleOut` order; a frame's
+            rate groups are named by their position here.
         algorithms: each algorithm `boot` built, by its instance's name, such as `nav`.
     """
 
@@ -92,15 +93,16 @@ class GncPartition:
         if len(drivers) != 1:
             raise ValueError(f"{topology} has {len(drivers)} rate group drivers: {drivers}")
         [driver] = drivers
-        cycle = sorted(
-            (c for c in connections if c.from_instance == driver and c.from_port == "CycleOut"),
-            key=lambda c: c.from_index,
+        # The model sorts connections by their from-port's number, so each filter keeps that order.
+        self.rate_groups = tuple(
+            c.to_instance
+            for c in connections
+            if c.from_instance == driver and c.from_port == "CycleOut"
         )
-        self.rate_groups = tuple(c.to_instance for c in cycle)
         self._members = tuple(
             tuple(
                 c.to_instance
-                for c in sorted(connections, key=lambda c: c.from_index)
+                for c in connections
                 if c.from_instance == group and c.from_port == "RateGroupMemberOut"
             )
             for group in self.rate_groups
@@ -118,7 +120,7 @@ class GncPartition:
 
         scheduling = {i for i, kind in component.items() if kind in (_DRIVER, _RATE_GROUP)}
         order = {m: n for n, m in enumerate(m for group in self._members for m in group)}
-        self._inputs: dict[str, set[str]] = {m: set() for m in members}
+        self._keywords: dict[str, set[str]] = {m: set() for m in members}
         self._routes: dict[tuple[str, str], tuple[str, str]] = {}
         for c in connections:
             if c.from_instance not in scheduling:
@@ -129,16 +131,16 @@ class GncPartition:
                         " frame, a one-frame-delayed feedback, which is not supported"
                     )
                 keyword = _keyword(c.to_instance, c.to_port)
-                self._inputs[c.to_instance].add(keyword)
+                self._keywords[c.to_instance].add(keyword)
                 self._routes[c.from_instance, c.from_port] = c.to_instance, keyword
         self._ports: dict[str, tuple[str, str]] = {}
         for name, port in model.ports.items():
             if name.startswith(f"{topology}.") and port.instance != driver:
                 keyword = _keyword(port.instance, port.port)
                 self._ports[name.removeprefix(f"{topology}.")] = port.instance, keyword
-                self._inputs[port.instance].add(keyword)
+                self._keywords[port.instance].add(keyword)
         self.algorithms = {}
-        self._written: dict[str, dict[str, Any]] = {}
+        self._held: dict[str, dict[str, Any]] = {}
 
     def boot(self, parameters: Mapping[str, Any]) -> None:
         """Builds every algorithm afresh on its parameters, with no input written.
@@ -147,7 +149,7 @@ class GncPartition:
             parameters: each algorithm's parameters, by its instance's name.
         """
         self.algorithms = {_name(m): cls(parameters[_name(m)]) for m, cls in self._classes.items()}
-        self._written = {m: {} for m in self._classes}
+        self._held = {m: {} for m in self._classes}
 
     def write(self, port: str, value: Any) -> None:
         """Writes a sub-topology input, which its instance holds until the next write.
@@ -157,14 +159,14 @@ class GncPartition:
             value: the value, in the port's FPP type.
         """
         instance, keyword = self._ports[port]
-        self._written[instance][keyword] = value
+        self._held[instance][keyword] = value
 
     def run(self, t: float, fired: Sequence[int]) -> list[tuple[str, Any]]:
         """Runs each member of each fired rate group, in order, routing its outputs.
 
         Args:
             t: s, the frame's time.
-            fired: the `CycleOut` index of each rate group that runs, in order.
+            fired: the position in `rate_groups` of each rate group that runs, in order.
 
         Returns:
             Each member's telemetry tuple, with its instance's name, in the order run.
@@ -175,15 +177,15 @@ class GncPartition:
         telemetry = []
         for group in fired:
             for member in self._members[group]:
-                inputs = self._written[member]
-                unwritten = sorted(self._inputs[member] - set(inputs))
+                inputs = self._held[member]
+                unwritten = sorted(self._keywords[member] - set(inputs))
                 if unwritten:
                     names = [f"{_name(member)}.{k}In" for k in unwritten]
                     raise RuntimeError(f"inputs {names} have not been written at t = {t} s")
-                outputs, written = self.algorithms[_name(member)].step(t, **inputs)
+                outputs, tlm = self.algorithms[_name(member)].step(t, **inputs)
                 for port, value in outputs._asdict().items():
                     if value is not None and (member, port) in self._routes:
                         target, keyword = self._routes[member, port]
-                        self._written[target][keyword] = value
-                telemetry.append((_name(member), written))
+                        self._held[target][keyword] = value
+                telemetry.append((_name(member), tlm))
         return telemetry
