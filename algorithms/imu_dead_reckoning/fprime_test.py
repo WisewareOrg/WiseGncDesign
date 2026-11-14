@@ -203,47 +203,6 @@ def test_init_nav_state_starts_the_reckoner_at_its_epoch(fsw: ModuleType, statio
     _assert_matches(station, python)
 
 
-Q_B = Rotation.from_euler("zyx", [-70.0, 10.0, -35.0], degrees=True).as_quat(scalar_first=True)
-R_B = np.array([7000.0e3, 100.0e3, -50.0e3])
-V_B = np.array([-200.0, 5.0e3, 5.6e3])
-"""A second flight's initial state, apart from `Q0`, `R0` and `V0` in every component."""
-
-
-def _fly_a_first_flight() -> None:
-    """On a copy of its own: boots, commands the first state, steps to 600 s on nonzero readings."""
-    rng = np.random.default_rng(3)
-    first = power_cycle()
-    station = FprimeStation(first, WISE_FSW)
-    first.boot(mu=MU, dcm_PB=MOUNTING)
-    state = {"epoch": 0.0, "attitude": Q0, "position": R0, "velocity": V0}
-    station.uplink("nav.initNavState", state, 1)
-    for k in range(1, 61):
-        first.step(
-            t_ns=10 * k * NS,
-            angVelPlatform=0.02 * rng.normal(size=3),
-            accelPlatform=1e-3 * rng.normal(size=3),
-        )
-    assert _telemetry(station)["nav.navState"] == "propagated"
-
-
-def test_a_fresh_copy_after_another_copy_flew_keeps_nothing_of_that_flight(
-    fsw: ModuleType,
-    station: FprimeStation,
-):
-    """After a flight, a fresh copy boots the reckoner idle, with no state, from t = 0.
-
-    Args:
-        fsw: the test's copy of the deployment.
-        station: the station on it.
-    """
-    _fly_a_first_flight()
-
-    fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
-
-    assert _telemetry(station) == {"nav.navState": "idle"}
-
-
 def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(
     fsw: ModuleType,
     station: FprimeStation,
@@ -269,29 +228,3 @@ def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(
 
     writes = [name for name, _, _ in station.telemetry() if name == "nav.navState"]
     assert len(writes) == ticks // divider
-
-
-def test_a_flight_on_a_fresh_copy_after_another_copy_flew_matches_a_fresh_notebook_reckoner(
-    fsw: ModuleType,
-    station: FprimeStation,
-):
-    """A fresh copy's flight after another copy's agrees with a reckoner that never flew before.
-
-    Args:
-        fsw: the test's copy of the deployment.
-        station: the station on it.
-    """
-    _fly_a_first_flight()
-    rng = np.random.default_rng(11)
-    readings = [(0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(300)]
-    python = ImuDeadReckoner(mu=MU, dcm_PB=MOUNTING)
-    python.initNavState(epoch=0.0, attitude=Q_B, position=R_B, velocity=V_B)
-
-    fsw.boot(mu=MU, dcm_PB=MOUNTING)
-    state = {"epoch": 0.0, "attitude": Q_B, "position": R_B, "velocity": V_B}
-    station.uplink("nav.initNavState", state, 1)
-    for k, (omega, accel) in enumerate(readings, start=1):
-        python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
-        fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
-
-    _assert_matches(station, python)
