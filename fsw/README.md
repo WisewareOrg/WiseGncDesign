@@ -98,11 +98,12 @@ not pack into the channel's type fails, naming the channel.
 
 A role's shared entries are `.fppi` groups under `fsw/fpp/interfaces/<Role>/`, which a
 component's `.fpp` includes; the instance name is the role, so nav's entries are `nav.*` in every
-build. A Python build's dictionary comes from FPP alone. `Dictionary.from_component(model,
-component, instance=...)` instances the component alone and runs `fpp-to-dict` in a temporary
-directory, against the F´ framework clone `just pinned` or `just local` fetches. Nothing is
-compiled, nothing is written in the tree, and each content of the model is generated once per
-process:
+build. The bus structs in `fsw/fpp/interfaces/Bus.fpp` mirror Basilisk's message payloads, and
+`bus_test.py` beside it holds each to the real message's fields. A Python build's dictionary comes
+from FPP alone. `Dictionary.from_component(model, component, instance=...)` instances the
+component alone and runs `fpp-to-dict` in a temporary directory, against the F´ framework clone
+`just pinned` or `just local` fetches. Nothing is compiled, nothing is written in the tree, and
+each content of the model is generated once per process:
 
 ```python
 >>> from pathlib import Path
