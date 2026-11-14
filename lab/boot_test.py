@@ -6,6 +6,8 @@ Skipped without the deployment `just fsw` builds.
 import importlib.util
 import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -123,6 +125,61 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
 
     with pytest.raises(RuntimeError, match=rf"^parameters {_id('nav.dcm_PB')} are not valid"):
         fsw.boot(str(parameters.dat(prm_record, DICTIONARY_PATH)), parameter_ids)
+
+
+def _changed(value: object) -> object:
+    """A record's value with one added to each of its numbers.
+
+    Args:
+        value: a parameter's value as the record holds it, a number or nested lists of numbers.
+
+    Returns:
+        The changed value, of the same shape.
+    """
+    if isinstance(value, list):
+        return [_changed(v) for v in value]
+    return value + 1
+
+
+def test_prm_db_s_saved_image_decodes_to_the_edited_record(
+    fsw: ModuleType,
+    station: FprimeStation,
+    tmp_path: Path,
+    prm_record: Path,
+    parameter_ids: list[int],
+):
+    """Every value edited in the record is the one PrmDb holds, read back from its own image.
+
+    The `.dat` is removed once booted, so the file decoded is the one `PRM_SAVE_FILE` writes.
+    F´'s `fprime-prm-decode` is always given `-o`, since it would otherwise overwrite the record.
+
+    Args:
+        fsw: the test's copy.
+        station: the station on it.
+        tmp_path: where PrmDb's image is decoded.
+        prm_record: the case's parameter record, edited here.
+        parameter_ids: every parameter's ID, which boot holds valid.
+    """
+    entries = json.loads(prm_record.read_text())
+    edited = {
+        instance: {name: _changed(value) for name, value in values.items()}
+        for instance, values in entries.items()
+    }
+    assert edited != entries
+    prm_record.write_text(json.dumps(edited))
+    dat = parameters.dat(prm_record, DICTIONARY_PATH)
+    fsw.boot(str(dat), parameter_ids)
+    dat.unlink()
+
+    station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)
+    fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+    decoded = tmp_path / "decoded.json"
+    tool = Path(sys.executable).parent / "fprime-prm-decode"
+    command = [tool, dat, "-d", DICTIONARY_PATH, "-o", decoded]
+    subprocess.run(command, check=True, capture_output=True)
+
+    assert station.responses() == [(1, "OK", None)]
+    assert json.loads(decoded.read_text()) == edited
 
 
 @pytest.mark.parametrize("path", ["run_0000.prm.dat", "/run_0000.prm.dat"])

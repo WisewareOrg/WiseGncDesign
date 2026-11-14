@@ -4,9 +4,6 @@ Skipped without the deployment `just fsw` builds.
 """
 
 import importlib.util
-import json
-import subprocess
-import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -18,10 +15,7 @@ from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
 from fsw.codegen.deployment import fpp_files
 from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_types import Gnc
-from fsw.python.cdh import parameters as cdh_parameters
-from ground import parameters
 from ground.fprime_station import FprimeStation
-from lab import DICTIONARY
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
@@ -226,45 +220,6 @@ def test_the_fprime_build_runs_nav_once_every_nav_divider_ticks(
 
     writes = [name for name, _, _ in station.telemetry() if name == "nav.navState"]
     assert len(writes) == ticks // divider
-
-
-def test_a_value_changed_in_the_record_reaches_prm_db_and_the_python_build_alike(
-    fsw: ModuleType,
-    station: FprimeStation,
-    tmp_path: Path,
-    prm_record: Path,
-    parameter_ids: list[int],
-):
-    """`mu` edited in the record is the one the F´ build's PrmDb holds and the Python build reads.
-
-    PrmDb's own image comes back through `PRM_SAVE_FILE`, which rewrites the `.dat`, and F´'s
-    `fprime-prm-decode`, always given `-o` since it would otherwise overwrite the record.
-
-    Args:
-        fsw: the test's copy of the deployment.
-        station: the station on it.
-        tmp_path: where PrmDb's image is decoded.
-        prm_record: the case's parameter record, edited here.
-        parameter_ids: every parameter's ID, which boot holds valid.
-    """
-    record = prm_record
-    entries = json.loads(record.read_text())
-    entries["ImuDeadReckoning.nav"]["mu"] = 4.9048695e12
-    record.write_text(json.dumps(entries))
-    dat = parameters.dat(record, DICTIONARY)
-    fsw.boot(str(dat), parameter_ids)
-
-    station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)
-    fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
-    decoded = tmp_path / "decoded.json"
-    tool = Path(sys.executable).parent / "fprime-prm-decode"
-    subprocess.run([tool, dat, "-d", DICTIONARY, "-o", decoded], check=True, capture_output=True)
-
-    assert station.responses() == [(1, "OK", None)]
-    assert json.loads(decoded.read_text())["ImuDeadReckoning.nav"]["mu"] == 4.9048695e12
-    python = cdh_parameters.read(record, Gnc.ImuDeadReckonerParameters)
-    assert python.mu == 4.9048695e12
-    assert json.loads(decoded.read_text()) == json.loads(record.read_text())
 
 
 @pytest.mark.parametrize("nav_parameters", [NAV._replace(mu=4.9048695e12)], ids=["moon"])
