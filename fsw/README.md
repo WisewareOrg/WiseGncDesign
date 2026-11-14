@@ -3,14 +3,8 @@
 `fsw` is the flight software. An algorithm from `algorithms` is hosted in a simulator by
 `fsw.python`, its Python build, or by `lab`, its F´ build.
 
-The ground, `ground.procedures.Ground`, flies a host that presents the link `ground.radio_edge.Link`:
-commands up, responses and every telemetry write down, in the form F´ uses. The ground runs the
-scenario's procedure against it and records the flight. `AlgorithmModule` and the F´ host,
-`FprimeModule`, each present it, so one procedure and one set of analyzers fly either build. The
-link's docstrings say what each method does. Each host also has `build`, its build identity,
-which the harness records in the flight's `flight.json`. How commands and telemetry travel
-between the ground and each build, and why every write is pushed rather than sampled, is in
-[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+The ground, `ground.procedures.Ground`, runs the scenario's procedure against either build's
+radio edge and records the flight; [RadioEdge](#radioedge) says which host presents it.
 
 `fsw.python` knows nothing about what any field means: it copies message fields to the
 algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm.
@@ -21,6 +15,22 @@ subscribed Basilisk readers, by role. Its docstrings say how the algorithm's nam
 inputs, commands and telemetry, how a tick runs, and what it refuses. It declares `period_s`
 (1 s), so the flight software runs at 1 Hz, and the simulation steps its dynamics and samples the
 IMU at that period at every fidelity.
+
+## RadioEdge
+
+`ground.radio_edge.RadioEdge` is the flight software as the ground sees it, in F´'s names and
+values on either build, so one procedure and one set of analyzers fly either build. Its docstrings
+say what crosses it.
+
+`AlgorithmModule` presents the radio edge itself, dispatching each command by name to the
+algorithm's method of that name. The F´ host, `FprimeModule`, presents it through the F´ ground
+station, `ground.fprime_station.FprimeStation`, the only F´ codec in the repository and the part
+F´'s real ground data system replaces: F´ packets exist only between it and `_wise_fsw`.
+
+Each host also has `build`, its build identity, which the harness records in the flight's
+`flight.json`. How commands and telemetry travel between the ground and each build, and why every
+write is pushed rather than sampled, is in
+[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## Example: fly the dead reckoner against a simulated spacecraft
 
@@ -79,12 +89,12 @@ command; and both return the telemetry they write. Its builder hosts it with the
 ## The dictionary
 
 `ground.dictionary.Dictionary` reads an F´ JSON dictionary, F´'s published form of the FPP
-model, and names its entries `<instance>.<entry>` with the deployment prefix dropped. It encodes
-and decodes commands in F´'s packet format and channels in F´'s bytes. A channel's type is a
-primitive, an enum or an array, such as `nav.bodyEciPos`, a `Gnc.Vector3`. `Channel.decode_many`
-decodes a batch of writes as F´ serialized them, and `Channel.pack_many` packs a batch a Python
-algorithm wrote into the same array; a written value that F´ would not pack into the channel's
-type fails, naming the channel.
+model, and names its entries `<instance>.<entry>` with the deployment prefix dropped. It holds
+values to the model's types and leaves the bytes to the F´ ground station. `Dictionary.arguments`
+holds a command's arguments to its parameters' types. A channel's type is a primitive, an enum or
+an array, such as `nav.bodyEciPos`, a `Gnc.Vector3`. `Channel.pack_many` packs a batch a Python
+algorithm wrote into the array the station decodes F´'s writes into; a written value that F´ would
+not pack into the channel's type fails, naming the channel.
 
 A role's shared entries are `.fppi` groups under `fsw/fpp/interfaces/<Role>/`, which a
 component's `.fpp` includes; the instance name is the role, so nav's entries are `nav.*` in every
@@ -126,5 +136,6 @@ The deployment takes commands through F´'s own command dispatcher, which runs o
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
 and `_wise_fsw.responses()` returns each response under its context. `_wise_fsw.telemetry()`
 drains every telemetry write since the last call, each with its F´ time tag, and `boot` runs the
-commands left queued, clears the link and leaves nav idle. The reasoning is in
+commands left queued, clears GroundLink's held responses and writes, and leaves nav idle. The
+module's radio edge is an `FprimeStation` on these pins. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).

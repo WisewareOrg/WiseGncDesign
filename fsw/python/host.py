@@ -1,4 +1,4 @@
-"""A Basilisk Python `SysModel` hosting one algorithm as an F´ component instance, on the link."""
+"""A Basilisk `SysModel` hosting one algorithm as an F´ component instance, on the radio edge."""
 
 import inspect
 from collections.abc import Mapping, Sequence
@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 from Basilisk.architecture import sysModel
 
-from ground.dictionary import Channel, DecodeError, Dictionary
+from ground.dictionary import Dictionary
 
 __all__ = ["AlgorithmModule"]
 
@@ -22,13 +22,12 @@ class AlgorithmModule(sysModel.SysModel):
     input reader whose message has a field of that name. Every command the dictionary gives
     `instance` is a method of the algorithm, named and parametered as in FPP.
 
-    The ground reaches the algorithm through the link: `uplink` queues a command packet, and the
-    next tick decodes it with the dictionary's types, so the handler gets what the F´ handler gets
-    (an F32 as F32 holds it, an enum constant by name, an array as an array), runs the handler
-    before the step and keeps the response. A handler that returns answers `OK`, and one that
-    raises `ValueError` answers `VALIDATION_ERROR` with the error's message as the reason; a packet
-    the dictionary cannot decode gets the response F´'s dispatcher gives it; any other exception is
-    a bug and fails the tick.
+    The ground reaches the algorithm through the radio edge by name: `uplink` queues a command with
+    its arguments, which the ground has typed as the F´ handler gets them, and the next tick runs
+    the handler before the step and keeps the response. A handler that returns answers `OK`, and
+    one that raises `ValueError` answers `VALIDATION_ERROR` with the error's message as the reason;
+    a name that is not one of the instance's commands answers `INVALID_OPCODE`; any other
+    exception is a bug and fails the tick.
 
     The algorithm writes telemetry by returning `{channel: value}`, or `None`, from `step` and from
     each handler, as an F´ component calls `tlmWrite_<channel>`. Each entry is one write, tagged
@@ -81,15 +80,14 @@ class AlgorithmModule(sysModel.SysModel):
                     f"{instance}.{name} takes {wanted}; the algorithm has "
                     f"{'no such method' if found is None else found}"
                 )
-        self._ids = {
-            name: dictionary.channel(f"{instance}.{name}").id for name in entries["channels"]
-        }
+        self._commands = frozenset(f"{instance}.{name}" for name in entries["commands"])
+        self._channels = {name: f"{instance}.{name}" for name in entries["channels"]}
         self.failure = None
         self._inputs_written = False
         self._t_ns = 0
-        self._uplinked: list[tuple[bytes, int]] = []
-        self._responses: list[tuple[int, int, str | None]] = []
-        self._log: list[tuple[int, int, Any]] = []
+        self._uplinked: list[tuple[str, Mapping[str, Any], int]] = []
+        self._responses: list[tuple[int, str, str | None]] = []
+        self._log: list[tuple[str, int, Any]] = []
 
     def _role(self, keyword: str) -> str:
         """The input role whose message carries the field `keyword`.
@@ -123,46 +121,46 @@ class AlgorithmModule(sysModel.SysModel):
         """The hosted algorithm, for inspection."""
         return self._algorithm
 
-    def uplink(self, packet: bytes, context: int) -> None:
-        """Queues a command packet, which runs at the next tick.
+    def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
+        """Queues a command, which runs at the next tick.
 
         Args:
-            packet: the serialized command packet.
+            name: `<instance>.<command>`.
+            args: the arguments by parameter name, as `Dictionary.arguments` types them.
             context: the ground's number for the command, returned with its response.
         """
-        self._uplinked.append((packet, context))
+        self._uplinked.append((name, args, context))
 
-    def responses(self) -> list[tuple[int, int, str | None]]:
+    def responses(self) -> list[tuple[int, str, str | None]]:
         """The command responses since the last call, oldest first.
 
         Returns:
-            `(context, response, reason)`: the response a value of the dictionary's
-            `Fw.CmdResponse`, and the message of the `ValueError` a handler refused it with, else
-            `None`.
+            `(context, response, reason)`: the response a name of `Fw.CmdResponse`, and the
+            message of the `ValueError` a handler refused it with, else `None`.
         """
         drained, self._responses = self._responses, []
         return drained
 
-    def telemetry(self) -> list[tuple[int, int, Any]]:
+    def telemetry(self) -> list[tuple[str, int, Any]]:
         """Every telemetry write since the last call, in the order written.
 
         Returns:
-            `(channel ID, time tag in ns, value)`, the value as the algorithm wrote it.
+            `(<instance>.<channel>, time tag in ns, value)`, the value as the algorithm wrote it.
         """
         drained, self._log = self._log, []
         return drained
 
-    def values(self, channel: Channel, payloads: Sequence[Any]) -> np.ndarray:
+    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
         """The values the algorithm wrote to one channel, packed in one batch.
 
         Args:
-            channel: the channel written.
-            payloads: its writes' values, as `telemetry` gave them.
+            name: `<instance>.<channel>`.
+            raws: its writes' values, as `telemetry` gave them.
 
         Returns:
             As `Channel.pack_many` gives them.
         """
-        return channel.pack_many(payloads)
+        return self.dictionary.channel(name).pack_many(raws)
 
     def Reset(self, CurrentSimNanos: int) -> None:
         """Takes the reset time as the last tick.
@@ -199,8 +197,8 @@ class AlgorithmModule(sysModel.SysModel):
         try:
             self._t_ns = CurrentSimNanos
             queued, self._uplinked = self._uplinked, []
-            for packet, context in queued:
-                self._responses.append((context, *self._dispatch(packet)))
+            for name, args, context in queued:
+                self._responses.append((context, *self._dispatch(name, args)))
             t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
             if not self._inputs_written:
                 unwritten = sorted(name for name, reader in self._readers if not reader.isWritten())
@@ -217,27 +215,25 @@ class AlgorithmModule(sysModel.SysModel):
             self.failure = error
             raise
 
-    def _dispatch(self, packet: bytes) -> tuple[int, str | None]:
-        """Decodes a command packet and runs its handler.
+    def _dispatch(self, name: str, args: Mapping[str, Any]) -> tuple[str, str | None]:
+        """Runs a command's handler, the method named as the command.
 
         Args:
-            packet: the serialized command packet.
+            name: `<instance>.<command>`.
+            args: the arguments by parameter name.
 
         Returns:
-            The `Fw.CmdResponse` value, and the message of the `ValueError` the handler refused the
+            The `Fw.CmdResponse` name, and the message of the `ValueError` the handler refused the
             command with, else `None`.
         """
-        responses = self.dictionary.responses
+        if name not in self._commands:
+            return "INVALID_OPCODE", None
         try:
-            name, args = self.dictionary.decode_command(packet, self._instance)
-        except DecodeError as error:
-            return responses[error.response], None
-        try:
-            writes = getattr(self._algorithm, name)(**args)
+            writes = getattr(self._algorithm, name.removeprefix(f"{self._instance}."))(**args)
         except ValueError as error:
-            return responses["VALIDATION_ERROR"], str(error)
+            return "VALIDATION_ERROR", str(error)
         self._write(writes)
-        return responses["OK"], None
+        return "OK", None
 
     def _write(self, writes: Mapping[str, Any] | None) -> None:
         """Logs the telemetry the algorithm returned, tagged with this tick, arrays copied.
@@ -249,7 +245,7 @@ class AlgorithmModule(sysModel.SysModel):
             ValueError: naming a channel the instance does not have.
         """
         for name, value in (writes or {}).items():
-            if name not in self._ids:
+            if name not in self._channels:
                 raise ValueError(f"{self._instance}.{name} is not a channel of the dictionary")
             written = value.copy() if isinstance(value, np.ndarray) else value
-            self._log.append((self._ids[name], self._t_ns, written))
+            self._log.append((self._channels[name], self._t_ns, written))

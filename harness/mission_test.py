@@ -585,7 +585,7 @@ class StubHost(sysModel.SysModel):
     def UpdateState(self, CurrentSimNanos):
         pass
 
-    def uplink(self, packet, context):
+    def uplink(self, name, args, context):
         raise AssertionError("no command is sent")
 
     def responses(self):
@@ -594,7 +594,7 @@ class StubHost(sysModel.SysModel):
     def telemetry(self):
         return []
 
-    def values(self, channel, payloads):
+    def values(self, name, raws):
         raise AssertionError("nothing is written")
 """
 
@@ -614,14 +614,14 @@ globals().update(
 """
 
 
-def test_a_flight_runs_the_procedure_on_the_host_s_link_for_the_scenario_s_duration(
+def test_a_flight_runs_the_procedure_on_the_host_s_radio_edge_for_the_scenario_s_duration(
     project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
     """A host that is neither built-in type flies through the ground, which records the run.
 
-    The stub host presents a link and writes nothing. The run file holds the truth and an empty
-    command log, no telemetry, and ends at the TST definition's `sim_duration_s`, so the harness
-    bound the stopping rule. `flight.json` names the builder and the stub's `build`.
+    The stub host presents a radio edge and writes nothing. The run file holds the truth and an
+    empty command log, no telemetry, and ends at the TST definition's `sim_duration_s`, so the
+    harness bound the stopping rule. `flight.json` names the builder and the stub's `build`.
 
     Args:
         project: the project.

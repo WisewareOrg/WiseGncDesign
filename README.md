@@ -22,7 +22,7 @@ algorithms/quaternion.py   the quaternion math numba-compiled algorithms share
 missions/      notebooks that plan missions, and the test running them
 fsw/           the flight software: python/, its Python host; fprime/, the F´ project; fpp/interfaces/,
                the shared FPP contract; and a worked example
-ground/        the ground: dictionary, radio edge and procedures
+ground/        the ground: dictionary, radio edge, F´ ground station and procedures
 lab/           the F´ host that runs the F´ build in the simulation, and its pybind11 module
 docs/          requirements/ (Doorstop tree), decisions/ (ADRs)
 ```

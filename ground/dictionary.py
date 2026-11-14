@@ -1,9 +1,8 @@
-"""An F´ JSON dictionary as the hosts and the ground use it: names, types and the wire format.
+"""An F´ JSON dictionary as the hosts and the ground use it: names and types.
 
-F´ serializes big-endian. A command packet is a `FwPacketDescriptorType` holding
-`FW_PACKET_COMMAND`, a `FwOpcodeType`, and the arguments in order. A telemetry value is the
-channel's type serialized. Entries are named `<instance>.<entry>` with the deployment prefix
-dropped, so `WiseFsw.nav.navState` is `nav.navState`.
+Entries are named `<instance>.<entry>` with the deployment prefix dropped, so
+`WiseFsw.nav.navState` is `nav.navState`. A type's numpy dtype is big-endian, as F´ serializes it;
+the bytes themselves are the F´ ground station's, `ground.fprime_station`.
 """
 
 import functools
@@ -20,7 +19,7 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["Channel", "Command", "DecodeError", "Dictionary"]
+__all__ = ["Channel", "Command", "Dictionary", "Type"]
 
 _REPOSITORY = Path(__file__).resolve().parents[1]
 _INTERFACES = _REPOSITORY / "fsw" / "fpp" / "interfaces"
@@ -78,7 +77,7 @@ def _tag() -> str:
 
 
 @dataclass(frozen=True)
-class _Type:
+class Type:
     """How a dictionary type serializes.
 
     A primitive, an enum, or an array of primitives or of such arrays.
@@ -129,26 +128,6 @@ class _Type:
         return raw.astype(self.dtype.base)
 
 
-class DecodeError(ValueError):
-    """A command packet the dictionary cannot decode, with the `Fw::CmdResponse` it earns.
-
-    Attributes:
-        response: the constant's name in `Dictionary.responses`.
-    """
-
-    response: str
-
-    def __init__(self, response: str, message: str) -> None:
-        """Holds the response and the message.
-
-        Args:
-            response: a name in `Dictionary.responses`.
-            message: what was wrong.
-        """
-        super().__init__(message)
-        self.response = response
-
-
 @dataclass(frozen=True)
 class Command:
     """One command of an instance.
@@ -157,12 +136,13 @@ class Command:
         name: `<instance>.<command>`.
         opcode: the command's opcode.
         params: the parameter names, in order.
+        types: each parameter's type, in order, or `None` when one is of a type not coded.
     """
 
     name: str
     opcode: int
     params: tuple[str, ...]
-    _types: tuple[_Type, ...] | None
+    types: tuple[Type, ...] | None
 
 
 @dataclass(frozen=True)
@@ -173,41 +153,13 @@ class Channel:
         id: the channel's ID.
         name: `<instance>.<channel>`.
         units: the units in the channel's FPP `format`, `"{} m"` giving `m`, else `""`.
+        type: the channel's type.
     """
 
     id: int
     name: str
     units: str
-    _type: _Type
-
-    def decode(self, serialized: bytes) -> Any:
-        """One write's value, as `decode_many` gives it.
-
-        Args:
-            serialized: the value as F´ serializes it.
-
-        Returns:
-            The value.
-        """
-        return self.decode_many([serialized])[0]
-
-    def decode_many(self, serialized: Sequence[bytes]) -> np.ndarray:
-        """Every write's value in one array, from the values as F´ serialized them.
-
-        Args:
-            serialized: each write's bytes.
-
-        Returns:
-            As `pack_many` gives it.
-
-        Raises:
-            ValueError: naming the channel, for a write that is not bytes of one value of its type,
-                or an enum value that is no constant.
-        """
-        size = self._type.dtype.itemsize
-        if not all(isinstance(value, bytes) and len(value) == size for value in serialized):
-            raise ValueError(f"channel {self.name} decodes {size}-byte writes only")
-        return self._values(np.frombuffer(b"".join(serialized), self._type.dtype))
+    type: Type
 
     def pack_many(self, written: Sequence[Any]) -> np.ndarray:
         """Every write's value in one array, from the values a Python algorithm wrote.
@@ -226,13 +178,13 @@ class Channel:
             ValueError: naming the channel, when a value does not fit its type.
         """
         try:
-            raw = self._type.serialized(written)
+            raw = self.type.serialized(written)
         except ValueError as error:
             raise ValueError(f"channel {self.name} cannot take its writes: {error}") from error
-        return self._values(raw)
+        return self.from_raw(raw)
 
-    def _values(self, raw: np.ndarray) -> np.ndarray:
-        """The values of serialized writes, as `pack_many` returns them.
+    def from_raw(self, raw: np.ndarray) -> np.ndarray:
+        """The values of writes held in the channel's dtype, as `pack_many` returns them.
 
         Args:
             raw: (N, *shape) in the channel's dtype.
@@ -243,7 +195,7 @@ class Channel:
         Raises:
             ValueError: naming the channel, for an enum value that is no constant.
         """
-        ftype = self._type
+        ftype = self.type
         if ftype.constants is None:
             return (raw == ftype.bools[1] if ftype.bools else raw).astype(np.float64)
         names = {value: name for name, value in ftype.constants.items()}
@@ -270,8 +222,8 @@ class Dictionary:
         """Parses the dictionary.
 
         A command with a parameter of a type the module does not code loads, and is refused only
-        when encoded, so a deployment's framework commands, which take strings, do not stop it
-        loading.
+        when its arguments are typed, so a deployment's framework commands, which take strings, do
+        not stop it loading.
 
         Args:
             path: the JSON file F´ generated.
@@ -286,26 +238,22 @@ class Dictionary:
         self._definitions = {t["qualifiedName"]: t for t in document["typeDefinitions"]}
         constants = {c["qualifiedName"]: c["value"] for c in document["constants"]}
         self._bools = (constants["FW_SERIALIZE_FALSE_VALUE"], constants["FW_SERIALIZE_TRUE_VALUE"])
-        self._descriptor = self._type("FwPacketDescriptorType")
-        self._opcode = self._type("FwOpcodeType")
-        self._command_descriptor = self._type("ComCfg.Apid").constants["FW_PACKET_COMMAND"]
-        self.responses = self._type("Fw.CmdResponse").constants
+        self.responses = self.type("Fw.CmdResponse").constants
         self._commands: dict[str, Command] = {}
         for entry in document["commands"]:
             name = entry["name"].split(".", 1)[1]
             params = tuple(p["name"] for p in entry["formalParams"])
             try:
-                types = tuple(self._type(p["type"]["name"]) for p in entry["formalParams"])
+                types = tuple(self.type(p["type"]["name"]) for p in entry["formalParams"])
             except ValueError:
                 types = None
             self._commands[name] = Command(name, entry["opcode"], params, types)
-        self._by_opcode = {c.opcode: c for c in self._commands.values()}
         self._channels: dict[str, Channel] = {}
         for entry in document["telemetryChannels"]:
             name = entry["name"].split(".", 1)[1]
             units = re.fullmatch(r"\{\}\s*(.*)", entry.get("format", ""))
             try:
-                ftype = self._type(entry["type"]["name"])
+                ftype = self.type(entry["type"]["name"])
             except ValueError as error:
                 raise ValueError(f"channel {name} has {error}") from error
             self._channels[name] = Channel(entry["id"], name, units[1] if units else "", ftype)
@@ -412,109 +360,66 @@ class Dictionary:
             raise KeyError(f"no channel {name!r}; the dictionary has {sorted(self._channels)}")
         return self._channels[name]
 
-    def encode_command(self, name: str, args: Mapping[str, Any]) -> bytes:
-        """A command packet.
+    def command(self, name: str) -> Command:
+        """One command by its name.
+
+        Args:
+            name: `<instance>.<command>`.
+
+        Returns:
+            The command.
+
+        Raises:
+            KeyError: when the dictionary has no such command.
+        """
+        if name not in self._commands:
+            raise KeyError(f"no command {name!r}; the dictionary has {sorted(self._commands)}")
+        return self._commands[name]
+
+    def arguments(self, name: str, args: Mapping[str, Any]) -> dict[str, Any]:
+        """A command's arguments held to its parameters' types, as F´'s handler gets them.
+
+        A name the dictionary lacks raises `KeyError`, as `Dictionary.command` does.
 
         Args:
             name: `<instance>.<command>`.
             args: the arguments by parameter name.
 
         Returns:
-            The packet: descriptor, opcode, then the arguments.
+            Each argument by parameter name, in the parameters' order: an F32 as F32 holds it, a
+            bool, an enum constant's name, an integer, or an array of the type's shape.
 
         Raises:
-            KeyError: when the dictionary has no such command.
-            ValueError: when the arguments are not exactly the parameters, or one does not pack.
+            ValueError: when the arguments are not exactly the parameters, or one does not fit its
+                type.
         """
-        if name not in self._commands:
-            raise KeyError(f"no command {name!r}; the dictionary has {sorted(self._commands)}")
-        command = self._commands[name]
-        if command._types is None:
+        command = self.command(name)
+        if command.types is None:
             raise ValueError(f"{name} has a parameter type the dictionary module does not code")
         if set(args) != set(command.params):
             raise ValueError(f"{name} takes {list(command.params)}, not {sorted(args)}")
-        packet = self._descriptor.serialized([self._command_descriptor]).tobytes()
-        packet += self._opcode.serialized([command.opcode]).tobytes()
-        for param, ftype in zip(command.params, command._types, strict=True):
+        typed = {}
+        for param, ftype in zip(command.params, command.types, strict=True):
             try:
-                packet += ftype.serialized([args[param]]).tobytes()
+                raw = ftype.serialized([args[param]])[0]
             except ValueError as error:
                 raise ValueError(f"{name} parameter {param} cannot take {args[param]!r}") from error
-        return packet
+            value = np.array(raw.tolist()) if ftype.dtype.shape else raw.item()
+            if ftype.bools:
+                value = value == ftype.bools[1]
+            elif ftype.constants is not None:
+                value = {v: k for k, v in ftype.constants.items()}[value]
+            typed[param] = value
+        return typed
 
-    def decode_command(self, packet: bytes, instance: str) -> tuple[str, dict[str, Any]]:
-        """A command packet's command and arguments, as F´'s dispatcher and autocoder decode them.
-
-        Args:
-            packet: the bytes.
-            instance: the instance the packet is dispatched to.
-
-        Returns:
-            The command name without the instance, and its arguments by parameter name: a
-            number, a bool, an enum constant's name, or an array.
-
-        Raises:
-            DecodeError: `VALIDATION_ERROR` for a packet that is not a command packet,
-                `INVALID_OPCODE` for an opcode the instance does not have, and `FORMAT_ERROR` for
-                arguments that do not deserialize or do not fill the packet exactly.
-        """
-        head = self._descriptor.dtype.itemsize + self._opcode.dtype.itemsize
-        if len(packet) < head:
-            raise DecodeError("VALIDATION_ERROR", f"a packet of {len(packet)} bytes")
-        descriptor = np.frombuffer(packet, self._descriptor.dtype, 1)[0]
-        opcode = np.frombuffer(packet, self._opcode.dtype, 1, self._descriptor.dtype.itemsize)[0]
-        if descriptor != self._command_descriptor:
-            raise DecodeError("VALIDATION_ERROR", f"descriptor {descriptor} is not a command")
-        command = self._by_opcode.get(int(opcode))
-        prefix = f"{instance}."
-        if command is None or not command.name.startswith(prefix):
-            raise DecodeError("INVALID_OPCODE", f"opcode {opcode} is not {instance}'s")
-        sizes = [ftype.dtype.itemsize for ftype in command._types]
-        if len(packet) != head + sum(sizes):
-            raise DecodeError("FORMAT_ERROR", f"{command.name} takes {sum(sizes)} bytes")
-        args, at = {}, head
-        for param, ftype, size in zip(command.params, command._types, sizes, strict=True):
-            raw = np.frombuffer(packet, ftype.dtype, 1, at)[0]
-            at += size
-            args[param] = self._argument(command, param, ftype, raw)
-        return command.name.removeprefix(prefix), args
-
-    def _argument(self, command: Command, param: str, ftype: _Type, raw: np.ndarray) -> Any:
-        """One deserialized argument as F´'s autocoder hands it to a handler.
-
-        Args:
-            command: the command, for the error.
-            param: the parameter, for the error.
-            ftype: the parameter's type.
-            raw: the argument as deserialized, a numpy scalar or array.
-
-        Returns:
-            A number, a bool, an enum constant's name, or an array of the type's shape.
-
-        Raises:
-            DecodeError: `FORMAT_ERROR` for a bool byte that is neither of F´'s, or an enum value
-                that is no constant.
-        """
-        value = np.array(raw.tolist()) if ftype.dtype.shape else raw.item()
-        if ftype.bools:
-            if value not in ftype.bools:
-                raise DecodeError("FORMAT_ERROR", f"{command.name} {param}: bool byte {value}")
-            return value == ftype.bools[1]
-        if ftype.constants is not None:
-            names = {v: k for k, v in ftype.constants.items()}
-            if value not in names:
-                raise DecodeError("FORMAT_ERROR", f"{command.name} {param}: no constant {value}")
-            return names[value]
-        return value
-
-    def _type(self, name: str) -> _Type:
+    def type(self, name: str) -> Type:
         """How a type serializes.
 
         Args:
             name: the type's qualified name.
 
         Returns:
-            Its `_Type`.
+            Its `Type`.
 
         Raises:
             ValueError: naming the type, when it is not a primitive, an alias of one, an enum, or
@@ -522,19 +427,19 @@ class Dictionary:
         """
         if name in _PRIMITIVES:
             bools = self._bools if name == "bool" else None
-            return _Type(name, np.dtype(_PRIMITIVES[name]), None, bools)
+            return Type(name, np.dtype(_PRIMITIVES[name]), None, bools)
         definition = self._definitions.get(name, {"kind": None})
         if definition["kind"] == "alias":
-            return self._type(definition["underlyingType"]["name"])
+            return self.type(definition["underlyingType"]["name"])
         if definition["kind"] == "enum":
-            representation = self._type(definition["representationType"]["name"])
+            representation = self.type(definition["representationType"]["name"])
             constants = {c["name"]: c["value"] for c in definition["enumeratedConstants"]}
-            return _Type(name, representation.dtype, constants, None)
+            return Type(name, representation.dtype, constants, None)
         if definition["kind"] == "array":
-            element = self._type(definition["elementType"]["name"])
+            element = self.type(definition["elementType"]["name"])
             if element.constants is None and element.bools is None:
                 shape = (definition["size"], *element.dtype.shape)
-                return _Type(name, np.dtype((element.dtype.base, shape)), None, None)
+                return Type(name, np.dtype((element.dtype.base, shape)), None, None)
         raise ValueError(f"type {name}, which is not coded")
 
     def _resolved(self, type_json: Mapping[str, Any]) -> Any:

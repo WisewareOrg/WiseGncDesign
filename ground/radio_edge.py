@@ -1,22 +1,25 @@
-"""The link between the ground and a flight software host, in the form F´ uses."""
+"""The radio edge: the flight software as the ground sees it, in F´'s names and values."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 import numpy as np
 
-from ground.dictionary import Channel, Dictionary
+from ground.dictionary import Dictionary
 
-__all__ = ["Link"]
+__all__ = ["RadioEdge"]
 
 
-class Link(Protocol):
-    """A flight software host as the ground sees it.
+class RadioEdge(Protocol):
+    """A flight software build as the ground sees it.
+
+    Commands go up and telemetry comes down by `<instance>.<entry>` name, with values in the
+    dictionary's types, and responses by their `Fw.CmdResponse` name, on either build.
 
     Attributes:
-        period_s: s, the period the host's flight software ticks at.
+        period_s: s, the period the build's flight software ticks at.
         dictionary: the dictionary the build is held to.
-        failure: the exception the host's tick raised, kept whole for the harness to re-raise in
+        failure: the exception the build's tick raised, kept whole for the harness to re-raise in
             place of the `RuntimeError` Basilisk reports it as, else `None`.
     """
 
@@ -24,41 +27,41 @@ class Link(Protocol):
     dictionary: Dictionary
     failure: BaseException | None
 
-    def uplink(self, packet: bytes, context: int) -> None:
-        """Queues a command packet, which runs at the host's next tick.
+    def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
+        """Queues a command, which runs at the build's next tick.
 
         Args:
-            packet: the serialized command packet.
+            name: `<instance>.<command>`.
+            args: the arguments by parameter name, as `Dictionary.arguments` types them.
             context: the ground's number for the command, returned with its response.
         """
         ...
 
-    def responses(self) -> list[tuple[int, int, str | None]]:
+    def responses(self) -> list[tuple[int, str, str | None]]:
         """The command responses since the last call, oldest first.
 
         Returns:
-            `(context, response, reason)`: the response a value of the dictionary's
-            `Fw.CmdResponse`, and why the flight software refused the command, when it said, else
-            `None`.
+            `(context, response, reason)`: the response a name of `Fw.CmdResponse`, and why the
+            flight software refused the command, when it said, else `None`.
         """
         ...
 
-    def telemetry(self) -> list[tuple[int, int, Any]]:
+    def telemetry(self) -> list[tuple[str, int, Any]]:
         """Every telemetry write since the last call, in the order written.
 
         Returns:
-            `(channel ID, time tag in ns, payload)`, the payload in the host's own form.
+            `(<instance>.<channel>, time tag in ns, raw)`, the raw write in the build's own form.
         """
         ...
 
-    def values(self, channel: Channel, payloads: Sequence[Any]) -> np.ndarray:
-        """The values of one channel's payloads, in one batch.
+    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
+        """One channel's raw writes as values, in one batch.
 
         Args:
-            channel: the channel written.
-            payloads: its writes' payloads, as `telemetry` gave them.
+            name: `<instance>.<channel>`.
+            raws: its raw writes, as `telemetry` gave them.
 
         Returns:
-            As `Channel.pack_many` and `Channel.decode_many` give them.
+            As `Channel.from_raw` gives them.
         """
         ...

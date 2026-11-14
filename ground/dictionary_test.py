@@ -1,15 +1,14 @@
-"""The dictionary against a toy component's, generated from FPP alone: names, types and bytes.
+"""The dictionary against a toy component's, generated from FPP alone: names and types.
 
 Needs the F´ framework clone `just _sync` fetches, not an F´ build.
 """
 
-import struct
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from ground.dictionary import DecodeError, Dictionary
+from ground.dictionary import Dictionary
 
 TOY = """\
 module Toy {
@@ -152,85 +151,42 @@ def test_every_dictionary_carries_f_prime_s_command_responses(toy: Dictionary):
     }
 
 
-def test_a_command_packet_is_f_prime_s_and_decodes_as_f_prime_would(toy: Dictionary):
-    """Descriptor, opcode, then big-endian arguments; an F32 is truncated and a bool is 0xFF.
+def test_arguments_are_typed_as_f_prime_s_handler_gets_them(toy: Dictionary):
+    """An F32 as F32 holds it, a bool as a bool, an enum by name, an array as an array.
 
     Args:
         toy: the toy's dictionary.
     """
-    packet = toy.encode_command("toy.setToy", ARGS)
+    args = toy.arguments("toy.setToy", ARGS)
 
-    assert packet[:6] == struct.pack(">HI", 0, 0x1000)
-    assert packet[6:10] == struct.pack(">f", 0.1)
-    assert packet[10] == 0xFF
-    assert len(packet) == 6 + 4 + 1 + 4 + 3 * 8 + 9 * 8 + 1
-    name, args = toy.decode_command(packet, "toy")
-    assert name == "setToy"
+    assert list(args) == ["gain", "enabled", "mode", "offset", "mounting", "count"]
     assert args["gain"] == float(np.float32(0.1))
     assert args["gain"] != 0.1
     assert args["enabled"] is True
     assert args["mode"] == "fast"
+    assert isinstance(args["offset"], np.ndarray)
     np.testing.assert_array_equal(args["offset"], ARGS["offset"])
     np.testing.assert_array_equal(args["mounting"], MOUNTING)
     assert args["count"] == 7
 
 
 @pytest.mark.parametrize(
-    ("change", "response"),
-    [
-        (lambda packet: packet[:5], "VALIDATION_ERROR"),
-        (lambda packet: struct.pack(">H", 1) + packet[2:], "VALIDATION_ERROR"),
-        (lambda packet: packet[:6] + packet[6:-1], "FORMAT_ERROR"),
-        (lambda packet: packet + b"\0", "FORMAT_ERROR"),
-        (lambda packet: packet[:10] + b"\x01" + packet[11:], "FORMAT_ERROR"),
-        (lambda packet: packet[:11] + struct.pack(">i", 7) + packet[15:], "FORMAT_ERROR"),
-    ],
-    ids=["short", "not-a-command", "truncated", "bytes-left-over", "bool-not-0xff", "no-constant"],
-)
-def test_a_malformed_packet_earns_the_response_f_prime_gives_it(
-    toy: Dictionary, change: object, response: str
-):
-    """Each malformed packet raises `DecodeError` carrying the dispatcher's or autocoder's response.
-
-    Args:
-        toy: the toy's dictionary.
-        change: makes the malformed packet from a good one.
-        response: the response it earns.
-    """
-    with pytest.raises(DecodeError) as error:
-        toy.decode_command(change(toy.encode_command("toy.setToy", ARGS)), "toy")
-
-    assert error.value.response == response
-
-
-def test_a_command_of_another_instance_is_an_invalid_opcode(toy: Dictionary):
-    """An opcode the receiving instance does not own earns `INVALID_OPCODE`.
-
-    Args:
-        toy: the toy's dictionary.
-    """
-    with pytest.raises(DecodeError) as error:
-        toy.decode_command(toy.encode_command("toy.setToy", ARGS), "nav")
-
-    assert error.value.response == "INVALID_OPCODE"
-
-
-@pytest.mark.parametrize(
     ("args", "match"),
     [
         ({k: v for k, v in ARGS.items() if k != "mode"}, r"takes \['gain'"),
+        (ARGS | {"extra": 1}, r"takes \['gain'"),
         (ARGS | {"offset": [1.0, 2.0]}, "parameter offset"),
         (ARGS | {"gain": None}, "parameter gain"),
         (ARGS | {"mode": "standby"}, "parameter mode"),
         (ARGS | {"count": 300}, "parameter count"),
         (ARGS | {"count": -1}, "parameter count"),
     ],
-    ids=["missing", "short-array", "none", "no-constant", "above-u8", "below-u8"],
+    ids=["missing", "extra", "short-array", "none", "no-constant", "above-u8", "below-u8"],
 )
-def test_a_command_that_will_not_pack_is_refused_naming_what(
+def test_arguments_that_will_not_fit_are_refused_naming_what(
     toy: Dictionary, args: dict, match: str
 ):
-    """Missing arguments, or one that does not pack into its type, raise naming it.
+    """Missing arguments, or one that does not fit its type, raise naming it.
 
     Args:
         toy: the toy's dictionary.
@@ -238,7 +194,25 @@ def test_a_command_that_will_not_pack_is_refused_naming_what(
         match: what the error names.
     """
     with pytest.raises(ValueError, match=match):
-        toy.encode_command("toy.setToy", args)
+        toy.arguments("toy.setToy", args)
+
+
+def test_a_command_with_a_parameter_type_not_coded_loads_and_refuses_its_arguments(
+    tmp_path: Path,
+):
+    """A string parameter does not stop the load; typing that command's arguments is refused.
+
+    Args:
+        tmp_path: where the toy's model is written.
+    """
+    labelled = _toy(
+        tmp_path,
+        toy=TOY.replace("    @ Sets", "    sync command label(note: string)\n\n    @ Sets"),
+    )
+
+    assert labelled.command("toy.label").types is None
+    with pytest.raises(ValueError, match=r"toy\.label has a parameter type .* does not code"):
+        labelled.arguments("toy.label", {"note": "hello"})
 
 
 def test_a_mistyped_name_is_refused_naming_it(toy: Dictionary):
@@ -250,10 +224,12 @@ def test_a_mistyped_name_is_refused_naming_it(toy: Dictionary):
     with pytest.raises(KeyError, match="'toy.gian'"):
         toy.channel("toy.gian")
     with pytest.raises(KeyError, match="'toy.setTyo'"):
-        toy.encode_command("toy.setTyo", ARGS)
+        toy.command("toy.setTyo")
+    with pytest.raises(KeyError, match="'toy.setTyo'"):
+        toy.arguments("toy.setTyo", ARGS)
 
 
-def test_serialized_channels_decode_in_one_batch_with_their_units(toy: Dictionary):
+def test_values_in_the_channel_s_type_come_back_in_one_batch_with_their_units(toy: Dictionary):
     """Arrays come back (N, *shape), a bool as 1.0, an enum as its name; units are the format's.
 
     Args:
@@ -262,17 +238,24 @@ def test_serialized_channels_decode_in_one_batch_with_their_units(toy: Dictionar
     offset, mounting = toy.channel("toy.offset"), toy.channel("toy.mounting")
 
     np.testing.assert_array_equal(
-        offset.decode_many([struct.pack(">3d", 1, 2, 3), struct.pack(">3d", 4, 5, 6)]),
-        [[1, 2, 3], [4, 5, 6]],
+        offset.from_raw(np.array([[1, 2, 3], [4, 5, 6]], ">f8")), [[1, 2, 3], [4, 5, 6]]
     )
-    np.testing.assert_array_equal(mounting.decode(struct.pack(">9d", *range(9))), MOUNTING)
-    assert toy.channel("toy.enabled").decode(b"\xff") == 1.0
-    assert toy.channel("toy.mode").decode(struct.pack(">i", 1)) == "fast"
-    assert toy.channel("toy.gain").decode(struct.pack(">f", 0.5)) == 0.5
-    assert offset.decode_many([]).shape == (0, 3)
-    assert toy.channel("toy.mode").decode_many([]).shape == (0,)
+    np.testing.assert_array_equal(mounting.from_raw(MOUNTING[None].astype(">f8"))[0], MOUNTING)
+    assert toy.channel("toy.enabled").from_raw(np.array([0xFF, 0], "u1")).tolist() == [1.0, 0.0]
+    assert toy.channel("toy.mode").from_raw(np.array([1, 0], ">i4")).tolist() == ["fast", "slow"]
+    assert offset.from_raw(np.empty((0, 3), ">f8")).shape == (0, 3)
     assert [offset.units, mounting.units, toy.channel("toy.extra").units] == ["m", "", "s"]
     assert toy.channels_by_id[offset.id] is offset
+
+
+def test_an_enum_value_that_is_no_constant_fails_naming_the_channel(toy: Dictionary):
+    """A raw enum value outside the enum's constants raises, naming the channel.
+
+    Args:
+        toy: the toy's dictionary.
+    """
+    with pytest.raises(ValueError, match=r"channel toy\.mode has no constant 7"):
+        toy.channel("toy.mode").from_raw(np.array([7], ">i4"))
 
 
 def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
@@ -293,30 +276,6 @@ def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
     assert toy.channel("toy.gain").pack_many([2, 0.1]).tolist() == [2.0, float(np.float32(0.1))]
     assert offset.pack_many([]).shape == (0, 3)
     assert toy.channel("toy.mode").pack_many([]).shape == (0,)
-
-
-@pytest.mark.parametrize(
-    ("channel", "serialized"),
-    [
-        ("toy.gain", [0.5]),
-        ("toy.offset", [np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0, 6.0])]),
-        ("toy.offset", [struct.pack(">2d", 1.0, 2.0)]),
-        ("toy.offset", [struct.pack(">2d", 1.0, 2.0), struct.pack(">4d", 3.0, 4.0, 5.0, 6.0)]),
-    ],
-    ids=["number", "numpy-array", "wrong-length", "misaligned"],
-)
-def test_decode_many_takes_whole_serialized_values_only(
-    toy: Dictionary, channel: str, serialized: list
-):
-    """Written values, numpy arrays included, or bytes of the wrong length fail, naming the channel.
-
-    Args:
-        toy: the toy's dictionary.
-        channel: the channel decoded.
-        serialized: what is handed to `decode_many`.
-    """
-    with pytest.raises(ValueError, match=rf"channel {channel} "):
-        toy.channel(channel).decode_many(serialized)
 
 
 @pytest.mark.parametrize(
