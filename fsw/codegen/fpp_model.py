@@ -552,8 +552,8 @@ def _component(
             if "DefPort" in general["ty"]:
                 port_type = nodes[str(general["ty"]["DefPort"]["symbol"]["Port"]["nodeId"])]
                 args = arguments(port_type.data["params"])
-            kind = outputs if general["kind"] == "Output" else inputs
-            kind.append((position, Port(general["specifier"]["name"], general["size"], args)))
+            ports = outputs if general["kind"] == "Output" else inputs
+            ports.append((position, Port(general["specifier"]["name"], general["size"], args)))
     return Component(
         node.name,
         tuple(c for _, c in sorted(commands)),

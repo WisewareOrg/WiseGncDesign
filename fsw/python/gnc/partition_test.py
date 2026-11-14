@@ -211,7 +211,8 @@ def test_members_run_in_rate_group_order_and_an_output_reaches_a_later_member_in
 ):
     """Source runs before sink, as `RateGroupMemberOut` numbers them, and sink gets its value.
 
-    Declared and sorted by name, sink would come first; the wiring, not the name, orders them.
+    Declared and sorted by name, sink would come first; the wiring, not the name, orders them. The
+    CDH writes every sub-topology port but the driver's `tickIn`.
 
     Args:
         gnc: the toy's partition.
@@ -224,6 +225,7 @@ def test_members_run_in_rate_group_order_and_an_output_reaches_a_later_member_in
     assert telemetry == [("source", SourceTelemetry(count=1)), ("sink", Nothing())]
     assert gnc.algorithms["source"].parameters == "p"
     assert sorted(gnc.algorithms) == ["sink", "slow", "source"]
+    assert gnc.inputs == ("seedIn",)
 
 
 def test_frames_follow_the_fpp_rate_constants_and_an_input_keeps_its_latest_value(
@@ -292,8 +294,8 @@ def test_boot_builds_every_algorithm_afresh(gnc: GncPartition):
 @pytest.mark.parametrize(
     ("classes", "named"),
     [
-        ((Sink, Source), r"need the classes \['Slow'\] and have none for \[\]"),
-        ((Sink, Slow, Source, Value), r"need the classes \[\] and have none for \['Value'\]"),
+        ((Sink, Source), r"no class for the components \['Slow'\]; the classes \[\] match"),
+        ((Sink, Slow, Source, Value), r"no class for the components \[\]; the classes \['Value'\]"),
     ],
     ids=["missing", "extra"],
 )

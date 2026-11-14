@@ -5,7 +5,8 @@ The sub-topology is `<configuration>.Gnc`. Its one `Svc.RateGroupDriver` drives 
 `RateGroupMemberOut` order; every other connection between its instances carries data. An algorithm
 is a class named as its member's FPP component, built at `boot` on its parameters. Its `step` takes
 `t`, in s, and a keyword per data input, named as the input port without its trailing `In`, and
-returns its `<Name>Outputs` and `<Name>Telemetry` tuples, read by field name. A connection
+returns its `<Name>Outputs` and `<Name>Telemetry` tuples, read by field name; it must not change a
+returned output in place, since the member it is routed to holds it as written. A connection
 `A.X -> B.Y` routes `A`'s output `X` to `B`'s input `Y`, as an F´ sync port does: an output reaches
 a later member in the same frame, and a `None` output writes nothing, so an input holds the latest
 value written to it. A backward edge, into a member that runs no later than `A` in the frame, `A`
@@ -67,11 +68,13 @@ class GncPartition:
         rate_groups: each rate group's qualified name, in its driver's `CycleOut` order; a frame's
             rate groups are named by their position here.
         components: each member's FPP component's qualified name, by its instance's name.
+        inputs: the sub-topology's input ports the CDH writes, every `port` but its driver's.
         algorithms: each algorithm `boot` built, by its instance's name, such as `nav`.
     """
 
     rate_groups: tuple[str, ...]
     components: dict[str, str]
+    inputs: tuple[str, ...]
     algorithms: dict[str, Any]
 
     def __init__(self, model: Model, configuration: str, classes: Sequence[type]) -> None:
@@ -117,7 +120,8 @@ class GncPartition:
         extra = sorted(set(by_name) - set(wanted.values()))
         if missing or extra:
             raise ValueError(
-                f"{topology}'s members need the classes {missing} and have none for {extra}"
+                f"{topology}: no class for the components {missing}; the classes {extra} match no"
+                " member"
             )
         self._classes = {m: by_name[name] for m, name in wanted.items()}
         self.components = {_name(m): model.instances[m].component for m in members}
@@ -150,6 +154,7 @@ class GncPartition:
                 keyword = _keyword(port.instance, port.port)
                 self._ports[name.removeprefix(f"{topology}.")] = port.instance, keyword
                 self._keywords[port.instance].add(keyword)
+        self.inputs = tuple(self._ports)
         self.algorithms = {}
         self._held: dict[str, dict[str, Any]] = {}
 

@@ -6,7 +6,7 @@ with `fsw.codegen.fpp_types.converter`, every array a fresh copy.
 """
 
 import functools
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any, NamedTuple
 
 from fsw.codegen import fpp_types
@@ -16,9 +16,6 @@ __all__ = ["Pair", "convert", "pairings"]
 
 _CONVERTER = "Cdh.BusConverter"
 """The component whose port pairs are the pairing."""
-
-_DRIVER = "Svc.RateGroupDriver"
-"""The component type of the port a sub-topology's base tick enters by."""
 
 
 class Pair(NamedTuple):
@@ -50,37 +47,23 @@ def _carried(port: Port) -> str:
     return argument.type
 
 
-def _tuple(name: str) -> type:
-    """A struct's tuple, by its qualified name.
-
-    Args:
-        name: such as `Gnc.ImuReading`.
-
-    Returns:
-        The tuple.
-    """
-    return functools.reduce(getattr, name.split("."), fpp_types)
-
-
-def pairings(model: Model, configuration: str) -> list[Pair]:
-    """Every role the configuration takes, paired by `Cdh.BusConverter` to its GNC port.
+def pairings(model: Model, ports: Collection[str]) -> list[Pair]:
+    """Every role a GNC sub-topology takes, paired by `Cdh.BusConverter` to its port.
 
     A bus-typed `<role>In` of the converter needs a `<role>Out` that is not bus-typed; a role whose
-    port the sub-topology lacks is not taken. Every sub-topology port but its base tick's must be
-    a role's.
+    port the sub-topology lacks is not taken, and every port it has must be a role's.
 
     Args:
-        model: the model holding the converter and the sub-topology `<configuration>.Gnc`.
-        configuration: the configuration, such as `ImuDeadReckoning`.
+        model: the model holding the converter.
+        ports: the sub-topology's input ports, as `GncPartition.inputs` gives them.
 
     Returns:
         The pairs, in the converter's port order.
 
     Raises:
-        ValueError: a role has no `<role>Out`, or a bus-typed one, naming the role; or a
-            sub-topology port is no role's, naming it.
+        ValueError: a role has no `<role>Out`, or a bus-typed one, naming the role; or a port is no
+            role's, naming it.
     """
-    topology = f"{configuration}.Gnc"
     converter = model.components[_CONVERTER]
     outputs = {port.name: port for port in converter.outputs}
     pairs = []
@@ -95,16 +78,12 @@ def pairings(model: Model, configuration: str) -> list[Pair]:
                 f"{_CONVERTER}'s role {role} takes {bus} at {port.name} but has no {role}Out of a"
                 " GNC type"
             )
-        if f"{topology}.{port.name}" in model.ports:
-            pairs.append(Pair(role, _tuple(bus), _tuple(_carried(output)), port.name))
-    paired = {pair.port for pair in pairs}
-    for name, port in model.ports.items():
-        if not name.startswith(f"{topology}."):
-            continue
-        if model.instances[port.instance].component == _DRIVER:
-            continue
-        if name.removeprefix(f"{topology}.") not in paired:
-            raise ValueError(f"{name} is fed by no role of {_CONVERTER}")
+        if port.name in ports:
+            icd = _carried(output)
+            pairs.append(Pair(role, fpp_types.named(bus), fpp_types.named(icd), port.name))
+    unfed = sorted(set(ports) - {pair.port for pair in pairs})
+    if unfed:
+        raise ValueError(f"the sub-topology's inputs {unfed} are fed by no role of {_CONVERTER}")
     return pairs
 
 

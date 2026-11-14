@@ -126,22 +126,18 @@ not pack into the channel's type fails, naming the channel.
 
 A role's shared entries are `.fppi` groups under `fsw/fpp/interfaces/<Role>/`, which a
 component's `.fpp` includes; the instance name is the role, so nav's entries are `nav.*` in every
-build. A Python build's dictionary comes from FPP alone. `Dictionary.from_component(model,
-instance)` instances the component alone, at the base ID its GNC sub-topology gives the instance,
-and runs `fpp-to-dict` in a temporary directory, against the F´ framework clone `just pinned` or
-`just local` fetches. Nothing is compiled, nothing is written in the tree, and each content of the
-model is generated once per process. `Dictionary.from_sub_topology(configuration)` generates a
-configuration's dictionary alike, from a deployment importing its GNC sub-topology, its rate
-groups' entries beside its algorithms'; the Python build is held to it:
+build. A Python build's dictionary comes from FPP alone:
+`Dictionary.from_sub_topology(configuration)` generates the configuration's, a deployment
+importing its GNC sub-topology, its rate groups' entries beside its algorithms', run through
+`fpp-to-dict` in a temporary directory against the F´ framework clone `just pinned` or `just local`
+fetches. Nothing is compiled, nothing is written in the tree, and each content of the model is
+generated once per process. `Dictionary.from_component(model, instance)` generates one
+component's alike, instanced alone, for toys and tests:
 
 ```python
->>> from pathlib import Path
->>> import algorithms.imu_dead_reckoning as reckoner
->>> from fsw.codegen.deployment import gnc_instance
 >>> from ground.dictionary import Dictionary
->>> model = [Path(reckoner.__file__).with_name("ImuDeadReckoner.fpp")]
->>> nav = Dictionary.from_component(model, gnc_instance("Gnc.ImuDeadReckoner"))
->>> position = nav.channel("nav.bodyEciPos")
+>>> dictionary = Dictionary.from_sub_topology("ImuDeadReckoning")
+>>> position = dictionary.channel("nav.bodyEciPos")
 >>> position.units
 'm'
 >>> position.pack_many([[6871.0e3, 0.0, 0.0], [6871.0e3, 1.0, 0.0]]).shape
@@ -149,9 +145,9 @@ groups' entries beside its algorithms'; the Python build is held to it:
 
 ```
 
-`ground/dictionary_test.py` asserts that every algorithm's GNC instance, so generated, has
-WiseFsw's entries, IDs aside, and WiseFsw's parameter IDs, so the two builds are held to one
-contract. The reasoning is in
+`ground/dictionary_test.py` asserts that every algorithm's GNC instance, in its configuration's
+generated dictionary, has WiseFsw's entries, IDs aside, and WiseFsw's parameter IDs, so the two
+builds are held to one contract. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 The bus structs are in `fsw/fpp/interfaces/Bus.fpp`, and `bus_test.py` beside it holds each to its
