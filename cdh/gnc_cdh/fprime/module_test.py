@@ -197,9 +197,11 @@ def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(exces
     module.Reset(0)
     whole = ONE_SECOND_NS + 1_000
     module.UpdateState(whole)
+    assert {tag for _, tag, _ in module.telemetry()} == {whole}
 
-    with pytest.raises(RuntimeError, match=r"1\.000001|1000001"):
+    with pytest.raises(RuntimeError, match=f"tick at {whole + excess_ns} ns ") as raised:
         module.UpdateState(whole + excess_ns)
+    assert module.failure is raised.value
 
 
 def test_the_build_names_the_pinned_framework_tag_and_the_project_version():

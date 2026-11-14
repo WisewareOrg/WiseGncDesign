@@ -241,6 +241,18 @@ def test_a_command_that_will_not_pack_is_refused_naming_what(
         toy.encode_command("toy.setToy", args)
 
 
+def test_a_mistyped_name_is_refused_naming_it(toy: Dictionary):
+    """A channel or command the dictionary lacks raises `KeyError` naming it.
+
+    Args:
+        toy: the toy's dictionary.
+    """
+    with pytest.raises(KeyError, match="'toy.gian'"):
+        toy.channel("toy.gian")
+    with pytest.raises(KeyError, match="'toy.setTyo'"):
+        toy.encode_command("toy.setTyo", ARGS)
+
+
 def test_serialized_channels_decode_in_one_batch_with_their_units(toy: Dictionary):
     """Arrays come back (N, *shape), a bool as 1.0, an enum as its name; units are the format's.
 
