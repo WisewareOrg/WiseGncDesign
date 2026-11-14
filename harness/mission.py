@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import tempfile
+import weakref
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -262,11 +263,13 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         """
         fsw = mission.fsw(sim_scenario)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
+        # The simulation holds the ground, so a strong reference back would keep every case.
+        scenario = weakref.ref(sim_scenario)
         ground = Ground(
             definition,
             fsw,
             sim_scenario.vehicle.tracking(),
-            sim_scenario.stop_ground,
+            lambda: scenario().stop_ground(),
             period_s=ground_period_s,
         )
         try:
