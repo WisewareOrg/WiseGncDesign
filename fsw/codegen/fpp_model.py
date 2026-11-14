@@ -20,6 +20,7 @@ from typing import Any, NamedTuple
 import fprime_fpp
 
 __all__ = [
+    "Argument",
     "Array",
     "Channel",
     "Command",
@@ -138,16 +139,28 @@ class Array(NamedTuple):
     element: str
 
 
+class Argument(NamedTuple):
+    """A command argument.
+
+    Attributes:
+        name: the argument's name.
+        type: its type reference.
+    """
+
+    name: str
+    type: str
+
+
 class Command(NamedTuple):
     """A command a component declares.
 
     Attributes:
         name: the command's name.
-        args: each argument's `(name, type reference)`, in order.
+        args: its arguments, in order.
     """
 
     name: str
-    args: tuple[tuple[str, str], ...]
+    args: tuple[Argument, ...]
 
 
 class Channel(NamedTuple):
@@ -419,7 +432,7 @@ def _component(
             for _, arg, _ in data["params"]:
                 arg_data = arg["AstNode"]["data"]
                 type_node = arg_data["typeName"]["AstNode"]["id"]
-                args.append((arg_data["name"], _type_name(type_map[str(type_node)], nodes)))
+                args.append(Argument(arg_data["name"], _type_name(type_map[str(type_node)], nodes)))
             commands.append((position, Command(data["name"], tuple(args))))
     channels = []
     for channel in entry["tlmChannelMap"].values():

@@ -12,6 +12,7 @@ import fprime_fpp
 import pytest
 
 from fsw.codegen.fpp_model import (
+    Argument,
     Array,
     Channel,
     Command,
@@ -251,10 +252,10 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares()
         Command(
             "initNavState",
             (
-                ("epoch", "F64"),
-                ("attitude", "Gnc.Quaternion"),
-                ("position", "Gnc.Vector3"),
-                ("velocity", "Gnc.Vector3"),
+                Argument("epoch", "F64"),
+                Argument("attitude", "Gnc.Quaternion"),
+                Argument("position", "Gnc.Vector3"),
+                Argument("velocity", "Gnc.Vector3"),
             ),
         ),
     )
@@ -348,7 +349,9 @@ def test_a_component_s_commands_channels_and_parameters_are_read(toy: Model):
     nav = toy.components["Gnc.Nav"]
 
     assert nav.name == "Gnc.Nav"
-    assert nav.commands == (Command("setMode", (("mode", "Gnc.Mode"), ("reading", "Gnc.Reading"))),)
+    assert nav.commands == (
+        Command("setMode", (Argument("mode", "Gnc.Mode"), Argument("reading", "Gnc.Reading"))),
+    )
     assert nav.channels == (Channel("rate", "F64"), Channel("mode", "Gnc.Mode"))
     assert nav.parameters == (
         Parameter("gain", "F64", 2.0),
