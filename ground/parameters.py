@@ -6,6 +6,8 @@ makes the `.dat` the F´ build's PrmDb loads, so nothing here parses or writes F
 Why is in ADR 0004 rev 2.
 """
 
+import contextlib
+import io
 import json
 from pathlib import Path
 from typing import Any
@@ -43,9 +45,9 @@ def write(parameters: Any, path: Path) -> Path:
 def dat(record: Path, dictionary: Path) -> Path:
     """Makes the record's `.dat` beside it with `fprime-prm-write`'s own conversion, in-process.
 
-    The output path is always given, so the tool never derives one from the record's. A record the
-    tool refuses, such as one naming a parameter the dictionary lacks, raises the tool's own
-    exception.
+    The output path is always given, so the tool never derives one from the record's, and what the
+    tool prints is discarded. A record the tool refuses, such as one naming a parameter the
+    dictionary lacks, raises the tool's own exception.
 
     Args:
         record: the case's record, `<name>.json`.
@@ -55,5 +57,6 @@ def dat(record: Path, dictionary: Path) -> Path:
         The `.dat`, `<name>.dat`.
     """
     output = record.with_suffix(".dat")
-    convert_json(record, dictionary, output, "dat")
+    with contextlib.redirect_stdout(io.StringIO()):
+        convert_json(record, dictionary, output, "dat")
     return output
