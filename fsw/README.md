@@ -141,15 +141,9 @@ so a key the module reads that is missing raises `KeyError`. The reasoning is in
 
 ## FPP types in Python
 
-`fsw.codegen.fpp_types` is FPP's types as named tuples, generated when it is imported from the
-model every configuration shares, read once per process; nothing generated is written in the tree.
-Each top-level FPP module is a namespace: one tuple per struct, an array is a numpy array, and an
-enum value is its constant's name. Each component an algorithm's `.fpp` defines also has
-`<Name>Outputs`, `<Name>Telemetry` and `<Name>Parameters`. An output or telemetry field defaults to
-`None`, not written; a parameter has a default only when FPP gives one. A misspelt field raises.
-
-`converter(source, target)` maps fields by name, ignoring case, from a struct's tuple or a Basilisk
-payload; every field of the target must be found, or building the converter fails, naming it:
+`fsw.codegen.fpp_types` is FPP's types as named tuples, generated when it is imported and never
+written in the tree, with `converter` between them. Its docstrings say what each FPP type becomes,
+which tuples an algorithm's component gets, and how fields are converted:
 
 ```python
 >>> from Basilisk.architecture import messaging

@@ -98,13 +98,13 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
 
 
 def _same(value: Any) -> Any:
-    """A value as it is.
+    """A scalar or an enum name, which a converter passes as it is.
 
     Args:
-        value: the value.
+        value: the field's value.
 
     Returns:
-        It.
+        The value, unchanged.
     """
     return value
 
