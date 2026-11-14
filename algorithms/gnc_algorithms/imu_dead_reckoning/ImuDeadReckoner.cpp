@@ -1,4 +1,4 @@
-// The math mirrors imu_dead_reckoning.py term for term, so the two builds can be compared.
+// The math is imu_dead_reckoning.py's; parity.py holds the two builds to parity case by case.
 #include "algorithms/gnc_algorithms/imu_dead_reckoning/ImuDeadReckoner.hpp"
 
 namespace Gnc {

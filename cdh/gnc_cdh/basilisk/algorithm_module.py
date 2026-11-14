@@ -33,9 +33,9 @@ class AlgorithmModule(sysModel.SysModel):
     The algorithm writes telemetry by returning `{channel: value}`, or `None`, from `step` and from
     each handler, as an F´ component calls `tlmWrite_<channel>`. Each entry is one write, tagged
     with the tick's time; its channel name is checked on the tick, an array is copied as written,
-    and the value is held to the channel's type when `values` packs a batch. Each tick after the
-    last reads every input once and calls `step(t=..., **fields)` with `t` in s; the call Basilisk
-    makes at the reset time runs nothing.
+    and the value is held to the channel's type when `values` packs a batch. Each tick whose time
+    lies after the last tick's reads every input once and calls `step(t=..., **fields)` with `t` in
+    s; the call Basilisk makes at the reset time runs nothing.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in: the flight

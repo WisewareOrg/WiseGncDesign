@@ -9,7 +9,8 @@ commands up, responses and every telemetry write down, in the form F´ uses. The
 scenario's procedure against it and records the flight. `AlgorithmModule` and the F´ host,
 `FprimeModule`, each present it, so one procedure and one set of analyzers fly either build. The
 link's docstrings say what each method does. Each host also has `build`, its build identity,
-which the harness records in the flight's `flight.json`. The reasoning is in
+which the harness records in the flight's `flight.json`. Why commands and telemetry travel in F´'s
+form, and why every write is pushed rather than sampled, is in
 [ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
 
 `gnc_cdh.basilisk` knows nothing about what any field means: it copies message fields to the
@@ -125,6 +126,6 @@ sync, and `just test`, `just fly` and `just lab` run it first; a host built with
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
 and `_wise_fsw.responses()` returns each response under its context. `_wise_fsw.telemetry()`
-drains every telemetry write since the last call, each with its F´ time tag, and `boot` clears both
-and leaves nav idle. The reasoning is in
+drains every telemetry write since the last call, each with its F´ time tag, and `boot` runs the
+commands left queued, clears the link and leaves nav idle. The reasoning is in
 [ADR 0004 rev 1](../docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
