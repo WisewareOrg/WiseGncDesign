@@ -57,8 +57,10 @@ performance with `x`, `p` and `c` as attributes, and TST items are scenarios lin
 evaluate. Its items and values are placeholders for exercising the tooling. `just reqs` checks that
 every item and link is reviewed and that no file a TST references has changed since.
 
-A mission is a vehicle, an FSW builder and the scenarios to fly, defined as a value in a notebook.
-The builder claims its capabilities with `@provides("SYS...")`, and a flight is judged on the rungs
+A mission is a vehicle, an FSW builder, the scenarios to fly and the algorithm's
+`parameters(scenario)`, defined as a value in a notebook. The ground writes each case's parameters
+as a record beside its run file, and the builder takes the scenario and the record's path. The
+builder claims its capabilities with `@provides("SYS...")`, and a flight is judged on the rungs
 its scenario links to that sit under those capabilities. `mission_tests` turns missions into Monte
 Carlo tests: a class per vehicle holding a test per FSW and scenario. The reasoning is in
 [ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).

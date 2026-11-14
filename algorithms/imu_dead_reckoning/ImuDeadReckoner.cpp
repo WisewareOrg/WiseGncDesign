@@ -36,6 +36,14 @@ Vector3d vector(const Gnc::Vector3& v) {
     return Vector3d(v[0], v[1], v[2]);
 }
 
+Eigen::Matrix3d matrix(const Gnc::Matrix3& m) {
+    Eigen::Matrix3d matrix;
+    for (FwIndexType row = 0; row < 3; row++) {
+        matrix.row(row) = vector(m[row]).transpose();
+    }
+    return matrix;
+}
+
 }  // namespace
 
 ImuDeadReckoner::ImuDeadReckoner(const char* compName) : ImuDeadReckonerComponentBase(compName) {}
@@ -72,13 +80,8 @@ void ImuDeadReckoner::schedIn_handler(FwIndexType portNum, U32 context) {
     Fw::ParamValid valid;
     const F64 mu = this->paramGet_mu(valid);
     FW_ASSERT(valid == Fw::ParamValid::VALID, valid.e);
-    const Gnc::Matrix3 dcmPB = this->paramGet_dcm_PB(valid);
+    const Eigen::Matrix3d dcm_BP = matrix(this->paramGet_dcm_PB(valid)).transpose();
     FW_ASSERT(valid == Fw::ParamValid::VALID, valid.e);
-    Eigen::Matrix3d dcm_PB;
-    for (FwIndexType row = 0; row < 3; row++) {
-        dcm_PB.row(row) = vector(dcmPB[row]).transpose();
-    }
-    const Eigen::Matrix3d dcm_BP = dcm_PB.transpose();
 
     const F64 dt = t - this->m_t;
     const Vector3d omega = dcm_BP * this->m_omega_P;

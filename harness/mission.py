@@ -270,7 +270,8 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             BaseException: what the run raised, when neither kept an exception.
         """
         record = run_path(sim_test_directory, sim_case_index).with_suffix(".prm.json")
-        fsw = mission.fsw(sim_scenario, parameters.write(mission.parameters(sim_scenario), record))
+        parameters.write(mission.parameters(sim_scenario), record)
+        fsw = mission.fsw(sim_scenario, record)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
         # The simulation holds the ground, so a strong reference back would keep every case.
         scenario = weakref.ref(sim_scenario)

@@ -27,7 +27,7 @@ module Gnc {
     @ Parameter reads
     param get port prmGetOut
 
-    @ Parameter updates
+    @ Parameter saves to PrmDb
     param set port prmSetOut
 
     @ m^3/s^2, the central body's gravitational parameter

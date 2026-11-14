@@ -136,12 +136,10 @@ class Parameter:
     Attributes:
         id: the parameter's ID.
         name: `<instance>.<parameter>`.
-        type: the parameter's type.
     """
 
     id: int
     name: str
-    type: Type
 
 
 @dataclass(frozen=True)
@@ -230,8 +228,8 @@ class Dictionary:
             path: the JSON file F´ generated.
 
         Raises:
-            ValueError: naming a channel or a parameter whose type is not a primitive, an enum, or
-                an array of primitives or of such arrays.
+            ValueError: naming a channel whose type is not a primitive, an enum, or an array of
+                primitives or of such arrays.
         """
         document = json.loads(Path(path).read_text())
         self.metadata = document["metadata"]
@@ -261,14 +259,10 @@ class Dictionary:
                 raise ValueError(f"channel {name} has {error}") from error
             self._channels[name] = Channel(entry["id"], name, units[1] if units else "", ftype)
         self.channels_by_id = {c.id: c for c in self._channels.values()}
-        self.parameters_by_id: dict[int, Parameter] = {}
-        for entry in document["parameters"]:
-            name = entry["name"].split(".", 1)[1]
-            try:
-                ftype = self.type(entry["type"]["name"])
-            except ValueError as error:
-                raise ValueError(f"parameter {name} has {error}") from error
-            self.parameters_by_id[entry["id"]] = Parameter(entry["id"], name, ftype)
+        self.parameters_by_id = {
+            entry["id"]: Parameter(entry["id"], entry["name"].split(".", 1)[1])
+            for entry in document["parameters"]
+        }
 
     @classmethod
     def from_component(
