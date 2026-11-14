@@ -171,8 +171,8 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
     """With nav propagating, every cycle time the rate group writes is 0, on F´'s stub clock.
 
     On the wall clock some cycles take a microsecond or more, so a cycle time that is not 0 shows a
-    deployment without the stub; on a much faster host it could still read 0. The cycle count is
-    held to one more per tick.
+    deployment without the stub; on a much faster host it could still read 0. How often the rate
+    group runs is `test_each_rate_group_runs_once_every_divider_ticks`'s.
 
     Args:
         fsw: the test's copy of the deployment.
@@ -206,10 +206,10 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
         name = f"navRateGroup.{channel}"
         return station.values(name, [raw for written, _, raw in writes if written == name])
 
-    assert values("CycleTime").tolist() == [0] * ticks
+    cycle_times = values("CycleTime")
+    assert cycle_times.size
+    assert not cycle_times.any()
     assert not values("MaxCycleTime").any()
-    assert np.diff(values("CycleCount")).tolist() == [1] * (ticks - 1)
-    assert len(values("CycleCount")) == ticks
 
 
 def test_each_rate_group_runs_once_every_divider_ticks(
