@@ -81,10 +81,10 @@ True
 ## Adding an algorithm
 
 Write the algorithm in `algorithms`, with its component model, `<Name>.fpp`, beside its
-notebook: the commands and telemetry it implements, and no input ports. Its `step(t=..., **inputs)`
-takes plain arrays by keyword, each named as the message field it reads; it has a method per
-command; and both return the telemetry they write. Its builder hosts it with the dictionary
-`Dictionary.from_component` generates from that model.
+notebook: the ports its GNC sub-topology wires, and the commands and telemetry it implements. Its
+`step(t=..., **inputs)` takes plain arrays by keyword, each named as the message field it reads; it
+has a method per command; and both return the telemetry they write. Its builder hosts it with the
+dictionary `Dictionary.from_component` generates from that model.
 
 ## The dictionary
 
