@@ -3,17 +3,16 @@
 **Status:** accepted
 **Decided:** 2026-11-14 (issue 51 two edges design; issue 52 tooling checks; issue 57 GNC
 sub-topology)
-**Rev:** 4
+**Rev:** 3
 
 ## Revisions
 
-- **rev 4** — 2026-11-14 — the rate groups' health telemetry is not downlinked: health instances
-  take base IDs from a reserved range the comm-stack stand-in drops (issue 57 GNC sub-topology).
 - **rev 3** — 2026-11-13 — the F´ build meets the sim as a hardware-in-the-loop rig: the lab, a
   fresh copy per case, one extension per configuration and rates as FPP constants, with the checks
   that support them; the partitions are ADR 0005 rev 1; reverses rev 2's configuration on an F´
   port for F´ parameters (ADR 0004 rev 2); corrects rev 2's "an `FW_ASSERT` aborts the process"
-  (issue 52 tooling checks).
+  (issue 52 tooling checks); the rate groups' health telemetry is not downlinked (issue 57 GNC
+  sub-topology).
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
   telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
@@ -84,7 +83,7 @@ The partitions inside each build are ADR 0005 rev 1.
 - **If a real F´ deployment would have it, it is inside `_wise_fsw`.** Each stand-in replaces one
   real thing: SimHub the bus driver, GroundLink the whole comm stack, SimTime the clock, its time
   source and its timer.
-  Everything else is ground segment (ADR 0004 rev 3) or lab; the lab's pins are compiled in as a
+  Everything else is ground segment (ADR 0004 rev 2) or lab; the lab's pins are compiled in as a
   test connector.
 - **One extension per configuration**, `_wise_fsw_<configuration>`, chosen by `Mission(gnc=…)`.
 - **Rates are FPP constants in the GNC sub-topology**, which owns its rate groups; F´'s
@@ -145,7 +144,7 @@ The partitions inside each build are ADR 0005 rev 1.
   bridge and the pins. Rejected for the lab, which names no algorithm.
 - **An algorithm's configuration on an F´ port, sent at boot by the sim glue.** It is per-algorithm
   glue outside the FPP contract, and parity cannot see it. Rejected for F´ parameters
-  (ADR 0004 rev 3).
+  (ADR 0004 rev 2).
 - **Rates in F´'s C++ configuration only.** The Python build cannot read C++, so the two builds
   would carry two copies of each rate. Rejected for FPP constants.
 - **A list of the recorded instances, kept by hand or generated.** It needs a registration per

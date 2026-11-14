@@ -2,12 +2,10 @@
 
 **Status:** accepted
 **Decided:** 2026-11-13 (issue 51 two edges design; issue 52 tooling checks)
-**Rev:** 3
+**Rev:** 2
 
 ## Revisions
 
-- **rev 3** — 2026-11-14 — the log holds every write the flight software downlinks, not its health
-  telemetry (ADR 0003 rev 4) (issue 57 GNC sub-topology).
 - **rev 2** — 2026-11-13 — retitled from "Carry commands and telemetry in F´'s form, from one FPP
   dictionary" and rewritten to two edges: RadioEdge in F´'s names, the F´ ground station, typing
   after the run, FPP as the contract read through the native `fpp to-json`, generated named tuples,
@@ -20,7 +18,7 @@
 
 One ground commands either build, records the telemetry either build writes, and the same analyzers
 judge both. An algorithm flies in Python before any F´ build of it exists, with no compiler. The F´
-build runs inside Basilisk with nothing on a thread of its own (ADR 0003 rev 4), and each build has
+build runs inside Basilisk with nothing on a thread of its own (ADR 0003 rev 3), and each build has
 its own CDH (ADR 0005 rev 1).
 
 At `6f6276e`, the Python build imitated F´'s wire format: it decoded F´ command packets, imitated
