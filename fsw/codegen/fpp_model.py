@@ -1,13 +1,10 @@
 """FPP's model, read from the native `fpp to-json`: the one module that reads its output.
 
-`to-json`'s output is unversioned compiler internals, so nothing else reads it, and a key it no
-longer writes raises `KeyError` here rather than reading a model short. Every name is FPP's
-qualified name, such as `WiseFsw.nav` or `Gnc.Vector3`. A type reference is a primitive's name
-(`F64`, `U8`, `bool`), `string`, or a named type's qualified name; an alias reads as the type it
-names.
-
-The binary is the native one inside the `fprime_fpp` package, run directly: F´'s wrapper sends
-`to-json` to Java.
+The binary is the native one inside the `fprime_fpp` package, run directly. A key the reader needs
+that is missing from the output raises `KeyError`. Every name is FPP's qualified name, such as
+`WiseFsw.nav` or `Gnc.Vector3`. A type reference is a primitive's name (`F64`, `U8`, `bool`),
+`string`, or a named type's qualified name; an alias reads as the type it names. Why one module
+reads `to-json` directly is in ADR 0004 rev 2.
 """
 
 import json
