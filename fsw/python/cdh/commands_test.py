@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from fsw.codegen.fpp_model import Instance
 from fsw.python.cdh import commands
 from ground.dictionary import Dictionary
 
@@ -68,7 +69,7 @@ def dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
     """
     model = tmp_path_factory.mktemp("toy") / "Toy.fpp"
     model.write_text(TOY)
-    return Dictionary.from_component([Path(model)], "Toy.Toy", instance="toy")
+    return Dictionary.from_component([Path(model)], Instance("Toy.toy", "Toy.Toy", 0x1000))
 
 
 def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
