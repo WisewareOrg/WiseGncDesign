@@ -126,6 +126,51 @@ def bus_messages() -> dict[str, BusMessage]:
 
 
 @pytest.fixture(scope="session")
+def imu_port() -> int:
+    """The SimHub port the deployment wires to the CDH's IMU input, read from its FPP.
+
+    Returns:
+        The index of SimHub's `busOut`.
+    """
+    from fsw.codegen.deployment import bus_port
+
+    return bus_port("ImuDeadReckoning", "imuIn")
+
+
+@pytest.fixture(scope="session")
+def imu_bus(imu_port: int) -> Callable[[Any, Any], list[tuple[int, bytes]]]:
+    """The bus a step takes for an IMU reading: its message's bytes on the IMU's SimHub port.
+
+    Args:
+        imu_port: the IMU's SimHub port.
+
+    Returns:
+        A function of the angular velocity and the acceleration, each three values in the
+        platform frame, giving `[(port, bytes)]`, the message's dv and dr zero.
+    """
+    from Basilisk.architecture import messaging
+
+    from lab.bus_emulator import serialize
+
+    def bus(angVelPlatform: Any, accelPlatform: Any) -> list[tuple[int, bytes]]:
+        """The bus for one reading.
+
+        Args:
+            angVelPlatform: rad/s, the angular velocity in the platform frame.
+            accelPlatform: m/s2, the acceleration in the platform frame.
+
+        Returns:
+            `[(port, bytes)]`.
+        """
+        message = messaging.IMUSensorMsgPayload()
+        message.AngVelPlatform = list(angVelPlatform)
+        message.AccelPlatform = list(accelPlatform)
+        return [(imu_port, serialize(message))]
+
+    return bus
+
+
+@pytest.fixture(scope="session")
 def case_parameters() -> tuple[Any, ...]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 

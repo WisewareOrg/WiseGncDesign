@@ -5,10 +5,12 @@ template CMake's `configure_file` renders for the F´ build, by the same `@CONFI
 algorithms are those the F´ build takes: every directory under `algorithms/` with a
 `CMakeLists.txt`. `gnc_instances` lists the GNC sub-topologies' instances, and `gnc_instance`
 finds a component's one instance among them. `configuration_model` reads a configuration's contract
-and GNC sub-topology, and `tick_period` its base tick's period.
+and GNC sub-topology, `tick_period` its base tick's period, and `bus_port` the SimHub port its
+deployment wires to a CDH input port.
 """
 
 import functools
+import tempfile
 from pathlib import Path
 
 from fsw.codegen.fpp_model import Instance, Model, read
@@ -16,6 +18,7 @@ from fsw.codegen.fpp_model import Instance, Model, read
 __all__ = [
     "CLONE",
     "algorithm_files",
+    "bus_port",
     "configuration_model",
     "contract_files",
     "fpp_files",
@@ -70,7 +73,7 @@ _PROJECT = (
     "fsw/fpp/interfaces/Interfaces.fpp",
     "fsw/fprime/cdh/GroundLink.fpp",
     "fsw/fprime/platform/SimTime.fpp",
-    "fsw/fprime/rio/SimBridge.fpp",
+    "fsw/fprime/rio/SimHub.fpp",
     "fsw/fprime/deployment/instances.fpp",
 )
 """The repository's files of every deployment's model, its algorithms and GNC sub-topology aside."""
@@ -200,3 +203,36 @@ def tick_period(configuration: str) -> float:
     if constant not in constants:
         raise KeyError(f"{constant} is not declared in fsw/fpp/gnc/{configuration}.fpp")
     return float(constants[constant])
+
+
+@functools.cache
+def bus_port(configuration: str, port: str) -> int:
+    """The SimHub port wired to a CDH input port in a configuration's deployment, once per process.
+
+    The deployment's topology is rendered and read, and the port is the index `i` of its one
+    connection `WiseFsw.simHub.busOut[i] -> WiseFsw.cdh.<port>`.
+
+    Args:
+        configuration: the configuration, such as `ImuDeadReckoning`.
+        port: the CDH input port, such as `imuIn`.
+
+    Returns:
+        The index of SimHub's `busOut`.
+
+    Raises:
+        ValueError: the topology wires SimHub to the port other than once, naming the
+            configuration, the port and the indices found.
+    """
+    with tempfile.TemporaryDirectory() as directory:
+        model = read(fpp_files(configuration, Path(directory)))
+    found = [
+        connection.from_index
+        for connection in model.topologies[f"WiseFsw.{configuration}Fsw"]
+        if (connection.from_instance, connection.from_port) == ("WiseFsw.simHub", "busOut")
+        and (connection.to_instance, connection.to_port) == ("WiseFsw.cdh", port)
+    ]
+    if len(found) != 1:
+        raise ValueError(
+            f"{configuration}'s deployment wires cdh.{port} to SimHub port(s) {found}, not one"
+        )
+    return found[0]

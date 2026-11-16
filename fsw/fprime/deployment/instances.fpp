@@ -2,7 +2,7 @@ module WiseFsw {
 
   instance simTime: Sim.SimTime base id 0x100
   instance groundLink: Sim.GroundLink base id 0x200
-  instance simBridge: Sim.SimBridge base id 0x300
+  instance simHub: Bus.SimHub base id 0x300
   instance cmdDisp: Svc.CommandDispatcher base id 0x500 queue size 10
 
   @ Loads the case's parameter file at boot; its sandbox is the file's directory
@@ -16,5 +16,9 @@ module WiseFsw {
     WiseFsw::prmDb.readParamFile();
     """
   }
+
+  @ The CDH: each bus struct converted to the GNC's struct; its implementation is generated into
+  @ the build directory
+  instance cdh: Cdh.BusConverter base id 0x700 at "../cdh/BusConverter.hpp"
 
 }

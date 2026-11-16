@@ -9,7 +9,8 @@ module WiseFsw {
 
     instance simTime
     instance groundLink
-    instance simBridge
+    instance simHub
+    instance cdh
     instance cmdDisp
     instance prmDb
 
@@ -26,7 +27,8 @@ module WiseFsw {
     }
 
     connections Simulation {
-      simBridge.imuOut -> @CONFIGURATION@.Gnc.imuIn
+      simHub.busOut[0] -> cdh.imuIn
+      cdh.imuOut -> @CONFIGURATION@.Gnc.imuIn
     }
 
     connections Ground {

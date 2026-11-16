@@ -220,9 +220,17 @@ Each configuration's deployment, `WiseFsw.<Cfg>Fsw`, is rendered at build time f
 in `fsw/fprime/deployment/`, one per file in `fsw/fpp/gnc/`, into the build directory, where it
 compiles its GNC sub-topology with it; the shared instances are in
 `fsw/fprime/deployment/instances.fpp`. The F´ build takes every directory under `algorithms/` with
-a `CMakeLists.txt`, and F´ finds which algorithms a configuration links from its FPP. Each `step`
-sets SimTime to the simulation's time, then SimTime ticks the driver once, so nav runs on every
-`navDivider`-th step.
+a `CMakeLists.txt`, and F´ finds which algorithms a configuration links from its FPP. Each
+`_wise_fsw.step(t_ns, bus)` sets SimTime to the simulation's time, runs the queued commands, pushes
+each `(port, bytes)` of `bus` out on SimHub's serial port `busOut[port]`, and then SimTime ticks the
+driver once, so nav runs on every `navDivider`-th step. SimHub stands in for the bus driver: the
+typed port each `busOut` connects to deserializes the bytes as F´ serializes the bus struct, and
+bytes it does not consume exactly trip F´'s assert. The deployment wires
+`simHub.busOut[i] -> cdh.<role>In`, and the `cdh` instance of the generated `Cdh.BusConverter`
+hands the GNC its struct at the sub-topology's `<role>In`. `FprimeModule` pushes the IMU message's
+bytes, as `lab.bus_emulator` writes them, on the port
+`fsw.codegen.deployment.bus_port(configuration, "imuIn")` reads from the rendered deployment's own
+wiring.
 
 The rate group's health telemetry is recorded with every other channel; the deployment links F´'s
 stub `Os::RawTime`, so its cycle times read 0. Each case flies a fresh copy of the deployment, so

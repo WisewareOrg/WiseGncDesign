@@ -9,9 +9,10 @@ import json
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pytest
@@ -44,7 +45,11 @@ def _id(name: str) -> int:
 
 
 def test_a_case_s_file_boots_every_parameter_valid(
-    fsw: ModuleType, prm_record: Path, prm: str, parameter_ids: list[int]
+    fsw: ModuleType,
+    prm_record: Path,
+    prm: str,
+    parameter_ids: list[int],
+    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
 ):
     """The case's record holds every parameter of the deployment, and booted on it the copy steps.
 
@@ -53,6 +58,7 @@ def test_a_case_s_file_boots_every_parameter_valid(
         prm_record: the case's parameter record.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
+        imu_bus: the IMU message's bus for a reading.
     """
     recorded = {
         f"{instance.rsplit('.', 1)[1]}.{name}"
@@ -62,7 +68,7 @@ def test_a_case_s_file_boots_every_parameter_valid(
     assert recorded == {p.name for p in DICTIONARY.parameters_by_id.values()}
 
     fsw.boot(prm, parameter_ids)
-    fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+    fsw.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
 
     assert fsw.telemetry()
 
@@ -158,6 +164,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     tmp_path: Path,
     prm_record: Path,
     parameter_ids: list[int],
+    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
 ):
     """Every value edited in the record is the one PrmDb holds, read back from its own image.
 
@@ -170,6 +177,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
         tmp_path: where PrmDb's image is decoded.
         prm_record: the case's parameter record, edited here.
         parameter_ids: every parameter's ID, which boot holds valid.
+        imu_bus: the IMU message's bus for a reading.
     """
     entries = json.loads(prm_record.read_text())
     counter = itertools.count(1)
@@ -184,7 +192,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     dat.unlink()
 
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)
-    fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+    fsw.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
     image = tmp_path / "image.json"
     tool = Path(sys.executable).parent / "fprime-prm-decode"
     command = [tool, dat, "-d", DICTIONARY_PATH, "-o", image]
@@ -298,6 +306,7 @@ def test_the_sandbox_is_the_case_s_directory(
     prm: str,
     parameter_ids: list[int],
     monkeypatch: pytest.MonkeyPatch,
+    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
 ):
     """PrmDb saves to the case's file and loads one beside it, but none from another directory.
 
@@ -307,6 +316,7 @@ def test_the_sandbox_is_the_case_s_directory(
         prm: the case's parameter file, in `case`.
         parameter_ids: every parameter's ID, which boot holds valid.
         monkeypatch: sets the working directory, which the loaded paths are relative to.
+        imu_bus: the IMU message's bus for a reading.
     """
     monkeypatch.chdir(tmp_path)
     dat = Path(prm)
@@ -322,7 +332,7 @@ def test_the_sandbox_is_the_case_s_directory(
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)
     fsw.uplink(_load_file(station, Path("elsewhere/outside.dat")), 2)
     fsw.uplink(_load_file(station, Path("case/beside.dat")), 3)
-    fsw.step(t_ns=NS, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
+    fsw.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
 
     assert station.responses() == [(1, "OK", None), (2, "EXECUTION_ERROR", None), (3, "OK", None)]
     assert dat.exists()

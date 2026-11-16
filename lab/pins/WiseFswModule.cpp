@@ -1,11 +1,11 @@
 // The deployment's Python interface: a hand-written pybind11 module.
 // One deployment per loaded copy: its component instances are the topology's globals.
-#include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Fw/Types/Assert.hpp"
@@ -32,10 +32,6 @@ class RaisingAssertHook final : public Fw::AssertHook {
 };
 
 RaisingAssertHook g_assertHook;
-
-Gnc::Vector3 vector3(const Eigen::Vector3d& v) {
-    return Gnc::Vector3({v.x(), v.y(), v.z()});
-}
 
 }  // namespace
 
@@ -73,7 +69,7 @@ PYBIND11_MODULE(_wise_fsw, m) {
             }
         },
         py::arg("prm_path"), py::arg("parameter_ids"),
-        "Sets the topology up and boots it at t = 0 s, the dead reckoner idle: PrmDb loads prm_path, an absolute "
+        "Sets the topology up and boots it at t = 0 s, every component idle: PrmDb loads prm_path, an absolute "
         "path whose directory is its sandbox. Raises ValueError for a relative path or one in the root directory, "
         "and RuntimeError naming each of parameter_ids that is not valid once loaded. A copy boots once: a second "
         "boot raises RuntimeError.");
@@ -95,15 +91,20 @@ PYBIND11_MODULE(_wise_fsw, m) {
 
     m.def(
         "step",
-        [](U64 t_ns, const Eigen::Vector3d& angVelPlatform, const Eigen::Vector3d& accelPlatform) {
+        [](U64 t_ns, const std::vector<std::pair<FwIndexType, py::bytes>>& bus) {
             WiseFsw::simTime.set(t_ns);
             g_cooperative.pump();
-            WiseFsw::simBridge.sendImu(vector3(angVelPlatform), vector3(accelPlatform));
+            for (const auto& message : bus) {
+                const std::string data = message.second;
+                WiseFsw::simHub.push(message.first, reinterpret_cast<const U8*>(data.data()),
+                                     static_cast<FwSizeType>(data.size()));
+            }
             WiseFsw::simTime.tick();
         },
-        py::arg("t_ns"), py::arg("angVelPlatform"), py::arg("accelPlatform"),
-        "Sets the clock to t_ns (ns), runs the queued commands, sends the IMU reading and ticks the rate groups "
-        "once.");
+        py::arg("t_ns"), py::arg("bus"),
+        "Sets the clock to t_ns (ns), runs the queued commands, pushes each (port, bytes) of bus out on "
+        "SimHub.busOut[port] in order and ticks the rate groups once. Bytes the connected port does not deserialize "
+        "exactly trip F´'s assert.");
 
     m.def(
         "pump", [](int rounds) { g_cooperative.pump(rounds); }, py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},

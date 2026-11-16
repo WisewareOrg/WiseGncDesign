@@ -6,6 +6,7 @@ import pytest
 
 from fsw.codegen.deployment import (
     algorithm_files,
+    bus_port,
     configuration_model,
     contract_files,
     fpp_files,
@@ -93,3 +94,14 @@ def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
 
     with pytest.raises(KeyError, match=r"ImuDeadReckoning\.tickPeriod"):
         tick_period("ImuDeadReckoning")
+
+
+def test_a_cdh_port_s_bus_port_is_the_simhub_port_the_deployment_wires_to_it():
+    """The IMU's `cdh.imuIn` is fed by `simHub.busOut[0]`, as the rendered topology wires it."""
+    assert bus_port("ImuDeadReckoning", "imuIn") == 0
+
+
+def test_a_cdh_port_no_simhub_port_feeds_is_refused_naming_it():
+    """A port the deployment does not wire to SimHub raises, naming it and the configuration."""
+    with pytest.raises(ValueError, match=r"ImuDeadReckoning.*cdh\.starIn.*SimHub port\(s\) \[\]"):
+        bus_port("ImuDeadReckoning", "starIn")
