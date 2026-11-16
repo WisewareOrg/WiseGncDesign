@@ -19,13 +19,14 @@ from Basilisk.architecture import messaging
 from fsw.codegen.fields import STRUCT_CODES
 from fsw.codegen.fpp_model import Struct, read
 
-__all__ = ["serialize"]
+__all__ = ["BUS", "serialize"]
 
-_BUS = Path(__file__).resolve().parents[1] / "fsw" / "fpp" / "interfaces" / "Bus.fpp"
+BUS = Path(__file__).resolve().parents[1] / "fsw" / "fpp" / "interfaces" / "Bus.fpp"
+"""The bus structs' FPP file."""
 
 _STRUCTS = {
     name.removeprefix("Bus.").lower() + "payload": struct_
-    for name, struct_ in read([_BUS]).types.items()
+    for name, struct_ in read([BUS]).types.items()
     if name.startswith("Bus.") and isinstance(struct_, Struct)
 }
 """Each bus struct, by the name of the payload it mirrors in lower case."""
@@ -47,7 +48,7 @@ def _packer(payload: type) -> tuple[struct.Struct, tuple[str, ...]]:
     """
     key = payload.__name__.lower()
     if key not in _STRUCTS:
-        raise KeyError(f"no bus struct in {_BUS.name} mirrors {payload.__name__}")
+        raise KeyError(f"no bus struct in {BUS.name} mirrors {payload.__name__}")
     bus = _STRUCTS[key]
     fields = {name.lower(): name for name in payload.__dtype__.names}
     layout = ">"
