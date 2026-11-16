@@ -17,13 +17,17 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
+from fsw.codegen.deployment import configurations
 from fsw.codegen.fpp_model import Instance
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import DICTIONARY, FprimeModule
+from lab import FprimeModule, dictionary_path
 
-BUILT = importlib.util.find_spec("lab._wise_fsw") is not None
-"""Whether `just fsw` built the deployment; the tests that need it skip without it."""
+BUILT = all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations())
+"""Whether `just fsw` built every deployment; the tests that need it skip without it."""
+
+DICTIONARY = dictionary_path("ImuDeadReckoning")
+"""The dictionary the build of nav's configuration generated, built or not."""
 
 TOY = """\
 module Toy {

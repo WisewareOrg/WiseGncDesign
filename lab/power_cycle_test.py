@@ -12,19 +12,16 @@ import h5py
 import numpy as np
 import pytest
 
+from fsw.codegen.deployment import configurations
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import DICTIONARY as DICTIONARY_PATH
-from lab.power_cycle import power_cycle
+from lab.power_cycle import _loaded_stamps, dictionary_path, power_cycle, source
 
-if importlib.util.find_spec("lab._wise_fsw") is None:
-    pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
+if not all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations()):
+    pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000
 """ns per s."""
-
-DICTIONARY = Dictionary(DICTIONARY_PATH)
-"""The deployment's dictionary, which the build generated."""
 
 STATE = {
     "epoch": 0.0,
@@ -116,7 +113,7 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
 
 
 def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
-    prm: str, parameter_ids: list[int], bus: list[tuple[int, bytes]]
+    configuration: str, prm: str, parameter_ids: list[int], bus: list[tuple[int, bytes]]
 ):
     """A pin called before boot trips an F´ assert, raised in Python with F´'s own text.
 
@@ -124,16 +121,17 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
     boots and steps. Neither copy is in `sys.modules`.
 
     Args:
+        configuration: the configuration power-cycled.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
-    raised = power_cycle()
+    raised = power_cycle(configuration)
 
     with pytest.raises(RuntimeError, match=r'^Assert: ".*:\d+"'):
         raised.step(t_ns=NS, bus=bus)
 
-    fresh = power_cycle()
+    fresh = power_cycle(configuration)
     assert fresh is not raised
     fresh.boot(prm, parameter_ids)
     fresh.step(t_ns=NS, bus=bus)
@@ -143,20 +141,26 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
 
 
 def test_two_copies_in_one_process_share_no_state(
-    prm: str, parameter_ids: list[int], bus: list[tuple[int, bytes]]
+    configuration: str,
+    dictionary: Dictionary,
+    prm: str,
+    parameter_ids: list[int],
+    bus: list[tuple[int, bytes]],
 ):
     """A copy left mid-flight, a command queued and its link undrained, reaches no later copy.
 
     The later copy boots idle and answers nothing; the earlier one flies on from its own state.
 
     Args:
+        configuration: the configuration power-cycled.
+        dictionary: its dictionary.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
-    earlier, later = power_cycle(), power_cycle()
-    earlier_station = FprimeStation(earlier, DICTIONARY)
-    later_station = FprimeStation(later, DICTIONARY)
+    earlier, later = power_cycle(configuration), power_cycle(configuration)
+    earlier_station = FprimeStation(earlier, dictionary)
+    later_station = FprimeStation(later, dictionary)
     earlier.boot(prm, parameter_ids)
     earlier_station.uplink("nav.initNavState", STATE, 1)
     earlier.step(t_ns=NS, bus=bus)
@@ -185,15 +189,54 @@ def test_two_copies_in_one_process_share_no_state(
     assert [context for context, _, _ in earlier_station.responses()] == [1, 2]
 
 
-def test_a_copy_boots_once(prm: str, parameter_ids: list[int]):
+def test_a_copy_boots_once(configuration: str, prm: str, parameter_ids: list[int]):
     """A second boot of one copy is refused: a copy is powered on once.
 
     Args:
+        configuration: the configuration power-cycled.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
     """
-    copy = power_cycle()
+    copy = power_cycle(configuration)
     copy.boot(prm, parameter_ids)
 
     with pytest.raises(RuntimeError, match="already booted"):
         copy.boot(prm, parameter_ids)
+
+
+def test_a_configuration_not_built_is_refused_naming_it():
+    """A configuration with no extension names itself and the recipe that builds it."""
+    with pytest.raises(
+        ModuleNotFoundError, match=r"of NoSuchConfiguration is not built; run `just fsw`"
+    ):
+        source("NoSuchConfiguration")
+
+
+def test_a_rebuilt_extension_is_refused_by_its_own_configuration_alone(
+    configuration: str, monkeypatch: pytest.MonkeyPatch
+):
+    """Each configuration's extension is stamped apart: another's rebuild leaves it flying.
+
+    Args:
+        configuration: the configuration checked.
+        monkeypatch: records a different file as the one this process loaded.
+    """
+    monkeypatch.setitem(_loaded_stamps, f"Other{configuration}", (-1, -1))
+    assert power_cycle(configuration)
+
+    monkeypatch.setitem(_loaded_stamps, configuration, (-1, -1))
+    with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
+        power_cycle(configuration)
+
+
+def test_a_configuration_s_dictionary_is_the_one_its_deployment_generated(
+    configuration: str, dictionary: Dictionary
+):
+    """`dictionary_path` names the dictionary of the configuration's own deployment.
+
+    Args:
+        configuration: the configuration.
+        dictionary: the dictionary at its path.
+    """
+    assert dictionary_path(configuration).name == f"{configuration}FswTopologyDictionary.json"
+    assert dictionary.metadata["deploymentName"] == f"WiseFsw.{configuration}Fsw"

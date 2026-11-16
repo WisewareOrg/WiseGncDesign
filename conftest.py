@@ -1,8 +1,9 @@
 """Fixtures every package's tests share: an F´ copy, its station, a drain, messages, parameters.
 
-A fixture needing the F´ build, or the dictionary it generates, skips its test without it. Every
-pytest run loads this file, the judge's included, so the FPP model, Basilisk and F´ are imported
-only by the fixtures that need them.
+The fixtures of a configuration's F´ build range over every configuration, one per GNC
+sub-topology. A fixture needing the F´ build, or the dictionary it generates, skips its test
+without it. Every pytest run loads this file, the judge's included, so the FPP model is read, and
+Basilisk and F´ are imported, only by the fixtures that need them.
 """
 
 from __future__ import annotations
@@ -18,39 +19,72 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 import pytest
 
+from fsw.codegen.deployment import configurations
+
 if TYPE_CHECKING:
+    from ground.dictionary import Dictionary
     from ground.fprime_station import FprimeStation
 
 
+@pytest.fixture(scope="session", params=configurations())
+def configuration(request: pytest.FixtureRequest) -> str:
+    """Each configuration in turn: the name of a GNC sub-topology in `fsw/fpp/gnc/`.
+
+    Args:
+        request: carries the configuration as its parameter.
+
+    Returns:
+        The configuration.
+    """
+    return request.param
+
+
+@pytest.fixture(scope="session")
+def dictionary(configuration: str) -> Dictionary:
+    """The dictionary the configuration's build generated; skips the test without it.
+
+    Args:
+        configuration: the configuration.
+
+    Returns:
+        The dictionary.
+    """
+    from ground.dictionary import Dictionary
+
+    return Dictionary(_dictionary(configuration))
+
+
 @pytest.fixture
-def fsw() -> ModuleType:
-    """A fresh copy of the deployment, not yet booted; skips the test without the F´ build.
+def fsw(configuration: str) -> ModuleType:
+    """A fresh copy of the configuration's deployment, not yet booted; skips without its build.
+
+    Args:
+        configuration: the configuration.
 
     Returns:
         The copy.
     """
-    if importlib.util.find_spec("lab._wise_fsw") is None:
-        pytest.skip("the F´ build is absent; run `just fsw`")
+    if importlib.util.find_spec(f"lab._wise_fsw_{configuration}") is None:
+        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
     from lab.power_cycle import power_cycle
 
-    return power_cycle()
+    return power_cycle(configuration)
 
 
 @pytest.fixture
-def station(fsw: ModuleType) -> FprimeStation:
+def station(fsw: ModuleType, dictionary: Dictionary) -> FprimeStation:
     """The ground station on the test's copy, on the dictionary the build generated.
 
     Args:
         fsw: the test's copy.
+        dictionary: the copy's dictionary.
 
     Returns:
         The station.
     """
-    from ground.dictionary import Dictionary
     from ground.fprime_station import FprimeStation
-    from lab import DICTIONARY
 
-    return FprimeStation(fsw, Dictionary(DICTIONARY))
+    return FprimeStation(fsw, dictionary)
 
 
 @pytest.fixture
@@ -126,15 +160,18 @@ def bus_messages() -> dict[str, BusMessage]:
 
 
 @pytest.fixture
-def bus_by_role(bus_messages: dict[str, BusMessage]) -> dict[str, tuple[int, bytes]]:
+def bus_by_role(
+    configuration: str, bus_messages: dict[str, BusMessage]
+) -> dict[str, tuple[int, bytes]]:
     """Each role's LabBusDriver port and its bus message's bytes, as the bus emulator writes them.
 
-    The roles are the contract's `Cdh.BusConverter`'s, and each port is the one the built
-    deployment's configuration wires to the role's CDH input, read from its FPP. The shared
+    The roles are the contract's `Cdh.BusConverter`'s, and each port is the one the
+    configuration's deployment wires to the role's CDH input, read from its FPP. The shared
     deployment template, `fsw/fprime/deployment/Fsw.fpp.in`, wires every role into every
     configuration, so a role left unwired fails the fixture with `bus_port`'s `ValueError`.
 
     Args:
+        configuration: the configuration.
         bus_messages: a message of each bus struct.
 
     Returns:
@@ -143,11 +180,8 @@ def bus_by_role(bus_messages: dict[str, BusMessage]) -> dict[str, tuple[int, byt
     from fsw.codegen.deployment import bus_port, contract_files
     from fsw.codegen.fpp_model import read
     from fsw.codegen.roles import roles
-    from ground.dictionary import Dictionary
     from lab.bus_emulator import serialize
 
-    instances = Dictionary(_dictionary()).algorithm_instances()
-    (configuration,) = {instance.name.split(".", 1)[0] for instance in instances}
     return {
         role.role: (
             bus_port(configuration, role.input),
@@ -171,13 +205,16 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
 
 
 @pytest.fixture(scope="session")
-def case_parameters() -> tuple[Any, ...]:
+def case_parameters(configuration: str) -> tuple[Any, ...]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
     The instances are those the deployment's dictionary holds, so the case skips without it. A
     zero holds for a numeric parameter or an array of them; a parameter of an enum, struct or
     string type gets none, and fails `parameters_from` or the `.dat`. A test module flying an
     algorithm's own values overrides this fixture, swapping that algorithm's tuple in.
+
+    Args:
+        configuration: the configuration, whose dictionary names the instances.
 
     Returns:
         Each instance's `<Name>Parameters` tuple.
@@ -189,7 +226,7 @@ def case_parameters() -> tuple[Any, ...]:
 
     model = read(contract_files())
     tuples = []
-    for instance in Dictionary(_dictionary()).algorithm_instances():
+    for instance in Dictionary(_dictionary(configuration)).algorithm_instances():
         component = model.components[instance.component]
         values = {}
         for parameter in component.parameters:
@@ -221,40 +258,48 @@ def prm_record(case_parameters: tuple[Any, ...], tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def prm(prm_record: Path) -> str:
+def prm(prm_record: Path, configuration: str) -> str:
     """The case's `.dat`, made beside its record as the F´ host makes it.
 
     Args:
         prm_record: the case's record.
+        configuration: the configuration, whose dictionary the `.dat` is made against.
 
     Returns:
         The `.dat`'s path, as `boot` takes it.
     """
     from ground import parameters
 
-    return str(parameters.dat(prm_record, _dictionary()))
+    return str(parameters.dat(prm_record, _dictionary(configuration)))
 
 
 @pytest.fixture(scope="session")
-def parameter_ids() -> list[int]:
-    """Every parameter's ID in the deployment's dictionary, which `boot` holds valid.
+def parameter_ids(configuration: str) -> list[int]:
+    """Every parameter's ID in the configuration's dictionary, which `boot` holds valid.
+
+    Args:
+        configuration: the configuration.
 
     Returns:
         The IDs, sorted.
     """
     from ground.dictionary import Dictionary
 
-    return sorted(Dictionary(_dictionary()).parameters_by_id)
+    return sorted(Dictionary(_dictionary(configuration)).parameters_by_id)
 
 
-def _dictionary() -> Path:
-    """The deployment's dictionary, skipping the test asking when `just fsw` has not built it.
+def _dictionary(configuration: str) -> Path:
+    """A configuration's dictionary, skipping the test asking when `just fsw` has not built it.
+
+    Args:
+        configuration: the configuration.
 
     Returns:
         Its path.
     """
-    from lab import DICTIONARY
+    from lab import dictionary_path
 
-    if not DICTIONARY.exists():
-        pytest.skip("the F´ build is absent; run `just fsw`")
-    return DICTIONARY
+    path = dictionary_path(configuration)
+    if not path.exists():
+        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
+    return path

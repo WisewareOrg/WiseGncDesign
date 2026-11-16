@@ -472,7 +472,9 @@ def test_the_algorithm_instances_are_the_gnc_instances_of_an_algorithm_it_holds(
     assert toy.algorithm_instances() == ()
 
 
-def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_parameter_ids():
+def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_parameter_ids(
+    dictionary: Dictionary,
+):
     """Each WiseFsw algorithm instance, in its configuration's generated dictionary, is WiseFsw's.
 
     The generated dictionary is the one the configuration's Python build flies; it states the
@@ -480,12 +482,11 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
 
     It also fails when an algorithm's `.fpp`, or a group it includes, changed and F´ was not
     rebuilt.
-    """
-    from lab import DICTIONARY
 
-    if not DICTIONARY.exists():
-        pytest.skip("the F´ build is absent; run `just fsw`")
-    wise_fsw = Dictionary(DICTIONARY)
+    Args:
+        dictionary: the dictionary the configuration's F´ build generated.
+    """
+    wise_fsw = dictionary
     instances = wise_fsw.algorithm_instances()
     assert instances
 

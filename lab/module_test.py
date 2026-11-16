@@ -12,9 +12,10 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
+import lab.power_cycle
 from lab import FprimeModule
 
-if importlib.util.find_spec("lab._wise_fsw") is None:
+if importlib.util.find_spec("lab._wise_fsw_ImuDeadReckoning") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
 
 REPOSITORY = Path(__file__).parents[1]
@@ -118,7 +119,7 @@ def test_a_host_without_the_f_prime_build_says_to_build_it(
         monkeypatch: hides the extension from the import system.
         prm_record: the case's parameter record.
     """
-    monkeypatch.setitem(sys.modules, "lab._wise_fsw", None)
+    monkeypatch.setitem(sys.modules, "lab._wise_fsw_ImuDeadReckoning", None)
 
     with pytest.raises(ModuleNotFoundError, match="not built; run `just fsw`"):
         _module(prm_record)
@@ -135,7 +136,7 @@ def test_a_host_refuses_an_extension_rebuilt_after_the_process_loaded_it(
         prm_record: the case's parameter record.
     """
     built_before = _module(prm_record)
-    monkeypatch.setattr("lab.power_cycle._loaded_stamp", (-1, -1))
+    monkeypatch.setitem(lab.power_cycle._loaded_stamps, "ImuDeadReckoning", (-1, -1))
 
     with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
         _module(prm_record)

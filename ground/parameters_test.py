@@ -13,7 +13,10 @@ from fsw.codegen.deployment import gnc_instances
 from fsw.codegen.fpp_model import Instance
 from fsw.codegen.fpp_types import Gnc
 from ground import parameters
-from lab import DICTIONARY
+from lab import dictionary_path
+
+DICTIONARY = dictionary_path("ImuDeadReckoning")
+"""The dictionary the build of nav's configuration generated, built or not."""
 
 NAV = Gnc.ImuDeadReckonerParameters(
     mu=3.986004360e14, dcm_PB=np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])

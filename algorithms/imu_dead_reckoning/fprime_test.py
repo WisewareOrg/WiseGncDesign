@@ -24,7 +24,7 @@ from ground.fprime_station import FprimeStation
 from lab import FprimeModule
 from lab.bus_emulator import serialize
 
-if importlib.util.find_spec("lab._wise_fsw") is None:
+if importlib.util.find_spec("lab._wise_fsw_ImuDeadReckoning") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
 
 MU = 3.986004360e14
@@ -42,6 +42,16 @@ NS = 1_000_000_000
 
 NAV = Gnc.ImuDeadReckonerParameters(mu=MU, dcm_PB=MOUNTING)
 """Nav's parameters."""
+
+
+@pytest.fixture(scope="session")
+def configuration() -> str:
+    """The dead reckoner's configuration, the only one this module's cases fly.
+
+    Returns:
+        `ImuDeadReckoning`.
+    """
+    return "ImuDeadReckoning"
 
 
 @pytest.fixture

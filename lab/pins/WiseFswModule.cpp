@@ -35,7 +35,7 @@ RaisingAssertHook g_assertHook;
 
 }  // namespace
 
-PYBIND11_MODULE(_wise_fsw, m) {
+PYBIND11_MODULE(WISE_FSW_MODULE, m) {
     m.doc() = "The WiseFsw F´ deployment, run inside the simulation's process; set up by boot, once per copy.";
 
     g_assertHook.registerHook();

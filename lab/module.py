@@ -13,14 +13,17 @@ from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab.bus_emulator import serialize
-from lab.power_cycle import power_cycle, source
+from lab.power_cycle import dictionary_path, power_cycle, source
 
-__all__ = ["DICTIONARY", "FprimeModule"]
+__all__ = ["FprimeModule"]
 
 _NANOSECONDS_PER_SECOND = 1e9
 _NANOSECONDS_PER_MICROSECOND = 1_000
 
-DICTIONARY = Path(__file__).with_name("WiseFswTopologyDictionary.json")
+_CONFIGURATION = "ImuDeadReckoning"
+"""The configuration this host flies."""
+
+DICTIONARY = dictionary_path(_CONFIGURATION)
 """The dictionary F´ generated for the deployment, copied here by `just fsw`."""
 
 
@@ -46,7 +49,7 @@ class FprimeModule(sysModel.SysModel):
             version and the commit the deployment was built from.
     """
 
-    period_s = tick_period("ImuDeadReckoning")
+    period_s = tick_period(_CONFIGURATION)
     dictionary: Dictionary
     failure: BaseException | None
     build: dict[str, str]
@@ -68,9 +71,9 @@ class FprimeModule(sysModel.SysModel):
             prm_path: the case's parameter record, JSON, which `Reset` boots the deployment with.
         """
         super().__init__()
-        source()
+        source(_CONFIGURATION)
         self._imu = imu
-        self._imu_port = bus_port("ImuDeadReckoning", "imuIn")
+        self._imu_port = bus_port(_CONFIGURATION, "imuIn")
         self._dat = parameters.dat(prm_path, DICTIONARY)
         self.dictionary = Dictionary(DICTIONARY)
         self.failure = None
@@ -131,7 +134,7 @@ class FprimeModule(sysModel.SysModel):
             BaseException: the reset's exception, kept whole in `failure`.
         """
         try:
-            self._fsw = power_cycle()
+            self._fsw = power_cycle(_CONFIGURATION)
             self._station = FprimeStation(self._fsw, self.dictionary)
             if not self._imu.isLinked():
                 raise RuntimeError("the IMU reader is not subscribed to any message")

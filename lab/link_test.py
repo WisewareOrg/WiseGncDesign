@@ -13,14 +13,13 @@ from typing import Any
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import fpp_files
+from fsw.codegen.deployment import configurations, fpp_files
 from fsw.codegen.fpp_model import read
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import DICTIONARY
 
-if importlib.util.find_spec("lab._wise_fsw") is None:
-    pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
+if not all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations()):
+    pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000
 """ns per s."""
@@ -211,6 +210,7 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
 def test_each_rate_group_runs_once_every_divider_ticks(
     fsw: ModuleType,
     station: FprimeStation,
+    dictionary: Dictionary,
     tmp_path: Path,
     prm: str,
     parameter_ids: list[int],
@@ -226,12 +226,13 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        dictionary: its dictionary.
         tmp_path: where the configuration's topology is rendered.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
-    instances = Dictionary(DICTIONARY).algorithm_instances()
+    instances = dictionary.algorithm_instances()
     (configuration,) = {i.name.split(".", 1)[0] for i in instances}
     constants = read(fpp_files(configuration, tmp_path)).constants
     dividers = {
