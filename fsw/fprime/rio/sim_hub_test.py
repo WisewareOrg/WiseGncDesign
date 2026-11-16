@@ -19,7 +19,7 @@ from lab.power_cycle import power_cycle
 NS = 1_000_000_000
 """ns per s."""
 
-_SIMHUB = r'^Assert: "fsw/fprime/rio/SimHub\.cpp:\d+"'
+_SIMHUB = r'^Assert: "[^"]*fsw/fprime/rio/SimHub\.cpp:\d+"'
 """The assert SimHub's own leftover-bytes check raises."""
 
 _TOPOLOGY = r'^Assert: "[^"]*FswTopologyAc\.cpp:\d+"'
