@@ -6,7 +6,6 @@ bytes F´ serialized, which `values` turns into values in one batch.
 """
 
 from collections.abc import Mapping, Sequence
-from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -19,23 +18,35 @@ __all__ = ["FprimeStation"]
 class FprimeStation:
     """The ground's radio edge to an F´ deployment, through the deployment's pins.
 
-    It supplies the edge's four methods; `lab.FprimeModule` holds it and supplies `period_s` and
-    `dictionary`.
+    Attributes:
+        dictionary: the deployment's dictionary.
     """
 
-    def __init__(self, fsw: ModuleType, dictionary: Dictionary) -> None:
-        """Holds the deployment and reads the packet's types from its dictionary.
+    dictionary: Dictionary
+
+    def __init__(self, fsw: Any, dictionary: Dictionary) -> None:
+        """Holds the deployment's pins and reads the packet's types from its dictionary.
 
         Args:
-            fsw: the deployment's extension.
+            fsw: the pins: anything with the extension's `uplink`, `responses` and `telemetry`,
+                such as a copy of the extension or `lab.Adapter`, which also gives `period_s`.
             dictionary: the deployment's dictionary.
         """
         self._fsw = fsw
-        self._dictionary = dictionary
+        self.dictionary = dictionary
         self._descriptor = dictionary.type("FwPacketDescriptorType")
         self._opcode = dictionary.type("FwOpcodeType")
         self._command_descriptor = dictionary.type("ComCfg.Apid").constants["FW_PACKET_COMMAND"]
         self._responses = {value: name for name, value in dictionary.responses.items()}
+
+    @property
+    def period_s(self) -> float:
+        """s, the period the deployment ticks at, as its pins give it.
+
+        Returns:
+            The pins' `period_s`.
+        """
+        return self._fsw.period_s
 
     def encode_command(self, name: str, args: Mapping[str, Any]) -> bytes:
         """A command packet.
@@ -55,7 +66,7 @@ class FprimeStation:
             ValueError: when a parameter is of a type the dictionary does not code, or an argument
                 does not fit its type.
         """
-        command = self._dictionary.command(name)
+        command = self.dictionary.command(name)
         if command.types is None:
             raise ValueError(f"{name} has a parameter type the dictionary module does not code")
         packet = self._descriptor.serialized([self._command_descriptor]).tobytes()
@@ -89,7 +100,7 @@ class FprimeStation:
         Returns:
             `(<instance>.<channel>, F´ time tag in ns, bytes)`, the value as F´ serialized it.
         """
-        channels = self._dictionary.channels_by_id
+        channels = self.dictionary.channels_by_id
         return [(channels[i].name, t_ns, raw) for i, t_ns, raw in self._fsw.telemetry()]
 
     def values(self, name: str, raws: Sequence[bytes]) -> np.ndarray:
@@ -105,7 +116,7 @@ class FprimeStation:
         Raises:
             ValueError: naming the channel, for a write that is not bytes of one value of its type.
         """
-        channel = self._dictionary.channel(name)
+        channel = self.dictionary.channel(name)
         size = channel.type.dtype.itemsize
         if not all(isinstance(raw, bytes) and len(raw) == size for raw in raws):
             raise ValueError(f"channel {name} decodes {size}-byte writes only")
