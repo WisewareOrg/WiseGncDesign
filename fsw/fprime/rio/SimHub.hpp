@@ -1,5 +1,4 @@
-// The bus driver's stand-in: bytes from the bus out on serial ports, deserialized by the typed port
-// each connects to.
+// The bus driver's stand-in: bytes from the bus out on serial ports.
 #ifndef BUS_SIMHUB_HPP
 #define BUS_SIMHUB_HPP
 
