@@ -15,13 +15,13 @@
 
 ## Context
 
-The F´ build flies inside Basilisk's process (ADR 0003 rev 3). The lab is the test rig between
-that build and the sim: the bus structs, the bus emulator, the stand-ins inside
-`_wise_fsw_<configuration>` and the pins that move bytes in and out of it. The sim this
-repository plugs into, WiseDynamics' FSW host, gives a build Basilisk messages by role and takes actuator commands back by
-role. Real flight software meets its hardware through a bus driver that takes bytes. At `6f6276e`,
-the F´ build's glue to the sim was wired by hand for one algorithm, so every added algorithm or
-sensor needed C++ in the bridge and the pins.
+The F´ build flies inside Basilisk's process (ADR 0003 rev 3). The lab is the test rig between that
+build and the sim: the bus structs, the bus emulator, the stand-ins inside
+`_wise_fsw_<configuration>` and the pins that move bytes in and out of it. The sim this repository
+plugs into, WiseDynamics' FSW host, gives a build Basilisk messages by role and takes actuator
+commands back by role. Real flight software meets its hardware through a bus driver that takes
+bytes. At `6f6276e`, the F´ build's glue to the sim was wired by hand for one algorithm, so every
+added algorithm or sensor needed C++ in the bridge and the pins.
 
 ### The check
 
