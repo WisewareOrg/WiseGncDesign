@@ -37,7 +37,7 @@ way through, partitioned as real flight software is.
 - **FPP pairs each sensor role's bus struct with the GNC's struct.** A CDH component,
   `Cdh.BusConverter` in `fsw/fpp/interfaces/`, has per role an input `<role>In` typed by the bus
   struct and an output `<role>Out` typed by the GNC's struct; FPP type-checks both ends, and each
-  build's CDH reads the same declaration (owner ruling on issue 61, option A).
+  build's CDH reads the same declaration.
 - **An algorithm's code lives in `algorithms/<name>/`, and GNC wires it in.** A configuration
   reaches its algorithms only through its GNC sub-topology.
 - **RIO, CDH and platform name no algorithm**; ADR 0006 rev 1 holds the lab and the sim glue to the
