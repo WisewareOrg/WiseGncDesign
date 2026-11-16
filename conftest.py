@@ -192,6 +192,25 @@ def bus_by_role(
 
 
 @pytest.fixture
+def messages_by_role(bus_messages: dict[str, BusMessage]) -> dict[str, Any]:
+    """Each role's bus message as a Basilisk payload, as WiseDynamics' host gives a build them.
+
+    The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's message.
+
+    Args:
+        bus_messages: a message of each bus struct.
+
+    Returns:
+        Each role's payload, by the role's name.
+    """
+    from fsw.codegen.deployment import contract_files
+    from fsw.codegen.fpp_model import read
+    from fsw.codegen.roles import roles
+
+    return {role.role: bus_messages[role.bus].payload for role in roles(read(contract_files()))}
+
+
+@pytest.fixture
 def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
     """The bus one step takes: every role's message bytes on its LabBusDriver port.
 
@@ -205,7 +224,7 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
 
 
 @pytest.fixture(scope="session")
-def case_parameters(configuration: str) -> tuple[Any, ...]:
+def case_parameters(dictionary: Dictionary) -> tuple[Any, ...]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
     The instances are those the deployment's dictionary holds, so the case skips without it. A
@@ -214,7 +233,7 @@ def case_parameters(configuration: str) -> tuple[Any, ...]:
     algorithm's own values overrides this fixture, swapping that algorithm's tuple in.
 
     Args:
-        configuration: the configuration, whose dictionary names the instances.
+        dictionary: the configuration's dictionary, which names the instances.
 
     Returns:
         Each instance's `<Name>Parameters` tuple.
@@ -222,11 +241,10 @@ def case_parameters(configuration: str) -> tuple[Any, ...]:
     from fsw.codegen import fpp_types
     from fsw.codegen.deployment import contract_files
     from fsw.codegen.fpp_model import Array, read
-    from ground.dictionary import Dictionary
 
     model = read(contract_files())
     tuples = []
-    for instance in Dictionary(_dictionary(configuration)).algorithm_instances():
+    for instance in dictionary.algorithm_instances():
         component = model.components[instance.component]
         values = {}
         for parameter in component.parameters:
@@ -274,18 +292,16 @@ def prm(prm_record: Path, configuration: str) -> str:
 
 
 @pytest.fixture(scope="session")
-def parameter_ids(configuration: str) -> list[int]:
+def parameter_ids(dictionary: Dictionary) -> list[int]:
     """Every parameter's ID in the configuration's dictionary, which `boot` holds valid.
 
     Args:
-        configuration: the configuration.
+        dictionary: the configuration's dictionary.
 
     Returns:
         The IDs, sorted.
     """
-    from ground.dictionary import Dictionary
-
-    return sorted(Dictionary(_dictionary(configuration)).parameters_by_id)
+    return sorted(dictionary.parameters_by_id)
 
 
 def _dictionary(configuration: str) -> Path:

@@ -345,6 +345,7 @@ def test_the_fprime_build_flies_the_mu_its_record_gives(
 
 
 def test_the_lab_adapter_mounts_the_imu_as_its_record_gives_it(
+    configuration: str,
     nav_parameters: Gnc.ImuDeadReckonerParameters,
     prm_record: Path,
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
@@ -354,6 +355,7 @@ def test_the_lab_adapter_mounts_the_imu_as_its_record_gives_it(
     Ten readings are enough for a transposed mounting to show far above rounding.
 
     Args:
+        configuration: the dead reckoner's configuration.
         nav_parameters: `NAV`.
         prm_record: the case's parameter record.
         decoded: drains the station's telemetry as values.
@@ -364,7 +366,7 @@ def test_the_lab_adapter_mounts_the_imu_as_its_record_gives_it(
         "position": R0,
         "velocity": V0,
     }
-    adapter = Adapter("ImuDeadReckoning", prm_record)
+    adapter = Adapter(configuration, prm_record)
     station = FprimeStation(adapter, adapter.dictionary)
     adapter.boot()
     station.uplink("nav.initNavState", state, 1)

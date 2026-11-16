@@ -15,7 +15,6 @@ from typing import Any
 
 import numpy as np
 import pytest
-from Basilisk.architecture import messaging
 
 from fsw.codegen.deployment import configurations
 from fsw.codegen.fpp_model import Instance
@@ -292,18 +291,22 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
 
 
 @pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")
-def test_a_command_f_prime_rejects_fails_nothing_in_the_lab_adapter(prm_record: Path):
+def test_a_command_f_prime_rejects_fails_nothing_in_the_lab_adapter(
+    configuration: str, messages_by_role: dict[str, Any], prm_record: Path
+):
     """Through the lab adapter, an opcode no instance has is answered `INVALID_OPCODE`, no reason.
 
     Args:
+        configuration: the configuration.
+        messages_by_role: a zero message for each role the CDH converts.
         prm_record: the case's parameter record.
     """
-    adapter = Adapter("ImuDeadReckoning", prm_record)
+    adapter = Adapter(configuration, prm_record)
     station = FprimeStation(adapter, adapter.dictionary)
     adapter.boot()
     init = _init()
 
     adapter.uplink(init[:2] + _unknown_opcode().to_bytes(4, "big") + init[6:], 9)
-    adapter.tick(NS, {"imu": messaging.IMUSensorMsgPayload()})
+    adapter.tick(NS, messages_by_role)
 
     assert station.responses() == [(9, "INVALID_OPCODE", None)]

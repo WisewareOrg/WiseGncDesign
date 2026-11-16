@@ -15,7 +15,6 @@ import pytest
 
 from fsw.codegen.deployment import configurations, fpp_files
 from fsw.codegen.fpp_model import read
-from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 
 if not all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations()):
@@ -210,7 +209,7 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
 def test_each_rate_group_runs_once_every_divider_ticks(
     fsw: ModuleType,
     station: FprimeStation,
-    dictionary: Dictionary,
+    configuration: str,
     tmp_path: Path,
     prm: str,
     parameter_ids: list[int],
@@ -218,22 +217,19 @@ def test_each_rate_group_runs_once_every_divider_ticks(
 ):
     """Each rate group's `CycleCount` advances by one once every divider ticks, its own divider.
 
-    The deployment's configuration is the module of its algorithm instances, a GNC sub-topology
-    named for its file. A rate group `<stem>RateGroup` runs at the constant `<stem>Divider` of that
-    module. The count is taken over ten of the dividers' least common multiple, a whole number of
-    every divider, which holds whatever tick the driver starts on.
+    A rate group `<stem>RateGroup` runs at the constant `<stem>Divider` of the configuration's
+    GNC sub-topology. The count is taken over ten of the dividers' least common multiple, a whole
+    number of every divider, which holds whatever tick the driver starts on.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
-        dictionary: its dictionary.
+        configuration: the copy's configuration.
         tmp_path: where the configuration's topology is rendered.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
-    instances = dictionary.algorithm_instances()
-    (configuration,) = {i.name.split(".", 1)[0] for i in instances}
     constants = read(fpp_files(configuration, tmp_path)).constants
     dividers = {
         name.removeprefix(f"{configuration}.").removesuffix("Divider") + "RateGroup": divider
