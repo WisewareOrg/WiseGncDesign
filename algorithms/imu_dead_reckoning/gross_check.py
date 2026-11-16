@@ -25,7 +25,7 @@ import numpy as np
 from wise_dynamics.basilisk import ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
-from fsw.python import AlgorithmModule
+from fsw.codegen.deployment import tick_period
 from harness.runs import at, read_run
 from test_attitude_knowledge import attitude_error_rad
 from test_position_knowledge import position_error_m
@@ -266,10 +266,10 @@ def bound_inputs() -> dict[str, float]:
 
     Returns:
         `gyro_noise_std_rad_s` (rad/s) and `accel_noise_std_m_s2` (m/s^2), the per-sample 1-sigma
-        noise; `step_s`, the flight software's step `AlgorithmModule.period_s` (s); and `mu`,
-        Earth's gravitational parameter from `Leo500` (m^3/s^2).
+        noise; `step_s`, the flight software's step, its configuration's base tick `tickPeriod`
+        (s); and `mu`, Earth's gravitational parameter from `Leo500` (m^3/s^2).
     """
-    step_s = AlgorithmModule.period_s
+    step_s = tick_period("ImuDeadReckoning")
     return {
         "gyro_noise_std_rad_s": ImuSpacecraft.gyro_noise_density_rad_s_rthz / np.sqrt(step_s),
         "accel_noise_std_m_s2": ImuSpacecraft.accel_noise_density_m_s2_rthz / np.sqrt(step_s),

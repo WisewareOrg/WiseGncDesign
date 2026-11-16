@@ -9,8 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import contract_files
-from fsw.codegen.fpp_model import Instance, read
+from fsw.codegen.fpp_model import Instance
 from ground.dictionary import Dictionary
 
 TOY = """\
@@ -474,7 +473,10 @@ def test_the_algorithm_instances_are_the_gnc_instances_of_an_algorithm_it_holds(
 
 
 def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_parameter_ids():
-    """Each of WiseFsw's algorithm instances, generated alone, states its entries and parameter IDs.
+    """Each WiseFsw algorithm instance, in its configuration's generated dictionary, is WiseFsw's.
+
+    The generated dictionary is the one the configuration's Python build flies; it states the
+    instance's entries and parameter IDs as WiseFsw does.
 
     It also fails when an algorithm's `.fpp`, or a group it includes, changed and F´ was not
     rebuilt.
@@ -484,7 +486,6 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
     if not DICTIONARY.exists():
         pytest.skip("the F´ build is absent; run `just fsw`")
     wise_fsw = Dictionary(DICTIONARY)
-    components = read(contract_files()).components
     instances = wise_fsw.algorithm_instances()
     assert instances
 
@@ -502,9 +503,18 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
         return {p.name: p.id for p in named if p.name.startswith(f"{instance}.")}
 
     for instance in instances:
-        generated = Dictionary.from_component([components[instance.component].file], instance)
+        generated = Dictionary.from_sub_topology(instance.name.split(".", 1)[0])
         short = instance.name.rsplit(".", 1)[-1]
         expected = wise_fsw.entries(short)
         assert expected["channels"] or expected["commands"] or ids(wise_fsw, short), instance.name
         assert generated.entries(short) == expected, instance.name
         assert ids(generated, short) == ids(wise_fsw, short), instance.name
+
+
+def test_a_configuration_s_dictionary_is_its_own_deployment_generated_once_per_content():
+    """`from_sub_topology` names its deployment for the configuration and caches it per process."""
+    configuration = Dictionary.from_sub_topology("ImuDeadReckoning")
+
+    assert configuration.metadata["deploymentName"] == "PyImuDeadReckoning.PyImuDeadReckoning"
+    assert configuration.algorithm_instances()
+    assert Dictionary.from_sub_topology("ImuDeadReckoning") is configuration

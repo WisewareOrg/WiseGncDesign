@@ -181,7 +181,7 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
     station.uplink("nav.initNavState", state, 1)
 
     for k, (omega, accel) in enumerate(readings, start=1):
-        python.step(t=k * step_ns / NS, AngVelPlatform=omega, AccelPlatform=accel)
+        python.step(t=k * step_ns / NS, imu=Gnc.ImuReading(omega, accel))
         fsw.step(t_ns=k * step_ns, angVelPlatform=omega, accelPlatform=accel)
 
     _assert_matches(_latest(decoded(station)), python)
@@ -216,7 +216,7 @@ def test_init_nav_state_starts_the_reckoner_at_its_epoch(
     station.uplink("nav.initNavState", state, 1)
 
     for k, (omega, accel) in enumerate(readings, start=61):
-        python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
+        python.step(t=float(k), imu=Gnc.ImuReading(omega, accel))
         fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
 
     assert station.responses() == [(1, "OK", None)]
@@ -280,7 +280,7 @@ def test_the_fprime_build_flies_the_mu_its_record_gives(
 
     for k in range(1, 61):
         omega, accel = 0.02 * rng.normal(size=3), 1e-3 * rng.normal(size=3)
-        python.step(t=float(k), AngVelPlatform=omega, AccelPlatform=accel)
+        python.step(t=float(k), imu=Gnc.ImuReading(omega, accel))
         fsw.step(t_ns=k * NS, angVelPlatform=omega, accelPlatform=accel)
 
     _assert_matches(_latest(decoded(station)), python)
@@ -324,8 +324,7 @@ def test_the_f_prime_host_mounts_the_imu_as_its_record_gives_it(
         module.UpdateState(k * NS)
         python.step(
             t=float(k),
-            AngVelPlatform=np.array(reading.AngVelPlatform),
-            AccelPlatform=np.array(reading.AccelPlatform),
+            imu=Gnc.ImuReading(np.array(reading.AngVelPlatform), np.array(reading.AccelPlatform)),
         )
 
     latest = _latest(decoded(module))

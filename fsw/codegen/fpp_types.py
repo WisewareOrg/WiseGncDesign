@@ -30,7 +30,7 @@ import numpy as np
 from fsw.codegen.deployment import algorithm_files, contract_files
 from fsw.codegen.fpp_model import Array, Component, Enum, Member, Model, Struct, read
 
-__all__ = ["converter", "parameters_from"]
+__all__ = ["converter", "named", "parameters_from"]
 
 _DTYPES = {
     "F32": np.dtype("float32"),
@@ -105,6 +105,22 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
         return target._make([to(getattr(value, field)) for field, to in plan])
 
     return convert
+
+
+def named(name: str) -> type:
+    """A struct's or a component's tuple, by its FPP qualified name.
+
+    Args:
+        name: such as `Gnc.ImuReading` or `Gnc.ImuDeadReckonerParameters`.
+
+    Returns:
+        The tuple.
+    """
+    *modules, base = name.split(".")
+    space = _namespaces[modules[0]]
+    for module in modules[1:]:
+        space = getattr(space, module)
+    return getattr(space, base)
 
 
 def parameters_from(tuple_type: type, values: Mapping[str, Any]) -> Any:

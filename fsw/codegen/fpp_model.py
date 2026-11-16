@@ -30,6 +30,7 @@ __all__ = [
     "Parameter",
     "Port",
     "Struct",
+    "TopologyPort",
     "parse",
     "read",
 ]
@@ -81,6 +82,18 @@ class Connection(NamedTuple):
     to_instance: str
     to_port: str
     to_index: int
+
+
+class TopologyPort(NamedTuple):
+    """The instance port a topology's `port` declaration exposes.
+
+    Attributes:
+        instance: the instance's qualified name.
+        port: the instance's port.
+    """
+
+    instance: str
+    port: str
 
 
 class Member(NamedTuple):
@@ -188,7 +201,7 @@ class Parameter(NamedTuple):
 
 
 class Port(NamedTuple):
-    """A general output port a component declares.
+    """A general port a component declares.
 
     Attributes:
         name: the port's name.
@@ -202,10 +215,10 @@ class Port(NamedTuple):
 
 
 class Component(NamedTuple):
-    """A component's commands, channels, parameters and general output ports, each in FPP's order.
+    """A component's commands, channels, parameters and general ports, each in FPP's order.
 
     F´'s implicit parameter set and save commands are not among the commands, and special ports,
-    such as `telemetry port`, are not among the outputs. Output ports imported from an interface
+    such as `telemetry port`, are not among the general ports. Ports imported from an interface
     follow the component's own, in the order `to-json` parsed them.
 
     Attributes:
@@ -214,6 +227,7 @@ class Component(NamedTuple):
         channels: its telemetry channels.
         parameters: its parameters.
         outputs: its general output ports.
+        inputs: its general input ports.
         file: the absolute path of the file that defines it.
     """
 
@@ -222,6 +236,7 @@ class Component(NamedTuple):
     channels: tuple[Channel, ...]
     parameters: tuple[Parameter, ...]
     outputs: tuple[Port, ...]
+    inputs: tuple[Port, ...]
     file: Path
 
 
@@ -232,6 +247,7 @@ class Model(NamedTuple):
         instances: every component instance.
         topologies: each topology's connections, an imported topology's among them, sorted by
             `(from_instance, from_port, from_index)`.
+        ports: each topology's ports, by `<topology>.<port>`.
         constants: every integer and float constant.
         types: every struct, enum and array type.
         components: every component.
@@ -241,6 +257,7 @@ class Model(NamedTuple):
 
     instances: dict[str, Instance]
     topologies: dict[str, tuple[Connection, ...]]
+    ports: dict[str, TopologyPort]
     constants: dict[str, int | float]
     types: dict[str, Struct | Enum | Array]
     components: dict[str, Component]
@@ -315,6 +332,11 @@ def parse(directory: Path) -> Model:
         _qualified(topology): _connections(topology, instance_map)
         for topology in analysis["topologyMap"].values()
     }
+    ports = {
+        f"{_qualified(topology)}.{name}": TopologyPort(*_port_end(port["pii"], instance_map))
+        for topology in analysis["topologyMap"].values()
+        for name, port in topology["portMap"].items()
+    }
 
     constants = {}
     types: dict[str, Struct | Enum | Array] = {}
@@ -337,7 +359,7 @@ def parse(directory: Path) -> Model:
         components[component.name] = component
 
     annotations = {n.name: n.annotation for n in nodes.values() if n.kind in _ANNOTATED}
-    return Model(instances, topologies, constants, types, components, annotations)
+    return Model(instances, topologies, ports, constants, types, components, annotations)
 
 
 def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tuple[str, _Node]]:
@@ -361,6 +383,21 @@ def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tup
             yield from _definitions(node["data"]["members"], (*qualifier, node["data"]["name"]))
 
 
+def _port_end(port: dict[str, Any], instance_map: dict[str, Any]) -> tuple[str, str]:
+    """An instance's port, as a connection's end or a topology port names it.
+
+    Args:
+        port: the analysis's port instance identifier.
+        instance_map: the analysis's component instances, by AST node id.
+
+    Returns:
+        The instance's qualified name and the port's name.
+    """
+    instance = port["interfaceInstance"]["InterfaceComponentInstance"]["astNodeId"]
+    ((_, port_instance),) = port["portInstance"].items()
+    return _qualified(instance_map[str(instance)]), port_instance["specifier"]["name"]
+
+
 def _connections(topology: dict[str, Any], instance_map: dict[str, Any]) -> tuple[Connection, ...]:
     """A topology's connections, each port number resolved.
 
@@ -373,26 +410,11 @@ def _connections(topology: dict[str, Any], instance_map: dict[str, Any]) -> tupl
     """
     from_numbers = {_key(c): n for c, n in topology["fromPortNumberMap"]}
     to_numbers = {_key(c): n for c, n in topology["toPortNumberMap"]}
-
-    def end(side: dict[str, Any]) -> tuple[str, str]:
-        """One end of a connection.
-
-        Args:
-            side: the connection's `from` or `to`.
-
-        Returns:
-            The instance's qualified name and the port's name.
-        """
-        port = side["port"]
-        instance = port["interfaceInstance"]["InterfaceComponentInstance"]["astNodeId"]
-        ((_, port_instance),) = port["portInstance"].items()
-        return _qualified(instance_map[str(instance)]), port_instance["specifier"]["name"]
-
     connections = []
     for group in topology["connectionMap"].values():
         for c in group:
-            from_instance, from_port = end(c["from"])
-            to_instance, to_port = end(c["to"])
+            from_instance, from_port = _port_end(c["from"]["port"], instance_map)
+            to_instance, to_port = _port_end(c["to"]["port"], instance_map)
             from_index, to_index = from_numbers[_key(c)], to_numbers[_key(c)]
             connections.append(
                 Connection(from_instance, from_port, from_index, to_instance, to_port, to_index)
@@ -459,7 +481,7 @@ def _component(
     nodes: dict[str, _Node],
     file: Path,
 ) -> Component:
-    """A component's declared commands, channels, parameters and general output ports.
+    """A component's declared commands, channels, parameters and general ports.
 
     Args:
         node: the component's definition.
@@ -520,23 +542,25 @@ def _component(
         default = _default(data["name"], parameter["default"])
         parameter_type = _type_name(parameter["paramType"], nodes)
         parameters.append((position, Parameter(data["name"], parameter_type, default)))
-    outputs = []
+    outputs, inputs = [], []
     for port in entry["portInterface"]["portMap"].values():
         general = port.get("General")
-        if general and general["kind"] == "Output":
+        if general:
             node_id = general["aNode"]["astNodeId"]
             position = (0, specs[str(node_id)][0]) if str(node_id) in specs else (1, node_id)
             args: tuple[Argument, ...] = ()
             if "DefPort" in general["ty"]:
                 port_type = nodes[str(general["ty"]["DefPort"]["symbol"]["Port"]["nodeId"])]
                 args = arguments(port_type.data["params"])
-            outputs.append((position, Port(general["specifier"]["name"], general["size"], args)))
+            ports = outputs if general["kind"] == "Output" else inputs
+            ports.append((position, Port(general["specifier"]["name"], general["size"], args)))
     return Component(
         node.name,
         tuple(c for _, c in sorted(commands)),
         tuple(c for _, c in sorted(channels)),
         tuple(p for _, p in sorted(parameters)),
         tuple(p for _, p in sorted(outputs)),
+        tuple(p for _, p in sorted(inputs)),
         file,
     )
 

@@ -1,20 +1,39 @@
 # Flight software
 
-`fsw` is the flight software. An algorithm from `algorithms` is hosted in a simulator by
-`fsw.python`, its Python build, or by `lab`, its F´ build.
+`fsw` is the flight software. A configuration, a GNC sub-topology of algorithms from
+`algorithms`, flies in a simulator as `fsw.python`, its Python build, or as `lab`, its F´ build.
 
 The ground, `ground.procedures.Ground`, runs the scenario's procedure against either build's
-radio edge and records the flight; [RadioEdge](#radioedge) says which host presents it.
+radio edge and records the flight; [RadioEdge](#radioedge) says which build presents it.
 
-`fsw.python` knows nothing about what any field means: it copies message fields to the
-algorithm's `step` as plain arrays. Frames and mountings belong to the algorithm.
+## The Python build
 
-`fsw.python.AlgorithmModule(algorithm, inputs, instance=..., dictionary=...)` hosts an
-algorithm as the F´ instance `instance` would be hosted, held to `dictionary`, on a dict of
-subscribed Basilisk readers, by role. Its docstrings say how the algorithm's names wire it to its
-inputs, commands and telemetry, how a tick runs, and what it refuses. It declares `period_s`
-(1 s), so the flight software runs at 1 Hz, and the simulation steps its dynamics and samples the
-IMU at that period at every fidelity.
+`fsw.python.FrameRunner(configuration, prm_path, components)` is a configuration's Python build,
+the build WiseDynamics' `FswHost` hosts: the harness flies `FswHost(build, vehicle)`, which boots
+it at reset and ticks it every `period_s` with each role's Basilisk message. `components` are the
+algorithms' classes, each named as its FPP component. Each tick is one frame through the partitions
+of [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md),
+in `fsw/python/<partition>/`, and FPP gives each its structure:
+
+- **platform** runs the frame. Its `period_s` is the sub-topology's base tick, the FPP constant
+  `tickPeriod`, which `fsw.codegen.deployment.tick_period` reads, and `platform.rates` runs each
+  rate group `<stem>RateGroup` every `<stem>Divider`-th tick, counting ticks as F´'s
+  `Svc.RateGroupDriver` does.
+- **RIO** reads each sensor role's message as its bus struct, copying it within the tick, and
+  returns the actuator commands, `{}` while the build writes no actuator.
+- **CDH** dispatches each command by name to its algorithm's method of that name, with F´'s
+  responses, converts each role's bus struct to its GNC input, logs every telemetry write tagged
+  with the tick's time, and reads each algorithm's parameters from the case's record at boot. Its
+  `GroundLink` holds what the ground uplinks and drains, and the frame runner presents the radio
+  edge through it.
+  `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each role, as its annotation states.
+- **GNC** runs the sub-topology's algorithms in its rate groups' order, routing each output to the
+  input it is wired to.
+
+Each module's docstrings say what it refuses. An algorithm's `step(t, ...)` takes a keyword per
+data input, named as the input port without its `In`, in the input's FPP type, and returns its
+`<Name>Outputs` and `<Name>Telemetry` tuples; its command methods return its `<Name>Telemetry` or
+`None`. Frames and mountings belong to the algorithm.
 
 ## RadioEdge
 
@@ -22,12 +41,12 @@ IMU at that period at every fidelity.
 values on either build, so one procedure and one set of analyzers fly either build. Its docstrings
 say what crosses it.
 
-`AlgorithmModule` presents the radio edge itself, dispatching each command by name to the
-algorithm's method of that name. The F´ host, `FprimeModule`, presents it through the F´ ground
+The Python build presents the radio edge itself, through its CDH. The F´ host, `FprimeModule`,
+presents it through the F´ ground
 station, `ground.fprime_station.FprimeStation`, the only F´ codec in the repository and the part
 F´'s real ground data system replaces: F´ packets exist only between it and `_wise_fsw`.
 
-Each host also has `build`, its build identity, which the harness records in the flight's
+Each build also has `build`, its build identity, which the harness records in the flight's
 `flight.json`. How commands and telemetry travel between the ground and each build, and why every
 write is pushed rather than sampled, is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
@@ -38,16 +57,17 @@ This example runs in a notebook or at a prompt, with the `sim` group installed
 (`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
 at its nominal configuration, writes the case's parameter record from the notebook's
 `parameters(scenario)`, as the harness does beside each run file, and boots the dead reckoner idle
-on that vehicle with the values the Python build reads back from the record. A ground procedure
-gives nav its state from tracking at t = 0, and the run lasts one minute, with the dynamics, the IMU
-and the dead reckoner all stepping at 1 Hz. The ground's record is then compared with the
+with the values the Python build reads back from the record, hosted on that vehicle by
+WiseDynamics' `FswHost` as the harness hosts it. A ground procedure gives nav its state from
+tracking at t = 0, and the run lasts one minute, with the dynamics, the IMU and the dead reckoner
+all stepping at 1 Hz. The ground's record is then compared with the
 vehicle's truth:
 
 ```python
 >>> import tempfile
 >>> from pathlib import Path
 >>> import numpy as np
->>> from wise_dynamics.basilisk import ImuSpacecraft
+>>> from wise_dynamics.basilisk import FswHost, ImuSpacecraft
 >>> from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 >>> from algorithms.imu_dead_reckoning import dead_reckoner, parameters
 >>> from ground.parameters import write
@@ -68,7 +88,7 @@ True
 ...         velocity=truth["v_N"],
 ...     )
 >>> ground = Ground(procedure, fsw, scenario.vehicle.tracking(), scenario.stop_ground)
->>> datasets = scenario.run(fsw, {}, duration_s=60.0, ground=ground)
+>>> datasets = scenario.run(FswHost(fsw, scenario.vehicle), {}, duration_s=60.0, ground=ground)
 >>> ground.command_log[0]["response"]
 'OK'
 >>> written = ground.telemetry_datasets()
@@ -90,13 +110,11 @@ True
 
 Write the algorithm in `algorithms`, with its component model, `<Name>.fpp`, beside its
 notebook: the ports its GNC sub-topology wires, the commands and telemetry it implements, and its
-parameters. Its `step(t=..., **inputs)` takes plain arrays by keyword, each named as the message
-field it reads; it has a method per command; and both return the telemetry they write. Its
-notebook's `parameters(scenario)` gives its `<Name>Parameters` tuple for a case, which the ground
-writes as the case's record, keyed by the algorithm's instance in its GNC sub-topology; its builder
-takes the scenario and the record's path, reads its parameters back with
-`fsw.python.cdh.parameters.read`, and hosts it with the dictionary `Dictionary.from_component`
-generates from that model.
+parameters. Its class is named as the component and takes its `<Name>Parameters`; its `step` and
+command methods are as [the Python build](#the-python-build) says. Its notebook's
+`parameters(scenario)` gives its `<Name>Parameters` tuple for a case, which the ground writes as
+the case's record, keyed by the algorithm's instance in its GNC sub-topology; its builder takes the
+scenario and the record's path and returns the configuration's `FrameRunner`.
 
 ## The dictionary
 
@@ -110,20 +128,18 @@ not pack into the channel's type fails, naming the channel.
 
 A role's shared entries are `.fppi` groups under `fsw/fpp/interfaces/<Role>/`, which a
 component's `.fpp` includes; the instance name is the role, so nav's entries are `nav.*` in every
-build. A Python build's dictionary comes from FPP alone. `Dictionary.from_component(model,
-instance)` instances the component alone, at the base ID its GNC sub-topology gives the instance,
-and runs `fpp-to-dict` in a temporary directory, against the F´ framework clone `just pinned` or
-`just local` fetches. Nothing is compiled, nothing is written in the tree, and each content of the
-model is generated once per process:
+build. A Python build's dictionary comes from FPP alone:
+`Dictionary.from_sub_topology(configuration)` generates the configuration's, a deployment
+importing its GNC sub-topology, its rate groups' entries beside its algorithms', run through
+`fpp-to-dict` in a temporary directory against the F´ framework clone `just pinned` or `just local`
+fetches. Nothing is compiled, nothing is written in the tree, and each content of the model is
+generated once per process. `Dictionary.from_component(model, instance)` generates one
+component's alike, instanced alone, for toys and tests:
 
 ```python
->>> from pathlib import Path
->>> import algorithms.imu_dead_reckoning as reckoner
->>> from fsw.codegen.deployment import gnc_instance
 >>> from ground.dictionary import Dictionary
->>> model = [Path(reckoner.__file__).with_name("ImuDeadReckoner.fpp")]
->>> nav = Dictionary.from_component(model, gnc_instance("Gnc.ImuDeadReckoner"))
->>> position = nav.channel("nav.bodyEciPos")
+>>> dictionary = Dictionary.from_sub_topology("ImuDeadReckoning")
+>>> position = dictionary.channel("nav.bodyEciPos")
 >>> position.units
 'm'
 >>> position.pack_many([[6871.0e3, 0.0, 0.0], [6871.0e3, 1.0, 0.0]]).shape
@@ -131,9 +147,9 @@ model is generated once per process:
 
 ```
 
-`ground/dictionary_test.py` asserts that every algorithm's GNC instance, so generated, has
-WiseFsw's entries, IDs aside, and WiseFsw's parameter IDs, so the two builds are held to one
-contract. The reasoning is in
+`ground/dictionary_test.py` asserts that every algorithm's GNC instance, in its configuration's
+generated dictionary, has WiseFsw's entries, IDs aside, and WiseFsw's parameter IDs, so the two
+builds are held to one contract. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 The bus structs are in `fsw/fpp/interfaces/Bus.fpp`, and `bus_test.py` beside it holds each to its
@@ -145,12 +161,12 @@ Basilisk message. The reasoning is in
 `fsw.codegen.fpp_model` is the one module that reads FPP's model in Python: `read(files)` runs
 the native `fpp` binary inside the `fprime_fpp` package, `fpp to-json`, into a temporary directory,
 and returns a `Model` of named tuples by qualified name: instances with their base IDs, each
-topology's connections with both port numbers resolved, numeric constants, struct, enum and array
-types, each component's commands, channels, parameters and general output ports with the file
-that defines it, and annotations. It needs no compiler,
-no Java and no F´ build, only the model's `.fpp` files, F´'s framework files among them from the
-clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned compiler internals,
-so a key the module reads that is missing raises `KeyError`. The reasoning is in
+topology's connections with both port numbers resolved, the instance port each topology port
+exposes, numeric constants, struct, enum and array types, each component's commands, channels,
+parameters and general output and input ports with the file that defines it, and annotations. It
+needs no compiler, no Java and no F´ build, only the model's `.fpp` files, F´'s framework files
+among them from the clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned
+compiler internals, so a key the module reads that is missing raises `KeyError`. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## FPP types in Python
@@ -183,8 +199,8 @@ with the parameters of the case's record at `prm_path`. The deployment's content
 reckoner, whose F´ component sits beside its notebook. `just fsw` builds the deployment into `lab`
 as the extension `_wise_fsw`, with the JSON dictionary F´ generates for it alongside. `just pinned`
 and `just local` run it as part of their sync, and `just test`, `just fly` and `just lab` run it
-first; a host built without it says to run `just fsw`. The module takes `AlgorithmModule`'s
-`period_s`, so the two builds fly at one rate.
+first; a host built without it says to run `just fsw`. The module's `period_s` is the
+configuration's `tickPeriod`, the Python build's, so the two builds fly at one rate.
 
 The module's reset power-cycles the deployment, as a vehicle is power-cycled between flights:
 `lab.power_cycle.power_cycle()`, the one entry point to the extension, loads a fresh copy of it,
