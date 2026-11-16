@@ -1,4 +1,4 @@
-"""Fixtures every package's tests share: an F´ copy, its station, a drain, a case's parameters.
+"""Fixtures every package's tests share: an F´ copy, its station, a drain, a message, parameters.
 
 A fixture needing the F´ build, or the dictionary it generates, skips its test without it. Every
 pytest run loads this file, the judge's included, so the FPP model, Basilisk and F´ are imported
@@ -74,6 +74,23 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
         return [(name, t_ns, edge.values(name, [raw])[0]) for name, t_ns, raw in edge.telemetry()]
 
     return drain
+
+
+@pytest.fixture
+def imu_message() -> Any:
+    """An IMU message whose twelve values are all distinct, so a field out of place shows.
+
+    Returns:
+        The `IMUSensorMsgPayload`.
+    """
+    from Basilisk.architecture import messaging
+
+    message = messaging.IMUSensorMsgPayload()
+    message.DVFramePlatform = [0.1, -0.2, 0.3]
+    message.AccelPlatform = [1.5, -2.25, 9.80665]
+    message.DRFramePlatform = [0.004, -0.005, 0.006]
+    message.AngVelPlatform = [0.07, -0.08, 0.09]
+    return message
 
 
 @pytest.fixture(scope="session")

@@ -2,14 +2,18 @@
 
 `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each sensor role, as its annotation
 states: a bus-typed input `<role>In` and an output `<role>Out` of the GNC's struct. `roles` reads
-the pairs, and `render` emits the component's C++: a handler per role building the GNC struct from
-the bus struct by `fsw.codegen.fields.plan`, the rule the Python build's converter follows, and
-sending it on `<role>Out`. A field must be one of the numeric primitives or a one-dimensional array
-of one; anything else raises when the code is generated.
+the pairs, and `render` emits the component's C++: per role, a conversion `convert_<role>`, inline
+in the header, building the GNC struct from the bus struct by `fsw.codegen.fields.plan`, the rule
+the Python build's converter follows, and a handler sending its result on `<role>Out`. A field must
+be one of the numeric primitives or a one-dimensional array of one; anything else raises when the
+code is generated.
 
 It also emits the lab's test pins, `BusConverterPins.hpp`, which `_wise_fsw`'s module includes
 once: `bus_<Struct>(<member>=...)` returns F´'s serialization of a bus struct built from its
-members' values, one pin per bus struct a role takes, in the same domain as the bus emulator.
+members' values, one pin per bus struct a role takes, in the same domain as the bus emulator; and
+`cdh_<role>(bus_bytes)` returns F´'s serialization of `convert_<role>`'s result for the bus struct
+F´ deserializes from the bytes. The pins need no instance of the component: F´ builds with direct
+port calls, so a port exists only in a topology, and the conversion is inline.
 
 `python -m fsw.codegen.bus_converter <directory>` writes the three files into the directory from
 the contract, `fsw.codegen.deployment.contract_files()`; CMake runs it during `just fsw`, into the
@@ -140,12 +144,12 @@ def _copies(model: Model, role: Role) -> list[str]:
             )
         if shape:
             statements.append(
-                f"    for (FwSizeType i = 0; i < {shape[0]}; i++) {{\n"
-                f"        icd.get_{member.name}()[i] = bus.get_{name}()[i];\n"
-                "    }"
+                f"        for (FwSizeType i = 0; i < {shape[0]}; i++) {{\n"
+                f"            icd.get_{member.name}()[i] = bus.get_{name}()[i];\n"
+                "        }"
             )
         else:
-            statements.append(f"    icd.set_{member.name}(bus.get_{name}());")
+            statements.append(f"        icd.set_{member.name}(bus.get_{name}());")
     return statements
 
 
@@ -161,7 +165,7 @@ namespace Cdh {{
 class BusConverter final : public BusConverterComponentBase {{
   public:
     explicit BusConverter(const char* compName);
-
+{conversions}
   private:
 {declarations}
 }};
@@ -182,11 +186,18 @@ BusConverter::BusConverter(const char* compName) : BusConverterComponentBase(com
 }}  // namespace Cdh
 """
 
+_CONVERSION = """
+    //! Role {role}'s GNC struct from its bus struct.
+    static {icd} convert_{role}(const {bus}& bus) {{
+        {icd} icd;
+{copies}
+        return icd;
+    }}
+"""
+
 _HANDLER = """
 void BusConverter::{signature} {{
-    {icd} icd;
-{copies}
-    this->{output}_out(0, icd);
+    this->{output}_out(0, convert_{role}(msg));
 }}
 """
 
@@ -203,6 +214,7 @@ _PINS = """\
 #include <array>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "BusConverter.hpp"
 
@@ -240,6 +252,27 @@ _BUS_PIN = """\
         }},
         {arguments},
         "F´'s serialization of a {qualified} built from its members' values.");
+"""
+
+_ROLE_PIN = """\
+    m.def(
+        "cdh_{role}",
+        [](const pybind11::bytes& bus_bytes) {{
+            const std::string text = bus_bytes;
+            std::vector<U8> data(text.begin(), text.end());
+            Fw::ExternalSerializeBuffer buffer(data.data(), static_cast<FwSizeType>(data.size()));
+            buffer.setBuffLen(static_cast<FwSizeType>(data.size()));
+            {bus} msg;
+            const Fw::SerializeStatus status = msg.deserializeFrom(buffer);
+            if (status != Fw::FW_SERIALIZE_OK) {{
+                throw std::runtime_error("cdh_{role}: deserializing {qualified} failed with F´ "
+                                         "status " + std::to_string(status));
+            }}
+            return busConverterSerialized(Cdh::BusConverter::convert_{role}(msg), "cdh_{role}");
+        }},
+        pybind11::arg("bus_bytes"),
+        "Role {role}'s bus bytes, deserialized by F´ and converted by Cdh.BusConverter's "
+        "generated conversion: F´'s serialization of the {icd} it gives.");
 """
 
 
@@ -287,7 +320,7 @@ def _bus_pin(model: Model, qualified: str) -> str:
 
 
 def _pins(model: Model, found: list[Role]) -> str:
-    """The test pins' header: a bus pin per distinct bus struct.
+    """The test pins' header: a bus pin per distinct bus struct, and a CDH pin per role.
 
     Args:
         model: the model.
@@ -298,6 +331,10 @@ def _pins(model: Model, found: list[Role]) -> str:
     """
     buses = dict.fromkeys(role.bus for role in found)
     pins = [_bus_pin(model, bus) for bus in buses]
+    pins += [
+        _ROLE_PIN.format(role=role.role, bus=_cpp(role.bus), qualified=role.bus, icd=role.icd)
+        for role in found
+    ]
     return _PINS.format(component=_CONVERTER, pins="\n".join(pins))
 
 
@@ -316,21 +353,25 @@ def render(model: Model) -> dict[str, str]:
     component = model.components[_CONVERTER]
     base = Path(os.path.relpath(component.file.parent, _REPOSITORY)) / "BusConverterComponentAc.hpp"
     found = roles(model)
-    declarations, definitions = [], []
+    conversions, declarations, definitions = [], [], []
     for role in found:
-        signature = f"{role.input}_handler(FwIndexType, const {_cpp(role.bus)}& bus)"
-        declarations.append(f"    void {signature} override;")
-        definitions.append(
-            _HANDLER.format(
-                signature=signature,
+        conversions.append(
+            _CONVERSION.format(
+                role=role.role,
                 icd=_cpp(role.icd),
+                bus=_cpp(role.bus),
                 copies="\n".join(_copies(model, role)),
-                output=role.output,
             )
         )
+        signature = f"{role.input}_handler(FwIndexType, const {_cpp(role.bus)}& msg)"
+        declarations.append(f"    void {signature} override;")
+        definitions.append(_HANDLER.format(signature=signature, output=role.output, role=role.role))
     return {
         "BusConverter.hpp": _HEADER.format(
-            component=_CONVERTER, base=base.as_posix(), declarations="\n".join(declarations)
+            component=_CONVERTER,
+            base=base.as_posix(),
+            conversions="".join(conversions),
+            declarations="\n".join(declarations),
         ),
         "BusConverter.cpp": _SOURCE.format(component=_CONVERTER, definitions="".join(definitions)),
         "BusConverterPins.hpp": _pins(model, found),

@@ -87,18 +87,19 @@ def test_a_role_without_its_output_is_refused_by_name(tmp_path: Path) -> None:
         roles(model)
 
 
-def test_two_roles_emit_two_handlers(tmp_path: Path) -> None:
-    """The component declares and defines a handler per role, each sending on its output.
+def test_two_roles_emit_two_handlers_and_two_conversions(tmp_path: Path) -> None:
+    """Per role, the header defines its conversion inline and the source a handler sending it.
 
     Args:
         tmp_path: where the toy is written.
     """
     files = render(_toy(tmp_path))
-    for role, bus in (("a", "Bus::A"), ("b", "Bus::B")):
-        signature = f"{role}In_handler(FwIndexType, const {bus}& bus)"
+    for role, bus, icd in (("a", "Bus::A", "Gnc::AIcd"), ("b", "Bus::B", "Gnc::BIcd")):
+        signature = f"{role}In_handler(FwIndexType, const {bus}& msg)"
+        assert f"static {icd} convert_{role}(const {bus}& bus) {{" in files["BusConverter.hpp"]
         assert f"void {signature} override;" in files["BusConverter.hpp"]
         assert f"void BusConverter::{signature} {{" in files["BusConverter.cpp"]
-        assert f"this->{role}Out_out(0, icd);" in files["BusConverter.cpp"]
+        assert f"this->{role}Out_out(0, convert_{role}(msg));" in files["BusConverter.cpp"]
 
 
 def test_each_field_is_copied_from_the_bus_field_of_its_name_and_extras_are_dropped(
@@ -109,10 +110,11 @@ def test_each_field_is_copied_from_the_bus_field_of_its_name_and_extras_are_drop
     Args:
         tmp_path: where the toy is written.
     """
-    source = render(_toy(tmp_path))["BusConverter.cpp"]
-    assert "icd.set_X(bus.get_x());" in source
-    assert "icd.get_v()[i] = bus.get_v()[i];" in source
-    assert "extra" not in source
+    files = render(_toy(tmp_path))
+    header = files["BusConverter.hpp"]
+    assert "icd.set_X(bus.get_x());" in header
+    assert "icd.get_v()[i] = bus.get_v()[i];" in header
+    assert "extra" not in header + files["BusConverter.cpp"]
 
 
 def test_an_array_of_arrays_is_refused_by_name(tmp_path: Path) -> None:
@@ -184,8 +186,8 @@ def test_a_field_that_is_not_a_number_is_refused_by_name(tmp_path: Path) -> None
         render(model)
 
 
-def test_each_bus_struct_a_role_takes_has_one_bus_pin(tmp_path: Path) -> None:
-    """A third role on `Bus.A` adds no pin: one per bus struct, taking each member by its name.
+def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(tmp_path: Path) -> None:
+    """A third role on `Bus.A` adds a CDH pin but no bus pin, which is one per bus struct.
 
     Args:
         tmp_path: where the toy is written.
@@ -203,6 +205,10 @@ def test_each_bus_struct_a_role_takes_has_one_bus_pin(tmp_path: Path) -> None:
     )["BusConverterPins.hpp"]
     assert pins.count('"bus_A"') == 1
     assert pins.count('"bus_B"') == 1
+    for role, bus in (("a", "Bus::A"), ("c", "Bus::A"), ("b", "Bus::B")):
+        assert f'"cdh_{role}"' in pins
+        assert f"{bus} msg;" in pins
+        assert f"Cdh::BusConverter::convert_{role}(msg)" in pins
     assert "[](F64 x, U32 extra, const std::array<F64, 3>& v)" in pins
     assert 'pybind11::arg("x"), pybind11::arg("extra"), pybind11::arg("v")' in pins
 
