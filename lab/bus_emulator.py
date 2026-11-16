@@ -1,11 +1,14 @@
-"""The bus emulator: a Basilisk message as the bytes a vehicle's bus carries, generated from FPP.
+"""The bus emulator: a Basilisk message as the bytes a vehicle's bus carries, built from Bus.fpp.
 
 Each bus struct in `fsw/fpp/interfaces/Bus.fpp`, `Bus.<Name>`, mirrors the Basilisk payload
 `messaging.<Name>Payload`, matched ignoring case as `fsw/fpp/interfaces/bus_test.py` holds them.
 `serialize` writes a payload as F´ serializes its bus struct: each member in declaration order,
-big-endian, packed and unframed. `Bus.fpp` is read once at import, alone, so no F´ framework clone
-is needed; each payload type's packer is planned on its first message. Lab equipment: a real
-vehicle's bus delivers the bytes itself, and the Python build reads messages without them.
+big-endian, packed and unframed. It is built from `Bus.fpp` at import, read alone, so no file is
+generated and no F´ framework clone is read; each payload type's packer is planned on its first
+message. A member must be a one-dimensional array of a numeric primitive, the domain of the F´ CDH
+generator's component and pins; anything else, a scalar among it, raises when planned. Lab
+equipment: a real vehicle's bus delivers the bytes itself, and the Python build reads messages
+without them.
 """
 
 import functools
@@ -54,8 +57,8 @@ def _packer(payload: type) -> tuple[struct.Struct, tuple[str, ...]]:
         The packer, and the payload's name for each bus member.
 
     Raises:
-        KeyError: no bus struct mirrors the payload, naming it; or a member's type has no `struct`
-            code, naming the member and the type.
+        KeyError: no bus struct mirrors the payload, naming it; or a member is not a
+            one-dimensional array of a type with a `struct` code, naming the member and the type.
     """
     key = payload.__name__.lower()
     if key not in _STRUCTS:
@@ -64,9 +67,13 @@ def _packer(payload: type) -> tuple[struct.Struct, tuple[str, ...]]:
     fields = {name.lower(): name for name in payload.__dtype__.names}
     layout = ">"
     for member in bus.members:
-        if member.type not in _CODES:
-            raise KeyError(f"{bus.name}.{member.name} is of {member.type}, which has no bus bytes")
-        layout += f"{member.size or ''}{_CODES[member.type]}"
+        if member.type not in _CODES or member.size is None:
+            size = "" if member.size is None else f"[{member.size}] "
+            raise KeyError(
+                f"{bus.name}.{member.name} is {size}{member.type}, which the bus emulator does not"
+                " write: it writes one-dimensional arrays of the numeric primitives"
+            )
+        layout += f"{member.size}{_CODES[member.type]}"
     return struct.Struct(layout), tuple(fields[member.name.lower()] for member in bus.members)
 
 
@@ -81,11 +88,4 @@ def serialize(message: Any) -> bytes:
         The bytes.
     """
     packer, fields = _packer(getattr(messaging, type(message).__name__))
-    values = []
-    for field in fields:
-        value = getattr(message, field)
-        if isinstance(value, list):
-            values.extend(value)
-        else:
-            values.append(value)
-    return packer.pack(*values)
+    return packer.pack(*(value for field in fields for value in getattr(message, field)))

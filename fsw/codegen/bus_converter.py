@@ -5,8 +5,8 @@ states: a bus-typed input `<role>In` and an output `<role>Out` of the GNC's stru
 the pairs, and `render` emits the component's C++: per role, a conversion `convert_<role>`, inline
 in the header, building the GNC struct from the bus struct by `fsw.codegen.fields.plan`, the rule
 the Python build's converter follows, and a handler sending its result on `<role>Out`. A field must
-be one of the numeric primitives or a one-dimensional array of one; anything else raises when the
-code is generated.
+be a one-dimensional array of a numeric primitive; anything else, a scalar among it, raises when
+the code is generated.
 
 It also emits the lab's test pins, `BusConverterPins.hpp`, which `_wise_fsw`'s module includes
 once: `bus_<Struct>(<member>=...)` returns F´'s serialization of a bus struct built from its
@@ -38,9 +38,10 @@ _CONVERTER = "Cdh.BusConverter"
 _REPOSITORY = Path(__file__).resolve().parents[2]
 
 _PRIMITIVES = ("F32", "F64", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64")
-"""The element types the component copies and a bus pin takes, alone or in a one-dimensional array:
-the numeric primitives, as the bus emulator's. F´ serializes `bool` unlike Python, so none takes
-it."""
+"""The element types the component copies and a bus pin takes, each in a one-dimensional array: the
+numeric primitives, as the bus emulator's. F´ serializes `bool` unlike Python, so none takes it. A
+scalar member is refused until a struct has one, so its first use adds its code with a compiled
+test."""
 
 _NUMBERS = [DTYPES[primitive] for primitive in _PRIMITIVES]
 """`_PRIMITIVES` as `fsw.codegen.fields.form` gives their element types."""
@@ -127,29 +128,26 @@ def _copies(model: Model, role: Role) -> list[str]:
         role: the role.
 
     Returns:
-        A statement per field: a scalar set, or an array copied element by element.
+        A statement per field, copying its array element by element.
 
     Raises:
-        ValueError: a field breaks `fsw.codegen.fields.plan`'s rule, or is neither one of
-            `_PRIMITIVES` nor a one-dimensional array of one, naming it.
+        ValueError: a field breaks `fsw.codegen.fields.plan`'s rule, or is not a one-dimensional
+            array of one of `_PRIMITIVES`, naming it.
     """
     bus, icd = model.types[role.bus], model.types[role.icd]
     sources = {m.name.lower(): (m.name, form(m, model.types)) for m in bus.members}
     statements = []
     for member, name, (shape, element) in plan(icd, model.types, sources, role.bus):
-        if len(shape) > 1 or element not in _NUMBERS:
+        if len(shape) != 1 or element not in _NUMBERS:
             raise ValueError(
                 f"{role.icd}.{member.name} is {shape} {element}, which the F´ CDH does not copy:"
-                " it copies the numeric primitives and one-dimensional arrays of them"
+                " it copies one-dimensional arrays of the numeric primitives"
             )
-        if shape:
-            statements.append(
-                f"        for (FwSizeType i = 0; i < {shape[0]}; i++) {{\n"
-                f"            icd.get_{member.name}()[i] = bus.get_{name}()[i];\n"
-                "        }"
-            )
-        else:
-            statements.append(f"        icd.set_{member.name}(bus.get_{name}());")
+        statements.append(
+            f"        for (FwSizeType i = 0; i < {shape[0]}; i++) {{\n"
+            f"            icd.get_{member.name}()[i] = bus.get_{name}()[i];\n"
+            "        }"
+        )
     return statements
 
 
@@ -287,27 +285,23 @@ def _bus_pin(model: Model, qualified: str) -> str:
         The pin's `m.def` statement.
 
     Raises:
-        ValueError: a member is not a number of `_PRIMITIVES` or a one-dimensional array of
-            one, naming it.
+        ValueError: a member is not a one-dimensional array of one of `_PRIMITIVES`, naming it.
     """
     bus = model.types[qualified]
     parameters, fills, arguments = [], [], []
     for member in bus.members:
-        if member.type not in _PRIMITIVES:
+        if member.type not in _PRIMITIVES or member.size is None:
+            size = "" if member.size is None else f"[{member.size}] "
             raise ValueError(
-                f"{qualified}.{member.name} is of {member.type}, which the bus pin does not take:"
-                " it takes the numeric primitives and one-dimensional arrays of them"
+                f"{qualified}.{member.name} is {size}{member.type}, which the bus pin does not"
+                " take: it takes one-dimensional arrays of the numeric primitives"
             )
-        if member.size is None:
-            parameters.append(f"{member.type} {member.name}")
-            fills.append(f"            value.set_{member.name}({member.name});")
-        else:
-            parameters.append(f"const std::array<{member.type}, {member.size}>& {member.name}")
-            fills.append(
-                f"            for (FwSizeType i = 0; i < {member.size}; i++) {{\n"
-                f"                value.get_{member.name}()[i] = {member.name}[i];\n"
-                "            }"
-            )
+        parameters.append(f"const std::array<{member.type}, {member.size}>& {member.name}")
+        fills.append(
+            f"            for (FwSizeType i = 0; i < {member.size}; i++) {{\n"
+            f"                value.get_{member.name}()[i] = {member.name}[i];\n"
+            "            }"
+        )
         arguments.append(f'pybind11::arg("{member.name}")')
     return _BUS_PIN.format(
         name=qualified.rsplit(".", 1)[-1],

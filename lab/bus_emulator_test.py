@@ -10,6 +10,8 @@ from typing import Any
 import pytest
 from Basilisk.architecture import messaging
 
+from fsw.codegen.fpp_model import Member, Struct
+from lab import bus_emulator
 from lab.bus_emulator import serialize
 
 
@@ -52,6 +54,35 @@ def test_a_message_with_no_bus_struct_is_refused_by_name() -> None:
     """A payload that no `Bus.<Name>` mirrors raises `KeyError` naming it."""
     with pytest.raises(KeyError, match="SCStatesMsgPayload"):
         serialize(messaging.SCStatesMsgPayload())
+
+
+@pytest.mark.parametrize(
+    ("member", "named"),
+    [
+        (Member("count", "U16", None), "count is U16"),
+        (Member("flags", "bool", 3), r"flags is \[3\] bool"),
+    ],
+    ids=["scalar", "bool"],
+)
+def test_a_member_outside_the_emulator_s_domain_is_refused_by_name(
+    member: Member, named: str, imu_message: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bus struct with a scalar or a `bool` member raises `KeyError` naming it, when planned.
+
+    The IMU's bus struct is stood in for by one with the member, and the packers are replanned.
+
+    Args:
+        member: the member outside the domain.
+        named: the member as the refusal names it, a pattern.
+        imu_message: the IMU message, whose packer is planned.
+        monkeypatch: replaces the IMU's bus struct for the test.
+    """
+    toy = Struct("Bus.ImuSensorMsg", (Member("angVelPlatform", "F64", 3), member))
+    monkeypatch.setitem(bus_emulator._STRUCTS, "imusensormsgpayload", toy)
+    bus_emulator._packer.cache_clear()
+    with pytest.raises(KeyError, match=rf"Bus\.ImuSensorMsg\.{named}, which the bus emulator"):
+        serialize(imu_message)
+    bus_emulator._packer.cache_clear()
 
 
 def test_the_emulator_writes_the_bytes_f_prime_serializes(

@@ -14,9 +14,9 @@ from fsw.codegen.fpp_model import Model, read
 
 TOY = """\
 module Bus {
-  struct A { x: F64, extra: U32, v: [3] F64 }
+  struct A { extra: [2] U32, v: [3] F64 }
   port A(msg: A)
-  struct B { n: I16 }
+  struct B { n: [2] I16 }
   port B(msg: B)
 }
 module Gnc {
@@ -26,9 +26,9 @@ module Gnc {
   }
   array Row = [3] F64
   array Mat = [2] Row
-  struct AIcd { X: F64, v: Row }
+  struct AIcd { V: Row }
   port AIcd(reading: AIcd)
-  struct BIcd { n: I16 }
+  struct BIcd { n: [2] I16 }
   port BIcd(reading: BIcd)
 }
 module Cdh {
@@ -40,8 +40,8 @@ module Cdh {
   }
 }
 """
-"""Role `a` takes a scalar by another case, a 1-D array and drops `extra`; role `b` a scalar of
-another type. `Mode` and `Mat` are there for the edits that seed a refusal."""
+"""Role `a` takes a 3-vector by an array type and another case, and drops `extra`; role `b` an
+inline array of another type. `Mode` and `Mat` are there for the edits that seed a refusal."""
 
 
 def _toy(tmp_path: Path, *edits: tuple[str, str]) -> Model:
@@ -87,6 +87,17 @@ def test_a_role_without_its_output_is_refused_by_name(tmp_path: Path) -> None:
         roles(model)
 
 
+def test_a_role_whose_output_carries_a_bus_struct_is_refused_by_name(tmp_path: Path) -> None:
+    """A `bOut` typed by a bus struct is no GNC output, and raises naming the role.
+
+    Args:
+        tmp_path: where the toy is written.
+    """
+    model = _toy(tmp_path, ("output port bOut: Gnc.BIcd", "output port bOut: Bus.B"))
+    with pytest.raises(ValueError, match="role b takes Bus.B at bIn but has no bOut of a GNC type"):
+        roles(model)
+
+
 def test_two_roles_emit_two_handlers_and_two_conversions(tmp_path: Path) -> None:
     """Per role, the header defines its conversion inline and the source a handler sending it.
 
@@ -105,15 +116,15 @@ def test_two_roles_emit_two_handlers_and_two_conversions(tmp_path: Path) -> None
 def test_each_field_is_copied_from_the_bus_field_of_its_name_and_extras_are_dropped(
     tmp_path: Path,
 ) -> None:
-    """A scalar is set from its namesake in another case, an array copied; `extra` is not read.
+    """`V` is copied from `v`, another case, and `n` from `n`, each by element; `extra` is not read.
 
     Args:
         tmp_path: where the toy is written.
     """
     files = render(_toy(tmp_path))
     header = files["BusConverter.hpp"]
-    assert "icd.set_X(bus.get_x());" in header
-    assert "icd.get_v()[i] = bus.get_v()[i];" in header
+    assert "icd.get_V()[i] = bus.get_v()[i];" in header
+    assert "icd.get_n()[i] = bus.get_n()[i];" in header
     assert "extra" not in header + files["BusConverter.cpp"]
 
 
@@ -125,64 +136,57 @@ def test_an_array_of_arrays_is_refused_by_name(tmp_path: Path) -> None:
     """
     model = _toy(
         tmp_path,
-        ("struct B { n: I16 }", "struct B { m: [2] Gnc.Row }"),
-        ("struct BIcd { n: I16 }", "struct BIcd { m: Mat }"),
+        ("struct B { n: [2] I16 }", "struct B { m: [2] Gnc.Row }"),
+        ("struct BIcd { n: [2] I16 }", "struct BIcd { m: Mat }"),
     )
     with pytest.raises(ValueError, match=r"Gnc\.BIcd\.m is \(2, 3\) float64, which the F´ CDH"):
         render(model)
 
 
-def test_a_bool_is_refused_by_name(tmp_path: Path) -> None:
-    """A `bool` matched by a bus `bool` passes the field rule, but the CDH refuses it, naming it.
+def test_a_scalar_is_refused_by_name(tmp_path: Path) -> None:
+    """A scalar matched by a bus scalar passes the field rule, but the CDH refuses it, naming it.
+
+    No struct has a scalar, so the first one adds its copy with a compiled test.
 
     Args:
         tmp_path: where the toy is written.
     """
     model = _toy(
         tmp_path,
-        ("struct A { x: F64", "struct A { x: bool"),
-        ("struct AIcd { X: F64", "struct AIcd { X: bool"),
+        ("struct A { extra", "struct A { x: F64, extra"),
+        ("struct AIcd { V", "struct AIcd { X: F64, V"),
     )
-    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.X is \(\) bool, which the F´ CDH"):
+    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.X is \(\) float64, which the F´ CDH"):
         render(model)
 
 
-def test_a_field_of_another_shape_is_refused_by_name(tmp_path: Path) -> None:
-    """A bus `v` of four elements cannot fill the ICD's three, and raises naming the field.
+def test_a_bool_is_refused_by_name(tmp_path: Path) -> None:
+    """A `bool` array matched by a bus `bool` array passes the field rule, but is refused by name.
 
     Args:
         tmp_path: where the toy is written.
     """
-    model = _toy(tmp_path, ("v: [3] F64", "v: [4] F64"))
-    with pytest.raises(
-        ValueError, match=r"Gnc\.AIcd\.v is \(3,\) float64, but Bus\.A\.v is \(4,\)"
-    ):
-        render(model)
-
-
-def test_a_field_of_another_element_type_is_refused_by_name(tmp_path: Path) -> None:
-    """A bus `x` of `F32` cannot fill the ICD's `F64` `X`, and raises naming the field.
-
-    Args:
-        tmp_path: where the toy is written.
-    """
-    model = _toy(tmp_path, ("struct A { x: F64", "struct A { x: F32"))
-    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.X is \(\) float64, but Bus\.A\.x is"):
+    model = _toy(
+        tmp_path,
+        ("struct A { extra", "struct A { f: [2] bool, extra"),
+        ("struct AIcd { V", "struct AIcd { f: [2] bool, V"),
+    )
+    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.f is \(2,\) bool, which the F´ CDH"):
         render(model)
 
 
 def test_a_field_that_is_not_a_number_is_refused_by_name(tmp_path: Path) -> None:
-    """An enum field matches by the field rule, but the F´ CDH copies numbers only, naming it.
+    """An enum array matches by the field rule, but the F´ CDH copies numbers only, naming it.
 
     Args:
         tmp_path: where the toy is written.
     """
     model = _toy(
         tmp_path,
-        ("{ x: F64, extra: U32", "{ x: Gnc.Mode, extra: U32"),
-        ("struct AIcd { X: F64", "struct AIcd { X: Mode"),
+        ("struct A { extra", "struct A { e: [2] Gnc.Mode, extra"),
+        ("struct AIcd { V", "struct AIcd { e: [2] Mode, V"),
     )
-    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.X is \(\) Gnc\.Mode, which the F´ CDH"):
+    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.e is \(2,\) Gnc\.Mode, which the F´ CDH"):
         render(model)
 
 
@@ -209,18 +213,27 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(tmp_path: Path)
         assert f'"cdh_{role}"' in pins
         assert f"{bus} msg;" in pins
         assert f"Cdh::BusConverter::convert_{role}(msg)" in pins
-    assert "[](F64 x, U32 extra, const std::array<F64, 3>& v)" in pins
-    assert 'pybind11::arg("x"), pybind11::arg("extra"), pybind11::arg("v")' in pins
+    assert "[](const std::array<U32, 2>& extra, const std::array<F64, 3>& v)" in pins
+    assert 'pybind11::arg("extra"), pybind11::arg("v")' in pins
 
 
-def test_a_bus_member_outside_the_pin_s_domain_is_refused_by_name(tmp_path: Path) -> None:
-    """A bus `bool` the CDH drops still has no bus bytes, so its pin refuses it, naming it.
+@pytest.mark.parametrize(
+    ("extra", "named"),
+    [("extra: U32", "extra is U32"), ("extra: [2] bool", r"extra is \[2\] bool")],
+    ids=["scalar", "bool"],
+)
+def test_a_bus_member_outside_the_pin_s_domain_is_refused_by_name(
+    extra: str, named: str, tmp_path: Path
+) -> None:
+    """A bus scalar or `bool` the CDH drops has no bus pin parameter, so the pin refuses it.
 
     Args:
+        extra: the member as the seeded toy declares it.
+        named: the member as the refusal names it, a pattern.
         tmp_path: where the toy is written.
     """
-    model = _toy(tmp_path, ("extra: U32", "extra: bool"))
-    with pytest.raises(ValueError, match=r"Bus\.A\.extra is of bool, which the bus pin"):
+    model = _toy(tmp_path, ("extra: [2] U32", extra))
+    with pytest.raises(ValueError, match=rf"Bus\.A\.{named}, which the bus pin"):
         render(model)
 
 
