@@ -298,7 +298,7 @@ def test_a_command_f_prime_rejects_fails_nothing_in_the_lab_adapter(
 
     Args:
         configuration: the configuration.
-        messages_by_role: a zero message for each role the CDH converts.
+        messages_by_role: a message for each role the CDH converts.
         prm_record: the case's parameter record.
     """
     adapter = Adapter(configuration, prm_record)

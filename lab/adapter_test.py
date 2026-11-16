@@ -32,7 +32,7 @@ def test_the_adapter_ticks_at_its_configuration_s_base_tick_and_commands_nothing
 
     Args:
         configuration: the configuration.
-        messages_by_role: a zero message for each role the CDH converts.
+        messages_by_role: a message for each role the CDH converts.
         prm_record: the case's parameter record.
     """
     adapter = Adapter(configuration, prm_record)
@@ -63,7 +63,7 @@ def test_each_boot_power_cycles_a_fresh_copy(
 
     Args:
         configuration: the configuration.
-        messages_by_role: a zero message for each role the CDH converts.
+        messages_by_role: a message for each role the CDH converts.
         prm_record: the case's parameter record.
     """
     adapter = Adapter(configuration, prm_record)
@@ -82,7 +82,7 @@ def test_a_tick_missing_a_role_the_cdh_converts_is_refused_naming_it(
 
     Args:
         configuration: the configuration.
-        messages_by_role: a zero message for each role the CDH converts.
+        messages_by_role: a message for each role the CDH converts.
         prm_record: the case's parameter record.
     """
     adapter = Adapter(configuration, prm_record)
@@ -104,7 +104,7 @@ def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(
 
     Args:
         configuration: the configuration.
-        messages_by_role: a zero message for each role the CDH converts.
+        messages_by_role: a message for each role the CDH converts.
         prm_record: the case's parameter record.
         excess_ns: ns past a whole microsecond.
     """
@@ -163,7 +163,7 @@ def test_a_command_goes_up_to_the_current_copy_and_its_response_comes_back(
 
     Args:
         configuration: the configuration.
-        messages_by_role: a zero message for each role the CDH converts.
+        messages_by_role: a message for each role the CDH converts.
         prm_record: the case's parameter record.
     """
     adapter = Adapter(configuration, prm_record)
@@ -185,7 +185,7 @@ def test_the_telemetry_is_every_write_the_ticks_drained_since_the_last_call(
 
     Args:
         configuration: the configuration.
-        messages_by_role: a zero message for each role the CDH converts.
+        messages_by_role: a message for each role the CDH converts.
         prm_record: the case's parameter record.
     """
     adapter = Adapter(configuration, prm_record)
@@ -208,7 +208,7 @@ def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(
 
     Args:
         configuration: the configuration.
-        messages_by_role: a zero message for each role the CDH converts.
+        messages_by_role: a message for each role the CDH converts.
         prm_record: the case's parameter record.
     """
     adapter = Adapter(configuration, prm_record)
