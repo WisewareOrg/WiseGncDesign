@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from fsw.codegen.bus_converter import main, render
+from fsw.codegen.deployment import contract_files
 from fsw.codegen.fpp_model import Model, read
+from fsw.codegen.roles import roles
 
 TOY = """\
 module Bus {
@@ -209,13 +211,19 @@ def test_a_bus_member_outside_the_pin_s_domain_is_refused_by_name(
         render(model)
 
 
-def test_the_tool_writes_the_component_into_its_directory(tmp_path: Path) -> None:
-    """`python -m fsw.codegen.bus_converter <dir>` writes the component and its pins.
+def test_the_tool_writes_the_component_and_its_pins_for_every_role(tmp_path: Path) -> None:
+    """`python -m fsw.codegen.bus_converter <dir>` writes a handler and pins per contract role.
 
     Args:
         tmp_path: the directory.
     """
     main([str(tmp_path)])
+    found = roles(read(contract_files()))
+    assert found
     assert "class BusConverter final" in (tmp_path / "BusConverter.hpp").read_text()
-    assert "imuIn_handler" in (tmp_path / "BusConverter.cpp").read_text()
-    assert '"bus_ImuSensorMsg"' in (tmp_path / "BusConverterPins.hpp").read_text()
+    source = (tmp_path / "BusConverter.cpp").read_text()
+    pins = (tmp_path / "BusConverterPins.hpp").read_text()
+    for role in found:
+        assert f"void BusConverter::{role.input}_handler(" in source
+        assert f'"cdh_{role.role}"' in pins
+        assert f'"bus_{role.bus.removeprefix("Bus.")}"' in pins

@@ -1,13 +1,12 @@
 """`Cdh.BusConverter`'s roles: each bus-typed input, paired with its GNC output.
 
-Each test but the contract's reads a toy model of two roles, so none needs the F´ framework clone.
+Each test reads a toy model of two roles, so none needs the F´ framework clone.
 """
 
 from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import contract_files
 from fsw.codegen.fpp_model import Model, read
 from fsw.codegen.roles import Role, roles
 
@@ -88,10 +87,3 @@ def test_a_role_whose_output_carries_a_bus_struct_is_refused_by_name(tmp_path: P
     model = _toy(tmp_path, ("output port bOut: Gnc.BIcd", "output port bOut: Bus.B"))
     with pytest.raises(ValueError, match="role b takes Bus.B at bIn but has no bOut of a GNC type"):
         roles(model)
-
-
-def test_the_contract_pairs_the_imu_bus_message_with_the_imu_reading() -> None:
-    """The real `Cdh.BusConverter` has one role, the IMU's."""
-    assert roles(read(contract_files())) == [
-        Role("imu", "Bus.ImuSensorMsg", "Gnc.ImuReading", "imuIn", "imuOut")
-    ]
