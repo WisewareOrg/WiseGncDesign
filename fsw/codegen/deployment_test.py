@@ -105,3 +105,26 @@ def test_a_cdh_port_no_simhub_port_feeds_is_refused_naming_it():
     """A port the deployment does not wire to SimHub raises, naming it and the configuration."""
     with pytest.raises(ValueError, match=r"ImuDeadReckoning.*cdh\.starIn.*SimHub port\(s\) \[\]"):
         bus_port("ImuDeadReckoning", "starIn")
+
+
+def test_a_cdh_port_two_simhub_ports_feed_is_refused_naming_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A template that wires a second SimHub port to `cdh.imuIn` raises, naming both ports.
+
+    Args:
+        tmp_path: where the twice-wired template is written.
+        monkeypatch: renders the deployment from that template.
+    """
+    template = tmp_path / "Fsw.fpp.in"
+    wired = "simHub.busOut[0] -> cdh.imuIn"
+    original = (_REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()
+    assert wired in original
+    template.write_text(original.replace(wired, f"{wired}\n      simHub.busOut[1] -> cdh.imuIn"))
+    monkeypatch.setattr("fsw.codegen.deployment._TEMPLATE", template)
+    bus_port.cache_clear()
+    try:
+        with pytest.raises(ValueError, match=r"cdh\.imuIn to SimHub port\(s\) \[0, 1\], not one"):
+            bus_port("ImuDeadReckoning", "imuIn")
+    finally:
+        bus_port.cache_clear()

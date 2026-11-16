@@ -130,7 +130,9 @@ def bus_by_role(bus_messages: dict[str, BusMessage]) -> dict[str, tuple[int, byt
     """Each role's SimHub port and its bus message's bytes, as the bus emulator writes them.
 
     The roles are the contract's `Cdh.BusConverter`'s, and each port is the one the built
-    deployment's configuration wires to the role's CDH input, read from its FPP.
+    deployment's configuration wires to the role's CDH input, read from its FPP. A configuration
+    wires every role: a role it leaves unwired fails the fixture with `bus_port`'s `ValueError`,
+    as a defect of the deployment, rather than being skipped.
 
     Args:
         bus_messages: a message of each bus struct.
