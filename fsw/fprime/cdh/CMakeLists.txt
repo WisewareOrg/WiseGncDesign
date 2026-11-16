@@ -10,10 +10,8 @@ register_fprime_module(
     Os
 )
 
-# Cdh.BusConverter's implementation and the lab's test pins on it, generated from FPP by
-# fsw.codegen.bus_converter into this build directory whenever the interfaces' FPP or the generator
-# changes. F´ requires a module's sources to exist at configure time, so the generated ones join the
-# module here, outside the sub-builds, which only gather model information.
+# fsw.codegen.bus_converter generates Cdh.BusConverter and its test pins into this build directory.
+# F´ requires a module's sources to exist at configure time, so they join it outside the sub-builds.
 if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     file(GLOB WISE_CDH_INPUTS CONFIGURE_DEPENDS
         "${FPRIME_PROJECT_ROOT}/fsw/fpp/interfaces/*.fpp"

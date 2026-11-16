@@ -44,9 +44,8 @@ _COMPONENTS: dict[str, tuple[Component, dict[str, Struct | Enum | Array]]] = {}
 def converter(source: type, target: type) -> Callable[[Any], Any]:
     """A function converting a `source` value to a `target` tuple, each field taken by name.
 
-    Every field of `target` is taken from the `source` field of its name, ignoring case, which must
-    have its shape and element type; fields of `source` that `target` lacks are dropped. An array
-    field becomes a fresh array of the FPP type; a scalar or an enum name passes as it is.
+    Fields are taken by `fsw.codegen.fields.plan`'s rule. An array field becomes a fresh array of
+    the FPP type; a scalar or an enum name passes as it is.
 
     Args:
         source: a struct's tuple, or a Basilisk message payload's type.
@@ -56,8 +55,7 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
         The converter.
 
     Raises:
-        ValueError: `target` is not a struct's tuple, or a field of it is a struct, is missing from
-            `source`, or differs from it in shape or element type, naming it.
+        ValueError: `target` is not a struct's tuple, or a field breaks the rule, naming it.
     """
     if target not in _STRUCTS:
         raise ValueError(f"{target.__name__} is not a struct's tuple")
