@@ -3,10 +3,11 @@
 A configuration's deployment topology is rendered from `fsw/fprime/deployment/Fsw.fpp.in`, the
 template CMake's `configure_file` renders for the F´ build, by the same `@CONFIGURATION@` token. The
 algorithms are those the F´ build takes: every directory under `algorithms/` with a
-`CMakeLists.txt`. `gnc_instances` lists the GNC sub-topologies' instances, and `gnc_instance`
-finds a component's one instance among them. `configuration_model` reads a configuration's contract
-and GNC sub-topology, `tick_period` its base tick's period, and `bus_port` the LabBusDriver port its
-deployment wires to a CDH input port.
+`CMakeLists.txt`. `configurations` names one configuration per GNC sub-topology. `gnc_instances`
+lists the GNC sub-topologies' instances, and `gnc_instance` finds a component's one instance among
+them. `configuration_model` reads a configuration's contract and GNC sub-topology, `tick_period`
+its base tick's period, and `bus_port` the LabBusDriver port its deployment wires to a CDH input
+port.
 """
 
 import functools
@@ -20,6 +21,7 @@ __all__ = [
     "algorithm_files",
     "bus_port",
     "configuration_model",
+    "configurations",
     "contract_files",
     "fpp_files",
     "framework_files",
@@ -78,6 +80,9 @@ _PROJECT = (
 )
 """The repository's files of every deployment's model, its algorithms and GNC sub-topology aside."""
 
+_GNC = _REPOSITORY / "fsw" / "fpp" / "gnc"
+"""The GNC sub-topologies, one `<configuration>.fpp` per configuration."""
+
 _TEMPLATE = _REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in"
 """The deployment topology's template, rendered per configuration."""
 
@@ -135,6 +140,15 @@ def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
     )
 
 
+def configurations() -> tuple[str, ...]:
+    """Every configuration: the name of each GNC sub-topology in `fsw/fpp/gnc/`.
+
+    Returns:
+        The names, sorted, such as `ImuDeadReckoning`.
+    """
+    return tuple(sorted(path.stem for path in _GNC.glob("*.fpp")))
+
+
 @functools.cache
 def gnc_instances() -> tuple[Instance, ...]:
     """Every instance the GNC sub-topologies in `fsw/fpp/gnc/` define, read once per process.
@@ -144,7 +158,7 @@ def gnc_instances() -> tuple[Instance, ...]:
     Returns:
         The instances.
     """
-    sub_topologies = sorted((_REPOSITORY / "fsw" / "fpp" / "gnc").glob("*.fpp"))
+    sub_topologies = [_GNC / f"{configuration}.fpp" for configuration in configurations()]
     contract = read(contract_files()).instances
     return tuple(
         instance

@@ -8,9 +8,11 @@ from fsw.codegen.deployment import (
     algorithm_files,
     bus_port,
     configuration_model,
+    configurations,
     contract_files,
     fpp_files,
     gnc_instance,
+    gnc_instances,
     tick_period,
 )
 from fsw.codegen.fpp_model import Instance
@@ -41,6 +43,17 @@ def test_the_contract_holds_the_bus_structs_and_every_algorithm_s_files():
     reckoner = _REPOSITORY / "algorithms" / "imu_dead_reckoning" / "ImuDeadReckoner.fpp"
     assert reckoner in algorithm_files()
     assert set(algorithm_files()) <= set(files)
+
+
+def test_the_configurations_are_the_gnc_sub_topologies_sorted_by_name():
+    """Each configuration has its sub-topology's file, and qualifies every GNC instance."""
+    found = configurations()
+
+    assert found
+    assert list(found) == sorted(found)
+    for configuration in found:
+        assert (_REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp").is_file()
+    assert {instance.name.split(".")[0] for instance in gnc_instances()} == set(found)
 
 
 def test_a_component_s_gnc_instance_is_its_one_instance_in_the_gnc_sub_topologies():
