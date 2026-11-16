@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from Basilisk.architecture import sysModel
 from wise_dynamics.basilisk import FswHost
 from wise_dynamics.basilisk.vehicles import VEHICLES
 from wise_dynamics.sessions import run_path
@@ -229,10 +228,9 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     The TST item's reference names the scenario's definition, its ground procedure, whose `sim_`
     marks say how it is flown; the test carries them and the mission's vehicle. The ground writes
     the case's parameter record beside its run file, as `run_<NNNN>.prm.json`, and the FSW is built
-    with its path. WiseDynamics' `FswHost` hosts the build, unless the build is a Basilisk module
-    hosting itself. A `Ground` flies the procedure against the build's radio edge and records the
-    run file. An exception the build kept, or the procedure raised, is re-raised whole, and a
-    procedure still waiting when the flight ends fails the case.
+    with its path. WiseDynamics' `FswHost` hosts the build. A `Ground` flies the procedure against
+    the build's radio edge and records the run file. An exception the procedure raised is re-raised
+    whole, and a procedure still waiting when the flight ends fails the case.
 
     Args:
         mission: the mission.
@@ -268,15 +266,15 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             sim_case_index: the case's number, which names its run file.
 
         Raises:
-            failure: the exception a self-hosting build or the procedure kept, re-raised whole in
-                place of what the run raised.
-            BaseException: what the run raised, when neither kept an exception.
+            ground.failure: the exception the procedure kept, re-raised whole in place of what
+                the run raised.
+            BaseException: what the run raised, when the procedure kept no exception.
         """
         record = run_path(sim_test_directory, sim_case_index).with_suffix(".prm.json")
         parameters.write([mission.parameters(sim_scenario)], record)
         fsw = mission.fsw(sim_scenario, record)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
-        host = fsw if isinstance(fsw, sysModel.SysModel) else FswHost(fsw, sim_scenario.vehicle)
+        host = FswHost(fsw, sim_scenario.vehicle)
         # The simulation holds the ground, so a strong reference back would keep every case.
         scenario = weakref.ref(sim_scenario)
         ground = Ground(
@@ -291,10 +289,9 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
                 host, fsw_fields={}, duration_s=sim_duration_s, ground=ground
             )
         except BaseException:
-            failure = getattr(fsw, "failure", None) or ground.failure
-            if failure is None:
+            if ground.failure is None:
                 raise
-            raise failure from None
+            raise ground.failure from None
         ground.ensure_returned()
         datasets |= ground.telemetry_datasets()
         path = sim_run_file(datasets, attrs={"commands": json.dumps(ground.command_log)})

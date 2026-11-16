@@ -92,7 +92,7 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
     """A drain of an edge's telemetry, each write decoded to its value by the edge.
 
     Returns:
-        A function taking an edge, such as an `FprimeStation` or a `lab.FprimeModule`, and giving
+        A function taking an edge, such as an `FprimeStation` or a `FrameRunner`, and giving
         each write since the edge's last drain as `(<instance>.<channel>, time tag in ns, value)`,
         oldest first.
     """

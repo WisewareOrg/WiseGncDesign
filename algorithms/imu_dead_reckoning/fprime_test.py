@@ -1,6 +1,6 @@
 """The F´ build of the dead reckoner against the notebook's, driven directly with no simulator.
 
-One test drives it through the F´ host, `lab.FprimeModule`, on Basilisk's IMU message. Skipped
+One test drives it through the lab adapter, `lab.Adapter`, on Basilisk's IMU message. Skipped
 without the deployment `just fsw` builds.
 """
 
@@ -21,7 +21,7 @@ from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_types import Gnc
 from fsw.codegen.roles import roles
 from ground.fprime_station import FprimeStation
-from lab import FprimeModule
+from lab import Adapter
 from lab.bus_emulator import serialize
 
 if importlib.util.find_spec("lab._wise_fsw_ImuDeadReckoning") is None:
@@ -344,19 +344,19 @@ def test_the_fprime_build_flies_the_mu_its_record_gives(
     _assert_matches(_latest(decoded(station)), python)
 
 
-def test_the_f_prime_host_mounts_the_imu_as_its_record_gives_it(
+def test_the_lab_adapter_mounts_the_imu_as_its_record_gives_it(
     nav_parameters: Gnc.ImuDeadReckonerParameters,
     prm_record: Path,
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
 ):
-    """On `NAV`'s mounting, which is not the identity, the F´ host's estimate is the notebook's.
+    """On `NAV`'s mounting, which is not the identity, the adapter's estimate is the notebook's.
 
     Ten readings are enough for a transposed mounting to show far above rounding.
 
     Args:
         nav_parameters: `NAV`.
         prm_record: the case's parameter record.
-        decoded: drains the host's telemetry as values.
+        decoded: drains the station's telemetry as values.
     """
     state = {
         "epoch": 0.0,
@@ -364,12 +364,10 @@ def test_the_f_prime_host_mounts_the_imu_as_its_record_gives_it(
         "position": R0,
         "velocity": V0,
     }
-    module = FprimeModule(messaging.IMUSensorMsgReader(), prm_record)
-    imu = messaging.IMUSensorMsg()
-    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
-    module._imu.subscribeTo(imu)
-    module.Reset(0)
-    module.uplink("nav.initNavState", state, 1)
+    adapter = Adapter("ImuDeadReckoning", prm_record)
+    station = FprimeStation(adapter, adapter.dictionary)
+    adapter.boot()
+    station.uplink("nav.initNavState", state, 1)
     python = ImuDeadReckoner(nav_parameters)
     python.initNavState(**state)
     rng = np.random.default_rng(7)
@@ -378,14 +376,13 @@ def test_the_f_prime_host_mounts_the_imu_as_its_record_gives_it(
         reading = messaging.IMUSensorMsgPayload()
         reading.AngVelPlatform = (0.02 * rng.normal(size=3)).tolist()
         reading.AccelPlatform = (1e-3 * rng.normal(size=3)).tolist()
-        imu.write(reading, k * NS, 0)
-        module.UpdateState(k * NS)
+        adapter.tick(k * NS, {"imu": reading})
         python.step(
             t=float(k),
             imu=Gnc.ImuReading(np.array(reading.AngVelPlatform), np.array(reading.AccelPlatform)),
         )
 
-    latest = _latest(decoded(module))
+    latest = _latest(decoded(station))
     np.testing.assert_allclose(latest["nav.bodyEciAttitude"], python.q_BN, rtol=0, atol=1e-12)
     np.testing.assert_allclose(latest["nav.bodyEciPos"], python.r_BN_N, rtol=1e-12)
     np.testing.assert_allclose(latest["nav.bodyEciVel"], python.v_BN_N, rtol=1e-12)

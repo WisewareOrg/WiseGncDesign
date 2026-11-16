@@ -21,7 +21,7 @@ from fsw.codegen.deployment import configurations
 from fsw.codegen.fpp_model import Instance
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import FprimeModule, dictionary_path
+from lab import Adapter, dictionary_path
 
 BUILT = all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations())
 """Whether `just fsw` built every deployment; the tests that need it skip without it."""
@@ -292,21 +292,18 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
 
 
 @pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")
-def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host(prm_record: Path):
-    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, no reason.
+def test_a_command_f_prime_rejects_fails_nothing_in_the_lab_adapter(prm_record: Path):
+    """Through the lab adapter, an opcode no instance has is answered `INVALID_OPCODE`, no reason.
 
     Args:
         prm_record: the case's parameter record.
     """
-    module = FprimeModule(messaging.IMUSensorMsgReader(), prm_record)
-    imu = messaging.IMUSensorMsg()
-    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
-    module._imu.subscribeTo(imu)
-    module.Reset(0)
+    adapter = Adapter("ImuDeadReckoning", prm_record)
+    station = FprimeStation(adapter, adapter.dictionary)
+    adapter.boot()
     init = _init()
 
-    module._fsw.uplink(init[:2] + _unknown_opcode().to_bytes(4, "big") + init[6:], 9)
-    module.UpdateState(NS)
+    adapter.uplink(init[:2] + _unknown_opcode().to_bytes(4, "big") + init[6:], 9)
+    adapter.tick(NS, {"imu": messaging.IMUSensorMsgPayload()})
 
-    assert module.responses() == [(9, "INVALID_OPCODE", None)]
-    assert module.failure is None
+    assert station.responses() == [(9, "INVALID_OPCODE", None)]

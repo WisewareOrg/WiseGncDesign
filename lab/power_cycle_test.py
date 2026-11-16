@@ -33,13 +33,8 @@ STATE = {
 
 FLIGHT = """
 from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
-from lab import FprimeModule
-
-
-@provides("SYS001")
-def fprime(scenario, prm_path):
-    return FprimeModule(scenario.vehicle.readers()["imu"], prm_path)
+from algorithms.imu_dead_reckoning.parity import fprime_dead_reckoner as fprime
+from harness.mission import Mission, mission_tests
 
 
 globals().update(
@@ -91,7 +86,7 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
         pytester: the project the flights run in, each run in one process of its own, xdist off.
     """
     pytester.makepyfile(test_flights=FLIGHT)
-    test = "test_flights.py::Test_imu_spacecraft::test_fprime_leo500"
+    test = "test_flights.py::Test_imu_spacecraft::test_fprime_dead_reckoner_leo500"
 
     options = ("-p", "no:cacheprovider", "-p", "no:xdist")
 
