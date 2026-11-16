@@ -6,6 +6,5 @@ register_fprime_module(
   HEADERS
     "${CMAKE_CURRENT_LIST_DIR}/SimHub.hpp"
   DEPENDS
-    fsw_fpp_interfaces
     Os
 )
