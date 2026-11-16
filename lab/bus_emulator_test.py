@@ -81,9 +81,11 @@ def test_a_member_outside_the_emulator_s_domain_is_refused_by_name(
     toy = Struct("Bus.ImuSensorMsg", (Member("angVelPlatform", "F64", 3), member))
     monkeypatch.setitem(bus_emulator._STRUCTS, "imusensormsgpayload", toy)
     bus_emulator._packer.cache_clear()
-    with pytest.raises(KeyError, match=rf"Bus\.ImuSensorMsg\.{named}, which the bus emulator"):
-        serialize(imu_message)
-    bus_emulator._packer.cache_clear()
+    try:
+        with pytest.raises(KeyError, match=rf"Bus\.ImuSensorMsg\.{named}, which the bus emulator"):
+            serialize(imu_message)
+    finally:
+        bus_emulator._packer.cache_clear()
 
 
 def test_the_emulator_writes_the_bytes_f_prime_serializes(
