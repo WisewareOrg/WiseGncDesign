@@ -46,7 +46,7 @@ class Adapter:
     _fsw: ModuleType
     """The copy the last `boot` powered on; unset before the first."""
     _writes: list[tuple[int, int, bytes]]
-    """The telemetry writes the ticks drained since the last `telemetry` or `boot`."""
+    """What `telemetry` returns next."""
 
     def __init__(self, configuration: str, prm_path: Path) -> None:
         """Makes the case's `.dat` beside its record, once `source` has checked the build.

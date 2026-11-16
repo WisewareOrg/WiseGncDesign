@@ -194,7 +194,7 @@ True
 The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
-## The F´ host
+## The lab adapter
 
 `lab.Adapter(configuration, prm_path)` is a configuration's WiseFsw F´ deployment as a
 WiseDynamics FSW build, which `FswHost` hosts in the simulation's process, with the parameters of

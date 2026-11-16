@@ -259,7 +259,7 @@ def prm_record(case_parameters: tuple[Any, ...], tmp_path: Path) -> Path:
 
 @pytest.fixture
 def prm(prm_record: Path, configuration: str) -> str:
-    """The case's `.dat`, made beside its record as the F´ host makes it.
+    """The case's `.dat`, made beside its record as `lab.Adapter` makes it.
 
     Args:
         prm_record: the case's record.
