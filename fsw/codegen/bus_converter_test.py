@@ -1,22 +1,20 @@
-"""The F´ CDH generator: its roles from `Cdh.BusConverter`'s ports, and the C++ it emits for them.
+"""The F´ CDH generator: the C++ it emits for `Cdh.BusConverter`'s roles, and what it refuses.
 
-Each test but the contract's reads a toy model, two roles whose structs exercise the field rule,
-so none needs the F´ framework clone.
+Each test but the tool's reads a toy model of two roles, so none needs the F´ framework clone.
 """
 
 from pathlib import Path
 
 import pytest
 
-from fsw.codegen.bus_converter import Role, main, render, roles
-from fsw.codegen.deployment import contract_files
+from fsw.codegen.bus_converter import main, render
 from fsw.codegen.fpp_model import Model, read
 
 TOY = """\
 module Bus {
-  struct A { extra: [2] U32, v: [3] F64 }
+  struct A { extra: [2] F64, v: [3] F64 }
   port A(msg: A)
-  struct B { n: [2] I16 }
+  struct B { n: [2] F64 }
   port B(msg: B)
 }
 module Gnc {
@@ -28,7 +26,7 @@ module Gnc {
   array Mat = [2] Row
   struct AIcd { V: Row }
   port AIcd(reading: AIcd)
-  struct BIcd { n: [2] I16 }
+  struct BIcd { n: [2] F64 }
   port BIcd(reading: BIcd)
 }
 module Cdh {
@@ -41,7 +39,7 @@ module Cdh {
 }
 """
 """Role `a` takes a 3-vector by an array type and another case, and drops `extra`; role `b` an
-inline array of another type. `Mode` and `Mat` are there for the edits that seed a refusal."""
+inline array. `Mode` and `Mat` are there for the edits that seed a refusal."""
 
 
 def _toy(tmp_path: Path, *edits: tuple[str, str]) -> Model:
@@ -62,40 +60,6 @@ def _toy(tmp_path: Path, *edits: tuple[str, str]) -> Model:
     path = tmp_path / "Toy.fpp"
     path.write_text(text)
     return read([path])
-
-
-def test_each_bus_typed_input_is_a_role_paired_with_its_output(tmp_path: Path) -> None:
-    """The toy's two input ports give two roles, each with its bus and ICD structs and ports.
-
-    Args:
-        tmp_path: where the toy is written.
-    """
-    assert roles(_toy(tmp_path)) == [
-        Role("a", "Bus.A", "Gnc.AIcd", "aIn", "aOut"),
-        Role("b", "Bus.B", "Gnc.BIcd", "bIn", "bOut"),
-    ]
-
-
-def test_a_role_without_its_output_is_refused_by_name(tmp_path: Path) -> None:
-    """A bus-typed `bIn` with no `bOut` raises, naming the role.
-
-    Args:
-        tmp_path: where the toy is written.
-    """
-    model = _toy(tmp_path, ("    output port bOut: Gnc.BIcd\n", ""))
-    with pytest.raises(ValueError, match="role b takes Bus.B at bIn but has no bOut"):
-        roles(model)
-
-
-def test_a_role_whose_output_carries_a_bus_struct_is_refused_by_name(tmp_path: Path) -> None:
-    """A `bOut` typed by a bus struct is no GNC output, and raises naming the role.
-
-    Args:
-        tmp_path: where the toy is written.
-    """
-    model = _toy(tmp_path, ("output port bOut: Gnc.BIcd", "output port bOut: Bus.B"))
-    with pytest.raises(ValueError, match="role b takes Bus.B at bIn but has no bOut of a GNC type"):
-        roles(model)
 
 
 def test_two_roles_emit_two_handlers_and_two_conversions(tmp_path: Path) -> None:
@@ -136,8 +100,8 @@ def test_an_array_of_arrays_is_refused_by_name(tmp_path: Path) -> None:
     """
     model = _toy(
         tmp_path,
-        ("struct B { n: [2] I16 }", "struct B { m: [2] Gnc.Row }"),
-        ("struct BIcd { n: [2] I16 }", "struct BIcd { m: Mat }"),
+        ("struct B { n: [2] F64 }", "struct B { m: [2] Gnc.Row }"),
+        ("struct BIcd { n: [2] F64 }", "struct BIcd { m: Mat }"),
     )
     with pytest.raises(ValueError, match=r"Gnc\.BIcd\.m is \(2, 3\) float64, which the F´ CDH"):
         render(model)
@@ -160,18 +124,22 @@ def test_a_scalar_is_refused_by_name(tmp_path: Path) -> None:
         render(model)
 
 
-def test_a_bool_is_refused_by_name(tmp_path: Path) -> None:
-    """A `bool` array matched by a bus `bool` array passes the field rule, but is refused by name.
+@pytest.mark.parametrize("element", ["bool", "U32"], ids=["bool", "unused-primitive"])
+def test_an_element_type_outside_the_domain_is_refused_by_name(
+    element: str, tmp_path: Path
+) -> None:
+    """A `bool` array, or one of a primitive no struct uses, passes the field rule but is refused.
 
     Args:
+        element: the arrays' element type.
         tmp_path: where the toy is written.
     """
     model = _toy(
         tmp_path,
-        ("struct A { extra", "struct A { f: [2] bool, extra"),
-        ("struct AIcd { V", "struct AIcd { f: [2] bool, V"),
+        ("struct A { extra", f"struct A {{ f: [2] {element}, extra"),
+        ("struct AIcd { V", f"struct AIcd {{ f: [2] {element}, V"),
     )
-    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.f is \(2,\) bool, which the F´ CDH"):
+    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.f is \(2,\) \w+, which the F´ CDH"):
         render(model)
 
 
@@ -213,35 +181,32 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(tmp_path: Path)
         assert f'"cdh_{role}"' in pins
         assert f"{bus} msg;" in pins
         assert f"Cdh::BusConverter::convert_{role}(msg)" in pins
-    assert "[](const std::array<U32, 2>& extra, const std::array<F64, 3>& v)" in pins
+    assert "[](const std::array<F64, 2>& extra, const std::array<F64, 3>& v)" in pins
     assert 'pybind11::arg("extra"), pybind11::arg("v")' in pins
 
 
 @pytest.mark.parametrize(
     ("extra", "named"),
-    [("extra: U32", "extra is U32"), ("extra: [2] bool", r"extra is \[2\] bool")],
-    ids=["scalar", "bool"],
+    [
+        ("extra: F64", "extra is F64"),
+        ("extra: [2] bool", r"extra is \[2\] bool"),
+        ("extra: [2] U32", r"extra is \[2\] U32"),
+    ],
+    ids=["scalar", "bool", "unused-primitive"],
 )
 def test_a_bus_member_outside_the_pin_s_domain_is_refused_by_name(
     extra: str, named: str, tmp_path: Path
 ) -> None:
-    """A bus scalar or `bool` the CDH drops has no bus pin parameter, so the pin refuses it.
+    """A bus scalar, `bool` or primitive no struct uses, dropped by the CDH, is refused by the pin.
 
     Args:
         extra: the member as the seeded toy declares it.
         named: the member as the refusal names it, a pattern.
         tmp_path: where the toy is written.
     """
-    model = _toy(tmp_path, ("extra: [2] U32", extra))
+    model = _toy(tmp_path, ("extra: [2] F64", extra))
     with pytest.raises(ValueError, match=rf"Bus\.A\.{named}, which the bus pin"):
         render(model)
-
-
-def test_the_contract_pairs_the_imu_bus_message_with_the_imu_reading() -> None:
-    """The real `Cdh.BusConverter` has one role, the IMU's."""
-    assert roles(read(contract_files())) == [
-        Role("imu", "Bus.ImuSensorMsg", "Gnc.ImuReading", "imuIn", "imuOut")
-    ]
 
 
 def test_the_tool_writes_the_component_into_its_directory(tmp_path: Path) -> None:

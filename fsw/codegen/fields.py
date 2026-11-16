@@ -2,7 +2,7 @@
 
 Every field of the target struct is taken from the source field of its name, ignoring case, which
 must have its shape and element type; source fields the target lacks are dropped, and a target
-field that is itself a struct is not converted. `fsw.codegen.fpp_types.converter` applies it to
+field that is itself a struct is refused. `fsw.codegen.fpp_types.converter` applies it to
 Python values, and `fsw.codegen.bus_converter` to the F´ build's generated C++.
 """
 
@@ -12,7 +12,7 @@ import numpy as np
 
 from fsw.codegen.fpp_model import Array, Enum, Member, Struct
 
-__all__ = ["DTYPES", "Form", "form", "plan"]
+__all__ = ["DTYPES", "STRUCT_CODES", "Form", "form", "plan"]
 
 DTYPES = {
     "F32": np.dtype("float32"),
@@ -28,6 +28,14 @@ DTYPES = {
     "bool": np.dtype("bool"),
 }
 """Each numeric FPP primitive as its native-endian numpy type."""
+
+STRUCT_CODES = {"F64": "d"}
+"""Each primitive a bus or GNC struct's array may hold, as its Python `struct` code: the primitives
+the contract's structs use. A bus struct's member is an inline array `[N] <primitive>`, and a GNC
+struct's may also be a named array type of one dimension. The F´ CDH generator's component and bus
+pins and the bus emulator take these alone and refuse anything else, a scalar among it, naming the
+member, so the first use of another type adds its code with a compiled test. F´ serializes `bool`
+unlike Python's `struct`, so it never joins."""
 
 Form = tuple[tuple[int, ...], np.dtype | str]
 """A field's shape, and its element's numpy type, or the name of its element's FPP type when that

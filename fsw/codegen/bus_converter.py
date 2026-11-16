@@ -1,19 +1,14 @@
 """The F´ build's CDH component, `Cdh.BusConverter`, generated from its FPP declaration.
 
-`Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each sensor role, as its annotation
-states: a bus-typed input `<role>In` and an output `<role>Out` of the GNC's struct. `roles` reads
-the pairs, and `render` emits the component's C++: per role, a conversion `convert_<role>`, inline
-in the header, building the GNC struct from the bus struct by `fsw.codegen.fields.plan`, the rule
-the Python build's converter follows, and a handler sending its result on `<role>Out`. A field must
-be a one-dimensional array of a numeric primitive; anything else, a scalar among it, raises when
+For each role `fsw.codegen.roles` reads, `render` emits a conversion `convert_<role>`, inline in
+the header, building the GNC struct from the bus struct by `fsw.codegen.fields.plan`, and a handler
+sending its result on `<role>Out`. A field outside `fsw.codegen.fields.STRUCT_CODES` raises when
 the code is generated.
 
 It also emits the lab's test pins, `BusConverterPins.hpp`, which `_wise_fsw`'s module includes
 once: `bus_<Struct>(<member>=...)` returns F´'s serialization of a bus struct built from its
-members' values, one pin per bus struct a role takes, in the same domain as the bus emulator; and
-`cdh_<role>(bus_bytes)` returns F´'s serialization of `convert_<role>`'s result for the bus struct
-F´ deserializes from the bytes. The pins need no instance of the component: F´ builds with direct
-port calls, so a port exists only in a topology, and the conversion is inline.
+members' values, one pin per bus struct a role takes; and `cdh_<role>(bus_bytes)` returns F´'s
+serialization of `convert_<role>`'s result for the bus struct F´ deserializes from the bytes.
 
 `python -m fsw.codegen.bus_converter <directory>` writes the three files into the directory from
 the contract, `fsw.codegen.deployment.contract_files()`; CMake runs it during `just fsw`, into the
@@ -24,88 +19,20 @@ import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import NamedTuple
+
+import numpy as np
 
 from fsw.codegen.deployment import contract_files
-from fsw.codegen.fields import DTYPES, form, plan
-from fsw.codegen.fpp_model import Model, Port, read
+from fsw.codegen.fields import DTYPES, STRUCT_CODES, form, plan
+from fsw.codegen.fpp_model import Model, read
+from fsw.codegen.roles import CONVERTER, Role, roles
 
-__all__ = ["Role", "main", "render", "roles"]
-
-_CONVERTER = "Cdh.BusConverter"
-"""The component whose port pairs are the roles."""
+__all__ = ["main", "render"]
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
 
-_PRIMITIVES = ("F32", "F64", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64")
-"""The element types the component copies and a bus pin takes, each in a one-dimensional array: the
-numeric primitives, as the bus emulator's. F´ serializes `bool` unlike Python, so none takes it. A
-scalar member is refused until a struct has one, so its first use adds its code with a compiled
-test."""
-
-_NUMBERS = [DTYPES[primitive] for primitive in _PRIMITIVES]
-"""`_PRIMITIVES` as `fsw.codegen.fields.form` gives their element types."""
-
-
-class Role(NamedTuple):
-    """A sensor role's pair of `Cdh.BusConverter` ports.
-
-    Attributes:
-        role: the role, such as `imu`.
-        bus: the bus struct's qualified FPP name, such as `Bus.ImuSensorMsg`.
-        icd: the GNC struct's qualified FPP name, such as `Gnc.ImuReading`.
-        input: the input port's name, `<role>In`.
-        output: the output port's name, `<role>Out`.
-    """
-
-    role: str
-    bus: str
-    icd: str
-    input: str
-    output: str
-
-
-def _carried(port: Port) -> str:
-    """The struct a port carries: its one argument's type.
-
-    Args:
-        port: the port.
-
-    Returns:
-        The struct's qualified name.
-    """
-    [argument] = port.args
-    return argument.type
-
-
-def roles(model: Model) -> list[Role]:
-    """Every role of `Cdh.BusConverter`: each bus-typed input, with its output.
-
-    Args:
-        model: the model holding the converter.
-
-    Returns:
-        The roles, in the converter's port order.
-
-    Raises:
-        ValueError: a role has no `<role>Out`, or a bus-typed one, naming the role.
-    """
-    converter = model.components[_CONVERTER]
-    outputs = {port.name: port for port in converter.outputs}
-    found = []
-    for port in converter.inputs:
-        bus = _carried(port)
-        if not bus.startswith("Bus."):
-            continue
-        role = port.name.removesuffix("In")
-        output = outputs.get(f"{role}Out")
-        if output is None or _carried(output).startswith("Bus."):
-            raise ValueError(
-                f"{_CONVERTER}'s role {role} takes {bus} at {port.name} but has no {role}Out of a"
-                " GNC type"
-            )
-        found.append(Role(role, bus, _carried(output), port.name, output.name))
-    return found
+_NUMBERS = [DTYPES[primitive] for primitive in STRUCT_CODES]
+"""`fsw.codegen.fields.STRUCT_CODES`' primitives as `fsw.codegen.fields.form` gives them."""
 
 
 def _cpp(name: str) -> str:
@@ -132,16 +59,16 @@ def _copies(model: Model, role: Role) -> list[str]:
 
     Raises:
         ValueError: a field breaks `fsw.codegen.fields.plan`'s rule, or is not a one-dimensional
-            array of one of `_PRIMITIVES`, naming it.
+            array of one of `fsw.codegen.fields.STRUCT_CODES`, naming it.
     """
     bus, icd = model.types[role.bus], model.types[role.icd]
     sources = {m.name.lower(): (m.name, form(m, model.types)) for m in bus.members}
     statements = []
     for member, name, (shape, element) in plan(icd, model.types, sources, role.bus):
-        if len(shape) != 1 or element not in _NUMBERS:
+        if len(shape) != 1 or not isinstance(element, np.dtype) or element not in _NUMBERS:
             raise ValueError(
                 f"{role.icd}.{member.name} is {shape} {element}, which the F´ CDH does not copy:"
-                " it copies one-dimensional arrays of the numeric primitives"
+                " it copies one-dimensional arrays of fsw.codegen.fields.STRUCT_CODES' primitives"
             )
         statements.append(
             f"        for (FwSizeType i = 0; i < {shape[0]}; i++) {{\n"
@@ -201,8 +128,6 @@ void BusConverter::{signature} {{
 
 _PINS = """\
 // Generated by fsw.codegen.bus_converter from {component}; never committed.
-// The lab's test pins on the CDH component and the bus structs, compiled into _wise_fsw's module:
-// its source includes this header once and calls busConverterPins(m) once.
 #ifndef CDH_BUSCONVERTERPINS_HPP
 #define CDH_BUSCONVERTERPINS_HPP
 
@@ -285,16 +210,17 @@ def _bus_pin(model: Model, qualified: str) -> str:
         The pin's `m.def` statement.
 
     Raises:
-        ValueError: a member is not a one-dimensional array of one of `_PRIMITIVES`, naming it.
+        ValueError: a member is not an inline array of one of `fsw.codegen.fields.STRUCT_CODES`,
+            naming it.
     """
     bus = model.types[qualified]
     parameters, fills, arguments = [], [], []
     for member in bus.members:
-        if member.type not in _PRIMITIVES or member.size is None:
+        if member.type not in STRUCT_CODES or member.size is None:
             size = "" if member.size is None else f"[{member.size}] "
             raise ValueError(
                 f"{qualified}.{member.name} is {size}{member.type}, which the bus pin does not"
-                " take: it takes one-dimensional arrays of the numeric primitives"
+                " take: it takes inline arrays of fsw.codegen.fields.STRUCT_CODES' primitives"
             )
         parameters.append(f"const std::array<{member.type}, {member.size}>& {member.name}")
         fills.append(
@@ -329,7 +255,7 @@ def _pins(model: Model, found: list[Role]) -> str:
         _ROLE_PIN.format(role=role.role, bus=_cpp(role.bus), qualified=role.bus, icd=role.icd)
         for role in found
     ]
-    return _PINS.format(component=_CONVERTER, pins="\n".join(pins))
+    return _PINS.format(component=CONVERTER, pins="\n".join(pins))
 
 
 def render(model: Model) -> dict[str, str]:
@@ -344,7 +270,7 @@ def render(model: Model) -> dict[str, str]:
         Each file's text, by its name: `BusConverter.hpp`, `BusConverter.cpp` and
         `BusConverterPins.hpp`.
     """
-    component = model.components[_CONVERTER]
+    component = model.components[CONVERTER]
     base = Path(os.path.relpath(component.file.parent, _REPOSITORY)) / "BusConverterComponentAc.hpp"
     found = roles(model)
     conversions, declarations, definitions = [], [], []
@@ -362,12 +288,12 @@ def render(model: Model) -> dict[str, str]:
         definitions.append(_HANDLER.format(signature=signature, output=role.output, role=role.role))
     return {
         "BusConverter.hpp": _HEADER.format(
-            component=_CONVERTER,
+            component=CONVERTER,
             base=base.as_posix(),
             conversions="".join(conversions),
             declarations="\n".join(declarations),
         ),
-        "BusConverter.cpp": _SOURCE.format(component=_CONVERTER, definitions="".join(definitions)),
+        "BusConverter.cpp": _SOURCE.format(component=CONVERTER, definitions="".join(definitions)),
         "BusConverterPins.hpp": _pins(model, found),
     }
 

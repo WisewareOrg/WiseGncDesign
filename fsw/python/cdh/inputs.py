@@ -1,9 +1,9 @@
 """The Python build's CDH-in: each sensor role's bus struct, converted to its GNC input's FPP type.
 
-The pairing is FPP's, `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp`, whose annotation states
-its rule, read by `fsw.codegen.bus_converter.roles` as the F´ build's CDH reads it; a `Pair` names
-one role's. The bus struct is converted to the ICD struct field by field
-with `fsw.codegen.fpp_types.converter`, every array a fresh copy.
+The pairing is FPP's, `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp`, read by
+`fsw.codegen.roles` as the F´ build's CDH reads it; a `Pair` names one role's. The bus struct is
+converted to the ICD struct field by field with `fsw.codegen.fpp_types.converter`, every array a
+fresh copy.
 """
 
 import functools
@@ -11,13 +11,10 @@ from collections.abc import Collection, Mapping, Sequence
 from typing import Any, NamedTuple
 
 from fsw.codegen import fpp_types
-from fsw.codegen.bus_converter import roles
 from fsw.codegen.fpp_model import Model
+from fsw.codegen.roles import CONVERTER, roles
 
 __all__ = ["Pair", "convert", "pairings"]
-
-_CONVERTER = "Cdh.BusConverter"
-"""The component whose port pairs are the pairing."""
 
 
 class Pair(NamedTuple):
@@ -60,7 +57,7 @@ def pairings(model: Model, ports: Collection[str]) -> list[Pair]:
     ]
     unfed = sorted(set(ports) - {pair.port for pair in pairs})
     if unfed:
-        raise ValueError(f"the sub-topology's inputs {unfed} are fed by no role of {_CONVERTER}")
+        raise ValueError(f"the sub-topology's inputs {unfed} are fed by no role of {CONVERTER}")
     return pairs
 
 

@@ -5,10 +5,8 @@ Each bus struct in `fsw/fpp/interfaces/Bus.fpp`, `Bus.<Name>`, mirrors the Basil
 `serialize` writes a payload as F´ serializes its bus struct: each member in declaration order,
 big-endian, packed and unframed. It is built from `Bus.fpp` at import, read alone, so no file is
 generated and no F´ framework clone is read; each payload type's packer is planned on its first
-message. A member must be a one-dimensional array of a numeric primitive, the domain of the F´ CDH
-generator's component and pins; anything else, a scalar among it, raises when planned. Lab
-equipment: a real vehicle's bus delivers the bytes itself, and the Python build reads messages
-without them.
+message, and a member outside `fsw.codegen.fields.STRUCT_CODES` raises then. Lab equipment: a real
+vehicle's bus delivers the bytes itself, and the Python build reads messages without them.
 """
 
 import functools
@@ -18,6 +16,7 @@ from typing import Any
 
 from Basilisk.architecture import messaging
 
+from fsw.codegen.fields import STRUCT_CODES
 from fsw.codegen.fpp_model import Struct, read
 
 __all__ = ["serialize"]
@@ -31,20 +30,6 @@ _STRUCTS = {
 }
 """Each bus struct, by the name of the payload it mirrors in lower case."""
 
-_CODES = {
-    "F32": "f",
-    "F64": "d",
-    "I8": "b",
-    "I16": "h",
-    "I32": "i",
-    "I64": "q",
-    "U8": "B",
-    "U16": "H",
-    "U32": "I",
-    "U64": "Q",
-}
-"""Each numeric FPP primitive's `struct` code; F´ serializes `bool` otherwise, so it has none."""
-
 
 @functools.cache
 def _packer(payload: type) -> tuple[struct.Struct, tuple[str, ...]]:
@@ -57,8 +42,8 @@ def _packer(payload: type) -> tuple[struct.Struct, tuple[str, ...]]:
         The packer, and the payload's name for each bus member.
 
     Raises:
-        KeyError: no bus struct mirrors the payload, naming it; or a member is not a
-            one-dimensional array of a type with a `struct` code, naming the member and the type.
+        KeyError: no bus struct mirrors the payload, naming it; or a member is not an inline array
+            of one of `fsw.codegen.fields.STRUCT_CODES`, naming the member and the type.
     """
     key = payload.__name__.lower()
     if key not in _STRUCTS:
@@ -67,18 +52,21 @@ def _packer(payload: type) -> tuple[struct.Struct, tuple[str, ...]]:
     fields = {name.lower(): name for name in payload.__dtype__.names}
     layout = ">"
     for member in bus.members:
-        if member.type not in _CODES or member.size is None:
+        if member.type not in STRUCT_CODES or member.size is None:
             size = "" if member.size is None else f"[{member.size}] "
             raise KeyError(
                 f"{bus.name}.{member.name} is {size}{member.type}, which the bus emulator does not"
-                " write: it writes one-dimensional arrays of the numeric primitives"
+                " write: it writes inline arrays of fsw.codegen.fields.STRUCT_CODES' primitives"
             )
-        layout += f"{member.size}{_CODES[member.type]}"
+        layout += f"{member.size}{STRUCT_CODES[member.type]}"
     return struct.Struct(layout), tuple(fields[member.name.lower()] for member in bus.members)
 
 
 def serialize(message: Any) -> bytes:
     """A Basilisk message's bytes, as F´ serializes the bus struct that mirrors it.
+
+    A message no bus struct mirrors, or whose bus struct has a member outside
+    `fsw.codegen.fields.STRUCT_CODES`, raises `KeyError` naming it.
 
     Args:
         message: the message's payload. Its class is resolved by its name in `messaging`, since

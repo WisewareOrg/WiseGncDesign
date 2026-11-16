@@ -59,15 +59,16 @@ def test_a_message_with_no_bus_struct_is_refused_by_name() -> None:
 @pytest.mark.parametrize(
     ("member", "named"),
     [
-        (Member("count", "U16", None), "count is U16"),
+        (Member("count", "F64", None), "count is F64"),
         (Member("flags", "bool", 3), r"flags is \[3\] bool"),
+        (Member("ticks", "U32", 3), r"ticks is \[3\] U32"),
     ],
-    ids=["scalar", "bool"],
+    ids=["scalar", "bool", "unused-primitive"],
 )
 def test_a_member_outside_the_emulator_s_domain_is_refused_by_name(
     member: Member, named: str, imu_message: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A bus struct with a scalar or a `bool` member raises `KeyError` naming it, when planned.
+    """A scalar, `bool` or unused-primitive member raises `KeyError` naming it, when planned.
 
     The IMU's bus struct is stood in for by one with the member, and the packers are replanned.
 
