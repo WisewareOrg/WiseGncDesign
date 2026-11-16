@@ -37,7 +37,8 @@ Tests sit beside the code they test. The suite needs the simulator installed, fr
 system C++ compiler and git. The F´ framework and Eigen are fetched by tag into gitignored folders
 under `fsw/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
 GitLab only the first time, or when a tag changes. Each sync rebuilds the F´ build cache from
-scratch, which needs no network.
+scratch, which needs no network. Why by tag is in
+[ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 `just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
 picked up. That rebuild reuses the existing cache, so after switching branches run `just pinned` or
@@ -45,8 +46,10 @@ picked up. That rebuild reuses the existing cache, so after switching branches r
 kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. A Python build needs
 no F´ build, and the F´ build's tests skip when it is absent; where a Python build's dictionary
 comes from is in [`fsw/README.md`](fsw/README.md#the-dictionary). Why the F´ build flies inside
-the simulation, and how, is in
-[ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md);
+the simulation is in
+[ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
+and how it meets the sim in
+[ADR 0006 rev 1](docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md);
 how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
 [ADR 0004 rev 2](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
@@ -62,7 +65,9 @@ A mission is a vehicle, an FSW builder, the scenarios to fly and the algorithm's
 as a record beside its run file, and the builder takes the scenario and the record's path. The
 builder claims its capabilities with `@provides("SYS...")`, and a flight is judged on the rungs
 its scenario links to that sit under those capabilities. `mission_tests` turns missions into Monte
-Carlo tests: a class per vehicle holding a test per FSW and scenario. The reasoning is in
+Carlo tests: a class per vehicle holding a test per FSW and scenario. A flight's end belongs to its
+scenario, never to a fixed length: the simulator stops only on time, so the one stopping rule the
+harness binds is the TST definition's duration. The reasoning is in
 [ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
 
 ### Notebooks
@@ -110,4 +115,5 @@ at `report/matrix.md`. How a verdict is reached is in
 ### Recipes and CI
 
 `just --list` shows every recipe with its description. `.github/workflows/checks.yml` is the
-authority on what CI runs: lint and docstring coverage, `just reqs`, and the suite.
+authority on what CI runs: lint and docstring coverage, `just reqs`, the suite, and wise-ci's
+`check-adrs` over `docs/decisions/`.

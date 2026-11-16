@@ -9,13 +9,14 @@ WiseDynamics' host module)
 
 - **rev 1** — 2026-11-13 — first written (issue 52 tooling checks); FPP carries each sensor role's
   bus-to-GNC pairing, and the Python build's frame refuses delayed feedback and fan-out (issue 61
-  The Python frame runner, on WiseDynamics' host module).
+  The Python frame runner, on WiseDynamics' host module); F´ in a repository of its own rejected,
+  moved from ADR 0003 rev 3 (issue 85 one decision per ADR).
 
 ## Context
 
 The algorithms are written in Python first and flown with no F´ build, and F´ is good flight
 software in its own right, not a mirror of the Python build. Each build meets the world at two
-edges: the ground (ADR 0004 rev 2) and the sim (ADR 0003 rev 3).
+edges: the ground (ADR 0004 rev 2) and the sim (ADR 0006 rev 1).
 
 At `6f6276e`, one object per build did bus I/O, unit conversion, commands, telemetry and the
 algorithm, wired by hand for one algorithm. A second algorithm had no place to sit, and the glue grew
@@ -36,10 +37,11 @@ way through, partitioned as real flight software is.
 - **FPP pairs each sensor role's bus struct with the GNC's struct.** A CDH component,
   `Cdh.BusConverter` in `fsw/fpp/interfaces/`, has per role an input `<role>In` typed by the bus
   struct and an output `<role>Out` typed by the GNC's struct; FPP type-checks both ends, and each
-  build's CDH reads the same declaration (owner ruling on issue 61, option A).
+  build's CDH reads the same declaration.
 - **An algorithm's code lives in `algorithms/<name>/`, and GNC wires it in.** A configuration
   reaches its algorithms only through its GNC sub-topology.
-- **RIO, CDH, platform and the lab (ADR 0003 rev 3) name no algorithm.**
+- **RIO, CDH and platform name no algorithm**; ADR 0006 rev 1 holds the lab and the sim glue to the
+  same rule.
 - **RIO, CDH and platform live in `fsw/<build>/<partition>/`; GNC is one sub-topology in
   `fsw/fpp/gnc/` that both builds fly.** The Python frame runner is nothing but these partitions.
 
@@ -55,6 +57,8 @@ way through, partitioned as real flight software is.
 - **One CDH converter shared by both builds.** One build would then run the other's internals, and
   a Python build must fly with no F´ build. Rejected for a CDH per build, each generated from the
   same FPP (ADR 0004 rev 2).
+- **F´ in a repository of its own.** Each algorithm and its F´ build are written side by side.
+  Rejected.
 
 ## Consequences
 

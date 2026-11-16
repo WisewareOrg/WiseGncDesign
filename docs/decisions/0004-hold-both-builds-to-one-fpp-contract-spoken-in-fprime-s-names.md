@@ -10,7 +10,10 @@
   dictionary" and rewritten to two edges: RadioEdge in F´'s names, the F´ ground station, typing
   after the run, FPP as the contract read through the native `fpp to-json`, generated named tuples,
   parameter files, and parity as an analyzer; with the checks that support them (issue 52 tooling
-  checks).
+  checks); rates as FPP constants (issue 57 GNC sub-topology); the rejected configuration on an F´
+  port, the rejected FSW telemetry in Basilisk message structs and the boot(prm_path) check, moved
+  from ADR 0003 rev 3; role groups and named-tuple defaults stated as consequences, and mechanics
+  their tickets record left to them (issue 85 one decision per ADR).
 - **rev 1** — 2026-11-13 — first written (issue 37 the dictionary; issue 38 commands into the F´
   build).
 
@@ -62,6 +65,11 @@ With the file missing, PrmDb reports `PrmFileReadError` and both parameters stay
 that failed would have shown. Not covered: this deployment's dictionary; the check used a scratch
 deployment's.
 
+**boot(prm_path): PASS** (`9eccec3`, `spikes/fprime/`). Setup moves out of import into
+`boot(prm_path)`, and PrmDb reads the case's file there. `python spike_check.py b <case>.dat` from
+two processes with two files: each read its own case's `mu`, so a path that never reached PrmDb
+would have shown as equal values.
+
 ## Decision
 
 ### RadioEdge speaks F´'s vocabulary, and only the F´ build sees packets
@@ -85,26 +93,24 @@ deployment's.
 
 - **Both builds fly one FPP model:** types, role groups, commands, telemetry, parameters, capability
   claims, and each configuration's GNC sub-topology with its wiring and rates.
-- **A role's shared entries are `.fppi` groups a component includes,** and a role is an instance
-  name, so an entry reads `<role>.<entry>` in every build.
+- **A rate is an FPP constant in the GNC sub-topology**, not F´'s C++ configuration alone, which
+  the Python build cannot read.
+- **A role is an instance name**, so an entry reads `<role>.<entry>` in every build.
 - **F´'s generated JSON dictionary is the model's published form, and what the ground consumes.** A
-  Python build's dictionary is generated from FPP alone with `fpp-to-dict`, into a temp dir: written
-  into the tree, it races between parallel test workers and is a build product in source.
+  Python build's dictionary is generated from FPP alone with `fpp-to-dict`.
 - **Python reads FPP's model through the native `fpp to-json`, in one module**, called directly,
   since F´'s wrapper sends `to-json` to Java. A contract test on the real flight software's FPP holds
   its shape and runs without an F´ build.
 - **Each build's CDH is generated from FPP** through that module, with no compiler and no F´ build.
 - **FPP types are generated named tuples in Python:** one per struct, and per algorithm its outputs,
-  telemetry and parameters. Telemetry and outputs default to not written; a parameter has no default
-  unless its FPP declaration gives one, so a missing parameter fails both builds alike.
+  telemetry and parameters.
 
 ### Parameters: JSON per case, F´'s tool makes the `.dat`
 
 - **The case's parameter record is JSON**, written by the ground from each algorithm's
-  `parameters(scenario)` and saved beside the run file. The Python build reads it.
-- **F´'s `fprime-prm-write` makes the `.dat` from it**, which stock PrmDb loads at boot. `fprime-gds`
-  joins the uv environment, and none of this repository's code parses or writes F´'s binary
-  parameter format.
+  `parameters(scenario)`. The Python build reads it.
+- **F´'s `fprime-prm-write` makes the `.dat` from it**, which stock PrmDb loads at boot. None of
+  this repository's code parses or writes F´'s binary parameter format.
 - **A load that leaves any parameter invalid fails the case.**
 
 ### Parity is an analyzer whose spec is a minimum
@@ -126,6 +132,8 @@ deployment's.
   Python build and duplicates F´'s own tool. Rejected for JSON plus `fprime-prm-write`.
 - **The Python build taking `parameters(scenario)` directly, with a file only for F´.** The two
   builds would then not read one case record. Rejected.
+- **An algorithm's configuration on an F´ port, sent at boot by the sim glue.** It is per-algorithm
+  glue outside the FPP contract, and parity cannot see it. Rejected for F´ parameters.
 - **Parity over every command and every channel.** F´ generates commands the Python build lacks and
   gives no refusal reason, so the logs would never match. Rejected for a minimum spec.
 - **Dictionaries for inputs, outputs, telemetry and parameters.** A misspelled key passes silently.
@@ -136,12 +144,12 @@ deployment's.
 - **Commands and telemetry declared in Python, with FPP generated at port time; or a Python build
   reading the F´ build's dictionary.** The first moves the contract's source at port time; the second
   needs a compiler before an algorithm flies in Python. Rejected.
-- **A role's entries as an FPP `interface`.** `fpp-check` rejects `telemetry` inside one. Rejected
-  for included groups.
 - **Each vector component as a scalar channel.** A quaternion over four channels is not one write.
   Rejected.
 - **Telemetry sampled on the simulation's recording grid, or drained packed per tick.** The first
   lets the sim set the rate and lose writes; the second measured no gain. Rejected.
+- **FSW telemetry in Basilisk message structs.** It limits the FSW to fields Basilisk defines.
+  Rejected.
 
 ## Consequences
 
@@ -154,6 +162,10 @@ deployment's.
 - Adding a channel or command while prototyping is two edits: the `.fpp` line and the Python that
   writes or handles it.
 - Generating a Python build's dictionary takes 0.1–0.3 s, once per process for each model.
+- A role's entries are `.fppi` groups a component includes, since `fpp-check` rejects `telemetry`
+  in an FPP `interface`.
+- Telemetry and outputs default to not written, and a parameter has no default unless its FPP
+  declaration gives one, so a missing parameter fails both builds alike.
 - Reopened if an F´ release drops the cooperative task routine, a component needs to block, a
   consumer needs one vector component written apart, or the per-write log shows in a per-case
   profile.
