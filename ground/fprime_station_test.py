@@ -242,17 +242,6 @@ def _unknown_opcode() -> int:
     return max(c["opcode"] for c in json.loads(DICTIONARY.read_text())["commands"]) + 1
 
 
-def _step(fsw: ModuleType, t_ns: int, bus: list[tuple[int, bytes]]) -> None:
-    """Steps the deployment to `t_ns` on every role's bus message.
-
-    Args:
-        fsw: the test's copy of the deployment.
-        t_ns: ns, the tick's time.
-        bus: every role's bus message on its SimHub port.
-    """
-    fsw.step(t_ns=t_ns, bus=bus)
-
-
 @pytest.mark.parametrize(
     ("change", "response"),
     [
@@ -291,7 +280,7 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
         bus: every role's bus message on its SimHub port.
     """
     fsw.uplink(change(_init()), 7)
-    _step(fsw, NS, bus)
+    fsw.step(t_ns=NS, bus=bus)
 
     assert booted_station.responses() == [(7, response, None)]
     writes = [write for write in decoded(booted_station) if write[0].startswith("nav.")]

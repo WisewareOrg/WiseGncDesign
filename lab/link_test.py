@@ -34,17 +34,6 @@ STATE = {
 """`nav.initNavState`'s arguments: a state at t = 0."""
 
 
-def _step(fsw: ModuleType, t_ns: int, bus: list[tuple[int, bytes]]) -> None:
-    """Steps a copy to `t_ns` on every role's bus message.
-
-    Args:
-        fsw: the copy.
-        t_ns: ns, the tick's time.
-        bus: every role's bus message on its SimHub port.
-    """
-    fsw.step(t_ns=t_ns, bus=bus)
-
-
 def _nav(writes: list[tuple[str, int, Any]]) -> list[tuple[str, int, Any]]:
     """Nav's writes among drained ones.
 
@@ -89,7 +78,7 @@ def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
 
     station.uplink("nav.initNavState", STATE, 42)
     assert _responses(station) == []
-    _step(fsw, NS, bus)
+    fsw.step(t_ns=NS, bus=bus)
 
     assert _responses(station) == [(42, "OK")]
 
@@ -126,8 +115,8 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     """
     fsw.boot(prm, parameter_ids)
     station.uplink("nav.initNavState", STATE, 1)
-    _step(fsw, NS, bus)
-    _step(fsw, 2 * NS, bus)
+    fsw.step(t_ns=NS, bus=bus)
+    fsw.step(t_ns=2 * NS, bus=bus)
 
     writes = _nav(decoded(station))
 
@@ -166,7 +155,7 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
     fsw.boot(prm, parameter_ids)
     t_ns = NS + 500_000_000 + 7_000
 
-    _step(fsw, t_ns, bus)
+    fsw.step(t_ns=t_ns, bus=bus)
 
     assert _nav(decoded(station)) == [("nav.navState", t_ns, "idle")]
 
@@ -256,7 +245,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     station.telemetry()
 
     for tick in range(1, ticks + 1):
-        _step(fsw, tick * NS, bus)
+        fsw.step(t_ns=tick * NS, bus=bus)
 
     writes = station.telemetry()
     for group, divider in dividers.items():
