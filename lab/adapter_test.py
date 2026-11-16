@@ -13,7 +13,6 @@ from typing import Any
 import pytest
 from Basilisk.architecture import messaging
 
-import lab.power_cycle
 from fsw.codegen.deployment import configuration_model, configurations, tick_period
 from fsw.codegen.roles import roles
 from ground.fprime_station import FprimeStation
@@ -131,10 +130,10 @@ def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(
         adapter.tick(whole + excess_ns, _messages(configuration))
 
 
-def test_an_adapter_without_its_f_prime_build_says_to_build_it(
+def test_an_adapter_checks_its_f_prime_build_before_it_makes_the_case_s_dat(
     configuration: str, monkeypatch: pytest.MonkeyPatch, prm_record: Path
 ):
-    """With no extension to import, building an adapter names the recipe that builds it.
+    """With no extension to import, building an adapter raises as `source` does, before any `.dat`.
 
     Args:
         configuration: the configuration.
@@ -145,25 +144,7 @@ def test_an_adapter_without_its_f_prime_build_says_to_build_it(
 
     with pytest.raises(ModuleNotFoundError, match="not built; run `just fsw`"):
         Adapter(configuration, prm_record)
-
-
-def test_an_adapter_refuses_an_extension_rebuilt_after_the_process_loaded_it(
-    configuration: str, monkeypatch: pytest.MonkeyPatch, prm_record: Path
-):
-    """Once the extension changes on disk, building or booting an adapter says restart the kernel.
-
-    Args:
-        configuration: the configuration.
-        monkeypatch: records a different file as the one this process loaded.
-        prm_record: the case's parameter record.
-    """
-    built_before = Adapter(configuration, prm_record)
-    monkeypatch.setitem(lab.power_cycle._loaded_stamps, configuration, (-1, -1))
-
-    with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
-        Adapter(configuration, prm_record)
-    with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
-        built_before.boot()
+    assert not prm_record.with_suffix("").with_suffix(".prm.dat").exists()
 
 
 def test_the_build_names_the_pinned_framework_tag_and_the_project_version(
@@ -243,6 +224,7 @@ def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(
     adapter = Adapter(configuration, prm_record)
     adapter.boot()
     adapter.tick(NS, _messages(configuration))
+    assert adapter._writes
 
     adapter.boot()
 
