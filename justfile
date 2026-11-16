@@ -15,7 +15,7 @@ _sync:
     rm -f fsw/fprime/build-fprime-automatic-native/CMakeCache.txt
     just fsw
 
-# Build the F´ deployment into lab: its Python extension and its dictionary.
+# Build each configuration's F´ deployment into lab: its Python extension and its dictionary.
 fsw:
     #!/usr/bin/env bash
     set -euo pipefail
