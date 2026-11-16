@@ -10,6 +10,7 @@
 
 #include "Fw/Types/Assert.hpp"
 #include "Os/Os.hpp"
+#include "fsw/fprime/cdh/BusConverterPins.hpp"
 #include "fsw/fprime/platform/Cooperative.hpp"
 #include WISE_FSW_TOPOLOGY_HEADER
 
@@ -42,6 +43,7 @@ PYBIND11_MODULE(_wise_fsw, m) {
     m.doc() = "The WiseFsw F´ deployment, run inside the simulation's process; set up by boot, once per copy.";
 
     g_assertHook.registerHook();
+    busConverterPins(m);
 
     m.def(
         "boot",

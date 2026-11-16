@@ -16,7 +16,7 @@ TOY = """\
 module Bus {
   struct A { x: F64, extra: U32, v: [3] F64 }
   port A(msg: A)
-  struct B { m: [2] Gnc.Row }
+  struct B { n: I16 }
   port B(msg: B)
 }
 module Gnc {
@@ -28,7 +28,7 @@ module Gnc {
   array Mat = [2] Row
   struct AIcd { X: F64, v: Row }
   port AIcd(reading: AIcd)
-  struct BIcd { m: Mat }
+  struct BIcd { n: I16 }
   port BIcd(reading: BIcd)
 }
 module Cdh {
@@ -40,8 +40,8 @@ module Cdh {
   }
 }
 """
-"""Role `a` takes a scalar by another case, a 1-D array and drops `extra`; role `b` an array of
-arrays."""
+"""Role `a` takes a scalar by another case, a 1-D array and drops `extra`; role `b` a scalar of
+another type. `Mode` and `Mat` are there for the edits that seed a refusal."""
 
 
 def _toy(tmp_path: Path, *edits: tuple[str, str]) -> Model:
@@ -111,19 +111,38 @@ def test_each_field_is_copied_from_the_bus_field_of_its_name_and_extras_are_drop
     """
     source = render(_toy(tmp_path))["BusConverter.cpp"]
     assert "icd.set_X(bus.get_x());" in source
-    assert "icd.get_v()[i0] = bus.get_v()[i0];" in source
+    assert "icd.get_v()[i] = bus.get_v()[i];" in source
     assert "extra" not in source
 
 
-def test_an_array_of_arrays_is_copied_element_by_element(tmp_path: Path) -> None:
-    """`Gnc.Mat`, two `Row`s, is copied over both indices.
+def test_an_array_of_arrays_is_refused_by_name(tmp_path: Path) -> None:
+    """A `Mat` matched by a bus `[2] Row` passes the field rule, but the CDH refuses it, naming it.
 
     Args:
         tmp_path: where the toy is written.
     """
-    assert (
-        "icd.get_m()[i0][i1] = bus.get_m()[i0][i1];" in render(_toy(tmp_path))["BusConverter.cpp"]
+    model = _toy(
+        tmp_path,
+        ("struct B { n: I16 }", "struct B { m: [2] Gnc.Row }"),
+        ("struct BIcd { n: I16 }", "struct BIcd { m: Mat }"),
     )
+    with pytest.raises(ValueError, match=r"Gnc\.BIcd\.m is \(2, 3\) float64, which the F´ CDH"):
+        render(model)
+
+
+def test_a_bool_is_refused_by_name(tmp_path: Path) -> None:
+    """A `bool` matched by a bus `bool` passes the field rule, but the CDH refuses it, naming it.
+
+    Args:
+        tmp_path: where the toy is written.
+    """
+    model = _toy(
+        tmp_path,
+        ("struct A { x: F64", "struct A { x: bool"),
+        ("struct AIcd { X: F64", "struct AIcd { X: bool"),
+    )
+    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.X is \(\) bool, which the F´ CDH"):
+        render(model)
 
 
 def test_a_field_of_another_shape_is_refused_by_name(tmp_path: Path) -> None:
@@ -161,7 +180,41 @@ def test_a_field_that_is_not_a_number_is_refused_by_name(tmp_path: Path) -> None
         ("{ x: F64, extra: U32", "{ x: Gnc.Mode, extra: U32"),
         ("struct AIcd { X: F64", "struct AIcd { X: Mode"),
     )
-    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.X is of Gnc\.Mode"):
+    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.X is \(\) Gnc\.Mode, which the F´ CDH"):
+        render(model)
+
+
+def test_each_bus_struct_a_role_takes_has_one_bus_pin(tmp_path: Path) -> None:
+    """A third role on `Bus.A` adds no pin: one per bus struct, taking each member by its name.
+
+    Args:
+        tmp_path: where the toy is written.
+    """
+    pins = render(
+        _toy(
+            tmp_path,
+            (
+                "    sync input port bIn",
+                "    sync input port cIn: Bus.A\n"
+                "    output port cOut: Gnc.AIcd\n"
+                "    sync input port bIn",
+            ),
+        )
+    )["BusConverterPins.hpp"]
+    assert pins.count('"bus_A"') == 1
+    assert pins.count('"bus_B"') == 1
+    assert "[](F64 x, U32 extra, const std::array<F64, 3>& v)" in pins
+    assert 'pybind11::arg("x"), pybind11::arg("extra"), pybind11::arg("v")' in pins
+
+
+def test_a_bus_member_outside_the_pin_s_domain_is_refused_by_name(tmp_path: Path) -> None:
+    """A bus `bool` the CDH drops still has no bus bytes, so its pin refuses it, naming it.
+
+    Args:
+        tmp_path: where the toy is written.
+    """
+    model = _toy(tmp_path, ("extra: U32", "extra: bool"))
+    with pytest.raises(ValueError, match=r"Bus\.A\.extra is of bool, which the bus pin"):
         render(model)
 
 
@@ -173,7 +226,7 @@ def test_the_contract_pairs_the_imu_bus_message_with_the_imu_reading() -> None:
 
 
 def test_the_tool_writes_the_component_into_its_directory(tmp_path: Path) -> None:
-    """`python -m fsw.codegen.bus_converter <dir>` writes the component's header and source.
+    """`python -m fsw.codegen.bus_converter <dir>` writes the component and its pins.
 
     Args:
         tmp_path: the directory.
@@ -181,3 +234,4 @@ def test_the_tool_writes_the_component_into_its_directory(tmp_path: Path) -> Non
     main([str(tmp_path)])
     assert "class BusConverter final" in (tmp_path / "BusConverter.hpp").read_text()
     assert "imuIn_handler" in (tmp_path / "BusConverter.cpp").read_text()
+    assert '"bus_ImuSensorMsg"' in (tmp_path / "BusConverterPins.hpp").read_text()

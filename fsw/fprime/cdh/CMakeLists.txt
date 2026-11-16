@@ -10,7 +10,7 @@ register_fprime_module(
     Os
 )
 
-# Cdh.BusConverter's implementation, generated from FPP by
+# Cdh.BusConverter's implementation and the lab's test pins on it, generated from FPP by
 # fsw.codegen.bus_converter into this build directory whenever the interfaces' FPP or the generator
 # changes. F´ requires a module's sources to exist at configure time, so the generated ones join the
 # module here, outside the sub-builds, which only gather model information.
@@ -22,10 +22,12 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
         OUTPUT
             "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.hpp"
             "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.cpp"
+            "${CMAKE_CURRENT_BINARY_DIR}/BusConverterPins.hpp"
         COMMAND "${Python_EXECUTABLE}" -m fsw.codegen.bus_converter "${CMAKE_CURRENT_BINARY_DIR}"
         WORKING_DIRECTORY "${FPRIME_PROJECT_ROOT}"
         DEPENDS ${WISE_CDH_INPUTS})
     target_sources(fsw_fprime_cdh PRIVATE
         "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.hpp"
-        "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.cpp")
+        "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.cpp"
+        "${CMAKE_CURRENT_BINARY_DIR}/BusConverterPins.hpp")
 endif ()
