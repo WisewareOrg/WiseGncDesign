@@ -1,0 +1,234 @@
+"""The F´ build's CDH component, `Cdh.BusConverter`, generated from its FPP declaration.
+
+`Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each sensor role, as its annotation
+states: a bus-typed input `<role>In` and an output `<role>Out` of the GNC's struct. `roles` reads
+the pairs, and `render` emits the component's C++: a handler per role building the GNC struct from
+the bus struct by `fsw.codegen.fields.plan`, the rule the Python build's converter follows, and
+sending it on `<role>Out`. A field must be a number or an array of numbers; anything else raises
+when the code is generated.
+
+`python -m fsw.codegen.bus_converter <directory>` writes `BusConverter.hpp` and `BusConverter.cpp`
+into the directory from the contract, `fsw.codegen.deployment.contract_files()`; CMake runs it
+during `just fsw`, into the build directory.
+"""
+
+import os
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+from typing import NamedTuple
+
+from fsw.codegen.deployment import contract_files
+from fsw.codegen.fields import DTYPES, form, plan
+from fsw.codegen.fpp_model import Model, Port, read
+
+__all__ = ["Role", "main", "render", "roles"]
+
+_CONVERTER = "Cdh.BusConverter"
+"""The component whose port pairs are the roles."""
+
+_REPOSITORY = Path(__file__).resolve().parents[2]
+
+
+class Role(NamedTuple):
+    """A sensor role's pair of `Cdh.BusConverter` ports.
+
+    Attributes:
+        role: the role, such as `imu`.
+        bus: the bus struct's qualified FPP name, such as `Bus.ImuSensorMsg`.
+        icd: the GNC struct's qualified FPP name, such as `Gnc.ImuReading`.
+        input: the input port's name, `<role>In`.
+        output: the output port's name, `<role>Out`.
+    """
+
+    role: str
+    bus: str
+    icd: str
+    input: str
+    output: str
+
+
+def _carried(port: Port) -> str:
+    """The struct a port carries: its one argument's type.
+
+    Args:
+        port: the port.
+
+    Returns:
+        The struct's qualified name.
+    """
+    [argument] = port.args
+    return argument.type
+
+
+def roles(model: Model) -> list[Role]:
+    """Every role of `Cdh.BusConverter`: each bus-typed input, with its output.
+
+    Args:
+        model: the model holding the converter.
+
+    Returns:
+        The roles, in the converter's port order.
+
+    Raises:
+        ValueError: a role has no `<role>Out`, or a bus-typed one, naming the role.
+    """
+    converter = model.components[_CONVERTER]
+    outputs = {port.name: port for port in converter.outputs}
+    found = []
+    for port in converter.inputs:
+        bus = _carried(port)
+        if not bus.startswith("Bus."):
+            continue
+        role = port.name.removesuffix("In")
+        output = outputs.get(f"{role}Out")
+        if output is None or _carried(output).startswith("Bus."):
+            raise ValueError(
+                f"{_CONVERTER}'s role {role} takes {bus} at {port.name} but has no {role}Out of a"
+                " GNC type"
+            )
+        found.append(Role(role, bus, _carried(output), port.name, output.name))
+    return found
+
+
+def _cpp(name: str) -> str:
+    """A qualified FPP name as C++ names it.
+
+    Args:
+        name: such as `Bus.ImuSensorMsg`.
+
+    Returns:
+        Such as `Bus::ImuSensorMsg`.
+    """
+    return name.replace(".", "::")
+
+
+def _copies(model: Model, role: Role) -> list[str]:
+    """The statements filling the role's GNC struct `icd` from its bus struct `bus`.
+
+    Args:
+        model: the model.
+        role: the role.
+
+    Returns:
+        A statement per field: a scalar set, or an array copied over every index.
+
+    Raises:
+        ValueError: a field breaks `fsw.codegen.fields.plan`'s rule, or is not a number or an
+            array of numbers, naming it.
+    """
+    bus, icd = model.types[role.bus], model.types[role.icd]
+    sources = {m.name.lower(): (m.name, form(m, model.types)) for m in bus.members}
+    statements = []
+    for member, name, (shape, element) in plan(icd, model.types, sources, role.bus):
+        if element not in DTYPES.values():
+            raise ValueError(
+                f"{role.icd}.{member.name} is of {element}, which the F´ CDH does not copy: it"
+                " copies numbers only"
+            )
+        if not shape:
+            statements.append(f"    icd.set_{member.name}(bus.get_{name}());")
+            continue
+        index = "".join(f"[i{depth}]" for depth in range(len(shape)))
+        lines = [
+            f"{'    ' * (depth + 1)}for (FwSizeType i{depth} = 0; i{depth} < {size}; i{depth}++) {{"
+            for depth, size in enumerate(shape)
+        ]
+        lines.append(
+            f"{'    ' * (len(shape) + 1)}icd.get_{member.name}(){index} = bus.get_{name}(){index};"
+        )
+        lines += [f"{'    ' * (depth + 1)}}}" for depth in reversed(range(len(shape)))]
+        statements.append("\n".join(lines))
+    return statements
+
+
+_HEADER = """\
+// Generated by fsw.codegen.bus_converter from {component}; never committed.
+#ifndef CDH_BUSCONVERTER_HPP
+#define CDH_BUSCONVERTER_HPP
+
+#include "{base}"
+
+namespace Cdh {{
+
+class BusConverter final : public BusConverterComponentBase {{
+  public:
+    explicit BusConverter(const char* compName);
+
+  private:
+{declarations}
+}};
+
+}}  // namespace Cdh
+
+#endif
+"""
+
+_SOURCE = """\
+// Generated by fsw.codegen.bus_converter from {component}; never committed.
+#include "BusConverter.hpp"
+
+namespace Cdh {{
+
+BusConverter::BusConverter(const char* compName) : BusConverterComponentBase(compName) {{}}
+{definitions}
+}}  // namespace Cdh
+"""
+
+_HANDLER = """
+void BusConverter::{signature} {{
+    {icd} icd;
+{copies}
+    this->{output}_out(0, icd);
+}}
+"""
+
+
+def render(model: Model) -> dict[str, str]:
+    """The component's C++, from `Cdh.BusConverter`'s roles.
+
+    A role or a field the rule refuses raises `ValueError`, naming it.
+
+    Args:
+        model: the model holding the converter and its structs.
+
+    Returns:
+        Each file's text, by its name: `BusConverter.hpp` and `BusConverter.cpp`.
+    """
+    component = model.components[_CONVERTER]
+    base = Path(os.path.relpath(component.file.parent, _REPOSITORY)) / "BusConverterComponentAc.hpp"
+    declarations, definitions = [], []
+    for role in roles(model):
+        signature = f"{role.input}_handler(FwIndexType, const {_cpp(role.bus)}& bus)"
+        declarations.append(f"    void {signature} override;")
+        definitions.append(
+            _HANDLER.format(
+                signature=signature,
+                icd=_cpp(role.icd),
+                copies="\n".join(_copies(model, role)),
+                output=role.output,
+            )
+        )
+    return {
+        "BusConverter.hpp": _HEADER.format(
+            component=_CONVERTER, base=base.as_posix(), declarations="\n".join(declarations)
+        ),
+        "BusConverter.cpp": _SOURCE.format(component=_CONVERTER, definitions="".join(definitions)),
+    }
+
+
+def main(argv: Sequence[str]) -> None:
+    """Writes the component's C++ from the contract into a directory.
+
+    Args:
+        argv: the directory, alone.
+    """
+    [directory] = argv
+    out = Path(directory)
+    out.mkdir(parents=True, exist_ok=True)
+    for name, text in render(read(contract_files())).items():
+        (out / name).write_text(text)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
