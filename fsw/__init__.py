@@ -1,5 +1,5 @@
-"""The flight software: hosts an algorithm in a simulator.
+"""The flight software: a configuration's GNC sub-topology, flown in a simulator by either build.
 
-Each host feeds the algorithm its sensor readings; `ground.radio_edge` states the radio edge a
-host presents to the ground.
+`fsw.python` is the Python build and `lab` hosts the F´ build; `ground.radio_edge` states the radio
+edge each presents to the ground.
 """

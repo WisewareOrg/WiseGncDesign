@@ -24,14 +24,10 @@ import numpy as np
 from numba import njit
 from wise_dynamics.basilisk import Scenario
 
-import algorithms.imu_dead_reckoning as package
 from algorithms.imu_dead_reckoning.gross_check import gross_check
 from algorithms.quaternion import dcm_NB, multiply
-from fsw.codegen.deployment import gnc_instance
 from fsw.codegen.fpp_types import Gnc
-from fsw.python import AlgorithmModule
-from fsw.python.cdh.parameters import read
-from ground.dictionary import Dictionary
+from fsw.python import FrameRunner
 from harness.mission import Mission, mission_tests, provides
 
 __all__ = ["ImuDeadReckoner"]
@@ -115,7 +111,8 @@ def _q_dot(q: np.ndarray, omega: np.ndarray) -> np.ndarray:
 # \end{pmatrix}$$
 #
 # $a_B$ is the accelerometer's body-frame reading of non-gravitational acceleration, and $\mu$ is
-# the gravitational parameter, supplied by the host so truth and estimate share one constant.
+# the gravitational parameter, which the case's parameter record gives from the scenario so truth
+# and estimate share one constant.
 
 
 # %%
@@ -165,8 +162,8 @@ def _translational_rates(
 # stage's rotated acceleration, the coupling between attitude and navigation error this module
 # demonstrates.
 #
-# In the flight software, `fsw.python` calls `step()` at 1 Hz, so `dt` is 1 s and each step
-# holds one IMU sample across the whole second.
+# In the flight software, the Python build's `FrameRunner` calls `step()` at every base tick,
+# `tickPeriod` = 1 s, so `dt` is 1 s and each step holds one IMU sample across the whole second.
 
 
 # %%
@@ -237,10 +234,13 @@ def _step(
 # ## Interface
 #
 # The estimator plays the F´ instance `nav`. Its contract is `ImuDeadReckoner.fpp` beside this
-# notebook, which both builds compile: the F´ build in C++, and this one through the dictionary
-# `ground.dictionary` generates from it. It boots idle, with no state, until the command
-# `nav.initNavState` gives it one, and `step` takes one IMU reading. Their docstrings below give
-# the arguments and the telemetry each writes, and the model gives each entry's type.
+# notebook, which both builds compile: the F´ build in C++, and this one through the tuples
+# `fsw.codegen.fpp_types` generates from it. It boots idle, with no state, until the command
+# `nav.initNavState` gives it one, and `step` takes one IMU reading, its `imuIn`, as a
+# `Gnc.ImuReading`. Both return a `Gnc.ImuDeadReckonerTelemetry`, a field per channel written, and
+# `step` also a `Gnc.ImuDeadReckonerOutputs`, which has no field: nav feeds no other algorithm.
+# Their docstrings below give the arguments and the telemetry each writes, and the model gives
+# each entry's type.
 #
 # A write is tagged with the flight software's time when it is written, so the estimator writes a
 # value only at a time it holds for: the command writes `navState` alone, since the state it takes
@@ -275,7 +275,7 @@ class ImuDeadReckoner:
 
     def initNavState(
         self, epoch: float, attitude: np.ndarray, position: np.ndarray, velocity: np.ndarray
-    ) -> dict[str, object]:
+    ) -> Gnc.ImuDeadReckonerTelemetry:
         """Takes the state as of `epoch`; the next step propagates from there.
 
         Args:
@@ -293,54 +293,55 @@ class ImuDeadReckoner:
         self.r_BN_N = np.asarray(position, dtype=float)
         self.v_BN_N = np.asarray(velocity, dtype=float)
         self.navState = "initialized"
-        return {"navState": self.navState}
+        return Gnc.ImuDeadReckonerTelemetry(navState=self.navState)
 
     def step(
-        self, t: float, AngVelPlatform: np.ndarray, AccelPlatform: np.ndarray
-    ) -> dict[str, object]:
+        self, t: float, imu: Gnc.ImuReading
+    ) -> tuple[Gnc.ImuDeadReckonerOutputs, Gnc.ImuDeadReckonerTelemetry]:
         """Advances the state to `t` by one RK4 step, once commanded, and writes it.
 
         Args:
             t: s, the reading's time.
-            AngVelPlatform: (3,) rad/s, the gyro reading, rate of B with respect to N in the IMU
-                platform frame P.
-            AccelPlatform: (3,) m/s^2, the accelerometer reading, non-gravitational acceleration
-                in P.
+            imu: the IMU's reading: `angVelPlatform` ((3,) rad/s, the gyro reading, rate of B with
+                respect to N in the IMU platform frame P) and `accelPlatform` ((3,) m/s^2, the
+                accelerometer reading, non-gravitational acceleration in P).
 
         Returns:
-            `navState`, `idle` until commanded; then also `bodyEciPos` ((3,) m, in N),
-            `bodyEciVel` ((3,) m/s, in N) and `bodyEciAttitude` ((4,) W X Y Z, unit, W >= 0).
+            No output, and the telemetry: `navState`, `idle` until commanded; then also
+            `bodyEciPos` ((3,) m, in N), `bodyEciVel` ((3,) m/s, in N) and `bodyEciAttitude`
+            ((4,) W X Y Z, unit, W >= 0).
         """
         if self.navState == "idle":
-            return {"navState": self.navState}
+            return Gnc.ImuDeadReckonerOutputs(), Gnc.ImuDeadReckonerTelemetry(navState="idle")
         self.q_BN, self.r_BN_N, self.v_BN_N = _step(
             self.q_BN,
             self.r_BN_N,
             self.v_BN_N,
-            AngVelPlatform,
-            AccelPlatform,
+            imu.angVelPlatform,
+            imu.accelPlatform,
             self._dcm_BP,
             t - self.t,
             self._mu,
         )
         self.t = float(t)
         self.navState = "propagated"
-        return {
-            "navState": self.navState,
-            "bodyEciPos": self.r_BN_N,
-            "bodyEciVel": self.v_BN_N,
-            "bodyEciAttitude": self.q_BN,
-        }
+        return Gnc.ImuDeadReckonerOutputs(), Gnc.ImuDeadReckonerTelemetry(
+            navState=self.navState,
+            bodyEciPos=self.r_BN_N,
+            bodyEciVel=self.v_BN_N,
+            bodyEciAttitude=self.q_BN,
+        )
 
 
 # %% [markdown]
 # ## The flight software
 #
 # `parameters` gives nav's parameters for a case: `mu` from the scenario and the IMU's mounting from
-# its vehicle. The ground writes them as the case's record, and `dead_reckoner` boots the estimator
-# idle on the values the Python build's CDH reads back from it, hosted on the scenario's vehicle as
-# `nav` with `fsw.python`, held to the dictionary generated from `ImuDeadReckoner.fpp`; the dynamics
-# and the IMU step at its period. The scenario's ground procedure gives it its state by command.
+# its vehicle. The ground writes them as the case's record, and `dead_reckoner` builds the Python
+# build of the `ImuDeadReckoning` configuration, whose GNC sub-topology flies the estimator as
+# `nav`: each boot builds it idle on the values the build's CDH reads back from the record, and the
+# harness hosts the build on the scenario's vehicle, whose dynamics and IMU step at its base tick.
+# The scenario's ground procedure gives it its state by command.
 
 
 # %%
@@ -359,26 +360,19 @@ def parameters(scenario: Scenario) -> Gnc.ImuDeadReckonerParameters:
 
 
 @provides("SYS001")
-def dead_reckoner(scenario: Scenario, prm_path: Path) -> AlgorithmModule:
-    """The dead reckoner, booted idle and hosted on a scenario's vehicle as `nav`.
+def dead_reckoner(scenario: Scenario, prm_path: Path) -> FrameRunner:
+    """The dead reckoner's configuration, its Python build flying the estimator as `nav`.
 
-    Its parameters are the case's record, read by the Python build's CDH.
+    Its parameters are the case's record, read by the Python build's CDH at each boot.
 
     Args:
-        scenario: the scenario whose vehicle the dead reckoner flies on.
+        scenario: the case's scenario, whose vehicle the harness hosts the build on.
         prm_path: the case's parameter record.
 
     Returns:
-        The `AlgorithmModule` hosting it.
+        The build.
     """
-    algorithm = ImuDeadReckoner(read(prm_path, Gnc.ImuDeadReckonerParameters))
-    dictionary = Dictionary.from_component(
-        [Path(package.__file__).with_name("ImuDeadReckoner.fpp")],
-        gnc_instance("Gnc.ImuDeadReckoner"),
-    )
-    return AlgorithmModule(
-        algorithm, scenario.vehicle.readers(), instance="nav", dictionary=dictionary
-    )
+    return FrameRunner("ImuDeadReckoning", prm_path, (ImuDeadReckoner,))
 
 
 # %% [markdown]

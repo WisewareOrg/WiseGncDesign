@@ -1,5 +1,8 @@
 module ImuDeadReckoning {
 
+  @ s, the base tick's period
+  constant tickPeriod = 1.0
+
   @ The ticks per run of nav's rate group: nav runs every tick
   constant navDivider = 1
 

@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import algorithm_files, contract_files, fpp_files, gnc_instance
+from fsw.codegen.deployment import (
+    algorithm_files,
+    configuration_model,
+    contract_files,
+    fpp_files,
+    gnc_instance,
+    tick_period,
+)
 from fsw.codegen.fpp_model import Instance
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
@@ -61,3 +68,28 @@ def test_a_component_instanced_twice_is_refused_naming_both_instances(
         match=r"instanced 2 times in fsw/fpp/gnc: \['ImuDeadReckoning\.nav', 'Other\.nav'\]",
     ):
         gnc_instance("Gnc.ImuDeadReckoner")
+
+
+def test_a_configuration_s_base_tick_period_is_its_fpp_constant():
+    """`tickPeriod`, in s, beside the sub-topology's dividers, read from its model once."""
+    assert tick_period("ImuDeadReckoning") == 1.0
+    assert configuration_model("ImuDeadReckoning") is configuration_model("ImuDeadReckoning")
+    assert "ImuDeadReckoning.Gnc" in configuration_model("ImuDeadReckoning").topologies
+
+
+def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A sub-topology that declares no `tickPeriod` raises, naming the constant it lacks.
+
+    Args:
+        monkeypatch: gives the configuration a model without the constant.
+    """
+    model = configuration_model("ImuDeadReckoning")
+    constants = {k: v for k, v in model.constants.items() if k != "ImuDeadReckoning.tickPeriod"}
+    monkeypatch.setattr(
+        "fsw.codegen.deployment.configuration_model", lambda _: model._replace(constants=constants)
+    )
+
+    with pytest.raises(KeyError, match=r"ImuDeadReckoning\.tickPeriod"):
+        tick_period("ImuDeadReckoning")

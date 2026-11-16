@@ -25,6 +25,7 @@ from fsw.codegen.fpp_model import (
     Parameter,
     Port,
     Struct,
+    TopologyPort,
     parse,
     read,
 )
@@ -130,6 +131,7 @@ module Gnc {
       rg.RateGroupMemberOut[0] -> nav.schedIn
       rg.RateGroupMemberOut[1] -> ctrl.schedIn
     }
+    port tickIn = rg.CycleIn
   }
 
 }
@@ -286,6 +288,22 @@ def test_an_imported_sub_topology_s_connections_are_the_deployment_s_in_port_ord
     assert toy.instances["Top.drv"] == Instance("Top.drv", "Top.Driver", 0x100)
 
 
+def test_a_topology_s_ports_are_read_as_the_instance_port_each_exposes(tmp_path: Path):
+    """Keyed `<topology>.<port>`: the toy's, and the dead reckoner's GNC sub-topology's.
+
+    Args:
+        tmp_path: where the toy's model and the deployment's topology are written.
+    """
+    toy = read(_toy_files(tmp_path))
+    model = read(fpp_files("ImuDeadReckoning", tmp_path))
+
+    assert toy.ports == {"Gnc.Gnc.tickIn": TopologyPort("Gnc.rg", "CycleIn")}
+    assert model.ports == {
+        "ImuDeadReckoning.Gnc.tickIn": TopologyPort("ImuDeadReckoning.rateGroupDriver", "CycleIn"),
+        "ImuDeadReckoning.Gnc.imuIn": TopologyPort("ImuDeadReckoning.nav", "imuIn"),
+    }
+
+
 def test_numeric_constants_are_read_by_qualified_name_and_others_are_not(toy: Model):
     """Integer and float constants are read, the framework's too; strings and bools are not.
 
@@ -399,6 +417,19 @@ def test_a_component_s_general_output_ports_and_its_file_are_read(toy: Model):
     assert toy.components["Gnc.Nav"].file.name == "Gnc.fpp"
     assert toy.components["Top.Driver"].file.name == "Top.fpp"
     assert toy.components["Gnc.Nav"].file.is_absolute()
+
+
+def test_a_component_s_general_input_ports_are_read_in_fpp_s_order(toy: Model):
+    """Each input port that is not a special port, with its size and arguments.
+
+    Args:
+        toy: the toy model.
+    """
+    assert toy.components["Gnc.RateGroup"].inputs == (
+        Port("CycleIn", 1, (Argument("ctx", "U32"),)),
+    )
+    assert toy.components["Gnc.Nav"].inputs == (Port("schedIn", 1, (Argument("ctx", "U32"),)),)
+    assert toy.components["Top.Driver"].inputs == ()
 
 
 def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):

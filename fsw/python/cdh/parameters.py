@@ -9,9 +9,21 @@ from pathlib import Path
 from typing import Any
 
 from fsw.codegen.deployment import gnc_instance
-from fsw.codegen.fpp_types import parameters_from
+from fsw.codegen.fpp_types import named, parameters_from
 
-__all__ = ["read"]
+__all__ = ["read", "tuple_of"]
+
+
+def tuple_of(component: str) -> type:
+    """A component's parameters tuple, `<Name>Parameters`.
+
+    Args:
+        component: the component's qualified FPP name, such as `Gnc.ImuDeadReckoner`.
+
+    Returns:
+        The tuple.
+    """
+    return named(f"{component}Parameters")
 
 
 def read(path: Path, tuple_type: type) -> Any:

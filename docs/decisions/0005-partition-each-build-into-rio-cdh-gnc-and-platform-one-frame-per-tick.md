@@ -1,13 +1,16 @@
 # 0005 — Partition each build into RIO, CDH, GNC and platform, one frame per tick
 
 **Status:** accepted
-**Decided:** 2026-11-13 (issue 51 two edges design)
+**Decided:** 2026-11-13 (issue 51 two edges design; issue 61 The Python frame runner, on
+WiseDynamics' host module)
 **Rev:** 1
 
 ## Revisions
 
-- **rev 1** — 2026-11-13 — first written (issue 52 tooling checks); F´ in a repository of its own
-  rejected, moved from ADR 0003 rev 3 (issue 85 one decision per ADR).
+- **rev 1** — 2026-11-13 — first written (issue 52 tooling checks); FPP carries each sensor role's
+  bus-to-GNC pairing, and the Python build's frame refuses delayed feedback and fan-out (issue 61
+  The Python frame runner, on WiseDynamics' host module); F´ in a repository of its own rejected,
+  moved from ADR 0003 rev 3 (issue 85 one decision per ADR).
 
 ## Context
 
@@ -31,6 +34,10 @@ way through, partitioned as real flight software is.
   - platform is the clock, the tick and the tasks.
 - **GNC touches neither edge.**
 - **Each build has its own CDH**, however thin.
+- **FPP pairs each sensor role's bus struct with the GNC's struct.** A CDH component,
+  `Cdh.BusConverter` in `fsw/fpp/interfaces/`, has per role an input `<role>In` typed by the bus
+  struct and an output `<role>Out` typed by the GNC's struct; FPP type-checks both ends, and each
+  build's CDH reads the same declaration (owner ruling on issue 61, option A).
 - **An algorithm's code lives in `algorithms/<name>/`, and GNC wires it in.** A configuration
   reaches its algorithms only through its GNC sub-topology.
 - **RIO, CDH and platform name no algorithm**; ADR 0006 rev 1 holds the lab and the sim glue to the
@@ -43,6 +50,10 @@ way through, partitioned as real flight software is.
 - **One object per build doing every job, as at `6f6276e`.** A second algorithm has no place to
   sit, and each algorithm brings its own glue for bus I/O, conversion, commands and telemetry.
   Rejected.
+- **An annotation on each bus struct naming its role and GNC struct.** FPP does not check it, so it
+  is an annotation dialect the generators parse. Rejected for the CDH component's ports.
+- **Pairing by name rules alone.** The F´ generator runs at build time with no vehicle to learn a
+  role's payload from, so it cannot supply the F´ CDH. Rejected for the CDH component's ports.
 - **One CDH converter shared by both builds.** One build would then run the other's internals, and
   a Python build must fly with no F´ build. Rejected for a CDH per build, each generated from the
   same FPP (ADR 0004 rev 2).
@@ -53,3 +64,7 @@ way through, partitioned as real flight software is.
 
 - A second algorithm joins a configuration in FPP, with no glue written for it in either build.
 - Both builds have the same shape, so a reader of one can find their way in the other.
+- The Python build's GNC refuses a backward edge (one-frame-delayed feedback) and an output feeding
+  more than one input, until an algorithm needs either.
+- The Python build converts each role's message twice per tick, Basilisk payload to bus struct in
+  RIO and bus struct to GNC struct in CDH, as the F´ path does.

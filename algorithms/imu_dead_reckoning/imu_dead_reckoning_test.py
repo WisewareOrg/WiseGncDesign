@@ -14,6 +14,7 @@ from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk import ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
+from algorithms.imu_dead_reckoning import gross_check
 from algorithms.imu_dead_reckoning import imu_dead_reckoning as reckoner_module
 from algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import (
@@ -23,7 +24,6 @@ from algorithms.imu_dead_reckoning.imu_dead_reckoning import (
     parameters,
 )
 from fsw.codegen.fpp_types import Gnc
-from fsw.python import AlgorithmModule
 from ground import parameters as ground_parameters
 from harness.notebook import run_notebook
 
@@ -67,7 +67,7 @@ def _propagate(
     reckoner.initNavState(epoch=0.0, attitude=q0, position=r0, velocity=v0)
     dt = total_t / n_steps
     for i in range(1, n_steps + 1):
-        reckoner.step(t=i * dt, AngVelPlatform=AngVelPlatform, AccelPlatform=AccelPlatform)
+        reckoner.step(t=i * dt, imu=Gnc.ImuReading(AngVelPlatform, AccelPlatform))
     return reckoner
 
 
@@ -75,9 +75,10 @@ def test_it_boots_idle_and_writes_only_navstate_until_commanded():
     """Booted, each step writes `navState` idle and nothing else, holding no state."""
     reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=0.0, dcm_PB=_IDENTITY))
 
-    written = reckoner.step(t=1.0, AngVelPlatform=_ZERO3, AccelPlatform=_ZERO3)
+    outputs, written = reckoner.step(t=1.0, imu=Gnc.ImuReading(_ZERO3, _ZERO3))
 
-    assert written == {"navState": "idle"}
+    assert type(outputs) is Gnc.ImuDeadReckonerOutputs
+    assert written == Gnc.ImuDeadReckonerTelemetry(navState="idle")
     assert not hasattr(reckoner, "q_BN")
 
 
@@ -92,14 +93,13 @@ def test_the_command_writes_navstate_alone_and_the_next_step_propagates_from_its
     commanded = reckoner.initNavState(
         epoch=60.0, attitude=_Q_IDENTITY, position=_AWAY_FROM_ORIGIN, velocity=velocity
     )
-    stepped = reckoner.step(t=61.0, AngVelPlatform=_ZERO3, AccelPlatform=_ZERO3)
+    _, stepped = reckoner.step(t=61.0, imu=Gnc.ImuReading(_ZERO3, _ZERO3))
 
-    assert commanded == {"navState": "initialized"}
-    assert list(stepped) == ["navState", "bodyEciPos", "bodyEciVel", "bodyEciAttitude"]
-    assert stepped["navState"] == "propagated"
-    np.testing.assert_allclose(stepped["bodyEciPos"], _AWAY_FROM_ORIGIN + velocity, rtol=1e-15)
-    np.testing.assert_array_equal(stepped["bodyEciVel"], velocity)
-    np.testing.assert_array_equal(stepped["bodyEciAttitude"], _Q_IDENTITY)
+    assert commanded == Gnc.ImuDeadReckonerTelemetry(navState="initialized")
+    assert stepped.navState == "propagated"
+    np.testing.assert_allclose(stepped.bodyEciPos, _AWAY_FROM_ORIGIN + velocity, rtol=1e-15)
+    np.testing.assert_array_equal(stepped.bodyEciVel, velocity)
+    np.testing.assert_array_equal(stepped.bodyEciAttitude, _Q_IDENTITY)
 
 
 # Past a rotation of $\pi$ the quaternion's $q_w$ would turn negative; the step keeps $q_w \ge 0$,
@@ -187,10 +187,10 @@ def test_the_kinematics_match_the_dcm_derivative_for_a_nonaligned_rate():
     reckoner.initNavState(epoch=0.0, attitude=q0, position=_AWAY_FROM_ORIGIN, velocity=_ZERO3)
     dt = 1e-5
 
-    state = reckoner.step(t=dt, AngVelPlatform=omega, AccelPlatform=_ZERO3)
+    _, state = reckoner.step(t=dt, imu=Gnc.ImuReading(omega, _ZERO3))
 
     c0 = Rotation.from_quat(q0, scalar_first=True).as_matrix().T
-    c1 = Rotation.from_quat(state["bodyEciAttitude"], scalar_first=True).as_matrix().T
+    c1 = Rotation.from_quat(state.bodyEciAttitude, scalar_first=True).as_matrix().T
     np.testing.assert_allclose(
         (c1 - c0) / dt,
         -np.cross(omega[:, None], c0, axis=0),
@@ -256,7 +256,7 @@ def test_a_longer_step_lowers_each_sample_s_noise(monkeypatch: pytest.MonkeyPatc
     Args:
         monkeypatch: replaces the flight software's step for this test.
     """
-    monkeypatch.setattr(AlgorithmModule, "period_s", 4.0)
+    monkeypatch.setattr(gross_check, "tick_period", lambda _: 4.0)
     inputs = bound_inputs()
     assert inputs["step_s"] == 4.0
     assert inputs["gyro_noise_std_rad_s"] == ImuSpacecraft.gyro_noise_density_rad_s_rthz / 2
@@ -281,7 +281,7 @@ def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() 
 def test_the_builder_builds_the_reckoner_on_its_record_s_parameters(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`dead_reckoner` reads the record it is given, not the scenario's mu or mounting.
+    """`dead_reckoner`'s build reads the record it is given at boot, not the scenario's values.
 
     The record holds the Moon's mu and a mounting that is not the identity; the scenario flies
     Earth's mu at identity mounting.
@@ -293,7 +293,7 @@ def test_the_builder_builds_the_reckoner_on_its_record_s_parameters(
     built = []
 
     class Recorded(ImuDeadReckoner):
-        """The reckoner, recording its parameters."""
+        """The reckoner, recording its parameters, named as its component for the build."""
 
         def __init__(self, parameters: Gnc.ImuDeadReckonerParameters) -> None:
             """Records `parameters`, then builds the reckoner on them.
@@ -304,12 +304,13 @@ def test_the_builder_builds_the_reckoner_on_its_record_s_parameters(
             built.append(parameters)
             super().__init__(parameters)
 
+    Recorded.__name__ = "ImuDeadReckoner"
     monkeypatch.setattr(reckoner_module, "ImuDeadReckoner", Recorded)
     mounting = np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
     moon = Gnc.ImuDeadReckonerParameters(mu=4.9048695e12, dcm_PB=mounting)
     record = ground_parameters.write([moon], tmp_path / "run_0000.prm.json")
 
-    dead_reckoner(Leo500(), record)
+    dead_reckoner(Leo500(), record).boot()
 
     (flown,) = built
     assert flown.mu == moon.mu
