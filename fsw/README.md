@@ -247,8 +247,8 @@ The F´ build's CDH component, `Cdh.BusConverter`, is generated from its declara
 `fsw/fpp/interfaces/Cdh.fpp` by `fsw.codegen.bus_converter` while `just fsw` builds, into the build
 directory: for each role `fsw.codegen.roles` reads, an inline conversion `convert_<role>` that
 builds the GNC struct from the bus struct by the field rule the Python build's converter follows,
-`fsw.codegen.fields`, and a handler that sends the result on `<role>Out`. No topology instances
-`cdh`; the conversion runs through the `cdh_<role>` pins. The generator emits two test pins into
+`fsw.codegen.fields`, and a handler that sends the result on `<role>Out`. Each deployment
+instances it as `cdh`, between SimHub and the GNC. The generator emits two test pins into
 `_wise_fsw`: `bus_<Struct>(<member>=...)` returns F´'s serialization of a bus struct built from
 its members' values, and `cdh_<role>(bus_bytes)` returns F´'s serialization of the GNC struct the
 conversion makes from the bus struct F´ deserializes from the bytes.
