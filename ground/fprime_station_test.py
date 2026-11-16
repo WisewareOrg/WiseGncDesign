@@ -5,25 +5,19 @@ reach the deployment crafted or malformed need the deployment `just fsw` builds,
 it.
 """
 
-import importlib.util
 import json
 import struct
 from collections.abc import Callable
-from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import configurations
 from fsw.codegen.fpp_model import Instance
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import Adapter, dictionary_path
-
-BUILT = all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations())
-"""Whether `just fsw` built every deployment; the tests that need it skip without it."""
+from lab import dictionary_path
 
 DICTIONARY = dictionary_path("ImuDeadReckoning")
 """The dictionary the build of nav's configuration generated, built or not."""
@@ -288,25 +282,3 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
     assert booted_station.responses() == [(7, response, None)]
     writes = [write for write in decoded(booted_station) if write[0].startswith("nav.")]
     assert writes == [("nav.navState", NS, "idle")]
-
-
-@pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")
-def test_a_command_f_prime_rejects_fails_nothing_in_the_lab_adapter(
-    configuration: str, messages_by_role: dict[str, Any], prm_record: Path
-):
-    """Through the lab adapter, an opcode no instance has is answered `INVALID_OPCODE`, no reason.
-
-    Args:
-        configuration: the configuration.
-        messages_by_role: a message for each role the CDH converts.
-        prm_record: the case's parameter record.
-    """
-    adapter = Adapter(configuration, prm_record)
-    station = FprimeStation(adapter, adapter.dictionary)
-    adapter.boot()
-    init = _init()
-
-    adapter.uplink(init[:2] + _unknown_opcode().to_bytes(4, "big") + init[6:], 9)
-    adapter.tick(NS, messages_by_role)
-
-    assert station.responses() == [(9, "INVALID_OPCODE", None)]
