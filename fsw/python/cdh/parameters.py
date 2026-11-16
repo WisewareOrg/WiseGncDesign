@@ -18,7 +18,7 @@ def tuple_of(component: str) -> type:
     """A component's parameters tuple, `<Name>Parameters`.
 
     Args:
-        component: the component's qualified FPP name, such as `Gnc.ImuDeadReckoner`.
+        component: the component's qualified FPP name, `<module>.<component>`.
 
     Returns:
         The tuple.

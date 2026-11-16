@@ -48,8 +48,7 @@ class FrameRunner:
         """Reads the configuration's FPP and matches each algorithm's class to its component.
 
         Args:
-            configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`,
-                such as `ImuDeadReckoning`.
+            configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`.
             prm_path: the case's parameter record, which `boot` reads.
             components: the algorithms' classes, each named as its FPP component.
         """
