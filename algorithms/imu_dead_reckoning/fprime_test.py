@@ -16,11 +16,13 @@ from Basilisk.architecture import messaging
 from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
-from fsw.codegen.deployment import fpp_files
+from fsw.codegen.deployment import bus_port, contract_files, fpp_files
 from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_types import Gnc
+from fsw.codegen.roles import roles
 from ground.fprime_station import FprimeStation
 from lab import FprimeModule
+from lab.bus_emulator import serialize
 
 if importlib.util.find_spec("lab._wise_fsw") is None:
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
@@ -66,6 +68,40 @@ def case_parameters(
         The tuples.
     """
     return tuple(nav_parameters if type(t) is type(nav_parameters) else t for t in case_parameters)
+
+
+@pytest.fixture(scope="module")
+def imu_bus() -> Callable[[Any, Any], list[tuple[int, bytes]]]:
+    """The bus a step takes for one IMU reading: nav's role's message bytes on its SimHub port.
+
+    The role is the contract's `Cdh.BusConverter` role whose GNC struct nav's `imuIn` takes, and
+    its port the one the configuration's deployment wires to the role's CDH input.
+
+    Returns:
+        A function of the angular velocity and the acceleration, each three values in the
+        platform frame, giving `[(port, bytes)]`, the message's dv and dr zero.
+    """
+    model = read(contract_files())
+    [imu_in] = [p for p in model.components["Gnc.ImuDeadReckoner"].inputs if p.name == "imuIn"]
+    [role] = [r for r in roles(model) if r.icd == imu_in.args[0].type]
+    port = bus_port("ImuDeadReckoning", role.input)
+
+    def bus(angVelPlatform: Any, accelPlatform: Any) -> list[tuple[int, bytes]]:
+        """The bus for one reading.
+
+        Args:
+            angVelPlatform: rad/s, the angular velocity in the platform frame.
+            accelPlatform: m/s2, the acceleration in the platform frame.
+
+        Returns:
+            `[(port, bytes)]`.
+        """
+        message = messaging.IMUSensorMsgPayload()
+        message.AngVelPlatform = list(angVelPlatform)
+        message.AccelPlatform = list(accelPlatform)
+        return [(port, serialize(message))]
+
+    return bus
 
 
 def _latest(writes: list[tuple[str, int, Any]]) -> dict[str, Any]:

@@ -6,9 +6,7 @@ Skipped without the deployment `just fsw` builds.
 import importlib.util
 import shutil
 import sys
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import h5py
 import numpy as np
@@ -118,7 +116,7 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
 
 
 def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
-    prm: str, parameter_ids: list[int], imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]]
+    prm: str, parameter_ids: list[int], bus: list[tuple[int, bytes]]
 ):
     """A pin called before boot trips an F´ assert, raised in Python with F´'s own text.
 
@@ -128,24 +126,24 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
     Args:
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
     raised = power_cycle()
 
     with pytest.raises(RuntimeError, match=r'^Assert: ".*:\d+"'):
-        raised.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
+        raised.step(t_ns=NS, bus=bus)
 
     fresh = power_cycle()
     assert fresh is not raised
     fresh.boot(prm, parameter_ids)
-    fresh.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
+    fresh.step(t_ns=NS, bus=bus)
     assert fresh.telemetry()
     assert raised not in sys.modules.values()
     assert fresh not in sys.modules.values()
 
 
 def test_two_copies_in_one_process_share_no_state(
-    prm: str, parameter_ids: list[int], imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]]
+    prm: str, parameter_ids: list[int], bus: list[tuple[int, bytes]]
 ):
     """A copy left mid-flight, a command queued and its link undrained, reaches no later copy.
 
@@ -154,20 +152,19 @@ def test_two_copies_in_one_process_share_no_state(
     Args:
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
-    zero = imu_bus(np.zeros(3), np.zeros(3))
     earlier, later = power_cycle(), power_cycle()
     earlier_station = FprimeStation(earlier, DICTIONARY)
     later_station = FprimeStation(later, DICTIONARY)
     earlier.boot(prm, parameter_ids)
     earlier_station.uplink("nav.initNavState", STATE, 1)
-    earlier.step(t_ns=NS, bus=zero)
+    earlier.step(t_ns=NS, bus=bus)
     earlier_station.uplink("nav.initNavState", STATE, 2)
 
     later.boot(prm, parameter_ids)
-    later.step(t_ns=NS, bus=zero)
-    earlier.step(t_ns=2 * NS, bus=zero)
+    later.step(t_ns=NS, bus=bus)
+    earlier.step(t_ns=2 * NS, bus=bus)
 
     def nav_states(station: FprimeStation) -> list[tuple[int, str]]:
         """Drains a station's telemetry and keeps nav's state writes.

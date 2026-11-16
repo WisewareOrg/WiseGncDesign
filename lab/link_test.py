@@ -34,17 +34,15 @@ STATE = {
 """`nav.initNavState`'s arguments: a state at t = 0."""
 
 
-def _step(
-    fsw: ModuleType, t_ns: int, imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]]
-) -> None:
-    """Steps a copy to `t_ns` on a zero IMU reading.
+def _step(fsw: ModuleType, t_ns: int, bus: list[tuple[int, bytes]]) -> None:
+    """Steps a copy to `t_ns` on every role's bus message.
 
     Args:
         fsw: the copy.
         t_ns: ns, the tick's time.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
-    fsw.step(t_ns=t_ns, bus=imu_bus(np.zeros(3), np.zeros(3)))
+    fsw.step(t_ns=t_ns, bus=bus)
 
 
 def _nav(writes: list[tuple[str, int, Any]]) -> list[tuple[str, int, Any]]:
@@ -76,7 +74,7 @@ def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
     station: FprimeStation,
     prm: str,
     parameter_ids: list[int],
-    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    bus: list[tuple[int, bytes]],
 ):
     """An uplinked command waits for the next step, then answers `OK` under the ground's context.
 
@@ -85,13 +83,13 @@ def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
         station: the station on it.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
     fsw.boot(prm, parameter_ids)
 
     station.uplink("nav.initNavState", STATE, 42)
     assert _responses(station) == []
-    _step(fsw, NS, imu_bus)
+    _step(fsw, NS, bus)
 
     assert _responses(station) == [(42, "OK")]
 
@@ -112,7 +110,7 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     prm: str,
     parameter_ids: list[int],
-    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    bus: list[tuple[int, bytes]],
 ):
     """Nav's writes of two ticks come down in the order written, each tagged with its tick's time.
 
@@ -124,12 +122,12 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
         decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
     fsw.boot(prm, parameter_ids)
     station.uplink("nav.initNavState", STATE, 1)
-    _step(fsw, NS, imu_bus)
-    _step(fsw, 2 * NS, imu_bus)
+    _step(fsw, NS, bus)
+    _step(fsw, 2 * NS, bus)
 
     writes = _nav(decoded(station))
 
@@ -153,7 +151,7 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     prm: str,
     parameter_ids: list[int],
-    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    bus: list[tuple[int, bytes]],
 ):
     """A tick at 1.500007 s tags its write with that time in ns, microseconds included.
 
@@ -163,12 +161,12 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
         decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
     fsw.boot(prm, parameter_ids)
     t_ns = NS + 500_000_000 + 7_000
 
-    _step(fsw, t_ns, imu_bus)
+    _step(fsw, t_ns, bus)
 
     assert _nav(decoded(station)) == [("nav.navState", t_ns, "idle")]
 
@@ -178,7 +176,7 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
     station: FprimeStation,
     prm: str,
     parameter_ids: list[int],
-    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    bus: list[tuple[int, bytes]],
 ):
     """With nav propagating, every cycle time the rate group writes is 0, on F´'s stub clock.
 
@@ -191,7 +189,7 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
         station: the station on it.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
     ticks = 500
     fsw.boot(prm, parameter_ids)
@@ -199,9 +197,7 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
     station.telemetry()
 
     for tick in range(1, ticks + 1):
-        fsw.step(
-            t_ns=tick * NS, bus=imu_bus(np.array([0.01, -0.02, 0.03]), np.array([0.1, 0.2, -0.3]))
-        )
+        fsw.step(t_ns=tick * NS, bus=bus)
 
     writes = station.telemetry()
 
@@ -229,7 +225,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     tmp_path: Path,
     prm: str,
     parameter_ids: list[int],
-    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    bus: list[tuple[int, bytes]],
 ):
     """Each rate group's `CycleCount` advances by one once every divider ticks, its own divider.
 
@@ -244,7 +240,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
         tmp_path: where the configuration's topology is rendered.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
     instances = Dictionary(DICTIONARY).algorithm_instances()
     (configuration,) = {i.name.split(".", 1)[0] for i in instances}
@@ -260,7 +256,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     station.telemetry()
 
     for tick in range(1, ticks + 1):
-        _step(fsw, tick * NS, imu_bus)
+        _step(fsw, tick * NS, bus)
 
     writes = station.telemetry()
     for group, divider in dividers.items():

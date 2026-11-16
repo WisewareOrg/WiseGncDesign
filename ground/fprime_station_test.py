@@ -242,17 +242,15 @@ def _unknown_opcode() -> int:
     return max(c["opcode"] for c in json.loads(DICTIONARY.read_text())["commands"]) + 1
 
 
-def _step(
-    fsw: ModuleType, t_ns: int, imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]]
-) -> None:
-    """Steps the deployment to `t_ns` on a zero IMU reading.
+def _step(fsw: ModuleType, t_ns: int, bus: list[tuple[int, bytes]]) -> None:
+    """Steps the deployment to `t_ns` on every role's bus message.
 
     Args:
         fsw: the test's copy of the deployment.
         t_ns: ns, the tick's time.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
-    fsw.step(t_ns=t_ns, bus=imu_bus(np.zeros(3), np.zeros(3)))
+    fsw.step(t_ns=t_ns, bus=bus)
 
 
 @pytest.mark.parametrize(
@@ -280,7 +278,7 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     change: object,
     response: str,
-    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    bus: list[tuple[int, bytes]],
 ):
     """F´ answers a bad packet with its `Fw.CmdResponse`, named, with no reason, and runs nothing.
 
@@ -290,10 +288,10 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
         decoded: drains the station's telemetry as values.
         change: makes the bad packet from a good `nav.initNavState`.
         response: the response F´ gives it.
-        imu_bus: the IMU message's bus for a reading.
+        bus: every role's bus message on its SimHub port.
     """
     fsw.uplink(change(_init()), 7)
-    _step(fsw, NS, imu_bus)
+    _step(fsw, NS, bus)
 
     assert booted_station.responses() == [(7, response, None)]
     writes = [write for write in decoded(booted_station) if write[0].startswith("nav.")]

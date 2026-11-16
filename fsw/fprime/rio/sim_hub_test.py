@@ -1,61 +1,60 @@
-"""SimHub delivers the bus emulator's bytes to the typed bus port, and wrong-length bytes raise.
+"""SimHub delivers each role's bus bytes to the typed bus port, and wrong-length bytes raise.
 
-On a booted copy of the deployment: F´ deserializes the bytes pushed on SimHub's port into the
-bus struct the port connects to, and a push of the wrong length trips F´'s own assert, which
-raises in Python. Skipped without the deployment `just fsw` builds, as the `fsw` fixture skips.
+On a booted copy of the deployment, for every role of the contract's `Cdh.BusConverter`: F´
+deserializes the bytes pushed on the role's SimHub port into the bus struct the port connects to,
+and a push of the wrong length trips F´'s own assert, which raises in Python. Skipped without the
+deployment `just fsw` builds, as the `fsw` and `bus_by_role` fixtures skip.
 """
 
 from types import ModuleType
-from typing import Any
 
 import pytest
 
-from lab.bus_emulator import serialize
+from lab.power_cycle import power_cycle
 
 NS = 1_000_000_000
 """ns per s."""
 
 
-def test_the_imu_message_s_bytes_step_cleanly(
-    fsw: ModuleType, prm: str, parameter_ids: list[int], imu_message: Any, imu_port: int
+def test_every_role_s_bus_message_steps_cleanly_on_its_port(
+    fsw: ModuleType, prm: str, parameter_ids: list[int], bus: list[tuple[int, bytes]]
 ) -> None:
-    """The emulator's 96 bytes for an IMU message step the deployment.
+    """Every role's message, as the bus emulator writes it, steps the deployment on its port.
 
     Args:
         fsw: a copy of the deployment.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        imu_message: the IMU message.
-        imu_port: the IMU's SimHub port.
+        bus: every role's bus message on its SimHub port.
     """
+    assert bus
     fsw.boot(prm, parameter_ids)
-    data = serialize(imu_message)
-    assert len(data) == 96
 
-    fsw.step(t_ns=NS, bus=[(imu_port, data)])
+    fsw.step(t_ns=NS, bus=bus)
 
 
-@pytest.mark.parametrize("length", [95, 97])
-def test_a_push_of_the_wrong_length_raises(
-    fsw: ModuleType,
+@pytest.mark.parametrize("change", [-1, 1], ids=["one-short", "one-over"])
+def test_a_role_s_push_of_the_wrong_length_raises(
     prm: str,
     parameter_ids: list[int],
-    imu_message: Any,
-    imu_port: int,
-    length: int,
+    bus_by_role: dict[str, tuple[int, bytes]],
+    change: int,
 ) -> None:
-    """Bytes one short of the IMU message, or one over, trip F´'s assert, raised in Python.
+    """Each role's bytes one short of its message, or one over, trip F´'s assert in Python.
+
+    A copy that raised is never reused, so each role's push flies a fresh copy.
 
     Args:
-        fsw: a copy of the deployment.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        imu_message: the IMU message.
-        imu_port: the IMU's SimHub port.
-        length: the bytes pushed.
+        bus_by_role: each role's SimHub port and message bytes.
+        change: the bytes added to the message, or removed from it.
     """
-    fsw.boot(prm, parameter_ids)
-    data = (serialize(imu_message) + b"\0")[:length]
+    assert bus_by_role
+    for port, data in bus_by_role.values():
+        fsw = power_cycle()
+        fsw.boot(prm, parameter_ids)
+        wrong = data[:change] if change < 0 else data + bytes(change)
 
-    with pytest.raises(RuntimeError, match=r'^Assert: ".*:\d+"'):
-        fsw.step(t_ns=NS, bus=[(imu_port, data)])
+        with pytest.raises(RuntimeError, match=r'^Assert: ".*:\d+"'):
+            fsw.step(t_ns=NS, bus=[(port, wrong)])

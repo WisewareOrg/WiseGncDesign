@@ -125,49 +125,47 @@ def bus_messages() -> dict[str, BusMessage]:
     return messages
 
 
-@pytest.fixture(scope="session")
-def imu_port() -> int:
-    """The SimHub port the deployment wires to the CDH's IMU input, read from its FPP.
+@pytest.fixture
+def bus_by_role(bus_messages: dict[str, BusMessage]) -> dict[str, tuple[int, bytes]]:
+    """Each role's SimHub port and its bus message's bytes, as the bus emulator writes them.
 
-    Returns:
-        The index of SimHub's `busOut`.
-    """
-    from fsw.codegen.deployment import bus_port
-
-    return bus_port("ImuDeadReckoning", "imuIn")
-
-
-@pytest.fixture(scope="session")
-def imu_bus(imu_port: int) -> Callable[[Any, Any], list[tuple[int, bytes]]]:
-    """The bus a step takes for an IMU reading: its message's bytes on the IMU's SimHub port.
+    The roles are the contract's `Cdh.BusConverter`'s, and each port is the one the built
+    deployment's configuration wires to the role's CDH input, read from its FPP.
 
     Args:
-        imu_port: the IMU's SimHub port.
+        bus_messages: a message of each bus struct.
 
     Returns:
-        A function of the angular velocity and the acceleration, each three values in the
-        platform frame, giving `[(port, bytes)]`, the message's dv and dr zero.
+        Each role's `(port, bytes)`, by the role's name.
     """
-    from Basilisk.architecture import messaging
-
+    from fsw.codegen.deployment import bus_port, contract_files
+    from fsw.codegen.fpp_model import read
+    from fsw.codegen.roles import roles
+    from ground.dictionary import Dictionary
     from lab.bus_emulator import serialize
 
-    def bus(angVelPlatform: Any, accelPlatform: Any) -> list[tuple[int, bytes]]:
-        """The bus for one reading.
+    instances = Dictionary(_dictionary()).algorithm_instances()
+    (configuration,) = {instance.name.split(".", 1)[0] for instance in instances}
+    return {
+        role.role: (
+            bus_port(configuration, role.input),
+            serialize(bus_messages[role.bus].payload),
+        )
+        for role in roles(read(contract_files()))
+    }
 
-        Args:
-            angVelPlatform: rad/s, the angular velocity in the platform frame.
-            accelPlatform: m/s2, the acceleration in the platform frame.
 
-        Returns:
-            `[(port, bytes)]`.
-        """
-        message = messaging.IMUSensorMsgPayload()
-        message.AngVelPlatform = list(angVelPlatform)
-        message.AccelPlatform = list(accelPlatform)
-        return [(imu_port, serialize(message))]
+@pytest.fixture
+def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
+    """The bus one step takes: every role's message bytes on its SimHub port.
 
-    return bus
+    Args:
+        bus_by_role: each role's port and bytes.
+
+    Returns:
+        `[(port, bytes)]`, a pair per role.
+    """
+    return list(bus_by_role.values())
 
 
 @pytest.fixture(scope="session")
