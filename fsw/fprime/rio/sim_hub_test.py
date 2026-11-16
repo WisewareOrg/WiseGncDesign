@@ -42,7 +42,8 @@ def test_a_role_s_push_of_the_wrong_length_raises(
 ) -> None:
     """Each role's bytes one short of its message, or one over, trip F´'s assert in Python.
 
-    A copy that raised is never reused, so each role's push flies a fresh copy.
+    Each role's push flies a fresh copy, since a copy that raised is never reused. The copy first
+    steps on the role's own message on that port, so the raise comes from the length, not the port.
 
     Args:
         prm: the case's parameter file.
@@ -54,7 +55,8 @@ def test_a_role_s_push_of_the_wrong_length_raises(
     for port, data in bus_by_role.values():
         fsw = power_cycle()
         fsw.boot(prm, parameter_ids)
+        fsw.step(t_ns=NS, bus=[(port, data)])
         wrong = data[:change] if change < 0 else data + bytes(change)
 
         with pytest.raises(RuntimeError, match=r'^Assert: ".*:\d+"'):
-            fsw.step(t_ns=NS, bus=[(port, wrong)])
+            fsw.step(t_ns=2 * NS, bus=[(port, wrong)])
