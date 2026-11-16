@@ -81,14 +81,15 @@ def _algorithm_names() -> re.Pattern[str]:
         each instance name as a whole word.
     """
     directories = {path.parts[1] for path in _tracked("algorithms") if len(path.parts) > 2}
-    algorithms = set(read(contract_files()).components) - set(
-        read(tuple(f for f in contract_files() if f not in algorithm_files())).components
+    without_algorithms = tuple(f for f in contract_files() if f not in algorithm_files())
+    algorithm_components = set(read(contract_files()).components) - set(
+        read(without_algorithms).components
     )
     substrings, words = set(directories), set()
     for instance in gnc_instances():
         configuration, name = instance.name.split(".")
         substrings.add(configuration)
-        if instance.component in algorithms:
+        if instance.component in algorithm_components:
             substrings.add(instance.component.split(".")[-1])
             words.add(name)
     alternatives = [re.escape(name) for name in sorted(substrings)]

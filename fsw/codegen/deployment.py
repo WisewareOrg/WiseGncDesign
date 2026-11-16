@@ -135,7 +135,7 @@ def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
     topology.write_text(_TEMPLATE.read_text().replace("@CONFIGURATION@", configuration))
     return (
         *contract_files(),
-        _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
+        _GNC / f"{configuration}.fpp",
         topology,
     )
 
@@ -197,7 +197,7 @@ def configuration_model(configuration: str) -> Model:
     Returns:
         The model.
     """
-    return read((*contract_files(), _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp"))
+    return read((*contract_files(), _GNC / f"{configuration}.fpp"))
 
 
 def tick_period(configuration: str) -> float:

@@ -131,10 +131,10 @@ class FprimeBuild:
 
 @provides("SYS001")
 def fprime_dead_reckoner(scenario: Scenario, prm_path: Path) -> FprimeBuild:
-    """The F´ dead reckoner, booted idle on a scenario's vehicle.
+    """The F´ dead reckoner's build, which the harness hosts and boots.
 
     Args:
-        scenario: the scenario whose vehicle the deployment flies on.
+        scenario: the case's scenario, whose vehicle the harness hosts the build on.
         prm_path: the case's parameter record.
 
     Returns:
