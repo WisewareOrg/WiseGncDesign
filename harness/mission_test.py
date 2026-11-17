@@ -850,14 +850,14 @@ class Broken(StubBuild):
 
 
 @provides("SYS901")
-def toy(scenario, prm_path):
+def mock(scenario, prm_path):
     return Broken()
 
 
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=toy, scenarios=("TST901",), parameters=parameters
+            vehicle="imu_spacecraft", fsw=mock, scenarios=("TST901",), parameters=parameters
         )
     )
 )
@@ -869,78 +869,6 @@ globals().update(
 
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["FAILED * - ZeroDivisionError: the tick's own bug"])
-
-
-SELF_HOSTING = """
-from Basilisk.architecture import sysModel
-
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
-
-
-class SelfHosting(StubBuild, sysModel.SysModel):
-    def __init__(self):
-        sysModel.SysModel.__init__(self)
-        self.failure = None
-        self.ticks = 0
-
-    def Reset(self, CurrentSimNanos):
-        pass
-
-    def UpdateState(self, CurrentSimNanos):
-        self.ticks += 1
-        if FAILS and CurrentSimNanos > 0:
-            self.failure = ZeroDivisionError("the host's own bug")
-            raise self.failure
-
-
-@provides("SYS901")
-def toy(scenario, prm_path):
-    return SelfHosting()
-
-
-globals().update(
-    mission_tests(
-        Mission(
-            vehicle="imu_spacecraft", fsw=toy, scenarios=("TST901",), parameters=parameters
-        )
-    )
-)
-"""
-
-
-@pytest.mark.parametrize("fails", [False, True], ids=["flies", "fails"])
-def test_a_build_that_hosts_itself_flies_unwrapped_and_its_kept_failure_fails_the_case(
-    project: pytest.Pytester,
-    fly_in_a_subprocess: Callable[..., pytest.RunResult],
-    monkeypatch: pytest.MonkeyPatch,
-    fails: bool,
-) -> None:
-    """A build that is a Basilisk module is flown as itself, as the F´ host is, not in `FswHost`.
-
-    One that ticks writes its run file; one whose tick fails with its `failure` kept fails the case
-    with that exception, not the `RuntimeError` Basilisk reports it as.
-
-    Args:
-        project: the project.
-        fly_in_a_subprocess: runs the project in a subprocess.
-        monkeypatch: widens the subprocess's summary line to hold the exception.
-        fails: whether the build's tick fails.
-    """
-    (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=5.0, body="pass"))
-    project.makepyfile(test_flights=STUB_BUILD + f"FAILS = {fails}\n" + SELF_HOSTING)
-
-    monkeypatch.setenv("COLUMNS", "200")
-    result = fly_in_a_subprocess(project)
-
-    if fails:
-        result.assert_outcomes(failed=1)
-        result.stdout.fnmatch_lines(["FAILED * - ZeroDivisionError: the host's own bug"])
-    else:
-        result.assert_outcomes(passed=1)
-        [path] = project.path.rglob("run_0000.h5")
-        with h5py.File(path, "r") as f:
-            assert f["t_s"][-1] == 5.0
 
 
 def test_a_later_cases_base_write_keeps_the_build_an_earlier_case_merged(

@@ -22,7 +22,7 @@ class Handler(NamedTuple):
     """A command's handler.
 
     Attributes:
-        instance: its algorithm's instance's name, such as `nav`.
+        instance: its algorithm's instance's unqualified name in the sub-topology.
         method: the algorithm's method of the command's name.
     """
 
@@ -53,7 +53,7 @@ def handlers(dictionary: Dictionary, algorithms: Mapping[str, Any]) -> Handlers:
 
     Args:
         dictionary: the dictionary holding the instances.
-        algorithms: each algorithm, by its instance's name, such as `nav`.
+        algorithms: each algorithm, by its instance's unqualified name.
 
     Returns:
         The handlers.

@@ -13,7 +13,9 @@
   checks); rates as FPP constants (issue 57 GNC sub-topology); the rejected configuration on an F´
   port, the rejected FSW telemetry in Basilisk message structs and the boot(prm_path) check, moved
   from ADR 0003 rev 3; role groups and named-tuple defaults stated as consequences, and mechanics
-  their tickets record left to them (issue 85 one decision per ADR).
+  their tickets record left to them (issue 85 one decision per ADR); the extension named
+  `_wise_fsw_<configuration>` (issue 64 The F´ build on WiseDynamics' host module, one extension
+  per configuration).
 - **rev 1** — 2026-11-13 — first written (issue 37 the dictionary; issue 38 commands into the F´
   build).
 
@@ -27,8 +29,8 @@ its own CDH (ADR 0005 rev 1).
 At `6f6276e`, the Python build imitated F´'s wire format: it decoded F´ command packets, imitated
 F´'s responses and packed telemetry into F´'s types. That is a Python version of F´ written as
 glue. Flying the F´ build with F´'s real ground data system must stay possible, so names and
-values never move inside `_wise_fsw`, the generated dictionary JSON stays, and telemetry leaves
-through F´'s telemetry ports.
+values never move inside `_wise_fsw_<configuration>`, the generated dictionary JSON stays, and
+telemetry leaves through F´'s telemetry ports.
 
 ### The checks
 
@@ -77,7 +79,8 @@ would have shown as equal values.
 - **The ground speaks names and values:** `<instance>.<entry>` names, values in FPP types, and
   `Fw.CmdResponse` codes, on both builds.
 - **The F´ ground station in `ground/` does the GDS's job:** names to F´ command packets, and
-  telemetry bytes to values. Real F´ packets exist only between it and `_wise_fsw`.
+  telemetry bytes to values. Real F´ packets exist only between it and
+  `_wise_fsw_<configuration>`.
 - **The Python build takes names directly**, and its CDH dispatches by name.
 - **The F´ build dispatches through F´'s stock `Svc.CmdDispatcher`, unmodified,** on a task with no
   thread, run on the tick.

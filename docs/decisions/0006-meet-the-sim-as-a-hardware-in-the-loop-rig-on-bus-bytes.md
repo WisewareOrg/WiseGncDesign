@@ -9,17 +9,19 @@
 - **rev 1** — 2026-11-14 — first written, moved out of ADR 0003 rev 3 (issue 85 one decision
   per ADR); the bus driver, named SimHub at `9eccec3`, is LabBusDriver, named for its job, and
   F´'s Svc.GenericHub is a rejected alternative, from the spike in the decision comment of
-  2026-11-16 on issue 63 The lab's bus driver carries bus data into the F´ build.
+  2026-11-16 on issue 63 The lab's bus driver carries bus data into the F´ build; the extension
+  named `_wise_fsw_<configuration>` (issue 64 The F´ build on WiseDynamics' host module, one
+  extension per configuration).
 
 ## Context
 
-The F´ build flies inside Basilisk's process (ADR 0003 rev 3). The lab is the test rig between
-that build and the sim: the bus structs, the bus emulator, the stand-ins inside `_wise_fsw` and
-the pins that move bytes in and out of it. The sim this repository plugs into,
-WiseDynamics' FSW host, gives a build Basilisk messages by role and takes actuator commands back by
-role. Real flight software meets its hardware through a bus driver that takes bytes. At `6f6276e`,
-the F´ build's glue to the sim was wired by hand for one algorithm, so every added algorithm or
-sensor needed C++ in the bridge and the pins.
+The F´ build flies inside Basilisk's process (ADR 0003 rev 3). The lab is the test rig between that
+build and the sim: the bus structs, the bus emulator, the stand-ins inside
+`_wise_fsw_<configuration>` and the pins that move bytes in and out of it. The sim this repository
+plugs into, WiseDynamics' FSW host, gives a build Basilisk messages by role and takes actuator
+commands back by role. Real flight software meets its hardware through a bus driver that takes
+bytes. At `6f6276e`, the F´ build's glue to the sim was wired by hand for one algorithm, so every
+added algorithm or sensor needed C++ in the bridge and the pins.
 
 ### The check
 
@@ -41,10 +43,11 @@ The little-endian push is the failure the comparison would have shown.
 
 ## Decision
 
-- **If a real F´ deployment would have it, it is inside `_wise_fsw`.** Each stand-in replaces one
-  real thing: LabBusDriver the bus driver, GroundLink the whole comm stack, SimTime the clock, its
-  time source and its timer. Anything a real deployment would not have is ground segment
-  (ADR 0004 rev 2) or the lab's own; the lab's pins are compiled in as a test connector.
+- **If a real F´ deployment would have it, it is inside `_wise_fsw_<configuration>`.** Each
+  stand-in replaces one real thing: LabBusDriver the bus driver, GroundLink the whole comm stack,
+  SimTime the clock, its time source and its timer. Anything a real deployment would not have is
+  ground segment (ADR 0004 rev 2) or the lab's own; the lab's pins are compiled in as a test
+  connector.
 - **Bus structs in FPP mirror Basilisk messages**, each held to the real message by a test.
 - **A bus emulator, generated from the bus structs, turns Basilisk messages into their bytes.**
 - **LabBusDriver takes the bytes on F´ `serial` ports** and delivers typed bus structs.

@@ -40,7 +40,7 @@ class RateGroupDriver:
 def dividers(model: Model, rate_groups: Sequence[str]) -> tuple[int, ...]:
     """Each rate group's divider: `<stem>RateGroup` takes the constant `<stem>Divider`.
 
-    The constant is in the rate group's own module, as `navRateGroup` takes `navDivider`.
+    The constant is in the rate group's own module, the sub-topology instancing it.
 
     Args:
         model: the model holding the rate groups and the constants.

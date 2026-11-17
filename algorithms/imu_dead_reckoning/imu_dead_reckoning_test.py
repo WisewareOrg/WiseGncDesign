@@ -326,6 +326,6 @@ def test_the_notebook_runs_end_to_end() -> None:
 @pytest.mark.xdist_group("notebooks")
 def test_the_parity_notebook_runs_end_to_end() -> None:
     """Every cell of the parity notebook runs, so the two builds agree case by case."""
-    if importlib.util.find_spec("lab._wise_fsw") is None:
+    if importlib.util.find_spec("lab._wise_fsw_ImuDeadReckoning") is None:
         pytest.skip("the F´ build is absent; run `just fsw`")
     run_notebook(Path(__file__).with_name("parity.py"))

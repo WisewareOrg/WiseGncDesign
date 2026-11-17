@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fsw.codegen.deployment import gnc_instance
 from fsw.codegen.fpp_types import named, parameters_from
 
 __all__ = ["read", "tuple_of"]
@@ -18,7 +17,7 @@ def tuple_of(component: str) -> type:
     """A component's parameters tuple, `<Name>Parameters`.
 
     Args:
-        component: the component's qualified FPP name, such as `Gnc.ImuDeadReckoner`.
+        component: the component's qualified FPP name, `<module>.<component>`.
 
     Returns:
         The tuple.
@@ -26,16 +25,16 @@ def tuple_of(component: str) -> type:
     return named(f"{component}Parameters")
 
 
-def read(path: Path, tuple_type: type) -> Any:
-    """A component's parameters from the case's record.
+def read(path: Path, tuple_type: type, instance: str) -> Any:
+    """An instance's parameters from the case's record.
 
-    The entry is the one under the qualified name of the component's instance in the GNC
-    sub-topologies, as the ground writes it. A parameter missing from it, or one the component
-    lacks, raises the tuple's `TypeError`.
+    The entry is the one under the instance's qualified name, as the ground writes it. A parameter
+    missing from it, or one the component lacks, raises the tuple's `TypeError`.
 
     Args:
         path: the case's record.
-        tuple_type: the component's `<Name>Parameters` tuple.
+        tuple_type: the instance's component's `<Name>Parameters` tuple.
+        instance: the instance's qualified name, `<configuration>.<instance>`.
 
     Returns:
         The tuple, each array a fresh array of its FPP type.
@@ -43,7 +42,6 @@ def read(path: Path, tuple_type: type) -> Any:
     Raises:
         KeyError: naming the instance, when the record has no entry for it.
     """
-    instance = gnc_instance(tuple_type.component).name
     entries = json.loads(Path(path).read_text())
     if instance not in entries:
         raise KeyError(f"{path} has no parameters for {instance}; it has {sorted(entries)}")

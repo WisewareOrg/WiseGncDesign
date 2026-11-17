@@ -1,16 +1,18 @@
-"""The Python build's CDH reads its instance's parameters from the case's record."""
+"""The Python build's CDH reads each algorithm instance's parameters from the case's record.
+
+The parameters are every algorithm component's, generated from the contract.
+"""
 
 import json
+import re
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 
-from fsw.codegen.fpp_types import Gnc
+from fsw.codegen.deployment import gnc_instance
 from fsw.python.cdh import parameters
-
-MOUNTING = [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
-"""A mounting [PB] that is not symmetric, so a transposed one shows."""
 
 
 def _record(directory: Path, entries: dict) -> Path:
@@ -28,57 +30,92 @@ def _record(directory: Path, entries: dict) -> Path:
     return path
 
 
-def test_the_instance_s_parameters_come_back_as_its_tuple(tmp_path: Path):
-    """Keyed by nav's qualified instance, as the ground writes it, an array as a float64 array.
+def _values(tuple_: Any) -> dict[str, Any]:
+    """A parameters tuple's fields as plain values, an array as nested lists.
+
+    Args:
+        tuple_: the tuple.
+
+    Returns:
+        Each field's value by name.
+    """
+    return {name: np.asarray(value).tolist() for name, value in tuple_._asdict().items()}
+
+
+def test_each_instance_s_parameters_come_back_as_its_tuple(
+    tmp_path: Path, algorithm_parameters: dict[str, Any]
+):
+    """Keyed by the qualified instance, as the ground writes it, an array as a fresh array.
 
     Args:
         tmp_path: where the record is written.
+        algorithm_parameters: each algorithm component's tuple.
     """
-    record = _record(tmp_path, {"ImuDeadReckoning.nav": {"mu": 3.986004360e14, "dcm_PB": MOUNTING}})
+    assert algorithm_parameters
+    entries = {gnc_instance(c).name: _values(t) for c, t in algorithm_parameters.items()}
+    record = _record(tmp_path, entries)
 
-    read = parameters.read(record, Gnc.ImuDeadReckonerParameters)
+    for component, expected in algorithm_parameters.items():
+        read = parameters.read(record, type(expected), gnc_instance(component).name)
 
-    assert type(read) is Gnc.ImuDeadReckonerParameters
-    assert read.mu == 3.986004360e14
-    assert isinstance(read.dcm_PB, np.ndarray)
-    assert read.dcm_PB.dtype == np.float64
-    np.testing.assert_array_equal(read.dcm_PB, MOUNTING)
+        assert type(read) is type(expected)
+        for name, value in expected._asdict().items():
+            if isinstance(value, np.ndarray):
+                assert isinstance(getattr(read, name), np.ndarray), f"{component}.{name}"
+                assert getattr(read, name).dtype == value.dtype, f"{component}.{name}"
+            np.testing.assert_array_equal(getattr(read, name), value, err_msg=component)
 
 
-def test_a_parameter_missing_from_the_record_raises(tmp_path: Path):
-    """A record without `dcm_PB` fails, as the F´ build's boot does.
+def test_a_parameter_missing_from_the_record_raises_naming_it(
+    tmp_path: Path, algorithm_parameters: dict[str, Any]
+):
+    """A record without one of an instance's parameters fails, as the F´ build's boot does.
 
     Args:
         tmp_path: where the record is written.
+        algorithm_parameters: each algorithm component's tuple.
     """
-    record = _record(tmp_path, {"ImuDeadReckoning.nav": {"mu": 3.986004360e14}})
+    for component, tuple_ in algorithm_parameters.items():
+        values = _values(tuple_)
+        if not values:
+            continue
+        missing = sorted(values)[0]
+        del values[missing]
+        record = _record(tmp_path, {gnc_instance(component).name: values})
 
-    with pytest.raises(TypeError, match="dcm_PB"):
-        parameters.read(record, Gnc.ImuDeadReckonerParameters)
+        with pytest.raises(TypeError, match=re.escape(missing)):
+            parameters.read(record, type(tuple_), gnc_instance(component).name)
 
 
-def test_a_parameter_the_component_lacks_raises(tmp_path: Path):
+def test_a_parameter_the_component_lacks_raises_naming_it(
+    tmp_path: Path, algorithm_parameters: dict[str, Any]
+):
     """A record naming a field the tuple lacks fails, as F´'s tool does.
 
     Args:
         tmp_path: where the record is written.
+        algorithm_parameters: each algorithm component's tuple.
     """
-    record = _record(
-        tmp_path,
-        {"ImuDeadReckoning.nav": {"mu": 3.986004360e14, "dcm_PB": MOUNTING, "gain": 1.0}},
-    )
+    for component, tuple_ in algorithm_parameters.items():
+        values = {**_values(tuple_), "notAParameter": 1.0}
+        record = _record(tmp_path, {gnc_instance(component).name: values})
 
-    with pytest.raises(TypeError, match="gain"):
-        parameters.read(record, Gnc.ImuDeadReckonerParameters)
+        with pytest.raises(TypeError, match="notAParameter"):
+            parameters.read(record, type(tuple_), gnc_instance(component).name)
 
 
-def test_a_record_without_the_instance_raises_naming_it(tmp_path: Path):
-    """An entry for nav under another qualified name is not nav's.
+def test_a_record_without_the_instance_raises_naming_it(
+    tmp_path: Path, algorithm_parameters: dict[str, Any]
+):
+    """An entry under another qualified name is not the instance's.
 
     Args:
         tmp_path: where the record is written.
+        algorithm_parameters: each algorithm component's tuple.
     """
-    record = _record(tmp_path, {"Other.nav": {"mu": 3.986004360e14, "dcm_PB": MOUNTING}})
+    for component, tuple_ in algorithm_parameters.items():
+        instance = gnc_instance(component).name
+        record = _record(tmp_path, {f"Other.{instance}": _values(tuple_)})
 
-    with pytest.raises(KeyError, match=r"no parameters for ImuDeadReckoning\.nav"):
-        parameters.read(record, Gnc.ImuDeadReckonerParameters)
+        with pytest.raises(KeyError, match=re.escape(f"no parameters for {instance}")):
+            parameters.read(record, type(tuple_), gnc_instance(component).name)

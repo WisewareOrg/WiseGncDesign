@@ -21,10 +21,10 @@ class Pair(NamedTuple):
     """A role's message, from its bus struct to the ICD struct its GNC port takes.
 
     Attributes:
-        role: the vehicle's role, such as `imu`.
+        role: the vehicle's role, `<role>`.
         bus: the bus struct's tuple, mirroring the role's Basilisk message.
         icd: the ICD struct's tuple, which the GNC port takes.
-        port: the GNC sub-topology's port, such as `imuIn`.
+        port: the GNC sub-topology's port, `<role>In`.
     """
 
     role: str

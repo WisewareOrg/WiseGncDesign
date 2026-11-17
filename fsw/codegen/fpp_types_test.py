@@ -1,8 +1,9 @@
-"""FPP's types as named tuples, and the converters between them, on the contract and on a toy.
+"""FPP's types as named tuples, and the converters between them, on the contract and on a mock.
 
 Needs the F´ framework clone `just _sync` fetches, not an F´ build.
 """
 
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,13 +12,14 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
-from fsw.codegen.deployment import CLONE
+from fsw.codegen import fpp_types
+from fsw.codegen.deployment import CLONE, Contract, algorithm_components
 from fsw.codegen.fpp_model import read
-from fsw.codegen.fpp_model_test import _TOY_FRAMEWORK
-from fsw.codegen.fpp_types import Bus, Gnc, Svc, _build, converter, parameters_from
+from fsw.codegen.fpp_model_test import _MOCK_FRAMEWORK
+from fsw.codegen.fpp_types import Bus, Gnc, Svc, _build, converter, named, parameters_from
 
-TOY = """\
-module Toy {
+MOCK = """\
+module Mock {
 
   enum Mode {
     idle
@@ -87,33 +89,33 @@ module Toy {
 """
 
 
-def _toy(directory: Path, toy: str = TOY) -> dict[str, SimpleNamespace]:
-    """The toy's types, its component an algorithm's.
+def _mock(directory: Path, mock: str = MOCK) -> dict[str, SimpleNamespace]:
+    """The mock's types, its component an algorithm's.
 
     Args:
-        directory: where `Toy.fpp` is written.
-        toy: the toy's FPP.
+        directory: where `Mock.fpp` is written.
+        mock: the mock's FPP.
 
     Returns:
         The namespaces `_build` makes, by top-level module.
     """
-    algorithm = directory / "Toy.fpp"
-    algorithm.write_text(toy)
-    framework = [CLONE / path for path in _TOY_FRAMEWORK]
+    algorithm = directory / "Mock.fpp"
+    algorithm.write_text(mock)
+    framework = [CLONE / path for path in _MOCK_FRAMEWORK]
     return _build(read([*framework, algorithm]), {algorithm})
 
 
 @pytest.fixture(scope="module")
-def toy(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
-    """The toy's namespace, built once.
+def mock(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
+    """The mock's namespace, built once.
 
     Args:
-        tmp_path_factory: where the toy is written.
+        tmp_path_factory: where the mock is written.
 
     Returns:
-        Module `Toy`'s namespace.
+        Module `Mock`'s namespace.
     """
-    return _toy(tmp_path_factory.mktemp("toy"))["Toy"]
+    return _mock(tmp_path_factory.mktemp("mock"))["Mock"]
 
 
 def _basilisk_reading() -> messaging.IMUSensorMsgPayload:
@@ -239,13 +241,13 @@ def test_the_tuples_are_immutable_and_their_fields_pass_into_numba():
     assert total(reading) == pytest.approx(9.0)
 
 
-def test_a_parameter_has_a_default_only_when_fpp_gives_one(toy: SimpleNamespace):
+def test_a_parameter_has_a_default_only_when_fpp_gives_one(mock: SimpleNamespace):
     """Required parameters come first, in FPP's order, then the defaulted ones; missing one raises.
 
     Args:
-        toy: the toy's namespace.
+        mock: the mock's namespace.
     """
-    parameters = toy.SpinnerParameters
+    parameters = mock.SpinnerParameters
 
     assert parameters._fields == ("mounting", "count", "gain", "startMode")
     built = parameters(mounting=np.zeros(3), count=4)
@@ -256,16 +258,16 @@ def test_a_parameter_has_a_default_only_when_fpp_gives_one(toy: SimpleNamespace)
 
 
 def test_parameters_from_plain_values_makes_each_array_of_its_fpp_shape_and_type(
-    toy: SimpleNamespace,
+    mock: SimpleNamespace,
 ):
     """JSON-shaped values become the tuple: lists to fresh arrays, scalars as given, defaults kept.
 
     Args:
-        toy: the toy's namespace.
+        mock: the mock's namespace.
     """
-    built = parameters_from(toy.SpinnerParameters, {"mounting": [1, 2, 3], "count": 4})
+    built = parameters_from(mock.SpinnerParameters, {"mounting": [1, 2, 3], "count": 4})
 
-    assert type(built) is toy.SpinnerParameters
+    assert type(built) is mock.SpinnerParameters
     assert built.mounting.dtype == np.float64
     np.testing.assert_array_equal(built.mounting, [1.0, 2.0, 3.0])
     assert built.count == 4
@@ -275,38 +277,38 @@ def test_parameters_from_plain_values_makes_each_array_of_its_fpp_shape_and_type
     assert nav.dcm_PB.dtype == np.float64
 
 
-def test_parameters_from_refuses_an_array_of_another_shape_naming_it(toy: SimpleNamespace):
+def test_parameters_from_refuses_an_array_of_another_shape_naming_it(mock: SimpleNamespace):
     """A value whose shape is not the field's FPP shape fails, naming the field.
 
     Args:
-        toy: the toy's namespace.
+        mock: the mock's namespace.
     """
     with pytest.raises(
-        ValueError, match=r"Toy\.Spinner\.mounting is \(3,\), but its value is \(2,\)"
+        ValueError, match=r"Mock\.Spinner\.mounting is \(3,\), but its value is \(2,\)"
     ):
-        parameters_from(toy.SpinnerParameters, {"mounting": [1.0, 2.0], "count": 4})
+        parameters_from(mock.SpinnerParameters, {"mounting": [1.0, 2.0], "count": 4})
 
 
-def test_outputs_are_one_field_per_output_port_defaulting_to_none(toy: SimpleNamespace):
+def test_outputs_are_one_field_per_output_port_defaulting_to_none(mock: SimpleNamespace):
     """Each general output port is a field, unwritten by default.
 
     Args:
-        toy: the toy's namespace.
+        mock: the mock's namespace.
     """
-    assert toy.SpinnerOutputs._fields == ("readingOut", "gainOut")
-    assert toy.SpinnerOutputs() == (None, None)
-    assert toy.SpinnerTelemetry._fields == ("speed", "mode")
+    assert mock.SpinnerOutputs._fields == ("readingOut", "gainOut")
+    assert mock.SpinnerOutputs() == (None, None)
+    assert mock.SpinnerTelemetry._fields == ("speed", "mode")
 
 
-def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(toy: SimpleNamespace):
+def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(mock: SimpleNamespace):
     """Array fields become fresh arrays of the FPP type; scalars and enum names pass as they are.
 
     Args:
-        toy: the toy's namespace.
+        mock: the mock's namespace.
     """
-    source = toy.Reading(rate=[1, 2, 3], count=4, mode="running")
+    source = mock.Reading(rate=[1, 2, 3], count=4, mode="running")
 
-    converted = converter(toy.Reading, toy.Reading)(source)
+    converted = converter(mock.Reading, mock.Reading)(source)
 
     assert converted.rate.dtype == np.dtype("float64")
     assert converted.rate.tolist() == [1.0, 2.0, 3.0]
@@ -314,15 +316,15 @@ def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(toy: Simple
     assert converted.mode == "running"
 
 
-def test_a_converter_keeps_each_array_s_shape_and_element_type(toy: SimpleNamespace):
+def test_a_converter_keeps_each_array_s_shape_and_element_type(mock: SimpleNamespace):
     """An array of arrays keeps its nested shape, and an inline array its element's type.
 
     Args:
-        toy: the toy's namespace.
+        mock: the mock's namespace.
     """
-    source = toy.Shapes(rows=[[1, 2, 3], [4, 5, 6]], counts=[7, 8])
+    source = mock.Shapes(rows=[[1, 2, 3], [4, 5, 6]], counts=[7, 8])
 
-    converted = converter(toy.Shapes, toy.Shapes)(source)
+    converted = converter(mock.Shapes, mock.Shapes)(source)
 
     assert converted.rows.shape == (2, 3)
     assert converted.rows.dtype == np.dtype("float64")
@@ -336,39 +338,39 @@ def test_a_converter_keeps_each_array_s_shape_and_element_type(toy: SimpleNamesp
     ids=["flat array to an array of arrays", "U32 to U16"],
 )
 def test_a_converter_from_a_field_of_another_shape_or_type_fails_naming_it(
-    toy: SimpleNamespace, source: str, field: str
+    mock: SimpleNamespace, source: str, field: str
 ):
     """A source field must have its target field's shape and element type.
 
     Args:
-        toy: the toy's namespace.
+        mock: the mock's namespace.
         source: the source struct, whose `field` differs from `Shapes`'.
         field: the field that differs.
     """
     with pytest.raises(ValueError, match=field):
-        converter(getattr(toy, source), toy.Shapes)
+        converter(getattr(mock, source), mock.Shapes)
 
 
 def test_a_converter_from_a_basilisk_field_of_another_shape_fails_naming_it(
-    toy: SimpleNamespace,
+    mock: SimpleNamespace,
 ):
     """Basilisk's three-element rate does not fill a four-element field.
 
     Args:
-        toy: the toy's namespace.
+        mock: the mock's namespace.
     """
     with pytest.raises(ValueError, match="AngVelPlatform"):
-        converter(messaging.IMUSensorMsgPayload, toy.QuaternionRate)
+        converter(messaging.IMUSensorMsgPayload, mock.QuaternionRate)
 
 
-def test_a_converter_to_a_nested_struct_field_fails_naming_it(toy: SimpleNamespace):
+def test_a_converter_to_a_nested_struct_field_fails_naming_it(mock: SimpleNamespace):
     """A target field of struct type is not converted.
 
     Args:
-        toy: the toy's namespace.
+        mock: the mock's namespace.
     """
     with pytest.raises(ValueError, match="inner"):
-        converter(toy.Outer, toy.Outer)
+        converter(mock.Outer, mock.Outer)
 
 
 @pytest.mark.parametrize(
@@ -386,15 +388,15 @@ def test_an_output_port_that_is_not_one_value_fails_generation_naming_it(
     """An output port with other than one argument, or an array of ports, has no field.
 
     Args:
-        tmp_path: where the seeded toy is written.
-        port: the toy's line seeded.
+        tmp_path: where the seeded mock is written.
+        port: the mock's line seeded.
         replacement: the seeded line.
     """
-    seeded = TOY.replace(port, replacement)
-    assert seeded != TOY
+    seeded = MOCK.replace(port, replacement)
+    assert seeded != MOCK
 
     with pytest.raises(ValueError, match="gainOut"):
-        _toy(tmp_path, seeded)
+        _mock(tmp_path, seeded)
 
 
 def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_and_ports():
@@ -440,3 +442,101 @@ def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_an
             assert sorted(tuple_of("Telemetry")._fields) == sorted(channels), instance.name
             assert sorted(tuple_of("Parameters")._fields) == sorted(parameters), instance.name
             assert list(tuple_of("Outputs")._fields) == ports, instance.name
+
+
+LOADED = """\
+module MockLoaded {
+
+  struct Sample {
+    value: F64
+  }
+
+  passive component Probe {
+    command recv port cmdIn
+    command reg port cmdRegOut
+    command resp port cmdResponseOut
+    telemetry port tlmOut
+    time get port timeCaller
+    param get port prmGetOut
+    param set port prmSetOut
+
+    telemetry level: F64
+
+    param gain: F64
+  }
+
+}
+"""
+"""A mock contract's algorithm: a module of its own, sharing no name with the repository's."""
+
+
+def _contract(directory: Path, algorithm: str) -> Contract:
+    """A contract of one algorithm file, with no GNC sub-topology.
+
+    Args:
+        directory: where the algorithm's `.fpp` and the empty GNC directory are written.
+        algorithm: the algorithm's FPP.
+
+    Returns:
+        The contract.
+    """
+    path = directory / "Algorithm.fpp"
+    path.write_text(algorithm)
+    (directory / "gnc").mkdir()
+    return Contract((path,), directory / "gnc")
+
+
+def test_a_loaded_contract_s_tuples_resolve_and_the_repository_s_stay_as_they_are(
+    tmp_path: Path,
+):
+    """After `load`, the contract's names resolve; the repository's namespaces and exports do not.
+
+    Args:
+        tmp_path: where the contract is written.
+    """
+    gnc, exports = dict(vars(Gnc)), list(fpp_types.__all__)
+
+    fpp_types.load(_contract(tmp_path, LOADED))
+
+    parameters = named("MockLoaded.ProbeParameters")
+    assert parameters._fields == ("gain",)
+    assert parameters.component == "MockLoaded.Probe"
+    assert named("MockLoaded.ProbeTelemetry")._fields == ("level",)
+    assert named("MockLoaded.Sample")._fields == ("value",)
+    assert parameters_from(parameters, {"gain": 2.5}) == parameters(gain=2.5)
+    assert dict(vars(Gnc)) == gnc
+    assert fpp_types.__all__ == exports
+    assert not hasattr(fpp_types, "MockLoaded")
+
+
+def test_a_contract_redefining_a_generated_name_is_refused_naming_it(tmp_path: Path):
+    """An algorithm component of the repository, defined again otherwise, raises naming it.
+
+    Args:
+        tmp_path: where the contract is written.
+    """
+    name = sorted(algorithm_components())[0]
+    module, component = name.rsplit(".", 1)
+    redefined = f"module {module} {{\n  passive component {component} {{\n  }}\n}}\n"
+
+    with pytest.raises(ValueError, match=re.escape(name)):
+        fpp_types.load(_contract(tmp_path, redefined))
+
+
+def test_a_contract_s_new_name_in_an_existing_module_leaves_that_module_s_namespace_as_it_is(
+    tmp_path: Path,
+):
+    """A struct a contract adds to a module the repository's has resolves, and the module does not.
+
+    Args:
+        tmp_path: where the contract is written.
+    """
+    gnc = dict(vars(Gnc))
+
+    fpp_types.load(
+        _contract(tmp_path, "module Gnc {\n  struct MockAdded {\n    value: F64\n  }\n}\n")
+    )
+
+    assert named("Gnc.MockAdded")._fields == ("value",)
+    assert not hasattr(Gnc, "MockAdded")
+    assert dict(vars(Gnc)) == gnc

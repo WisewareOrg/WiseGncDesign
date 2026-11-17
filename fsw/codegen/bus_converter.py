@@ -5,10 +5,11 @@ the header, building the GNC struct from the bus struct by `fsw.codegen.fields.p
 sending its result on `<role>Out`. A field outside `fsw.codegen.fields.STRUCT_CODES` raises when
 the code is generated.
 
-It also emits the lab's test pins, `BusConverterPins.hpp`, which `_wise_fsw`'s module includes
-once: `bus_<Struct>(<member>=...)` returns F´'s serialization of a bus struct built from its
-members' values, one pin per bus struct a role takes; and `cdh_<role>(bus_bytes)` returns F´'s
-serialization of `convert_<role>`'s result for the bus struct F´ deserializes from the bytes.
+It also emits the lab's test pins, `BusConverterPins.hpp`, which each configuration's extension,
+`_wise_fsw_<configuration>`, includes once: `bus_<Struct>(<member>=...)` returns F´'s
+serialization of a bus struct built from its members' values, one pin per bus struct a role takes;
+and `cdh_<role>(bus_bytes)` returns F´'s serialization of `convert_<role>`'s result for the bus
+struct F´ deserializes from the bytes.
 
 `python -m fsw.codegen.bus_converter <directory>` writes the three files into the directory from
 the contract, `fsw.codegen.deployment.contract_files()`; CMake runs it during `just fsw`, into the

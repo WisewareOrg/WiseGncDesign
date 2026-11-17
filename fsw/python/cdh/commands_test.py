@@ -10,10 +10,10 @@ from fsw.codegen.fpp_model import Instance
 from fsw.python.cdh import commands
 from ground.dictionary import Dictionary
 
-TOY = """\
-module Toy {
+MOCK = """\
+module Mock {
 
-  passive component Toy {
+  passive component Mock {
     sync command setGain(gain: F64)
     sync command reset
     telemetry gain: F64
@@ -30,14 +30,14 @@ module Toy {
 }
 """
 
-ToyTelemetry = namedtuple("ToyTelemetry", ["gain"], defaults=[None])
-"""The toy's telemetry tuple."""
+MockTelemetry = namedtuple("MockTelemetry", ["gain"], defaults=[None])
+"""The mock's telemetry tuple."""
 
 
-class Toy:
-    """A toy algorithm: `setGain` refuses a negative gain, `reset` writes nothing."""
+class Mock:
+    """A mock algorithm: `setGain` refuses a negative gain, `reset` writes nothing."""
 
-    def setGain(self, gain: float) -> ToyTelemetry:
+    def setGain(self, gain: float) -> MockTelemetry:
         """Takes the gain, refusing a negative one.
 
         Args:
@@ -51,7 +51,7 @@ class Toy:
         """
         if gain < 0.0:
             raise ValueError(f"gain {gain} is negative")
-        return ToyTelemetry(gain=gain)
+        return MockTelemetry(gain=gain)
 
     def reset(self) -> None:
         """Writes nothing."""
@@ -59,17 +59,17 @@ class Toy:
 
 @pytest.fixture(scope="module")
 def dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
-    """The toy's dictionary, instanced as `toy`.
+    """The mock's dictionary, instanced as `mock`.
 
     Args:
-        tmp_path_factory: where the toy's model is written.
+        tmp_path_factory: where the mock's model is written.
 
     Returns:
         The dictionary.
     """
-    model = tmp_path_factory.mktemp("toy") / "Toy.fpp"
-    model.write_text(TOY)
-    return Dictionary.from_component([Path(model)], Instance("Toy.toy", "Toy.Toy", 0x1000))
+    model = tmp_path_factory.mktemp("mock") / "Mock.fpp"
+    model.write_text(MOCK)
+    return Dictionary.from_component([Path(model)], Instance("Mock.mock", "Mock.Mock", 0x1000))
 
 
 def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
@@ -80,23 +80,23 @@ def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
     command, answers `INVALID_OPCODE`.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
-    handlers = commands.handlers(dictionary, {"toy": Toy()})
+    handlers = commands.handlers(dictionary, {"mock": Mock()})
 
-    assert commands.dispatch(handlers, "toy.setGain", {"gain": 2.0}) == (
+    assert commands.dispatch(handlers, "mock.setGain", {"gain": 2.0}) == (
         "OK",
         None,
-        [("toy.gain", 2.0)],
+        [("mock.gain", 2.0)],
     )
-    assert commands.dispatch(handlers, "toy.reset", {}) == ("OK", None, [])
-    assert type(commands.dispatch(handlers, "toy.reset", {})) is commands.Dispatched
-    assert commands.dispatch(handlers, "toy.setGain", {"gain": -1.0}) == (
+    assert commands.dispatch(handlers, "mock.reset", {}) == ("OK", None, [])
+    assert type(commands.dispatch(handlers, "mock.reset", {})) is commands.Dispatched
+    assert commands.dispatch(handlers, "mock.setGain", {"gain": -1.0}) == (
         "VALIDATION_ERROR",
         "gain -1.0 is negative",
         [],
     )
-    for name in ("toy.setGian", "toy.OFFSET_PRM_SET", "toy.OFFSET_PRM_SAVE", "other.reset"):
+    for name in ("mock.setGian", "mock.OFFSET_PRM_SET", "mock.OFFSET_PRM_SAVE", "other.reset"):
         assert commands.dispatch(handlers, name, {}) == ("INVALID_OPCODE", None, [])
 
 
@@ -104,11 +104,11 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
     """Anything but `ValueError` from a handler is raised whole.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
 
-    class Broken(Toy):
-        """A toy whose `reset` fails."""
+    class Broken(Mock):
+        """A mock whose `reset` fails."""
 
         def reset(self) -> None:
             """Fails.
@@ -118,18 +118,18 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
             """
             raise ZeroDivisionError("broken")
 
-    handlers = commands.handlers(dictionary, {"toy": Broken()})
+    handlers = commands.handlers(dictionary, {"mock": Broken()})
 
     with pytest.raises(ZeroDivisionError, match="broken"):
-        commands.dispatch(handlers, "toy.reset", {})
+        commands.dispatch(handlers, "mock.reset", {})
 
 
 @pytest.mark.parametrize(
     "algorithm",
     [
         object(),
-        type("Renamed", (Toy,), {"setGain": lambda self, value: None})(),
-        type("Extra", (Toy,), {"setGain": lambda self, gain, scale: None})(),
+        type("Renamed", (Mock,), {"setGain": lambda self, value: None})(),
+        type("Extra", (Mock,), {"setGain": lambda self, gain, scale: None})(),
     ],
     ids=["no method", "other parameter", "extra parameter"],
 )
@@ -139,23 +139,23 @@ def test_a_command_the_algorithm_lacks_or_declares_otherwise_is_refused_naming_i
     """Every command of the instance must be a method taking FPP's parameters, by name.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
         algorithm: an algorithm lacking `setGain`, or declaring it with another parameter.
     """
-    with pytest.raises(ValueError, match=r"toy\.setGain takes \['gain'\]"):
-        commands.handlers(dictionary, {"toy": algorithm})
+    with pytest.raises(ValueError, match=r"mock\.setGain takes \['gain'\]"):
+        commands.handlers(dictionary, {"mock": algorithm})
 
 
 def test_arguments_reach_the_handler_as_given(dictionary: Dictionary):
     """The handler gets each argument by its parameter's name, unconverted.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     received = []
 
-    class Recording(Toy):
-        """A toy keeping what `setGain` receives."""
+    class Recording(Mock):
+        """A mock keeping what `setGain` receives."""
 
         def setGain(self, gain: float) -> None:
             """Keeps the gain.
@@ -167,7 +167,7 @@ def test_arguments_reach_the_handler_as_given(dictionary: Dictionary):
 
     gain = np.float64(0.5)
     commands.dispatch(
-        commands.handlers(dictionary, {"toy": Recording()}), "toy.setGain", {"gain": gain}
+        commands.handlers(dictionary, {"mock": Recording()}), "mock.setGain", {"gain": gain}
     )
 
     assert received == [gain]

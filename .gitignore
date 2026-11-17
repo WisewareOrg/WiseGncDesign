@@ -7,7 +7,7 @@ __pycache__/
 # F´ build products: the build cache, and the extension and dictionary `just fsw` places beside its host
 build-fprime-*/
 /lab/_wise_fsw*.so
-/lab/WiseFswTopologyDictionary.json
+/lab/*FswTopologyDictionary.json
 # Fetched sources: the F´ clone and Eigen's checkout
 /fsw/fprime/lib/fprime/
 /fsw/fprime/lib/fetchcontent/

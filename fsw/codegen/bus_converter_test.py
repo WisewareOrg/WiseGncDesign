@@ -1,6 +1,6 @@
 """The F´ CDH generator: the C++ it emits for `Cdh.BusConverter`'s roles, and what it refuses.
 
-Each test but the tool's reads a toy model of two roles, so none needs the F´ framework clone.
+Each test but the tool's reads a mock model of two roles, so none needs the F´ framework clone.
 """
 
 from pathlib import Path
@@ -12,7 +12,7 @@ from fsw.codegen.deployment import contract_files
 from fsw.codegen.fpp_model import Model, read
 from fsw.codegen.roles import roles
 
-TOY = """\
+MOCK = """\
 module Bus {
   struct A { extra: [2] F64, v: [3] F64 }
   port A(msg: A)
@@ -44,22 +44,22 @@ module Cdh {
 inline array. `Mode` and `Mat` are there for the edits that seed a refusal."""
 
 
-def _toy(tmp_path: Path, *edits: tuple[str, str]) -> Model:
-    """The toy model, each edit's old text replaced by its new once it is seen to change the toy.
+def _mock(tmp_path: Path, *edits: tuple[str, str]) -> Model:
+    """The mock model, each edit's old text replaced by its new once it is seen to change the mock.
 
     Args:
-        tmp_path: where the toy's file is written.
-        *edits: each `(old, new)` replacement; none leaves the toy as it is.
+        tmp_path: where the mock's file is written.
+        *edits: each `(old, new)` replacement; none leaves the mock as it is.
 
     Returns:
         The model.
     """
-    text = TOY
+    text = MOCK
     for old, new in edits:
         edited = text.replace(old, new)
         assert edited != text, old
         text = edited
-    path = tmp_path / "Toy.fpp"
+    path = tmp_path / "Mock.fpp"
     path.write_text(text)
     return read([path])
 
@@ -68,9 +68,9 @@ def test_two_roles_emit_two_handlers_and_two_conversions(tmp_path: Path) -> None
     """Per role, the header defines its conversion inline and the source a handler sending it.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    files = render(_toy(tmp_path))
+    files = render(_mock(tmp_path))
     for role, bus, icd in (("a", "Bus::A", "Gnc::AIcd"), ("b", "Bus::B", "Gnc::BIcd")):
         signature = f"{role}In_handler(FwIndexType, const {bus}& msg)"
         assert f"static {icd} convert_{role}(const {bus}& bus) {{" in files["BusConverter.hpp"]
@@ -85,9 +85,9 @@ def test_each_field_is_copied_from_the_bus_field_of_its_name_and_extras_are_drop
     """`V` is copied from `v`, another case, and `n` from `n`, each by element; `extra` is not read.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    files = render(_toy(tmp_path))
+    files = render(_mock(tmp_path))
     header = files["BusConverter.hpp"]
     assert "icd.get_V()[i] = bus.get_v()[i];" in header
     assert "icd.get_n()[i] = bus.get_n()[i];" in header
@@ -98,9 +98,9 @@ def test_an_array_of_arrays_is_refused_by_name(tmp_path: Path) -> None:
     """A `Mat` matched by a bus `[2] Row` passes the field rule, but the CDH refuses it, naming it.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    model = _toy(
+    model = _mock(
         tmp_path,
         ("struct B { n: [2] F64 }", "struct B { m: [2] Gnc.Row }"),
         ("struct BIcd { n: [2] F64 }", "struct BIcd { m: Mat }"),
@@ -115,9 +115,9 @@ def test_a_scalar_is_refused_by_name(tmp_path: Path) -> None:
     No struct has a scalar, so the first one adds its copy with a compiled test.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    model = _toy(
+    model = _mock(
         tmp_path,
         ("struct A { extra", "struct A { x: F64, extra"),
         ("struct AIcd { V", "struct AIcd { X: F64, V"),
@@ -134,9 +134,9 @@ def test_an_element_type_outside_the_domain_is_refused_by_name(
 
     Args:
         element: the arrays' element type.
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    model = _toy(
+    model = _mock(
         tmp_path,
         ("struct A { extra", f"struct A {{ f: [2] {element}, extra"),
         ("struct AIcd { V", f"struct AIcd {{ f: [2] {element}, V"),
@@ -149,9 +149,9 @@ def test_a_field_that_is_not_a_number_is_refused_by_name(tmp_path: Path) -> None
     """An enum array matches by the field rule, but the F´ CDH copies numbers only, naming it.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    model = _toy(
+    model = _mock(
         tmp_path,
         ("struct A { extra", "struct A { e: [2] Gnc.Mode, extra"),
         ("struct AIcd { V", "struct AIcd { e: [2] Mode, V"),
@@ -164,10 +164,10 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(tmp_path: Path)
     """A third role on `Bus.A` adds a CDH pin but no bus pin, which is one per bus struct.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
     pins = render(
-        _toy(
+        _mock(
             tmp_path,
             (
                 "    sync input port bIn",
@@ -202,11 +202,11 @@ def test_a_bus_member_outside_the_pin_s_domain_is_refused_by_name(
     """A bus scalar, `bool` or primitive no struct uses, dropped by the CDH, is refused by the pin.
 
     Args:
-        extra: the member as the seeded toy declares it.
+        extra: the member as the seeded mock declares it.
         named: the member as the refusal names it, a pattern.
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    model = _toy(tmp_path, ("extra: [2] F64", extra))
+    model = _mock(tmp_path, ("extra: [2] F64", extra))
     with pytest.raises(ValueError, match=rf"Bus\.A\.{named}, which the bus pin"):
         render(model)
 

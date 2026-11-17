@@ -23,7 +23,8 @@ missions/      notebooks that plan missions, and the test running them
 fsw/           the flight software: python/, the Python build's partitions; fprime/, the F´
                project; fpp/, the shared FPP contract and GNC sub-topologies; and a worked example
 ground/        the ground: dictionary, radio edge, F´ ground station and procedures
-lab/           the F´ host that runs the F´ build in the simulation, and its pybind11 module
+lab/           the lab adapter hosting each configuration's F´ build in the simulation, and its
+               pybind11 module
 docs/          requirements/ (Doorstop tree), decisions/ (ADRs)
 ```
 

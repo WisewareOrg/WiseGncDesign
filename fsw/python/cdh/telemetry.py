@@ -16,7 +16,7 @@ def writes(instance: str, telemetry: NamedTuple | None) -> list[tuple[str, Any]]
     """The writes of one telemetry tuple, in its fields' order, each array copied as written.
 
     Args:
-        instance: the instance's name, such as `nav`.
+        instance: the instance's unqualified name.
         telemetry: the `<Name>Telemetry` tuple a step or command returned, or `None`.
 
     Returns:

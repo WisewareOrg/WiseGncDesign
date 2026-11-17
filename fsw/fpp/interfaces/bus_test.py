@@ -7,6 +7,7 @@ matched ignoring case. Offsets and padding are not compared, since F´ serialize
 F´ build.
 """
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -87,111 +88,129 @@ def test_each_bus_struct_mirrors_its_basilisk_payload() -> None:
         assert _struct_fields(struct) == _payload_fields(struct), struct.name
 
 
-def _rename(text: str) -> str:
-    """Bus.fpp with `angVelPlatform` renamed.
+Seed = Callable[[list[str], list[int]], None]
+"""A drift seeded into a struct's member lines: the file's lines, and the indices of the struct's
+members' lines, in FPP's order."""
+
+
+def _rename(lines: list[str], members: list[int]) -> None:
+    """The first member renamed.
 
     Args:
-        text: Bus.fpp's text.
-
-    Returns:
-        The seeded text.
+        lines: Bus.fpp's lines, edited in place.
+        members: the indices of the struct's members' lines.
     """
-    return text.replace("angVelPlatform:", "angularVelocityPlatform:")
+    lines[members[0]] = lines[members[0]].replace(":", "Renamed:", 1)
 
 
-def _delete(text: str) -> str:
-    """Bus.fpp with `drFramePlatform` deleted.
+def _delete(lines: list[str], members: list[int]) -> None:
+    """The first member deleted.
 
     Args:
-        text: Bus.fpp's text.
-
-    Returns:
-        The seeded text.
+        lines: Bus.fpp's lines, edited in place.
+        members: the indices of the struct's members' lines.
     """
-    lines = text.splitlines(keepends=True)
-    return "".join(line for line in lines if not line.strip().startswith("drFramePlatform:"))
+    lines[members[0]] = ""
 
 
-def _swap(text: str) -> str:
-    """Bus.fpp with `dvFramePlatform` and `accelPlatform` in each other's place.
+def _swap(lines: list[str], members: list[int]) -> None:
+    """The first two members in each other's place.
 
     Args:
-        text: Bus.fpp's text.
-
-    Returns:
-        The seeded text.
+        lines: Bus.fpp's lines, edited in place.
+        members: the indices of the struct's members' lines.
     """
-    lines = text.splitlines(keepends=True)
-    first = next(i for i, line in enumerate(lines) if line.strip().startswith("dvFramePlatform:"))
-    second = next(i for i, line in enumerate(lines) if line.strip().startswith("accelPlatform:"))
+    first, second = members[:2]
     lines[first], lines[second] = lines[second], lines[first]
-    return "".join(lines)
 
 
-def _reshape(text: str) -> str:
-    """Bus.fpp with `accelPlatform` four elements long.
+def _reshape(lines: list[str], members: list[int]) -> None:
+    """The first array member one element longer.
 
     Args:
-        text: Bus.fpp's text.
-
-    Returns:
-        The seeded text.
+        lines: Bus.fpp's lines, edited in place.
+        members: the indices of the struct's members' lines.
     """
-    return text.replace("accelPlatform: [3] F64", "accelPlatform: [4] F64")
+    index = next(i for i in members if re.search(r":\s*\[\d+\]", lines[i]))
+    lines[index] = re.sub(
+        r"\[(\d+)\]", lambda size: f"[{int(size.group(1)) + 1}]", lines[index], count=1
+    )
 
 
-def _recase(text: str) -> str:
-    """Bus.fpp with `angVelPlatform` spelled in capitals, a name that differs only in case.
+def _recase(lines: list[str], members: list[int]) -> None:
+    """The first member's name in capitals, a name that differs only in case.
 
     Args:
-        text: Bus.fpp's text.
-
-    Returns:
-        The seeded text.
+        lines: Bus.fpp's lines, edited in place.
+        members: the indices of the struct's members' lines.
     """
-    return text.replace("angVelPlatform:", "ANGVELPLATFORM:")
+    name, rest = lines[members[0]].split(":", 1)
+    lines[members[0]] = f"{name.upper()}:{rest}"
 
 
-def _seeded_imu(seed: Callable[[str], str], tmp_path: Path) -> Struct:
-    """`Bus.ImuSensorMsg` from a seeded copy of Bus.fpp, once the seed is seen to change the text.
+def _seeded(struct: Struct, seed: Seed, tmp_path: Path) -> Struct:
+    """A bus struct from a copy of Bus.fpp with a drift seeded into it, once seen to change it.
 
     Args:
-        seed: the edit to make to the copy.
+        struct: the struct, as Bus.fpp declares it.
+        seed: the drift to seed into the struct's member lines.
         tmp_path: where the copy is written.
 
     Returns:
-        The copy's `Bus.ImuSensorMsg`.
+        The copy's struct of that name.
     """
     text = BUS.read_text()
-    seeded = seed(text)
+    lines = text.splitlines(keepends=True)
+    opening = re.compile(rf"\s*struct {re.escape(struct.name.removeprefix('Bus.'))}\s*\{{")
+    start = next(i for i, line in enumerate(lines) if opening.match(line))
+    end = next(i for i in range(start, len(lines)) if lines[i].strip() == "}")
+    names = {member.name for member in struct.members}
+    members = [i for i in range(start + 1, end) if lines[i].split(":", 1)[0].strip() in names]
+    assert len(members) == len(struct.members), struct.name
+    seed(lines, members)
+    seeded = "".join(lines)
     assert seeded != text
     copy = tmp_path / "Bus.fpp"
     copy.write_text(seeded)
-    (struct,) = (s for s in _bus_structs(copy) if s.name == "Bus.ImuSensorMsg")
-    return struct
+    (copied,) = (s for s in _bus_structs(copy) if s.name == struct.name)
+    return copied
 
 
+STRUCTS = _bus_structs(BUS)
+"""Every bus struct Bus.fpp declares."""
+
+
+@pytest.mark.parametrize("struct", STRUCTS, ids=lambda struct: struct.name)
 @pytest.mark.parametrize(
     "seed", [_rename, _delete, _swap, _reshape], ids=["renamed", "missing", "swapped", "reshaped"]
 )
 def test_a_drifted_bus_struct_differs_from_its_payload(
-    seed: Callable[[str], str], tmp_path: Path
+    struct: Struct, seed: Seed, tmp_path: Path
 ) -> None:
     """A copy of Bus.fpp with a member renamed, missing, moved or resized no longer mirrors it.
 
     Args:
-        seed: the drift to seed into the copy.
+        struct: the bus struct the drift is seeded into.
+        seed: the drift.
         tmp_path: where the seeded copy is written.
     """
-    struct = _seeded_imu(seed, tmp_path)
-    assert _struct_fields(struct) != _payload_fields(struct)
+    if seed is _swap and len(struct.members) < 2:
+        pytest.skip(f"{struct.name} has one member, so none can move")
+    if seed is _reshape and all(member.size is None for member in struct.members):
+        pytest.skip(f"{struct.name} has no array member to resize")
+    drifted = _seeded(struct, seed, tmp_path)
+    assert _struct_fields(drifted) != _payload_fields(drifted)
 
 
-def test_a_member_name_differing_only_in_case_still_mirrors_its_field(tmp_path: Path) -> None:
+@pytest.mark.parametrize("struct", STRUCTS, ids=lambda struct: struct.name)
+def test_a_member_name_differing_only_in_case_still_mirrors_its_field(
+    struct: Struct, tmp_path: Path
+) -> None:
     """A copy of Bus.fpp with a member's name in capitals still mirrors its payload.
 
     Args:
+        struct: the bus struct the recased name is seeded into.
         tmp_path: where the seeded copy is written.
     """
-    struct = _seeded_imu(_recase, tmp_path)
-    assert _struct_fields(struct) == _payload_fields(struct)
+    recased = _seeded(struct, _recase, tmp_path)
+    assert _struct_fields(recased) == _payload_fields(recased)

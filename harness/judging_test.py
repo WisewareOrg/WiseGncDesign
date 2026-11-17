@@ -27,7 +27,7 @@ PLANNED = 10
 KINDS = {"attitude": "SRS901", "velocity": "SRS902", "position": "SRS903"}
 
 BODY_ECI = Path(__file__).parents[1] / "fsw" / "fpp" / "interfaces" / "Nav" / "BodyEci.fppi"
-"""nav's estimate channels, which a toy flight software includes to be judged."""
+"""nav's estimate channels, which a mock flight software includes to be judged."""
 NODE = "missions/nb/Test_vehicle/test_fsw_alpha"
 NODEID = "missions/nb.py::Test_vehicle::test_fsw_alpha"
 ALL = {"scenario": "TST901", "capabilities": ["SYS901"], "rungs": None}
@@ -572,7 +572,7 @@ def test_a_flown_mission_is_judged_end_to_end(
 
     The flight's `flight.json` and run files come from the simulator's own writers, so a key or
     dataset the writer and the judge disagree on makes this fail. Four cases are the fewest that
-    show p = 0.8 at c = 0.5. The flight software is a toy writing nav's estimate channels with a
+    show p = 0.8 at c = 0.5. The flight software is a mock writing nav's estimate channels with a
     fixed state, and each rung's x is set far above its error so the verdict rests on the
     agreement alone.
 
@@ -600,9 +600,9 @@ def test_a_flown_mission_is_judged_end_to_end(
         "async def alpha(ground) -> None:\n"
         "    pass\n"
     )
-    (root / "Toy.fpp").write_text(
-        "module Toy {\n"
-        "  passive component Toy {\n"
+    (root / "Mock.fpp").write_text(
+        "module Mock {\n"
+        "  passive component Mock {\n"
         f'    include "{BODY_ECI}"\n'
         "    time get port timeCaller\n"
         "    telemetry port tlmOut\n"
@@ -619,9 +619,9 @@ from ground.dictionary import Dictionary
 from harness.mission import Mission, mission_tests, provides
 
 
-class Toy:
+class Mock:
     period_s = 1.0
-    build = {"host": "toy"}
+    build = {"host": "mock"}
 
     def __init__(self, dictionary):
         self.dictionary = dictionary
@@ -655,8 +655,8 @@ class Toy:
 
 @provides("SYS901")
 def reckoner(scenario, prm_path):
-    model = [Path(__file__).with_name("Toy.fpp")]
-    return Toy(Dictionary.from_component(model, Instance("Toy.nav", "Toy.Toy", 0x1000)))
+    model = [Path(__file__).with_name("Mock.fpp")]
+    return Mock(Dictionary.from_component(model, Instance("Mock.nav", "Mock.Mock", 0x1000)))
 
 
 globals().update(

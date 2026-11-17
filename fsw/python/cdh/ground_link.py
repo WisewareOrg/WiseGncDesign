@@ -55,7 +55,7 @@ class GroundLink:
         """Logs an algorithm's telemetry tuple, a write per field written.
 
         Args:
-            instance: the algorithm's instance's name, such as `nav`.
+            instance: the algorithm's instance's unqualified name.
             written: its `<Name>Telemetry` tuple, or `None`.
             t_ns: ns, the tick's time, which tags the writes.
         """

@@ -14,7 +14,8 @@ from typing import Any
 
 import numpy as np
 
-from fsw.codegen.deployment import configuration_model, tick_period
+from fsw.codegen import fpp_types
+from fsw.codegen.deployment import CONTRACT, Contract, configuration_model, tick_period
 from fsw.python.cdh import commands, inputs, parameters
 from fsw.python.cdh.ground_link import GroundLink
 from fsw.python.gnc.partition import GncPartition
@@ -44,22 +45,32 @@ class FrameRunner:
     dictionary: Dictionary
     build = {"host": "fsw.python.FrameRunner"}
 
-    def __init__(self, configuration: str, prm_path: Path, components: Sequence[type]) -> None:
+    def __init__(
+        self,
+        configuration: str,
+        prm_path: Path,
+        components: Sequence[type],
+        *,
+        contract: Contract = CONTRACT,
+    ) -> None:
         """Reads the configuration's FPP and matches each algorithm's class to its component.
 
         Args:
-            configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`,
-                such as `ImuDeadReckoning`.
+            configuration: the configuration, the name of its GNC sub-topology in the contract's
+                directory of them.
             prm_path: the case's parameter record, which `boot` reads.
             components: the algorithms' classes, each named as its FPP component.
+            contract: the contract, the repository's by default, whose tuples it loads.
         """
-        model = configuration_model(configuration)
+        fpp_types.load(contract)
+        model = configuration_model(configuration, contract=contract)
+        self._configuration = configuration
         self._gnc = GncPartition(model, configuration, components)
         self._pairs = inputs.pairings(model, self._gnc.inputs)
         self._dividers = dividers(model, self._gnc.rate_groups)
         self._prm_path = Path(prm_path)
-        self.period_s = tick_period(configuration)
-        self.dictionary = Dictionary.from_sub_topology(configuration)
+        self.period_s = tick_period(configuration, contract=contract)
+        self.dictionary = Dictionary.from_sub_topology(configuration, contract=contract)
         self._link = GroundLink(self.dictionary, {})
 
     def boot(self) -> None:
@@ -69,7 +80,11 @@ class FrameRunner:
         """
         self._gnc.boot(
             {
-                name: parameters.read(self._prm_path, parameters.tuple_of(component))
+                name: parameters.read(
+                    self._prm_path,
+                    parameters.tuple_of(component),
+                    f"{self._configuration}.{name}",
+                )
                 for name, component in self._gnc.components.items()
             }
         )

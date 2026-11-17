@@ -1,40 +1,39 @@
 """The F´ ground station: names to command packets, and telemetry bytes to values.
 
-The codec runs against a toy component's dictionary, generated from FPP alone. The packets that
-reach the deployment crafted or malformed need the deployment `just fsw` builds, and skip without
-it.
+The codec runs against a mock component's dictionary, generated from FPP alone. The packets that
+reach the deployment crafted or malformed are made from F´'s own `cmdDisp.CMD_TEST_CMD_1`, which
+every deployment has; they need the deployment `just fsw` builds, and skip without it.
 """
 
-import importlib.util
 import json
 import struct
 from collections.abc import Callable
-from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import numpy as np
 import pytest
-from Basilisk.architecture import messaging
 
+from fsw.codegen.deployment import gnc_instances
 from fsw.codegen.fpp_model import Instance
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import DICTIONARY, FprimeModule
+from lab import dictionary_path
+from lab.power_cycle import power_cycle
 
-BUILT = importlib.util.find_spec("lab._wise_fsw") is not None
-"""Whether `just fsw` built the deployment; the tests that need it skip without it."""
+TEST_COMMAND = "cmdDisp.CMD_TEST_CMD_1"
+"""F´'s CommandDispatcher's test command, which takes arguments, in every deployment."""
 
-TOY = """\
-module Toy {
+MOCK = """\
+module Mock {
 
   enum Mode {
     slow
     fast
   }
 
-  passive component Toy {
-    sync command setToy(
+  passive component Mock {
+    sync command setMock(
       gain: F32
       enabled: bool
       mode: Mode
@@ -72,52 +71,44 @@ ARGS = {
 NS = 1_000_000_000
 """ns per s."""
 
-STATE = {
-    "epoch": 0.0,
-    "attitude": np.array([1.0, 0.0, 0.0, 0.0]),
-    "position": np.array([6871.0e3, 0.0, 0.0]),
-    "velocity": np.array([0.0, 5.4e3, 5.4e3]),
-}
-"""`nav.initNavState`'s arguments: a state at t = 0."""
-
-WISE_FSW = Dictionary(DICTIONARY) if DICTIONARY.exists() else None
-"""The deployment's dictionary, which the build generated, or `None` without the build."""
-
 
 @pytest.fixture(scope="module")
-def toy_dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
-    """The toy's dictionary, instanced as `toy`.
+def mock_dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
+    """The mock's dictionary, instanced as `mock`.
 
     Args:
-        tmp_path_factory: where the toy's model is written.
+        tmp_path_factory: where the mock's model is written.
 
     Returns:
         The dictionary.
     """
-    model = tmp_path_factory.mktemp("toy") / "Toy.fpp"
-    model.write_text(TOY)
-    return Dictionary.from_component([model], Instance("Toy.toy", "Toy.Toy", 0x1000))
+    model = tmp_path_factory.mktemp("mock") / "Mock.fpp"
+    model.write_text(MOCK)
+    return Dictionary.from_component([model], Instance("Mock.mock", "Mock.Mock", 0x1000))
 
 
 @pytest.fixture(scope="module")
-def toy(toy_dictionary: Dictionary) -> FprimeStation:
-    """A station for the toy on no deployment: its codec only.
+def mock(mock_dictionary: Dictionary) -> FprimeStation:
+    """A station for the mock on no deployment: its codec only.
 
     Args:
-        toy_dictionary: the toy's dictionary.
+        mock_dictionary: the mock's dictionary.
 
     Returns:
         The station.
     """
-    return FprimeStation(ModuleType("no_deployment"), toy_dictionary)
+    return FprimeStation(ModuleType("no_deployment"), mock_dictionary)
 
 
 @pytest.fixture
-def booted_station(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> FprimeStation:
+def booted_station(
+    fsw: ModuleType, dictionary: Dictionary, prm: str, parameter_ids: list[int]
+) -> FprimeStation:
     """A station on the deployment, booted idle on the case's parameters.
 
     Args:
         fsw: the test's copy of the deployment.
+        dictionary: its dictionary.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
 
@@ -125,17 +116,17 @@ def booted_station(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> Fprim
         The station.
     """
     fsw.boot(prm, parameter_ids)
-    return FprimeStation(fsw, WISE_FSW)
+    return FprimeStation(fsw, dictionary)
 
 
-def test_a_command_packet_is_f_prime_s(toy: FprimeStation, toy_dictionary: Dictionary):
+def test_a_command_packet_is_f_prime_s(mock: FprimeStation, mock_dictionary: Dictionary):
     """Descriptor, opcode, then big-endian arguments; an F32 is truncated and a bool is 0xFF.
 
     Args:
-        toy: the toy's station.
-        toy_dictionary: the toy's dictionary, which types the arguments.
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary, which types the arguments.
     """
-    packet = toy.encode_command("toy.setToy", toy_dictionary.arguments("toy.setToy", ARGS))
+    packet = mock.encode_command("mock.setMock", mock_dictionary.arguments("mock.setMock", ARGS))
 
     assert packet[:6] == struct.pack(">HI", 0, 0x1000)
     assert packet[6:10] == struct.pack(">f", 0.1)
@@ -146,111 +137,143 @@ def test_a_command_packet_is_f_prime_s(toy: FprimeStation, toy_dictionary: Dicti
     assert packet[111:] == bytes([7])
 
 
-def test_a_command_the_dictionary_lacks_is_refused_naming_it(toy: FprimeStation):
+def test_a_command_the_dictionary_lacks_is_refused_naming_it(mock: FprimeStation):
     """Encoding a name the dictionary lacks raises `KeyError` naming it.
 
     Args:
-        toy: the toy's station.
+        mock: the mock's station.
     """
-    with pytest.raises(KeyError, match="'toy.setTyo'"):
-        toy.encode_command("toy.setTyo", {})
+    with pytest.raises(KeyError, match="'mock.setTyo'"):
+        mock.encode_command("mock.setTyo", {})
 
 
 @pytest.mark.parametrize(
     ("name", "args", "error", "match"),
     [
-        ("toy.setToy", {k: v for k, v in ARGS.items() if k != "mode"}, KeyError, "'mode'"),
-        ("toy.label", {"note": "hello"}, ValueError, r"toy\.label has a parameter type"),
+        ("mock.setMock", {k: v for k, v in ARGS.items() if k != "mode"}, KeyError, "'mode'"),
+        ("mock.label", {"note": "hello"}, ValueError, r"mock\.label has a parameter type"),
     ],
     ids=["missing-argument", "type-not-coded"],
 )
 def test_a_command_the_station_cannot_encode_is_refused_naming_what(
-    toy: FprimeStation, name: str, args: dict, error: type, match: str
+    mock: FprimeStation, name: str, args: dict, error: type, match: str
 ):
     """A missing argument, or a parameter of a type not coded, raises naming it.
 
     Args:
-        toy: the toy's station.
+        mock: the mock's station.
         name: the command encoded.
         args: its arguments.
         error: what encoding raises.
         match: what the error names.
     """
     with pytest.raises(error, match=match):
-        toy.encode_command(name, args)
+        mock.encode_command(name, args)
 
 
-def test_serialized_writes_become_values_in_one_batch(toy: FprimeStation):
+def test_serialized_writes_become_values_in_one_batch(mock: FprimeStation):
     """Arrays come back (N, *shape), a bool as 1.0, an enum as its name, an F32 as F32 holds it.
 
     Args:
-        toy: the toy's station.
+        mock: the mock's station.
     """
     np.testing.assert_array_equal(
-        toy.values("toy.offset", [struct.pack(">3d", 1, 2, 3), struct.pack(">3d", 4, 5, 6)]),
+        mock.values("mock.offset", [struct.pack(">3d", 1, 2, 3), struct.pack(">3d", 4, 5, 6)]),
         [[1, 2, 3], [4, 5, 6]],
     )
-    mounting = toy.values("toy.mounting", [struct.pack(">9d", *range(9))])
+    mounting = mock.values("mock.mounting", [struct.pack(">9d", *range(9))])
     np.testing.assert_array_equal(mounting[0], MOUNTING)
-    assert toy.values("toy.enabled", [b"\xff", b"\x00"]).tolist() == [1.0, 0.0]
-    assert toy.values("toy.mode", [struct.pack(">i", 1)]).tolist() == ["fast"]
-    assert toy.values("toy.gain", [struct.pack(">f", 0.1)]).tolist() == [float(np.float32(0.1))]
-    assert toy.values("toy.offset", []).shape == (0, 3)
-    assert toy.values("toy.mode", []).shape == (0,)
+    assert mock.values("mock.enabled", [b"\xff", b"\x00"]).tolist() == [1.0, 0.0]
+    assert mock.values("mock.mode", [struct.pack(">i", 1)]).tolist() == ["fast"]
+    assert mock.values("mock.gain", [struct.pack(">f", 0.1)]).tolist() == [float(np.float32(0.1))]
+    assert mock.values("mock.offset", []).shape == (0, 3)
+    assert mock.values("mock.mode", []).shape == (0,)
 
 
 @pytest.mark.parametrize(
     ("channel", "serialized"),
     [
-        ("toy.gain", [0.5]),
-        ("toy.offset", [np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0, 6.0])]),
-        ("toy.offset", [struct.pack(">2d", 1.0, 2.0)]),
-        ("toy.offset", [struct.pack(">2d", 1.0, 2.0), struct.pack(">4d", 3.0, 4.0, 5.0, 6.0)]),
+        ("mock.gain", [0.5]),
+        ("mock.offset", [np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0, 6.0])]),
+        ("mock.offset", [struct.pack(">2d", 1.0, 2.0)]),
+        ("mock.offset", [struct.pack(">2d", 1.0, 2.0), struct.pack(">4d", 3.0, 4.0, 5.0, 6.0)]),
     ],
     ids=["number", "numpy-array", "wrong-length", "misaligned"],
 )
 def test_values_takes_whole_serialized_values_only(
-    toy: FprimeStation, channel: str, serialized: list
+    mock: FprimeStation, channel: str, serialized: list
 ):
     """Written values, numpy arrays included, or bytes of the wrong length fail, naming the channel.
 
     Args:
-        toy: the toy's station.
+        mock: the mock's station.
         channel: the channel decoded.
         serialized: what is handed to `values`.
     """
     with pytest.raises(ValueError, match=rf"channel {channel} "):
-        toy.values(channel, serialized)
+        mock.values(channel, serialized)
 
 
-def _init() -> bytes:
-    """`nav.initNavState` with `STATE`, as the station encodes it.
+def _test_command(dictionary: Dictionary) -> bytes:
+    """`cmdDisp.CMD_TEST_CMD_1` with an argument of each parameter's type, as the station codes it.
+
+    Args:
+        dictionary: the deployment's dictionary.
 
     Returns:
         The packet.
     """
-    station = FprimeStation(ModuleType("no_deployment"), WISE_FSW)
-    return station.encode_command("nav.initNavState", WISE_FSW.arguments("nav.initNavState", STATE))
+    command = dictionary.command(TEST_COMMAND)
+    args = {
+        param: 1.5 if type_.dtype.kind == "f" else 1
+        for param, type_ in zip(command.params, command.types, strict=True)
+    }
+    station = FprimeStation(ModuleType("no_deployment"), dictionary)
+    return station.encode_command(TEST_COMMAND, dictionary.arguments(TEST_COMMAND, args))
 
 
-def _unknown_opcode() -> int:
-    """An opcode no instance of the deployment has.
+def _unknown_opcode(configuration: str) -> int:
+    """An opcode no instance of the configuration's deployment has.
+
+    Args:
+        configuration: the configuration.
 
     Returns:
         One past the largest opcode.
     """
-    return max(c["opcode"] for c in json.loads(DICTIONARY.read_text())["commands"]) + 1
+    document = json.loads(dictionary_path(configuration).read_text())
+    return max(c["opcode"] for c in document["commands"]) + 1
+
+
+def _gnc_writes(
+    writes: list[tuple[str, int, Any]], configuration: str
+) -> list[tuple[str, int, Any]]:
+    """The writes of the configuration's GNC instances among drained ones.
+
+    Args:
+        writes: drained writes, as `decoded` gives them.
+        configuration: the configuration.
+
+    Returns:
+        Those writes, in order, each value as plain lists.
+    """
+    prefixes = tuple(
+        f"{i.name.removeprefix(f'{configuration}.')}."
+        for i in gnc_instances()
+        if i.name.startswith(f"{configuration}.")
+    )
+    return [(n, t, np.asarray(v).tolist()) for n, t, v in writes if n.startswith(prefixes)]
 
 
 @pytest.mark.parametrize(
     ("change", "response"),
     [
-        (lambda init: init[:2] + _unknown_opcode().to_bytes(4, "big") + init[6:], "INVALID_OPCODE"),
-        (lambda init: b"\x00\x01" + init[2:], "VALIDATION_ERROR"),
-        (lambda init: init[:4], "VALIDATION_ERROR"),
-        (lambda init: init[:-8], "FORMAT_ERROR"),
-        (lambda init: init[:6], "FORMAT_ERROR"),
-        (lambda init: init + bytes(8), "FORMAT_ERROR"),
+        (lambda good, unknown: good[:2] + unknown.to_bytes(4, "big") + good[6:], "INVALID_OPCODE"),
+        (lambda good, unknown: b"\x00\x01" + good[2:], "VALIDATION_ERROR"),
+        (lambda good, unknown: good[:4], "VALIDATION_ERROR"),
+        (lambda good, unknown: good[:-1], "FORMAT_ERROR"),
+        (lambda good, unknown: good[:6], "FORMAT_ERROR"),
+        (lambda good, unknown: good + bytes(8), "FORMAT_ERROR"),
     ],
     ids=[
         "unknown-opcode",
@@ -261,48 +284,42 @@ def _unknown_opcode() -> int:
         "extra",
     ],
 )
-def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
+def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_the_gnc_runs_as_untouched(
     fsw: ModuleType,
     booted_station: FprimeStation,
+    configuration: str,
+    dictionary: Dictionary,
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
-    change: object,
+    change: Callable[[bytes, int], bytes],
     response: str,
+    prm: str,
+    parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
     """F´ answers a bad packet with its `Fw.CmdResponse`, named, with no reason, and runs nothing.
 
+    The GNC instances write on the step what a copy with no packet writes on the same step.
+
     Args:
         fsw: the test's copy of the deployment.
         booted_station: the station on it.
-        decoded: drains the station's telemetry as values.
-        change: makes the bad packet from a good `nav.initNavState`.
+        configuration: the copy's configuration.
+        dictionary: its dictionary.
+        decoded: drains a station's telemetry as values.
+        change: makes the bad packet from a good `cmdDisp.CMD_TEST_CMD_1` and an unknown opcode.
         response: the response F´ gives it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
-    fsw.uplink(change(_init()), 7)
+    untouched = power_cycle(configuration)
+    untouched.boot(prm, parameter_ids)
+    untouched.step(t_ns=NS, bus=bus)
+    expected = _gnc_writes(decoded(FprimeStation(untouched, dictionary)), configuration)
+    assert expected
+
+    fsw.uplink(change(_test_command(dictionary), _unknown_opcode(configuration)), 7)
     fsw.step(t_ns=NS, bus=bus)
 
     assert booted_station.responses() == [(7, response, None)]
-    writes = [write for write in decoded(booted_station) if write[0].startswith("nav.")]
-    assert writes == [("nav.navState", NS, "idle")]
-
-
-@pytest.mark.skipif(not BUILT, reason="the F´ build is absent; run `just fsw`")
-def test_a_command_f_prime_rejects_fails_nothing_in_the_f_prime_host(prm_record: Path):
-    """Through the F´ host, an opcode no instance has is answered `INVALID_OPCODE`, no reason.
-
-    Args:
-        prm_record: the case's parameter record.
-    """
-    module = FprimeModule(messaging.IMUSensorMsgReader(), prm_record)
-    imu = messaging.IMUSensorMsg()
-    imu.write(messaging.IMUSensorMsgPayload(), 0, 0)
-    module._imu.subscribeTo(imu)
-    module.Reset(0)
-    init = _init()
-
-    module._fsw.uplink(init[:2] + _unknown_opcode().to_bytes(4, "big") + init[6:], 9)
-    module.UpdateState(NS)
-
-    assert module.responses() == [(9, "INVALID_OPCODE", None)]
-    assert module.failure is None
+    assert _gnc_writes(decoded(booted_station), configuration) == expected

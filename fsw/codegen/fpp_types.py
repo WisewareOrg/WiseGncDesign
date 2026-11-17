@@ -2,7 +2,9 @@
 
 Importing the module reads the contract, `fsw.codegen.deployment.contract_files()`, once through
 `fsw.codegen.fpp_model.read`, and binds each top-level FPP module as a namespace, so
-`Gnc.ImuReading` is FPP's `Gnc.ImuReading`. Each struct is a named tuple with no defaults. An array
+`Gnc.ImuReading` is FPP's `Gnc.ImuReading`. `load(contract)` generates another contract's
+tuples, such as a test's mock's, for `named` and the converters, leaving these namespaces as they
+are. Each struct is a named tuple with no defaults. An array
 is a numpy array, one of nested shape for an array of arrays, and has no tuple of its own; a scalar
 is a number, and an enum value is its constant's name. A tuple converts nothing on construction.
 
@@ -27,11 +29,11 @@ from typing import Any
 
 import numpy as np
 
-from fsw.codegen.deployment import algorithm_files, contract_files
+from fsw.codegen.deployment import CONTRACT, Contract, contract_files
 from fsw.codegen.fields import Form, form, plan
 from fsw.codegen.fpp_model import Array, Component, Enum, Member, Model, Struct, read
 
-__all__ = ["converter", "named", "parameters_from"]
+__all__ = ["converter", "load", "named", "parameters_from"]
 
 _STRUCTS: dict[type, tuple[Struct, dict[str, Struct | Enum | Array]]] = {}
 """Each struct's tuple, to its struct and the model's types, for `converter`."""
@@ -39,6 +41,12 @@ _STRUCTS: dict[type, tuple[Struct, dict[str, Struct | Enum | Array]]] = {}
 _COMPONENTS: dict[str, tuple[Component, dict[str, Struct | Enum | Array]]] = {}
 """Each algorithm's component, by its qualified name, with the model's types, for
 `parameters_from`."""
+
+_DEFINITIONS: dict[str, Struct | Component] = {}
+"""Each struct and algorithm component tuples were generated for, by its qualified name."""
+
+_LOADED: set[Contract] = set()
+"""Each contract `load` has generated the tuples of."""
 
 
 def converter(source: type, target: type) -> Callable[[Any], Any]:
@@ -189,12 +197,14 @@ def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamesp
         if isinstance(struct, Struct):
             cls = namedtuple(name.rsplit(".", 1)[-1], [m.name for m in struct.members])
             _STRUCTS[cls] = struct, model.types
+            _DEFINITIONS[name] = struct
             place(name, cls)
 
     files = {Path(f).resolve() for f in algorithms}
     for component in model.components.values():
         if component.file.resolve() in files:
             _COMPONENTS[component.name] = component, model.types
+            _DEFINITIONS[component.name] = component
             for suffix, cls in _component_tuples(component).items():
                 place(component.name + suffix, cls)
     return namespaces
@@ -236,6 +246,57 @@ def _component_tuples(component: Component) -> dict[str, type]:
     }
 
 
-_namespaces = _build(read(contract_files()), algorithm_files())
+def load(contract: Contract) -> None:
+    """Generates a contract's tuples, once per contract, so `named` and the converters resolve them.
+
+    A struct or algorithm component already generated with an equal definition, such as the
+    framework's and the interfaces' every contract shares, keeps its tuples. A module the
+    repository's contract already has is merged into a copy that `named` reads, so this module's
+    namespaces, the repository's, gain nothing of another contract's.
+
+    Args:
+        contract: the contract.
+
+    Raises:
+        ValueError: a struct or algorithm component is already generated from another definition,
+            naming it.
+    """
+    if contract in _LOADED:
+        return
+    model = read(contract_files(contract=contract))
+    files = {Path(f).resolve() for f in contract.algorithms}
+    definitions = {name: t for name, t in model.types.items() if isinstance(t, Struct)}
+    definitions |= {c.name: c for c in model.components.values() if c.file.resolve() in files}
+    for name, definition in definitions.items():
+        if _DEFINITIONS.get(name, definition) != definition:
+            raise ValueError(f"{name} is already generated from another definition")
+    for top, space in _build(model, contract.algorithms).items():
+        held = _namespaces.get(top)
+        _namespaces[top] = space if held is None else _merged(held, space)
+    _LOADED.add(contract)
+
+
+def _merged(held: SimpleNamespace, space: SimpleNamespace) -> SimpleNamespace:
+    """A copy of a namespace with another's names it lacks, nested namespaces merged alike.
+
+    Args:
+        held: the namespace copied; a name it has keeps its value, and it is left as it is.
+        space: the namespace whose names are added.
+
+    Returns:
+        The copy.
+    """
+    merged = SimpleNamespace(**vars(held))
+    for name, value in vars(space).items():
+        kept = getattr(held, name, None)
+        if isinstance(value, SimpleNamespace) and isinstance(kept, SimpleNamespace):
+            setattr(merged, name, _merged(kept, value))
+        elif kept is None:
+            setattr(merged, name, value)
+    return merged
+
+
+_namespaces: dict[str, SimpleNamespace] = {}
+load(CONTRACT)
 globals().update(_namespaces)
 __all__ += sorted(_namespaces)

@@ -15,35 +15,35 @@ from types import ModuleType
 
 import pytest
 
+from fsw.codegen.deployment import configurations
 from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import DICTIONARY as DICTIONARY_PATH
+from lab import dictionary_path
 
-if importlib.util.find_spec("lab._wise_fsw") is None:
-    pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
-
-DICTIONARY = Dictionary(DICTIONARY_PATH)
-"""The deployment's dictionary, which the build generated."""
+if not all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations()):
+    pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000
 """ns per s."""
 
 
-def _id(name: str) -> int:
+def _id(dictionary: Dictionary, name: str) -> int:
     """A parameter's ID.
 
     Args:
+        dictionary: the deployment's dictionary.
         name: `<instance>.<parameter>`.
 
     Returns:
         Its ID.
     """
-    return next(i for i, p in DICTIONARY.parameters_by_id.items() if p.name == name)
+    return next(i for i, p in dictionary.parameters_by_id.items() if p.name == name)
 
 
 def test_a_case_s_file_boots_every_parameter_valid(
     fsw: ModuleType,
+    dictionary: Dictionary,
     prm_record: Path,
     prm: str,
     parameter_ids: list[int],
@@ -53,6 +53,7 @@ def test_a_case_s_file_boots_every_parameter_valid(
 
     Args:
         fsw: the test's copy.
+        dictionary: the copy's dictionary.
         prm_record: the case's parameter record.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
@@ -63,7 +64,7 @@ def test_a_case_s_file_boots_every_parameter_valid(
         for instance, values in json.loads(prm_record.read_text()).items()
         for name in values
     }
-    assert recorded == {p.name for p in DICTIONARY.parameters_by_id.values()}
+    assert recorded == {p.name for p in dictionary.parameters_by_id.values()}
 
     fsw.boot(prm, parameter_ids)
     fsw.step(t_ns=NS, bus=bus)
@@ -121,12 +122,18 @@ def test_a_file_that_is_not_a_parameter_file_fails_the_boot(
 
 
 def test_a_parameter_missing_from_the_record_fails_the_boot(
-    fsw: ModuleType, prm_record: Path, parameter_ids: list[int]
+    fsw: ModuleType,
+    configuration: str,
+    dictionary: Dictionary,
+    prm_record: Path,
+    parameter_ids: list[int],
 ):
     """A record without one parameter makes a `.dat` without it; boot names that parameter alone.
 
     Args:
         fsw: the test's copy.
+        configuration: the copy's configuration.
+        dictionary: the copy's dictionary.
         prm_record: the case's parameter record, edited here.
         parameter_ids: every parameter's ID, which boot holds valid.
     """
@@ -135,10 +142,10 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
     parameter = next(iter(values))
     del values[parameter]
     prm_record.write_text(json.dumps(entries))
-    dropped = _id(f"{instance.rsplit('.', 1)[1]}.{parameter}")
+    dropped = _id(dictionary, f"{instance.rsplit('.', 1)[1]}.{parameter}")
 
     with pytest.raises(RuntimeError, match=rf"^parameters {dropped} are not valid"):
-        fsw.boot(str(parameters.dat(prm_record, DICTIONARY_PATH)), parameter_ids)
+        fsw.boot(str(parameters.dat(prm_record, dictionary_path(configuration))), parameter_ids)
 
 
 def _changed(value: object, counter: Iterator[int]) -> object:
@@ -158,6 +165,7 @@ def _changed(value: object, counter: Iterator[int]) -> object:
 
 def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     fsw: ModuleType,
+    configuration: str,
     station: FprimeStation,
     tmp_path: Path,
     prm_record: Path,
@@ -171,6 +179,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
 
     Args:
         fsw: the test's copy.
+        configuration: the copy's configuration.
         station: the station on it.
         tmp_path: where PrmDb's image is decoded.
         prm_record: the case's parameter record, edited here.
@@ -185,7 +194,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     }
     assert edited != entries
     prm_record.write_text(json.dumps(edited))
-    dat = parameters.dat(prm_record, DICTIONARY_PATH)
+    dat = parameters.dat(prm_record, dictionary_path(configuration))
     fsw.boot(str(dat), parameter_ids)
     dat.unlink()
 
@@ -193,7 +202,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     fsw.step(t_ns=NS, bus=bus)
     image = tmp_path / "image.json"
     tool = Path(sys.executable).parent / "fprime-prm-decode"
-    command = [tool, dat, "-d", DICTIONARY_PATH, "-o", image]
+    command = [tool, dat, "-d", dictionary_path(configuration), "-o", image]
     subprocess.run(command, check=True, capture_output=True)
 
     assert station.responses() == [(1, "OK", None)]
@@ -274,7 +283,7 @@ def test_a_case_directory_of_239_characters_trips_f_prime_s_assert(
         fsw.boot(str(directory / "a"), parameter_ids)
 
 
-def _load_file(station: FprimeStation, path: Path) -> bytes:
+def _load_file(station: FprimeStation, dictionary: Dictionary, path: Path) -> bytes:
     """`prmDb.PRM_LOAD_FILE`'s packet, merging, its string argument serialized by hand.
 
     The station codes no string argument, so the packet is built here: the header the station
@@ -284,22 +293,25 @@ def _load_file(station: FprimeStation, path: Path) -> bytes:
 
     Args:
         station: the station on the copy.
+        dictionary: the copy's dictionary.
         path: the file to load, relative to the working directory.
 
     Returns:
         The packet.
     """
-    command = DICTIONARY.command("prmDb.PRM_LOAD_FILE")
+    command = dictionary.command("prmDb.PRM_LOAD_FILE")
     header = station.encode_command("prmDb.PRM_SAVE_FILE", {})
-    header = header[: -DICTIONARY.type("FwOpcodeType").dtype.itemsize]
-    header += DICTIONARY.type("FwOpcodeType").serialized([command.opcode]).tobytes()
+    header = header[: -dictionary.type("FwOpcodeType").dtype.itemsize]
+    header += dictionary.type("FwOpcodeType").serialized([command.opcode]).tobytes()
     name = str(path).encode()
-    size = DICTIONARY.type("FwSizeStoreType").serialized([len(name)]).tobytes()
+    size = dictionary.type("FwSizeStoreType").serialized([len(name)]).tobytes()
     return header + size + name + bytes([0])
 
 
 def test_the_sandbox_is_the_case_s_directory(
     fsw: ModuleType,
+    station: FprimeStation,
+    dictionary: Dictionary,
     tmp_path: Path,
     prm: str,
     parameter_ids: list[int],
@@ -310,6 +322,8 @@ def test_the_sandbox_is_the_case_s_directory(
 
     Args:
         fsw: the test's copy.
+        station: the station on it.
+        dictionary: the copy's dictionary.
         tmp_path: the test's directory, holding the case's directory `case` and `elsewhere`.
         prm: the case's parameter file, in `case`.
         parameter_ids: every parameter's ID, which boot holds valid.
@@ -323,13 +337,12 @@ def test_the_sandbox_is_the_case_s_directory(
     elsewhere.mkdir()
     shutil.copyfile(dat, case / "beside.dat")
     shutil.copyfile(dat, elsewhere / "outside.dat")
-    station = FprimeStation(fsw, DICTIONARY)
     fsw.boot(prm, parameter_ids)
     dat.unlink()
 
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)
-    fsw.uplink(_load_file(station, Path("elsewhere/outside.dat")), 2)
-    fsw.uplink(_load_file(station, Path("case/beside.dat")), 3)
+    fsw.uplink(_load_file(station, dictionary, Path("elsewhere/outside.dat")), 2)
+    fsw.uplink(_load_file(station, dictionary, Path("case/beside.dat")), 3)
     fsw.step(t_ns=NS, bus=bus)
 
     assert station.responses() == [(1, "OK", None), (2, "EXECUTION_ERROR", None), (3, "OK", None)]
