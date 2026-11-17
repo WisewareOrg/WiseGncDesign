@@ -61,15 +61,18 @@ performance with `x`, `p` and `c` as attributes, and TST items are scenarios lin
 evaluate. Its items and values are placeholders for exercising the tooling. `just reqs` checks that
 every item and link is reviewed and that no file a TST references has changed since.
 
-A mission is a vehicle, an FSW builder, the scenarios to fly and the algorithm's
-`parameters(scenario)`, defined as a value in a notebook. The ground writes each case's parameters
-as a record beside its run file, and the builder takes the scenario and the record's path. The
-builder claims its capabilities with `@provides("SYS...")`, and a flight is judged on the rungs
-its scenario links to that sit under those capabilities. `mission_tests` turns missions into Monte
-Carlo tests: a class per vehicle holding a test per FSW and scenario. A flight's end belongs to its
-scenario, never to a fixed length: the simulator stops only on time, so the one stopping rule the
-harness binds is the TST definition's duration. The reasoning is in
-[ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
+A mission is a value in a notebook: `Mission(vehicle=…, gnc=…, build=…, scenarios=…)`, with
+optional `rungs=…` and `check=…`. `gnc` names a configuration, a GNC sub-topology in
+`fsw/fpp/gnc/`, and `build` is `"python"` or `"fprime"`. Each algorithm component claims its
+capabilities with `@ provides: SYS...` lines in its `.fpp`, the configuration claims their union,
+and a flight is judged on the rungs its scenario links to that sit under those capabilities. The
+ground writes each case's parameters, from each algorithm notebook's `parameters(scenario)`, as a
+record beside its run file, and the harness builds the configuration's build on it.
+`mission_tests` turns missions into Monte Carlo tests: a class per vehicle holding a test per
+configuration, build and scenario, such as `test_ImuDeadReckoning_python_leo500`. A flight's end
+belongs to its scenario, never to a fixed length: the simulator stops only on time, so the one
+stopping rule the harness binds is the TST definition's duration. The reasoning is in
+[ADR 0002 rev 2](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
 
 ### Notebooks
 
@@ -110,7 +113,7 @@ judges, over the active session. `judge()` in a notebook does the same and retur
 per rung and a column per flight. A failing rung lists each failing case with the command that
 re-simulates it. The report lands in the session's `report/` and is rebuilt on every judging; start
 at `report/matrix.md`. How a verdict is reached is in
-[ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md) and
+[ADR 0002 rev 2](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md) and
 [ADR 0001 rev 2](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
 
 ### Recipes and CI
