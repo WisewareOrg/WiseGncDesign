@@ -1,8 +1,8 @@
 """Missions: what a flight judges, what a mission refuses, and the record a flight leaves.
 
-Every test but the F´ build's reads a requirements tree it writes in `tmp_path`, by pointing the
-tree root at it, so none depends on the repository's own tree; the F´ build's test flies the
-repository's configurations through the repository's tree. The tree holds two capabilities, four
+Every test but two reads a requirements tree it writes in `tmp_path`, by pointing the tree root
+at it, so none depends on the repository's own tree; those two build missions of the repository's
+configurations against the repository's tree, flying nothing. The tree holds two capabilities, four
 rungs and two scenarios:
 
     SYS901 <- SRS901, SRS902, SRS904      SYS902 <- SRS903
@@ -274,9 +274,16 @@ def test_unknown_names_are_refused(tree: Path, changes: dict, unknown: str) -> N
         ({"gnc": "NoSuchConfiguration"}, r"NoSuchConfiguration.*'BothMocks'.*'FirstMockOnly'"),
         ({"build": "simulink"}, r"simulink.*'fprime'.*'python'"),
         ({"build": "fprime"}, r"fprime.*harness/mock"),
-        ({"gnc": "Unclaimed"}, r"HarnessMock\.UnclaimedMock.*faulty_mock/UnclaimedMock\.fpp"),
-        ({"gnc": "Classless"}, r"harness\.mock\.faulty_mock\.faulty_mock.*ClasslessMock"),
-        ({"gnc": "Parameterless"}, r"harness\.mock\.faulty_mock\.faulty_mock\.parameters"),
+        (
+            {"gnc": "SecondMockTwice"},
+            r"HarnessMock\.SecondMock.*'SecondMockTwice\.second', 'SecondMockTwice\.other'",
+        ),
+        (
+            {"gnc": "UnclaimedMockOnly"},
+            r"HarnessMock\.UnclaimedMock.*faulty_mock/UnclaimedMock\.fpp",
+        ),
+        ({"gnc": "ClasslessMockOnly"}, r"harness\.mock\.faulty_mock\.faulty_mock.*ClasslessMock"),
+        ({"gnc": "ParameterlessMockOnly"}, r"harness\.mock\.faulty_mock\.faulty_mock\.parameters"),
     ],
 )
 def test_each_lookup_that_fails_is_refused_naming_what_it_looked_for(
@@ -285,7 +292,9 @@ def test_each_lookup_that_fails_is_refused_naming_what_it_looked_for(
     """A configuration, build, claim, class or `parameters` not found is a ValueError naming it.
 
     An unknown configuration names the contract's; an unknown build names both builds; the F´ build
-    of a contract other than the repository's names the contract; a member's component with no
+    of a contract other than the repository's names the contract; a component instanced more than
+    once names it and its instances, since `parameters(scenario)` gives one tuple per component; a
+    member's component with no
     `@ provides` names it and its file; a member's class missing from its notebook names the
     notebook's module and the class; and a member with parameters and no `parameters` names the
     function. A vehicle missing a role the configuration takes is refused by each build's tick,

@@ -1,4 +1,4 @@
-module Parameterless {
+module ParameterlessMockOnly {
 
   @ s, the base tick's period
   constant tickPeriod = 1.0

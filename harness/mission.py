@@ -128,6 +128,9 @@ def _notebook(component: Component) -> Any:
 def _configuration(gnc: str, build: str, contract: Contract) -> _Configuration:
     """Finds a configuration's claims, its members' parameters and, for Python, their classes.
 
+    A component is instanced at most once, since its notebook's `parameters(scenario)` gives one
+    tuple per component and so cannot tell two instances apart.
+
     Args:
         gnc: the configuration.
         build: the build, one of `BUILDS`.
@@ -137,43 +140,46 @@ def _configuration(gnc: str, build: str, contract: Contract) -> _Configuration:
         What was found.
 
     Raises:
-        ValueError: a member's component claims nothing or an ID the tree lacks; for the Python
-            build, its notebook has no class named as the component; or the component has
-            parameters and the notebook no `parameters`, naming what it looked for.
+        ValueError: a component is instanced more than once; a member's component claims nothing
+            or an ID the tree lacks; for the Python build, its notebook has no class named as the
+            component; or the component has parameters and the notebook no `parameters`, naming
+            what it looked for.
     """
     fpp_types.load(contract)
     model = configuration_model(gnc, contract=contract)
     instances = [m for group in members(model, gnc).values() for m in group]
-    components = {i.component: model.components[i.component] for i in instances}
-    capabilities = {uid for component in components.values() for uid in _claims(model, component)}
-    classes = {}
-    functions = {}
-    for name, component in components.items():
-        short = name.rsplit(".", 1)[-1]
-        tuple_type = fpp_types.named(f"{name}Parameters")
-        if build != "python" and not tuple_type._fields:
-            functions[name] = None
-            continue
+    by_component: dict[str, list[str]] = {}
+    for instance in instances:
+        by_component.setdefault(instance.component, []).append(instance.name)
+    for name, named in by_component.items():
+        if len(named) > 1:
+            raise ValueError(
+                f"{name} is instanced more than once in {gnc}, as {named}, and its notebook's"
+                " `parameters(scenario)` gives one tuple per component"
+            )
+    capabilities = {uid for name in by_component for uid in _claims(model, model.components[name])}
+    found = []
+    classes = []
+    for instance in instances:
+        component = model.components[instance.component]
+        short = component.name.rsplit(".", 1)[-1]
+        tuple_type = fpp_types.named(f"{component.name}Parameters")
         notebook = _notebook(component)
         if build == "python":
-            classes[name] = getattr(notebook, short, None)
-            if not isinstance(classes[name], type):
-                raise ValueError(f"{notebook.__name__} has no class {short} for {name}")
-        function = getattr(notebook, "parameters", None) if tuple_type._fields else None
-        if tuple_type._fields and not callable(function):
-            raise ValueError(
-                f"{notebook.__name__}.parameters is not defined, and {name} has the parameters"
-                f" {list(tuple_type._fields)}"
-            )
-        functions[name] = function
-    return _Configuration(
-        tuple(sorted(capabilities)),
-        tuple(
-            _Member(i.name, fpp_types.named(f"{i.component}Parameters"), functions[i.component])
-            for i in instances
-        ),
-        tuple(classes.values()),
-    )
+            cls = getattr(notebook, short, None)
+            if not isinstance(cls, type):
+                raise ValueError(f"{notebook.__name__} has no class {short} for {component.name}")
+            classes.append(cls)
+        function = None
+        if tuple_type._fields:
+            function = getattr(notebook, "parameters", None)
+            if not callable(function):
+                raise ValueError(
+                    f"{notebook.__name__}.parameters is not defined, and {component.name} has the"
+                    f" parameters {list(tuple_type._fields)}"
+                )
+        found.append(_Member(instance.name, tuple_type, function))
+    return _Configuration(tuple(sorted(capabilities)), tuple(found), tuple(classes))
 
 
 @dataclass(frozen=True)
