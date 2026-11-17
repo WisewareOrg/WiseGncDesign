@@ -1,6 +1,7 @@
 """The deployment's pins through the ground station: commands up, responses and telemetry down.
 
-Skipped without the deployment `just fsw` builds.
+The command is F´'s own `cmdDisp.CMD_NO_OP`, and the writes are each `Svc.PassiveRateGroup`'s
+health channels, which every deployment has. Skipped without the deployment `just fsw` builds.
 """
 
 import importlib.util
@@ -23,25 +24,20 @@ if not all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configuration
 NS = 1_000_000_000
 """ns per s."""
 
-STATE = {
-    "epoch": 0.0,
-    "attitude": np.array([1.0, 0.0, 0.0, 0.0]),
-    "position": np.array([6871.0e3, 0.0, 0.0]),
-    "velocity": np.array([0.0, 5.4e3, 5.4e3]),
-}
-"""`nav.initNavState`'s arguments: a state at t = 0."""
 
-
-def _nav(writes: list[tuple[str, int, Any]]) -> list[tuple[str, int, Any]]:
-    """Nav's writes among drained ones.
+def _health(
+    writes: list[tuple[str, int, Any]], rate_groups: list[str]
+) -> list[tuple[str, int, Any]]:
+    """The rate groups' writes among drained ones.
 
     Args:
         writes: drained writes, as `decoded` gives them.
+        rate_groups: the rate groups.
 
     Returns:
-        Those of nav's channels, in order.
+        Those of the rate groups' channels, in order.
     """
-    return [write for write in writes if write[0].startswith("nav.")]
+    return [write for write in writes if write[0].startswith(tuple(f"{g}." for g in rate_groups))]
 
 
 def _responses(station: FprimeStation) -> list[tuple[int, str]]:
@@ -74,7 +70,7 @@ def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
     """
     fsw.boot(prm, parameter_ids)
 
-    station.uplink("nav.initNavState", STATE, 42)
+    station.uplink("cmdDisp.CMD_NO_OP", {}, 42)
     assert _responses(station) == []
     fsw.step(t_ns=NS, bus=bus)
 
@@ -91,60 +87,58 @@ def test_a_packet_larger_than_f_prime_s_buffer_is_refused_naming_its_size(fsw: M
         fsw.uplink(bytes(10_000), 1)
 
 
-def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
+def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
     fsw: ModuleType,
     station: FprimeStation,
+    rate_groups: list[str],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     prm: str,
     parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
-    """Nav's writes of two ticks come down in the order written, each tagged with its tick's time.
+    """Each rate group's writes of two ticks come down in the order written, tagged with each tick.
 
-    The command's handler writes `navState` alone, before the step writes the estimate.
+    Each rate group runs on both ticks, so its `CycleCount` comes down as 1 then 2, and every
+    write of the first tick before every write of the second.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        rate_groups: the copy's rate groups.
         decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
     fsw.boot(prm, parameter_ids)
-    station.uplink("nav.initNavState", STATE, 1)
     fsw.step(t_ns=NS, bus=bus)
     fsw.step(t_ns=2 * NS, bus=bus)
 
-    writes = _nav(decoded(station))
+    writes = _health(decoded(station), rate_groups)
 
-    estimate = ["nav.navState", "nav.bodyEciPos", "nav.bodyEciVel", "nav.bodyEciAttitude"]
-    assert [(name, t) for name, t, _ in writes] == [
-        ("nav.navState", NS),
-        *[(name, NS) for name in estimate],
-        *[(name, 2 * NS) for name in estimate],
-    ]
-    assert [value for name, _, value in writes if name == "nav.navState"] == [
-        "initialized",
-        "propagated",
-        "propagated",
-    ]
-    assert _nav(decoded(station)) == []
+    assert [t for _, t, _ in writes] == sorted(t for _, t, _ in writes)
+    assert {t for _, t, _ in writes} == {NS, 2 * NS}
+    for group in rate_groups:
+        counts = [(t, v) for n, t, v in writes if n == f"{group}.CycleCount"]
+        assert counts == [(NS, 1), (2 * NS, 2)], group
+    assert _health(decoded(station), rate_groups) == []
 
 
 def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
     fsw: ModuleType,
     station: FprimeStation,
+    rate_groups: list[str],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     prm: str,
     parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
-    """A tick at 1.500007 s tags its write with that time in ns, microseconds included.
+    """A tick at 1.500007 s tags its writes with that time in ns, microseconds included.
 
     Args:
         fsw: the test's copy of the deployment.
         station: the station on it.
+        rate_groups: the copy's rate groups.
         decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
@@ -155,55 +149,9 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
 
     fsw.step(t_ns=t_ns, bus=bus)
 
-    assert _nav(decoded(station)) == [("nav.navState", t_ns, "idle")]
-
-
-def test_the_rate_group_s_health_repeats_on_the_stub_clock(
-    fsw: ModuleType,
-    station: FprimeStation,
-    prm: str,
-    parameter_ids: list[int],
-    bus: list[tuple[int, bytes]],
-):
-    """With nav propagating, every cycle time the rate group writes is 0, on F´'s stub clock.
-
-    On the wall clock some cycles take a microsecond or more, so a cycle time that is not 0 shows a
-    deployment without the stub; on a much faster host it could still read 0. How often the rate
-    group runs is `test_each_rate_group_runs_once_every_divider_ticks`'s.
-
-    Args:
-        fsw: the test's copy of the deployment.
-        station: the station on it.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its LabBusDriver port.
-    """
-    ticks = 500
-    fsw.boot(prm, parameter_ids)
-    station.uplink("nav.initNavState", STATE, 1)
-    station.telemetry()
-
-    for tick in range(1, ticks + 1):
-        fsw.step(t_ns=tick * NS, bus=bus)
-
-    writes = station.telemetry()
-
-    def values(channel: str) -> np.ndarray:
-        """The values the rate group wrote to one channel.
-
-        Args:
-            channel: the channel's name within `navRateGroup`.
-
-        Returns:
-            Its values, oldest first.
-        """
-        name = f"navRateGroup.{channel}"
-        return station.values(name, [raw for written, _, raw in writes if written == name])
-
-    cycle_times = values("CycleTime")
-    assert cycle_times.size
-    assert not cycle_times.any()
-    assert not values("MaxCycleTime").any()
+    writes = _health(decoded(station), rate_groups)
+    assert writes
+    assert {t for _, t, _ in writes} == {t_ns}
 
 
 def test_each_rate_group_runs_once_every_divider_ticks(
