@@ -113,8 +113,7 @@ def _claims(model: Model, component: Component) -> list[str]:
 def _notebook(component: Component) -> Any:
     """The notebook of a component's algorithm, imported by its dotted name.
 
-    The notebook is `<folder>/<folder>.py` beside the component's `.fpp`. A notebook missing, or an
-    exception the notebook raises while importing, propagates as itself.
+    The notebook is `<folder>/<folder>.py` beside the component's `.fpp`.
 
     Args:
         component: the component.
