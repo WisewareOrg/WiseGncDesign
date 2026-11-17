@@ -411,7 +411,8 @@ def test_one_configuration_flown_on_both_builds_is_two_flights(configuration: st
 CLAIMS = """
 module ClaimsMock {{
 
-  @ A test mock whose claims are its annotation lines; it provides an estimate in prose
+  @ A test mock whose claims are its annotation lines
+  @ provides an estimate, in prose and not as a claim
 {claims}
   passive component Claims {{
     sync input port schedIn: Svc.Sched
