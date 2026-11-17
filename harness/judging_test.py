@@ -680,6 +680,8 @@ def test_the_notebook_judge_raises_naming_an_analyzer_that_errors(
 ) -> None:
     """An analyzer that errors, in its call or its setup, raises, naming its test by node ID.
 
+    The error carries the analyzers' run's output, its summary among it.
+
     The flight's cases fail SRS901, so only the analyzer's own error tells the two apart.
 
     Args:
@@ -697,5 +699,7 @@ def test_the_notebook_judge_raises_naming_an_analyzer_that_errors(
     monkeypatch.setattr(requirements_tree, "ROOT", project.path)
 
     test = re.escape("analysis/test_attitude_knowledge.py::test_attitude_knowledge[SRS901]")
-    with pytest.raises(RuntimeError, match=rf"errored rather than judging:\n- {test}: "):
+    with pytest.raises(RuntimeError, match=rf"errored rather than judging:\n- {test}: ") as raised:
         notebook.judge()
+
+    assert "short test summary info" in str(raised.value)

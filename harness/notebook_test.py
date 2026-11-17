@@ -16,7 +16,6 @@ x = 1
 """
 
 
-@pytest.mark.xdist_group("notebooks")
 def test_an_error_in_a_notebook_only_cell_fails_the_run(tmp_path: Path) -> None:
     """The seeded error: a notebook-only cell that raises fails the run.
 
@@ -30,8 +29,7 @@ def test_an_error_in_a_notebook_only_cell_fails_the_run(tmp_path: Path) -> None:
         run_notebook(notebook)
 
 
-@pytest.mark.xdist_group("notebooks")
-def test_each_run_flies_and_judges_in_a_session_root_of_its_own(tmp_path: Path) -> None:
+def test_each_run_finds_a_session_of_its_own_outside_the_notebook_s_folder(tmp_path: Path) -> None:
     """Two notebooks in one folder find two sessions, neither the folder's own `monte_carlo`.
 
     So one notebook test's flights and judging never see another's, however the tests are run.
@@ -54,7 +52,24 @@ def test_each_run_flies_and_judges_in_a_session_root_of_its_own(tmp_path: Path) 
         assert not session.is_relative_to(tmp_path), session
 
 
-@pytest.mark.xdist_group("notebooks")
+def test_each_run_s_kernel_listens_on_files_of_its_own_not_tcp_ports(tmp_path: Path) -> None:
+    """The kernel talks over IPC sockets of the run's own, never TCP ports kernels race for.
+
+    Args:
+        tmp_path: the notebook's folder.
+    """
+    notebook = tmp_path / "transport.py"
+    body = (
+        "from ipykernel.connect import get_connection_info; "
+        "info = get_connection_info(unpack=True); "
+        'assert info["transport"] == "ipc", info["transport"]; '
+        f'assert not info["ip"].startswith(r"{tmp_path}"), info["ip"]'
+    )
+    notebook.write_text(CELLS.format(body=body))
+
+    run_notebook(notebook)
+
+
 def test_the_run_is_capped_and_names_the_notebook_as_its_session(tmp_path: Path) -> None:
     """The kernel sees the cap and the notebook's path, so a run cannot fly the full campaign.
 

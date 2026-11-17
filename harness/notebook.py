@@ -10,6 +10,7 @@ end in a kernel, as the test suite does.
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,30 @@ from harness import requirements_tree
 from harness.judging import skipped_folders
 
 KERNEL = "wise-gnc-design"
+
+_EXECUTE = """
+import sys
+from pathlib import Path
+
+import jupytext
+import nbformat
+from jupytext.kernels import kernelspec_from_language
+from nbclient import NotebookClient
+from traitlets.config import Config
+
+path, out, ip = sys.argv[1:]
+notebook = jupytext.read(path)
+if not notebook.metadata.get("kernelspec", {}).get("name"):
+    language = notebook.metadata["jupytext"]["main_language"]
+    notebook.metadata["kernelspec"] = kernelspec_from_language(language)
+config = Config({"KernelManager": {"transport": "ipc", "ip": ip}})
+resources = {"metadata": {"path": str(Path(path).parent)}}
+NotebookClient(notebook, timeout=None, resources=resources, config=config).execute()
+nbformat.write(notebook, out)
+"""
+"""Executes a percent-format notebook in its folder, as `jupytext --execute` does, in the kernel
+jupytext picks for its language, over IPC sockets at a path prefix given: `<notebook> <executed
+copy> <socket prefix>`."""
 
 
 def _report() -> Path:
@@ -102,7 +127,8 @@ def judge() -> pd.DataFrame:
             raise RuntimeError(f"judging failed ({result.returncode}):\n{out}")
         errored = _errored(report)
     if errored:
-        raise RuntimeError("analyzers errored rather than judging:\n" + "\n".join(errored))
+        errors = "\n".join(errored)
+        raise RuntimeError(f"analyzers errored rather than judging:\n{errors}\n{result.stdout}")
     summary = result.stdout.partition("short test summary info")[2].splitlines()[1:]
     print("\n".join(summary) if summary else result.stdout.strip() or result.stderr)
     skipped = skipped_folders(current_session(), requirements_tree.ROOT)
@@ -138,9 +164,10 @@ def run_notebook(path: Path) -> None:
     The kernel runs in the notebook's folder, as in Lab, so the session it finds is the one its
     flights land in. Its sessions are kept in a temporary directory of the run's own, the `sim_out`
     every pytest the run starts takes through `PYTEST_ADDOPTS`, so two runs at once, or one run
-    and the project's own sessions, never fly or judge in one session. The executed copy goes to
-    that directory too, never beside the notebook. Cells that only the notebook runs, such as
-    those that judge and plot, run too.
+    and the project's own sessions, never fly or judge in one session. The kernel listens on IPC
+    sockets in that directory, not TCP ports, which kernels started at once can race to bind. The
+    executed copy goes to that directory too, never beside the notebook. Cells that only the
+    notebook runs, such as those that judge and plot, run too.
 
     Args:
         path: the notebook's percent-format file.
@@ -153,19 +180,10 @@ def run_notebook(path: Path) -> None:
             f"the {KERNEL} kernel is not registered; run `just local` or `just pinned`"
         )
     with tempfile.TemporaryDirectory() as tmp:
-        addopts = f"{os.environ.get('PYTEST_ADDOPTS', '')} -o sim_out={tmp}/sessions"
+        sessions = shlex.quote(f"{tmp}/sessions")
+        addopts = f"{os.environ.get('PYTEST_ADDOPTS', '')} -o sim_out={sessions}"
         result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "jupytext",
-                "--execute",
-                "--run-path",
-                str(path.parent),
-                str(path),
-                "-o",
-                f"{tmp}/run.ipynb",
-            ],
+            [sys.executable, "-c", _EXECUTE, str(path), f"{tmp}/run.ipynb", f"{tmp}/kernel"],
             env={
                 **os.environ,
                 "JPY_SESSION_NAME": str(path),
