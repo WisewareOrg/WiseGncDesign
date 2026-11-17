@@ -9,6 +9,7 @@ all linked by the scenario TST901.
 
 import json
 import math
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -645,43 +646,56 @@ def test_the_notebook_judge_raises_when_the_analysis_run_itself_fails(
         notebook.judge()
 
 
-@pytest.mark.parametrize(
-    ("edit", "raises"),
-    [
-        (None, False),
-        (("tlm_t/nav.bodyEciAttitude", "tlm_t/nav.noSuchChannel"), True),
-    ],
-    ids=["failed-rung", "analyzer-error"],
-)
-def test_the_notebook_judge_reports_a_failed_rung_and_raises_on_an_analyzer_error(
-    project: pytest.Pytester,
-    monkeypatch: pytest.MonkeyPatch,
-    edit: tuple[str, str] | None,
-    raises: bool,
+def test_the_notebook_judge_reports_a_failed_rung_in_its_matrix(
+    project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A rung that fails is a verdict in the matrix; an analyzer that errors raises, named.
-
-    The flight's cases fail SRS901 either way; the attitude analyzer reads a channel the run lacks
-    in the second case, so it crashes with a `KeyError` before it judges.
+    """A rung the flight's cases fail is a `fail` verdict in the matrix, not an error.
 
     Args:
         project: the project.
         monkeypatch: the monkeypatch fixture.
-        edit: `(old, new)` applied to the attitude analyzer, or none.
-        raises: whether `judge()` raises.
     """
     write_cases(session(project), bad=(1, 2, 3), flight=only("SRS901"))
-    analyzer = project.path / "analysis" / "test_attitude_knowledge.py"
-    if edit:
-        text = analyzer.read_text()
-        assert edit[0] in text
-        analyzer.write_text(text.replace(*edit))
     monkeypatch.chdir(project.path)
     monkeypatch.setattr(requirements_tree, "ROOT", project.path)
 
-    if raises:
-        with pytest.raises(RuntimeError, match=r"test_attitude_knowledge\[SRS901\].*KeyError"):
-            notebook.judge()
-    else:
-        matrix = notebook.judge()
-        assert matrix.to_dict() == {"nb: vehicle / fsw_alpha": {"SRS901 SRS901": "fail 3/1"}}
+    matrix = notebook.judge()
+
+    assert matrix.to_dict() == {"nb: vehicle / fsw_alpha": {"SRS901 SRS901": "fail 3/1"}}
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        ("tlm_t/nav.bodyEciAttitude", "tlm_t/nav.noSuchChannel"),
+        (
+            "    verdict: Callable[..., None],\n",
+            "    verdict: Callable[..., None],\n    no_such_fixture: None,\n",
+        ),
+    ],
+    ids=["crash-in-the-call", "error-in-setup"],
+)
+def test_the_notebook_judge_raises_naming_an_analyzer_that_errors(
+    project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, edit: tuple[str, str]
+) -> None:
+    """An analyzer that errors, in its call or its setup, raises, naming its test by node ID.
+
+    The flight's cases fail SRS901, so only the analyzer's own error tells the two apart.
+
+    Args:
+        project: the project.
+        monkeypatch: the monkeypatch fixture.
+        edit: `(old, new)` applied to the attitude analyzer: a channel the run lacks, or a fixture
+            nothing defines.
+    """
+    write_cases(session(project), bad=(1, 2, 3), flight=only("SRS901"))
+    analyzer = project.path / "analysis" / "test_attitude_knowledge.py"
+    text = analyzer.read_text()
+    assert edit[0] in text
+    analyzer.write_text(text.replace(*edit))
+    monkeypatch.chdir(project.path)
+    monkeypatch.setattr(requirements_tree, "ROOT", project.path)
+
+    test = re.escape("analysis/test_attitude_knowledge.py::test_attitude_knowledge[SRS901]")
+    with pytest.raises(RuntimeError, match=rf"errored rather than judging:\n- {test}: "):
+        notebook.judge()
