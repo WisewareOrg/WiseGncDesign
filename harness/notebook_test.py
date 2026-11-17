@@ -47,17 +47,23 @@ def test_an_error_in_a_notebook_only_cell_fails_the_run(tmp_path: Path) -> None:
 def test_the_run_is_capped_and_names_the_notebook_as_its_session(tmp_path: Path) -> None:
     """The kernel sees the cap and the notebook's path, so a run cannot fly the full campaign.
 
+    It runs in the notebook's folder, as in Lab, so it finds the session the notebook's flights
+    land in; the executed copy is written elsewhere.
+
     Args:
         tmp_path: the test's directory.
     """
     notebook = tmp_path / "env.py"
     body = (
         'import os; assert os.environ["WISE_DYNAMICS_CAPPED"] == "1"; '
-        f'assert os.environ["JPY_SESSION_NAME"] == r"{notebook}"'
+        f'assert os.environ["JPY_SESSION_NAME"] == r"{notebook}"; '
+        f'assert os.getcwd() == r"{tmp_path}"'
     )
     notebook.write_text(CELLS.format(body=body))
 
     run_notebook(notebook)
+
+    assert [path.name for path in tmp_path.iterdir()] == ["env.py"]
 
 
 def test_an_unregistered_kernel_fails_the_run_naming_the_fix(

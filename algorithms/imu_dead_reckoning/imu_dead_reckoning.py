@@ -405,9 +405,13 @@ globals().update(mission_tests(*MISSIONS))
 # judge()
 
 # %% active="ipynb"
+# # Parity runs only where the F´ build exists, and then must compare a twin per scenario at least.
+# import importlib.util
+#
 # from harness.parity import session_parity
 #
-# session_parity()
+# if importlib.util.find_spec(f"lab._wise_fsw_{MISSION.gnc}") is not None:
+#     assert session_parity() >= len(MISSION.scenarios)
 
 # %% active="ipynb"
 # runs = load_runs(Test_imu_spacecraft.test_ImuDeadReckoning_python_leo500)

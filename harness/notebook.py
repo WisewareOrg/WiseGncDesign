@@ -101,8 +101,9 @@ def plots(requirement_id: str) -> None:
 def run_notebook(path: Path) -> None:
     """Execute a notebook end to end in the `wise-gnc-design` kernel, capped at two cases a flight.
 
-    The executed copy goes to a temporary directory, never beside the notebook. Cells that only
-    the notebook runs, such as those that judge and plot, run too.
+    The kernel runs in the notebook's folder, as in Lab, so the session it finds is the one its
+    flights land in. The executed copy goes to a temporary directory, never beside the notebook.
+    Cells that only the notebook runs, such as those that judge and plot, run too.
 
     Args:
         path: the notebook's percent-format file.
@@ -116,7 +117,17 @@ def run_notebook(path: Path) -> None:
         )
     with tempfile.TemporaryDirectory() as tmp:
         result = subprocess.run(
-            [sys.executable, "-m", "jupytext", "--execute", str(path), "-o", f"{tmp}/run.ipynb"],
+            [
+                sys.executable,
+                "-m",
+                "jupytext",
+                "--execute",
+                "--run-path",
+                str(path.parent),
+                str(path),
+                "-o",
+                f"{tmp}/run.ipynb",
+            ],
             env={**os.environ, "JPY_SESSION_NAME": str(path), "WISE_DYNAMICS_CAPPED": "1"},
             capture_output=True,
             text=True,
