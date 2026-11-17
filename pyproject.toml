@@ -34,7 +34,7 @@ fprime = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-gds==4.4.0", "fprime-too
 
 [tool.uv.sources]
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "20245c24028c13fc15082ea5006edb0c6750d92a" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "b7203fe4075e66740542f7ac476ac65d4f6a6208" }
 
 [build-system]
 requires = ["hatchling"]
