@@ -25,7 +25,7 @@ from harness.parity import parity, session_parity
 GNC = "MockFlight"
 MODEL = configuration_model(GNC, contract=MOCK)
 [[GROUP, (MEMBER,)]] = members(MODEL, GNC).items()
-INSTANCE = MEMBER.name.removeprefix(f"{GNC}.")
+INSTANCE = MEMBER.name.split(".", 1)[1]
 COMPONENT = MODEL.components[MEMBER.component]
 FLOAT = next(c.name for c in COMPONENT.channels if isinstance(MODEL.types.get(c.type), Array))
 ENUM = next(c.name for c in COMPONENT.channels if isinstance(MODEL.types.get(c.type), Enum))
@@ -98,19 +98,20 @@ def _put(f: h5py.File, name: str, values: np.ndarray) -> None:
         f[name] = values
 
 
-def _write_flight(folder: Path, build: str, scenario: str, nodeid: str) -> None:
-    """Write one flight's folder as a campaign leaves it, its values the same for every build.
+def _write_flight(folder: Path, build: str, scenario: str, gnc: str, nodeid: str) -> None:
+    """Write one flight of `GNC` as a campaign leaves it, its values the same for every build.
 
     Args:
         folder: the flight's folder.
         build: `"python"` or `"fprime"`.
         scenario: the TST ID it flew.
+        gnc: the configuration its `flight.json` names.
         nodeid: the test's node ID.
     """
     folder.mkdir(parents=True)
     (folder / "planned.json").write_text(json.dumps({"runs": CASES, "nodeid": nodeid}))
     (folder / "flight.json").write_text(
-        json.dumps({"scenario": scenario, "fsw": {"gnc": GNC, "build": build}})
+        json.dumps({"scenario": scenario, "fsw": {"gnc": gnc, "build": build}})
     )
     for case in range(CASES):
         rng = np.random.default_rng(case)
@@ -138,26 +139,35 @@ def fly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Flier:
         monkeypatch: points the requirements tree's root at `tmp_path`.
 
     Returns:
-        A function taking the build, and optionally the scenario and the notebook, writing that
-        flight of `GNC` on one vehicle and returning its folder.
+        A function taking the build, and optionally the scenario, the notebook, the vehicle's
+        class and the configuration `flight.json` names, writing that flight and returning its
+        folder.
     """
     monkeypatch.setattr(requirements_tree, "ROOT", tmp_path)
     (tmp_path / "notebook.py").touch()
 
-    def flight(build: str, scenario: str = "TST901", notebook: str = "notebook") -> Path:
+    def flight(
+        build: str,
+        scenario: str = "TST901",
+        notebook: str = "notebook",
+        vehicle: str = "Test_vehicle",
+        gnc: str = GNC,
+    ) -> Path:
         """Write one flight.
 
         Args:
             build: `"python"` or `"fprime"`.
             scenario: the TST ID it flew.
             notebook: the notebook it was flown from, without `.py`.
+            vehicle: its vehicle's test class.
+            gnc: the configuration its `flight.json` names.
 
         Returns:
             Its folder.
         """
-        test = f"test_{GNC}_{build}_{scenario}"
-        folder = tmp_path / "session" / notebook / "Test_vehicle" / test
-        _write_flight(folder, build, scenario, f"{notebook}.py::Test_vehicle::{test}")
+        test = f"test_{gnc}_{build}_{scenario}"
+        folder = tmp_path / "session" / notebook / vehicle / test
+        _write_flight(folder, build, scenario, gnc, f"{notebook}.py::{vehicle}::{test}")
         return folder
 
     return flight
@@ -321,16 +331,26 @@ def _extras(folder: Path) -> None:
         _dataset(folder, f"tlm_t/{name}", lambda _: np.arange(WRITES, dtype=float))
 
 
-def _record(folder: Path) -> None:
-    """Change the parameter's value in case 0's record.
+def _record(folder: Path, change: Callable[[dict[str, Any]], Any]) -> None:
+    """Change the member's parameters in case 0's record in place.
 
     Args:
         folder: the flight's folder.
+        change: takes the member's parameters by name and changes them.
     """
     path = run_path(folder, 0).with_suffix(".prm.json")
     record = json.loads(path.read_text())
-    record[MEMBER.name][PARAMETER] += 1.0
+    change(record[MEMBER.name])
     path.write_text(json.dumps(record))
+
+
+def _bump(parameters: dict[str, Any]) -> None:
+    """Change the parameter's value.
+
+    Args:
+        parameters: the member's parameters by name.
+    """
+    parameters[PARAMETER] += 1.0
 
 
 def _response(field: str, value: Any) -> Callable[[list[dict[str, Any]]], None]:
@@ -376,6 +396,7 @@ def _planned(folder: Path) -> None:
 
 FLOAT_TLM = f"tlm/{INSTANCE}.{FLOAT}"
 COMMAND = f"{INSTANCE}.{ARGUED.name}"
+OTHER_COMMAND = f"{INSTANCE}.{next(c.name for c in COMPONENT.commands if c != ARGUED)}"
 
 CHANGES = [
     ("identical", lambda t: None, None),
@@ -416,14 +437,55 @@ CHANGES = [
         lambda t: _commands(t.fprime, _response("response_t_s", 99.0)),
         f"{COMMAND}: response_t_s ",
     ),
-    ("parameter", lambda t: _record(t.fprime), "parameter record"),
+    (
+        "command-time",
+        lambda t: _commands(t.fprime, _response("t_s", 99.0)),
+        f"{COMMAND}: t_s ",
+    ),
+    (
+        "command-name",
+        lambda t: _commands(t.fprime, _response("name", OTHER_COMMAND)),
+        f"{COMMAND}: name ",
+    ),
+    (
+        "argument-missing",
+        lambda t: _commands(t.fprime, lambda log: _entry(log)["args"].pop(ARGUMENT)),
+        f"{COMMAND}: arguments ",
+    ),
+    (
+        "shape",
+        lambda t: _dataset(t.fprime, FLOAT_TLM, lambda v: v[:, :-1]),
+        f"{FLOAT_TLM} is float64",
+    ),
+    ("parameter", lambda t: _record(t.fprime, _bump), f"differs in ['{MEMBER.name}.{PARAMETER}']"),
+    (
+        "parameter-one-side",
+        lambda t: _record(t.fprime, lambda parameters: parameters.pop(PARAMETER)),
+        f"differs in ['{MEMBER.name}.{PARAMETER}']",
+    ),
     ("case-one-side", lambda t: run_path(t.fprime, 1).unlink(), "case 1"),
-    ("crash", lambda t: _crash(t.fprime), "case 1"),
+    ("crash-fprime", lambda t: _crash(t.fprime), "case 1: crashed on fprime"),
+    ("crash-python", lambda t: _crash(t.python), "case 1: crashed on python"),
+    ("crash-both", lambda t: [_crash(side) for side in t], "case 1: crashed on python and fprime"),
     ("planned", lambda t: _planned(t.fprime), "planned"),
     ("extras-fprime", lambda t: _extras(t.fprime), None),
     ("extras-python", lambda t: _extras(t.python), None),
 ]
 """Each change of an identical twin, with a fragment of the one problem it makes, or None."""
+
+MALFORMED = [
+    (
+        "write-times-missing",
+        lambda t: _dataset(t.fprime, f"tlm_t/{INSTANCE}.{FLOAT}", lambda v: None),
+        KeyError,
+    ),
+    (
+        "record-missing",
+        lambda t: run_path(t.fprime, 0).with_suffix(".prm.json").unlink(),
+        FileNotFoundError,
+    ),
+]
+"""Each change leaving a case's run without a file or dataset the harness always writes with it."""
 
 
 @pytest.mark.parametrize(
@@ -450,12 +512,37 @@ def test_parity_reports_each_compared_difference_once_and_never_an_extra(
         assert problem in found[0]
 
 
+PYTHON = {"build": "python"}
+FPRIME = {"build": "fprime"}
+
+
+@pytest.mark.parametrize(
+    ("change", "error"), [m[1:] for m in MALFORMED], ids=[m[0] for m in MALFORMED]
+)
+def test_a_case_missing_what_the_harness_writes_with_its_run_raises(
+    twin: Twin, change: Callable[[Twin], None], error: type[Exception]
+) -> None:
+    """A malformed case is not a disagreement: parity raises rather than reporting it.
+
+    Args:
+        twin: an identical twin.
+        change: removes a channel's write times or the case's parameter record on one side.
+        error: the exception reading the missing item raises.
+    """
+    change(twin)
+
+    with pytest.raises(error):
+        parity(GNC, twin.python, twin.fprime, contract=MOCK)
+
+
 SESSIONS = [
-    ("twin", [("python", "TST901"), ("fprime", "TST901")], False, 1, None),
-    ("twin-disagrees", [("python", "TST901"), ("fprime", "TST901")], True, 1, FLOAT_TLM),
-    ("lone-python", [("python", "TST901")], True, 0, None),
-    ("other-scenario", [("python", "TST901"), ("fprime", "TST902")], True, 0, None),
-    ("skipped", [("python", "TST901", "gone"), ("fprime", "TST901", "gone")], True, 0, None),
+    ("twin", [PYTHON, FPRIME], False, 1, None),
+    ("twin-disagrees", [PYTHON, FPRIME], True, 1, FLOAT_TLM),
+    ("lone-python", [PYTHON], True, 0, None),
+    ("other-scenario", [PYTHON, {**FPRIME, "scenario": "TST902"}], True, 0, None),
+    ("other-vehicle", [PYTHON, {**FPRIME, "vehicle": "Test_other"}], True, 0, None),
+    ("other-configuration", [PYTHON, {**FPRIME, "gnc": "OtherFlight"}], True, 0, None),
+    ("skipped", [{**PYTHON, "notebook": "gone"}, {**FPRIME, "notebook": "gone"}], True, 0, None),
 ]
 """Each session's flights, whether its F´ flights disagree, the twins compared and the problem."""
 
@@ -468,7 +555,7 @@ SESSIONS = [
 def test_session_parity_compares_each_twin_flight_json_pairs(
     fly: Flier,
     capsys: pytest.CaptureFixture[str],
-    flights: list[tuple[str, ...]],
+    flights: list[dict[str, str]],
     disagree: bool,
     compared: int,
     problem: str | None,
@@ -480,19 +567,19 @@ def test_session_parity_compares_each_twin_flight_json_pairs(
     Args:
         fly: writes a flight.
         capsys: captures the count printed.
-        flights: each flight's build, scenario and, optionally, its notebook, absent from the root.
+        flights: each flight's arguments to `fly`; the notebook `gone` is absent from the root.
         disagree: whether each F´ flight's float channel is changed beyond tolerance.
         compared: the twins compared.
         problem: a fragment of the problem raised, or None when nothing is raised.
     """
     for flight in flights:
-        folder = fly(*flight)
-        if disagree and flight[0] == "fprime":
+        folder = fly(**flight)
+        if disagree and flight["build"] == "fprime":
             _dataset(folder, FLOAT_TLM, _scaled(1e-11))
     session = requirements_tree.ROOT / "session"
 
     if problem is None:
-        session_parity(session, contract=MOCK)
+        assert session_parity(session, contract=MOCK) == compared
     else:
         with pytest.raises(AssertionError) as raised:
             session_parity(session, contract=MOCK)

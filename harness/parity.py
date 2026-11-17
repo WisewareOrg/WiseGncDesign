@@ -57,19 +57,19 @@ _ABSENT = object()
 """A parameter one record lacks."""
 
 
-def _members(gnc: str, contract: Contract) -> list[tuple[str, Component]]:
-    """The configuration's algorithm members, each by its instance's name in the sub-topology.
+def _roles(gnc: str, contract: Contract) -> list[tuple[str, Component]]:
+    """The configuration's algorithm members, each by its role: its instance's name, module dropped.
 
     Args:
         gnc: the configuration.
         contract: the contract holding it.
 
     Returns:
-        Each member's unqualified instance name, such as `nav`, with its component.
+        Each member's role, such as `nav`, as the dictionary names it, with its component.
     """
     model = configuration_model(gnc, contract=contract)
     return [
-        (instance.name.removeprefix(f"{gnc}."), model.components[instance.component])
+        (instance.name.split(".", 1)[1], model.components[instance.component])
         for group in members(model, gnc).values()
         for instance in group
     ]
@@ -113,12 +113,12 @@ def _differ(python: Any, fprime: Any, scale: float) -> str | None:
 
 
 def _telemetry(
-    instances: list[tuple[str, Component]], python: dict[str, Any], fprime: dict[str, Any]
+    roles: list[tuple[str, Component]], python: dict[str, Any], fprime: dict[str, Any]
 ) -> list[str]:
     """How one case's declared channels disagree.
 
     Args:
-        instances: the members.
+        roles: the members, by role.
         python: the Python build's run, as `read_run` gives it.
         fprime: the F´ build's run.
 
@@ -126,9 +126,9 @@ def _telemetry(
         The problems.
     """
     problems = []
-    for instance, component in instances:
+    for role, component in roles:
         for channel in component.channels:
-            tlm, tlm_t = f"tlm/{instance}.{channel.name}", f"tlm_t/{instance}.{channel.name}"
+            tlm, tlm_t = f"tlm/{role}.{channel.name}", f"tlm_t/{role}.{channel.name}"
             written = [
                 build for build, run in (("python", python), ("fprime", fprime)) if tlm in run
             ]
@@ -148,21 +148,21 @@ def _telemetry(
 
 
 def _commands(
-    instances: list[tuple[str, Component]], python: list[dict], fprime: list[dict]
+    roles: list[tuple[str, Component]],
+    python: list[dict[str, Any]],
+    fprime: list[dict[str, Any]],
 ) -> list[str]:
     """How one case's logs of commands to the members disagree.
 
     Args:
-        instances: the members.
+        roles: the members, by role.
         python: the Python build's command log.
         fprime: the F´ build's command log.
 
     Returns:
         The problems.
     """
-    declared = {
-        f"{instance}.{c.name}" for instance, component in instances for c in component.commands
-    }
+    declared = {f"{role}.{c.name}" for role, component in roles for c in component.commands}
     python = [entry for entry in python if entry["name"] in declared]
     fprime = [entry for entry in fprime if entry["name"] in declared]
     if len(python) != len(fprime):
@@ -203,6 +203,22 @@ def _commands(
     return problems
 
 
+def _record(path: Path) -> dict[str, Any]:
+    """A case's parameter record, each value by `<instance>.<parameter>`.
+
+    Args:
+        path: the record.
+
+    Returns:
+        The values.
+    """
+    return {
+        f"{instance}.{name}": value
+        for instance, values in json.loads(path.read_text()).items()
+        for name, value in values.items()
+    }
+
+
 def _parameters(python: Path, fprime: Path) -> list[str]:
     """How one case's parameter records disagree.
 
@@ -213,14 +229,7 @@ def _parameters(python: Path, fprime: Path) -> list[str]:
     Returns:
         The problem, naming each parameter that differs, or none.
     """
-    p, f = (
-        {
-            f"{instance}.{name}": value
-            for instance, values in json.loads(path.read_text()).items()
-            for name, value in values.items()
-        }
-        for path in (python, fprime)
-    )
+    p, f = _record(python), _record(fprime)
     differing = sorted(n for n in p.keys() | f.keys() if p.get(n, _ABSENT) != f.get(n, _ABSENT))
     return [f"parameter record differs in {differing}"] if differing else []
 
@@ -229,7 +238,9 @@ def parity(gnc: str, python: Path, fprime: Path, *, contract: Contract = CONTRAC
     """Every way two flights of a configuration, one on each build, disagree.
 
     A differing planned count, a case with a run file on one side only and a case that crashed on
-    either side are each a problem, and every case with a run file on both sides is compared.
+    either side are each a problem, and every case with a run file on both sides is compared. A
+    case missing what the harness always writes with its run file, its parameter record or a
+    written channel's write times, is malformed and raises as reading it does.
 
     Args:
         gnc: the configuration both flew.
@@ -240,7 +251,7 @@ def parity(gnc: str, python: Path, fprime: Path, *, contract: Contract = CONTRAC
     Returns:
         The problems, each naming its case and item; empty when the twins agree.
     """
-    instances = _members(gnc, contract)
+    roles = _roles(gnc, contract)
     results = {"python": read_test_results(python), "fprime": read_test_results(fprime)}
     problems = []
     if results["python"].planned != results["fprime"].planned:
@@ -260,8 +271,8 @@ def parity(gnc: str, python: Path, fprime: Path, *, contract: Contract = CONTRAC
             continue
         p, f = read_run(run_path(python, case)), read_run(run_path(fprime, case))
         found = [
-            *_telemetry(instances, p, f),
-            *_commands(instances, json.loads(str(p["commands"])), json.loads(str(f["commands"]))),
+            *_telemetry(roles, p, f),
+            *_commands(roles, json.loads(str(p["commands"])), json.loads(str(f["commands"]))),
             *_parameters(
                 run_path(python, case).with_suffix(".prm.json"),
                 run_path(fprime, case).with_suffix(".prm.json"),
@@ -271,7 +282,7 @@ def parity(gnc: str, python: Path, fprime: Path, *, contract: Contract = CONTRAC
     return problems
 
 
-def session_parity(session: Path | None = None, *, contract: Contract = CONTRACT) -> None:
+def session_parity(session: Path | None = None, *, contract: Contract = CONTRACT) -> int:
     """Holds every twin in a session to parity, and prints how many twins it compared.
 
     Twins are two folders under one `<notebook>/<Test_vehicle>/` whose `flight.json` agree on
@@ -281,6 +292,9 @@ def session_parity(session: Path | None = None, *, contract: Contract = CONTRACT
     Args:
         session: the session's directory; by default the active one, `current_session()`.
         contract: the contract holding the flights' configurations, the repository's by default.
+
+    Returns:
+        The number of twins compared.
 
     Raises:
         AssertionError: listing every problem `parity` finds, each naming its twin's folders.
@@ -307,3 +321,4 @@ def session_parity(session: Path | None = None, *, contract: Contract = CONTRACT
     print(f"{session}: compared {len(twins)} twin flights")
     if problems:
         raise AssertionError("\n".join(problems))
+    return len(twins)
