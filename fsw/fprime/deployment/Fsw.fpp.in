@@ -1,5 +1,8 @@
-# Rendered for each GNC sub-topology in fsw/fpp/gnc/, which must expose the ports tickIn and imuIn.
-# It wires every Cdh.BusConverter role into every configuration: LabBusDriver to cdh, cdh to GNC.
+# Rendered by fsw.codegen.deployment for each configuration the F´ build builds, whose GNC
+# sub-topology exposes the port tickIn. The Simulation group is the role wiring, generated from the
+# roles the sub-topology exposes: the k-th sensor role's LabBusDriver.busOut[k] -> cdh.<role>In and
+# cdh.<role>Out -> Gnc.<role>In, the k-th actuator role's Gnc.<role>Out -> cdh.<role>In and
+# cdh.<role>Out -> LabBusDriver.busIn[k], in Cdh.BusConverter's order.
 module WiseFsw {
 
   @ The flight software run inside the simulation: the @CONFIGURATION@ configuration's GNC, fed and
@@ -28,8 +31,7 @@ module WiseFsw {
     }
 
     connections Simulation {
-      labBusDriver.busOut[0] -> cdh.imuIn
-      cdh.imuOut -> @CONFIGURATION@.Gnc.imuIn
+@SIMULATION@
     }
 
     connections Ground {

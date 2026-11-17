@@ -1,7 +1,7 @@
 register_fprime_module(
   fsw_fprime_deployment_@CONFIGURATION@
   AUTOCODER_INPUTS
-    "${FPRIME_PROJECT_ROOT}/fsw/fpp/gnc/@CONFIGURATION@.fpp"
+    "@GNC_SUB_TOPOLOGY@"
     "${CMAKE_CURRENT_LIST_DIR}/@CONFIGURATION@Fsw.fpp"
   SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/@CONFIGURATION@FswTopology.cpp"

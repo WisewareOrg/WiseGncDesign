@@ -14,13 +14,13 @@ from types import ModuleType
 
 import pytest
 
-from fsw.codegen.deployment import configurations
+from fsw.codegen.deployment import fprime_configurations
 from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import built, dictionary_path
 
-if not all(built(c) for c in configurations()):
+if not all(built(c) for c in fprime_configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000

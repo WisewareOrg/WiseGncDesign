@@ -32,6 +32,10 @@ foreach (WISE_ALGORITHM IN LISTS WISE_ALGORITHMS)
     get_filename_component(WISE_ALGORITHM_DIR "${WISE_ALGORITHM}" DIRECTORY)
     add_fprime_subdirectory("${WISE_ALGORITHM_DIR}")
 endforeach ()
+# Every algorithm's FPP, an F´ component or not, which the deployment's render reads: an edit to
+# one reruns it.
+file(GLOB WISE_ALGORITHM_FPP CONFIGURE_DEPENDS "${FPRIME_PROJECT_ROOT}/algorithms/*/*.fpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${WISE_ALGORITHM_FPP})
 # pybind11, for the hand-written module that hosts each configuration's deployment in the
 # simulation's process, and `_wise_fsw`, the target building every configuration's extension and
 # dictionary. The F´ sub-builds only gather model information and compile nothing.

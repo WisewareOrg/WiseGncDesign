@@ -1,9 +1,10 @@
 """Fixtures every package's tests share: an F´ copy, its station, a drain, messages, parameters.
 
 The fixtures of a configuration's F´ build range over every configuration, one per GNC
-sub-topology. A fixture needing the F´ build, or the dictionary it generates, skips its test
-without it. Every pytest run loads this file, the judge's included, so the FPP model is read, and
-Basilisk and F´ are imported, only by the fixtures that need them.
+sub-topology. A fixture needing the F´ build, or the dictionary it generates, skips its test for a
+configuration the F´ build does not build, and without the build. Every pytest run loads this
+file, the judge's included, so the FPP model is read, and Basilisk and F´ are imported, only by the
+fixtures that need them.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import configurations
+from fsw.codegen.deployment import configurations, fprime_configurations
 
 if TYPE_CHECKING:
     from fsw.codegen.fpp_model import Model
@@ -65,6 +66,7 @@ def fsw(configuration: str) -> ModuleType:
     """
     from lab.power_cycle import built, power_cycle
 
+    _skip_without_fprime(configuration)
     if not built(configuration):
         pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
 
@@ -190,25 +192,23 @@ def bus_messages() -> dict[str, BusMessage]:
 
 @pytest.fixture
 def bus_by_role(
-    configuration: str, bus_messages: dict[str, BusMessage], contract_model: Model
+    configuration: str, bus_messages: dict[str, BusMessage]
 ) -> dict[str, tuple[int, bytes]]:
-    """Each role's LabBusDriver port and its bus message's bytes, as the bus emulator writes them.
+    """Each sensor role's LabBusDriver port and its message's bytes, as the emulator writes them.
 
-    The roles are the contract's `Cdh.BusConverter`'s, and each port is the one the
-    configuration's deployment wires to the role's CDH input, read from its FPP. The shared
-    deployment template, `fsw/fprime/deployment/Fsw.fpp.in`, wires every role into every
-    configuration, so a role left unwired fails the fixture with `bus_port`'s `ValueError`.
+    The roles are the sensor roles the configuration takes, those its GNC sub-topology exposes
+    (`fsw.codegen.roles.taken`), and each port is the one its deployment wires to the role's CDH
+    input, read from its FPP.
 
     Args:
         configuration: the configuration.
         bus_messages: a message of each bus struct.
-        contract_model: the contract's model, which declares the roles.
 
     Returns:
         Each role's `(port, bytes)`, by the role's name.
     """
-    from fsw.codegen.deployment import bus_port
-    from fsw.codegen.roles import roles
+    from fsw.codegen.deployment import bus_port, configuration_model
+    from fsw.codegen.roles import taken
     from lab.bus_emulator import serialize
 
     return {
@@ -216,15 +216,17 @@ def bus_by_role(
             bus_port(configuration, role.input),
             serialize(bus_messages[role.bus].payload),
         )
-        for role in roles(contract_model)
+        for role in taken(configuration_model(configuration), configuration)
+        if role.sensor
     }
 
 
 @pytest.fixture
 def messages_by_role(bus_messages: dict[str, BusMessage], contract_model: Model) -> dict[str, Any]:
-    """Each role's bus message as a Basilisk payload, as WiseDynamics' host gives a build them.
+    """Each sensor role's bus message as a Basilisk payload, as WiseDynamics' host gives a build.
 
-    The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's message.
+    The roles are the sensor roles of the contract's `Cdh.BusConverter`, each with its bus
+    struct's message.
 
     Args:
         bus_messages: a message of each bus struct.
@@ -235,18 +237,20 @@ def messages_by_role(bus_messages: dict[str, BusMessage], contract_model: Model)
     """
     from fsw.codegen.roles import roles
 
-    return {role.role: bus_messages[role.bus].payload for role in roles(contract_model)}
+    return {
+        role.role: bus_messages[role.bus].payload for role in roles(contract_model) if role.sensor
+    }
 
 
 @pytest.fixture
 def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
-    """The bus one step takes: every role's message bytes on its LabBusDriver port.
+    """The bus one step takes: every sensor role's message bytes on its LabBusDriver port.
 
     Args:
-        bus_by_role: each role's port and bytes.
+        bus_by_role: each sensor role's port and bytes.
 
     Returns:
-        `[(port, bytes)]`, a pair per role.
+        `[(port, bytes)]`, a pair per sensor role the configuration takes.
     """
     return list(bus_by_role.values())
 
@@ -404,7 +408,18 @@ def _dictionary(configuration: str) -> Path:
     """
     from lab import dictionary_path
 
+    _skip_without_fprime(configuration)
     path = dictionary_path(configuration)
     if not path.exists():
         pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
     return path
+
+
+def _skip_without_fprime(configuration: str) -> None:
+    """Skips the test asking when the F´ build does not build the configuration.
+
+    Args:
+        configuration: the configuration.
+    """
+    if configuration not in fprime_configurations():
+        pytest.skip(f"the F´ build does not build {configuration}: a member has no F´ component")

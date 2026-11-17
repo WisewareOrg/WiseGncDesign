@@ -60,8 +60,9 @@ jobs:
       # Syncs every group, registers the kernel and builds the F´ deployment the tests fly.
       - run: just _sync
       # The F´ tests skip when an extension is absent, so a build that lands any configuration's
-      # short fails here.
-      - run: uv run --no-sync python -c "import importlib; from fsw.codegen.deployment import configurations; [importlib.import_module(f'lab._wise_fsw_{c}') for c in configurations()]"
+      # short fails here: every configuration the F´ build builds, of the repository's contract and
+      # the test mocks'.
+      - run: uv run --no-sync python -c "import importlib; from fsw.codegen.deployment import CONTRACT, fprime_configurations; from fsw.mock import MOCK; [importlib.import_module(f'lab._wise_fsw_{c}') for k in (CONTRACT, MOCK) for c in fprime_configurations(contract=k)]"
       - run: uv run --no-sync pytest
       # Everything the build and the suite write must be ignored; the log names what is not.
       - run: |
