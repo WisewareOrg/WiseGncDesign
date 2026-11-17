@@ -6,6 +6,7 @@ Needs the F´ framework clone `just _sync` fetches, not an F´ build.
 import re
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numba
 import numpy as np
@@ -19,8 +20,9 @@ from fsw.codegen.deployment import (
     configuration_model,
     framework_files,
 )
+from fsw.codegen.fields import DTYPES
 from fsw.codegen.fpp_model import read
-from fsw.codegen.fpp_types import Bus, Gnc, Svc, _build, converter, named, parameters_from
+from fsw.codegen.fpp_types import Gnc, Svc, _build, converter, named, parameters_from
 from fsw.mock import edited
 from ground.dictionary import Dictionary
 
@@ -123,78 +125,63 @@ def mock(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
     return _mock(tmp_path_factory.mktemp("mock"))["Mock"]
 
 
-def _basilisk_reading() -> messaging.IMUSensorMsgPayload:
-    """An IMU reading as Basilisk writes it, every field distinct.
+def test_each_basilisk_message_converts_to_its_bus_struct_member_for_member(
+    bus_messages: dict[str, Any],
+):
+    """Each Basilisk message becomes its bus struct, each member its values in its FPP type.
 
-    Returns:
-        The payload.
+    Args:
+        bus_messages: a message of each bus struct, its members' values distinct.
     """
-    payload = messaging.IMUSensorMsgPayload()
-    payload.DVFramePlatform = [0.1, 0.2, 0.3]
-    payload.AccelPlatform = [1.0, -2.0, 9.81]
-    payload.DRFramePlatform = [0.01, 0.02, 0.03]
-    payload.AngVelPlatform = [1e-3, -2e-3, 3e-3]
-    return payload
+    assert bus_messages
+    for name, message in bus_messages.items():
+        bus = converter(type(message.payload), named(name))(message.payload)
+
+        assert type(bus) is named(name), name
+        for member in message.struct.members:
+            value = getattr(bus, member.name)
+            assert isinstance(value, np.ndarray), f"{name}.{member.name}"
+            assert value.dtype == DTYPES[member.type], f"{name}.{member.name}"
+            assert value.tolist() == message.values[member.name], f"{name}.{member.name}"
 
 
-def test_a_basilisk_reading_reaches_the_icd_through_the_bus_struct():
-    """Basilisk -> `Bus.ImuSensorMsg` -> `Gnc.ImuReading` keeps the ICD fields as float64 arrays."""
-    payload = _basilisk_reading()
+def test_a_misspelt_field_raises(mock: SimpleNamespace):
+    """A misspelt field fails building the tuple and reading it.
 
-    bus = converter(messaging.IMUSensorMsgPayload, Bus.ImuSensorMsg)(payload)
-    reading = converter(Bus.ImuSensorMsg, Gnc.ImuReading)(bus)
+    Args:
+        mock: the mock's namespace.
+    """
+    with pytest.raises(TypeError, match="rtae"):
+        mock.Reading(rtae=np.zeros(3), count=4, mode="running")
 
-    assert type(bus) is Bus.ImuSensorMsg
-    assert np.array_equal(bus.drFramePlatform, payload.DRFramePlatform)
-    assert type(reading) is Gnc.ImuReading
-    assert np.array_equal(reading.angVelPlatform, payload.AngVelPlatform)
-    assert np.array_equal(reading.accelPlatform, payload.AccelPlatform)
-    for field in (*bus, *reading):
-        assert isinstance(field, np.ndarray)
-        assert field.dtype == np.dtype("float64")
-    assert reading.angVelPlatform is not bus.angVelPlatform
-
-
-def test_a_converter_missing_a_target_field_in_its_source_fails_naming_it():
-    """The ICD has no `dvFramePlatform`, so no converter from it to the bus struct is built."""
-    with pytest.raises(ValueError, match="dvFramePlatform"):
-        converter(Gnc.ImuReading, Bus.ImuSensorMsg)
-
-
-def test_a_converter_to_a_tuple_that_is_not_a_struct_s_fails_naming_it():
-    """Telemetry is no struct, so no converter to it is built."""
-    with pytest.raises(ValueError, match="ImuDeadReckonerTelemetry"):
-        converter(Bus.ImuSensorMsg, Gnc.ImuDeadReckonerTelemetry)
-
-
-def test_a_misspelt_field_raises():
-    """A misspelt field fails building the tuple and reading it."""
-    vector = np.zeros(3)
-    with pytest.raises(TypeError, match="angVelPlatfrom"):
-        Gnc.ImuReading(angVelPlatfrom=vector, accelPlatform=vector)
-
-    reading = Gnc.ImuReading(angVelPlatform=vector, accelPlatform=vector)
+    reading = mock.Reading(rate=np.zeros(3), count=4, mode="running")
     with pytest.raises(AttributeError):
-        reading.angvelplatform  # noqa: B018
+        reading.Rate  # noqa: B018
 
 
-def test_a_struct_s_tuple_has_no_defaults():
-    """A struct's tuple is built from every field."""
-    with pytest.raises(TypeError, match="accelPlatform"):
-        Gnc.ImuReading(angVelPlatform=np.zeros(3))
+def test_a_struct_s_tuple_has_no_defaults(mock: SimpleNamespace):
+    """A struct's tuple is built from every field.
+
+    Args:
+        mock: the mock's namespace.
+    """
+    with pytest.raises(TypeError, match="count"):
+        mock.Reading(rate=np.zeros(3))
 
 
-def test_unwritten_telemetry_is_none_and_written_telemetry_is_not():
-    """Every telemetry field defaults to None; one written holds its value."""
-    position = np.array([6871.0e3, 0.0, 0.0])
+def test_unwritten_telemetry_is_none_and_written_telemetry_is_not(mock: SimpleNamespace):
+    """Every telemetry field defaults to None; one written holds its value.
 
-    telemetry = Gnc.ImuDeadReckonerTelemetry(bodyEciPos=position, navState="initialized")
+    Args:
+        mock: the mock's namespace.
+    """
+    speed = np.float64(3.5)
 
-    assert telemetry.bodyEciPos is position
-    assert telemetry.navState == "initialized"
-    assert telemetry.bodyEciVel is None
-    assert telemetry.bodyEciAttitude is None
-    assert Gnc.ImuDeadReckonerTelemetry() == (None, None, None, None)
+    telemetry = mock.SpinnerTelemetry(speed=speed)
+
+    assert telemetry.speed is speed
+    assert telemetry.mode is None
+    assert mock.SpinnerTelemetry() == (None, None)
 
 
 def test_only_an_algorithm_s_component_gets_tuples():
@@ -203,11 +190,15 @@ def test_only_an_algorithm_s_component_gets_tuples():
     assert not hasattr(Gnc, "Vector3")
 
 
-def test_the_tuples_are_immutable_and_their_fields_pass_into_numba():
-    """A field cannot be reassigned, and a tuple and its arrays are numba arguments."""
-    reading = Gnc.ImuReading(angVelPlatform=np.ones(3), accelPlatform=np.full(3, 2.0))
+def test_the_tuples_are_immutable_and_their_fields_pass_into_numba(mock: SimpleNamespace):
+    """A field cannot be reassigned, and a tuple and its arrays are numba arguments.
+
+    Args:
+        mock: the mock's namespace.
+    """
+    reading = mock.Reading(rate=np.full(3, 2.0), count=4, mode="running")
     with pytest.raises(AttributeError):
-        reading.angVelPlatform = np.zeros(3)
+        reading.rate = np.zeros(3)
 
     @numba.njit
     def norm(v: np.ndarray) -> float:
@@ -223,7 +214,7 @@ def test_the_tuples_are_immutable_and_their_fields_pass_into_numba():
 
     @numba.njit
     def total(r: tuple) -> float:
-        """The sum of a reading's elements.
+        """The sum of a reading's rate and its count.
 
         Args:
             r: the reading.
@@ -231,10 +222,10 @@ def test_the_tuples_are_immutable_and_their_fields_pass_into_numba():
         Returns:
             The sum.
         """
-        return r.angVelPlatform.sum() + r.accelPlatform.sum()
+        return r.rate.sum() + r.count
 
-    assert norm(reading.accelPlatform) == pytest.approx(np.sqrt(12.0))
-    assert total(reading) == pytest.approx(9.0)
+    assert norm(reading.rate) == pytest.approx(np.sqrt(12.0))
+    assert total(reading) == pytest.approx(10.0)
 
 
 def test_a_parameter_has_a_default_only_when_fpp_gives_one(mock: SimpleNamespace):
@@ -329,44 +320,43 @@ def test_a_converter_keeps_each_array_s_shape_and_element_type(mock: SimpleNames
 
 
 @pytest.mark.parametrize(
-    ("source", "field"),
-    [("FlatShapes", "rows"), ("WideShapes", "counts")],
-    ids=["flat array to an array of arrays", "U32 to U16"],
+    ("source", "target", "match"),
+    [
+        ("Reading", "QuaternionRate", "angVelPlatform"),
+        ("Reading", "SpinnerTelemetry", "SpinnerTelemetry"),
+        ("FlatShapes", "Shapes", "rows"),
+        ("WideShapes", "Shapes", "counts"),
+        (messaging.IMUSensorMsgPayload, "QuaternionRate", "AngVelPlatform"),
+        ("Outer", "Outer", "inner"),
+    ],
+    ids=[
+        "missing-field",
+        "not-a-struct",
+        "flat array to an array of arrays",
+        "U32 to U16",
+        "basilisk-shape",
+        "nested-struct",
+    ],
 )
-def test_a_converter_from_a_field_of_another_shape_or_type_fails_naming_it(
-    mock: SimpleNamespace, source: str, field: str
+def test_a_converter_refuses_a_field_that_breaks_the_field_rule(
+    mock: SimpleNamespace, source: str | type, target: str, match: str
 ):
-    """A source field must have its target field's shape and element type.
+    """No converter is built from a source that cannot fill its target, naming what fails.
+
+    A target field must be in the source, of its shape and element type; Basilisk's
+    three-element rate does not fill a four-element field. The target must be a struct's tuple,
+    which telemetry is not, and a target field of struct type is not converted.
 
     Args:
         mock: the mock's namespace.
-        source: the source struct, whose `field` differs from `Shapes`'.
-        field: the field that differs.
+        source: the source, a mock tuple by name or a Basilisk payload.
+        target: the target, a mock tuple by name.
+        match: what the refusal names.
     """
-    with pytest.raises(ValueError, match=field):
-        converter(getattr(mock, source), mock.Shapes)
+    source_type = getattr(mock, source) if isinstance(source, str) else source
 
-
-def test_a_converter_from_a_basilisk_field_of_another_shape_fails_naming_it(
-    mock: SimpleNamespace,
-):
-    """Basilisk's three-element rate does not fill a four-element field.
-
-    Args:
-        mock: the mock's namespace.
-    """
-    with pytest.raises(ValueError, match="AngVelPlatform"):
-        converter(messaging.IMUSensorMsgPayload, mock.QuaternionRate)
-
-
-def test_a_converter_to_a_nested_struct_field_fails_naming_it(mock: SimpleNamespace):
-    """A target field of struct type is not converted.
-
-    Args:
-        mock: the mock's namespace.
-    """
-    with pytest.raises(ValueError, match="inner"):
-        converter(mock.Outer, mock.Outer)
+    with pytest.raises(ValueError, match=match):
+        converter(source_type, getattr(mock, target))
 
 
 @pytest.mark.parametrize(

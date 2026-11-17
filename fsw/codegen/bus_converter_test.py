@@ -46,70 +46,6 @@ def test_each_field_is_copied_from_the_bus_field_of_its_name_and_extras_are_drop
     assert "extra" not in header + files["BusConverter.cpp"]
 
 
-def test_an_array_of_arrays_is_refused_by_name(converter_mock: Callable[..., Model]) -> None:
-    """A `Mat` matched by a bus `[2] Row` passes the field rule, but the CDH refuses it, naming it.
-
-    Args:
-        converter_mock: reads the mock, edited.
-    """
-    model = converter_mock(
-        ("struct B { n: [2] F64 }", "struct B { m: [2] Gnc.Row }"),
-        ("struct BIcd { n: [2] F64 }", "struct BIcd { m: Mat }"),
-    )
-    with pytest.raises(ValueError, match=r"Gnc\.BIcd\.m is \(2, 3\) float64, which the F´ CDH"):
-        render(model)
-
-
-def test_a_scalar_is_refused_by_name(converter_mock: Callable[..., Model]) -> None:
-    """A scalar matched by a bus scalar passes the field rule, but the CDH refuses it, naming it.
-
-    No struct has a scalar, so the first one adds its copy with a compiled test.
-
-    Args:
-        converter_mock: reads the mock, edited.
-    """
-    model = converter_mock(
-        ("struct A { extra", "struct A { x: F64, extra"),
-        ("struct AIcd { V", "struct AIcd { X: F64, V"),
-    )
-    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.X is \(\) float64, which the F´ CDH"):
-        render(model)
-
-
-@pytest.mark.parametrize("element", ["bool", "U32"], ids=["bool", "unused-primitive"])
-def test_an_element_type_outside_the_domain_is_refused_by_name(
-    element: str, converter_mock: Callable[..., Model]
-) -> None:
-    """A `bool` array, or one of a primitive no struct uses, passes the field rule but is refused.
-
-    Args:
-        element: the arrays' element type.
-        converter_mock: reads the mock, edited.
-    """
-    model = converter_mock(
-        ("struct A { extra", f"struct A {{ f: [2] {element}, extra"),
-        ("struct AIcd { V", f"struct AIcd {{ f: [2] {element}, V"),
-    )
-    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.f is \(2,\) \w+, which the F´ CDH"):
-        render(model)
-
-
-def test_a_field_that_is_not_a_number_is_refused_by_name(
-    converter_mock: Callable[..., Model],
-) -> None:
-    """An enum array matches by the field rule, but the F´ CDH copies numbers only, naming it.
-
-    Args:
-        converter_mock: reads the mock, edited.
-    """
-    model = converter_mock(
-        ("struct A { extra", "struct A { e: [2] Gnc.Mode, extra"),
-        ("struct AIcd { V", "struct AIcd { e: [2] Mode, V"),
-    )
-    with pytest.raises(ValueError, match=r"Gnc\.AIcd\.e is \(2,\) Gnc\.Mode, which the F´ CDH"):
-        render(model)
-
-
 def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(
     converter_mock: Callable[..., Model],
 ) -> None:
@@ -139,26 +75,81 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(
 
 
 @pytest.mark.parametrize(
-    ("extra", "named"),
+    ("edits", "match"),
     [
-        ("extra: F64", "extra is F64"),
-        ("extra: [2] bool", r"extra is \[2\] bool"),
-        ("extra: [2] U32", r"extra is \[2\] U32"),
+        (
+            (
+                ("struct B { n: [2] F64 }", "struct B { m: [2] Gnc.Row }"),
+                ("struct BIcd { n: [2] F64 }", "struct BIcd { m: Mat }"),
+            ),
+            r"Gnc\.BIcd\.m is \(2, 3\) float64, which the F´ CDH",
+        ),
+        (
+            (
+                ("struct A { extra", "struct A { x: F64, extra"),
+                ("struct AIcd { V", "struct AIcd { X: F64, V"),
+            ),
+            r"Gnc\.AIcd\.X is \(\) float64, which the F´ CDH",
+        ),
+        (
+            (
+                ("struct A { extra", "struct A { f: [2] bool, extra"),
+                ("struct AIcd { V", "struct AIcd { f: [2] bool, V"),
+            ),
+            r"Gnc\.AIcd\.f is \(2,\) bool, which the F´ CDH",
+        ),
+        (
+            (
+                ("struct A { extra", "struct A { f: [2] U32, extra"),
+                ("struct AIcd { V", "struct AIcd { f: [2] U32, V"),
+            ),
+            r"Gnc\.AIcd\.f is \(2,\) uint32, which the F´ CDH",
+        ),
+        (
+            (
+                ("struct A { extra", "struct A { e: [2] Gnc.Mode, extra"),
+                ("struct AIcd { V", "struct AIcd { e: [2] Mode, V"),
+            ),
+            r"Gnc\.AIcd\.e is \(2,\) Gnc\.Mode, which the F´ CDH",
+        ),
+        ((("extra: [2] F64", "extra: F64"),), r"Bus\.A\.extra is F64, which the bus pin"),
+        (
+            (("extra: [2] F64", "extra: [2] bool"),),
+            r"Bus\.A\.extra is \[2\] bool, which the bus pin",
+        ),
+        (
+            (("extra: [2] F64", "extra: [2] U32"),),
+            r"Bus\.A\.extra is \[2\] U32, which the bus pin",
+        ),
     ],
-    ids=["scalar", "bool", "unused-primitive"],
+    ids=[
+        "array-of-arrays",
+        "scalar",
+        "bool",
+        "unused-primitive",
+        "not-a-number",
+        "bus-scalar",
+        "bus-bool",
+        "bus-unused-primitive",
+    ],
 )
-def test_a_bus_member_outside_the_pin_s_domain_is_refused_by_name(
-    extra: str, named: str, converter_mock: Callable[..., Model]
+def test_a_field_outside_the_domain_is_refused_by_name(
+    converter_mock: Callable[..., Model], edits: tuple[tuple[str, str], ...], match: str
 ) -> None:
-    """A bus scalar, `bool` or primitive no struct uses, dropped by the CDH, is refused by the pin.
+    """A field the field rule passes but the F´ CDH or the bus pin cannot copy is refused, named.
+
+    The CDH copies arrays of numbers its structs use: an array of arrays, a scalar, a `bool` array,
+    one of a primitive no struct uses, and an enum array are refused. No struct has a scalar, so the
+    first one adds its copy with a compiled test. The bus pin refuses a bus member the CDH drops
+    that is a scalar, a `bool` array or one of a primitive no struct uses.
 
     Args:
-        extra: the member as the seeded mock declares it.
-        named: the member as the refusal names it, a pattern.
         converter_mock: reads the mock, edited.
+        edits: the mock's edits.
+        match: the refusal, naming the field.
     """
-    model = converter_mock(("extra: [2] F64", extra))
-    with pytest.raises(ValueError, match=rf"Bus\.A\.{named}, which the bus pin"):
+    model = converter_mock(*edits)
+    with pytest.raises(ValueError, match=match):
         render(model)
 
 
