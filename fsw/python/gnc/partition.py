@@ -107,7 +107,7 @@ class GncPartition:
             c.from_instance: model.instances[c.from_instance].component for c in connections
         } | {c.to_instance: model.instances[c.to_instance].component for c in connections}
         groups = rate_group_members(model, configuration)
-        [driver] = (i for i, kind in component.items() if kind == DRIVER)
+        driver = next(i for i, kind in component.items() if kind == DRIVER)
         self.rate_groups = tuple(groups)
         self._members = tuple(tuple(m.name for m in group) for group in groups.values())
         members = {m for group in self._members for m in group}
