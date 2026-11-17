@@ -94,17 +94,11 @@ class GncPartition:
         rate_groups: each rate group's qualified name, in its driver's `CycleOut` order; a frame's
             rate groups are named by their position here.
         components: each member's FPP component's qualified name, by its instance's name.
-        inputs: the sub-topology's input ports the CDH writes, each a `port` on an instance's
-            input, the driver's aside.
-        outputs: the sub-topology's output ports the CDH reads, each a `port` on an instance's
-            output.
         algorithms: each algorithm `boot` built, by its instance's unqualified name.
     """
 
     rate_groups: tuple[str, ...]
     components: dict[str, str]
-    inputs: tuple[str, ...]
-    outputs: tuple[str, ...]
     algorithms: dict[str, Any]
 
     def __init__(self, model: Model, configuration: str, classes: Sequence[type]) -> None:
@@ -183,8 +177,6 @@ class GncPartition:
             keyword = _keyword(port.instance, port.port)
             self._ports[short] = port.instance, keyword
             self._keywords[port.instance].add(keyword)
-        self.inputs = tuple(self._ports)
-        self.outputs = tuple(self._exposed.values())
         self.algorithms = {}
         self._held: dict[str, dict[str, Any]] = {}
 

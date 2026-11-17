@@ -233,8 +233,6 @@ def test_members_run_in_rate_group_order_and_an_output_reaches_a_later_member_in
     assert telemetry[0].instance == "source"
     assert gnc.algorithms["source"].parameters == "p"
     assert sorted(gnc.algorithms) == ["sink", "slow", "source"]
-    assert gnc.inputs == ("seedIn",)
-    assert gnc.outputs == ("slowOut",)
 
 
 def test_a_frame_returns_each_output_port_its_members_wrote_and_none_it_did_not(

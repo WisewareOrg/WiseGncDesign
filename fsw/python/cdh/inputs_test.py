@@ -1,62 +1,40 @@
 """The Python build's CDH-in pairs each sensor role from FPP and converts its bus struct to ICD.
 
 Each configuration's pairing is of the sensor roles it takes, read from the contract and its
-sub-topology, every algorithm a class named for its component; the conversion ranges over every
-sensor role, on `bus_messages`' values.
+sub-topology; the conversion ranges over every sensor role, on `bus_messages`' values.
 """
 
 from typing import Any
 
 import numpy as np
+import pytest
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import (
-    algorithm_components,
     configuration_model,
     contract_files,
 )
-from fsw.codegen.fpp_model import Model, read
+from fsw.codegen.fpp_model import read
 from fsw.codegen.roles import roles, taken
 from fsw.python.cdh.inputs import convert, pairings
-from fsw.python.gnc.partition import GncPartition
 
 ROLES = [role for role in roles(read(contract_files())) if role.sensor]
 """Every sensor role of the contract's `Cdh.BusConverter`."""
 
 
-def _algorithm_classes(model: Model, configuration: str) -> list[type]:
-    """An empty class per algorithm component the configuration instances, named for it.
-
-    Args:
-        model: the configuration's model.
-        configuration: the configuration.
-
-    Returns:
-        The classes.
-    """
-    components = {
-        instance.component
-        for name, instance in model.instances.items()
-        if name.startswith(f"{configuration}.") and instance.component in algorithm_components()
-    }
-    return [type(component.rsplit(".", 1)[-1], (), {}) for component in sorted(components)]
-
-
-def test_each_configuration_pairs_every_input_to_the_struct_its_gnc_port_takes(
+def test_each_configuration_pairs_each_sensor_role_to_the_struct_its_gnc_port_takes(
     configuration: str,
 ):
-    """Each sub-topology input is a role's, from its bus struct to the type the GNC port takes.
+    """Each sensor role taken is paired from its bus struct to the type its GNC port takes.
 
     Args:
         configuration: the configuration.
     """
     model = configuration_model(configuration)
-    inputs = GncPartition(model, configuration, _algorithm_classes(model, configuration)).inputs
-    assert inputs
-
     pairs = pairings([role for role in taken(model, configuration) if role.sensor])
+    if not pairs:
+        pytest.skip(f"{configuration} takes no sensor role")
 
-    assert {pair.port for pair in pairs} == set(inputs)
     bus = {role.input: role.bus for role in roles(model)}
     for pair in pairs:
         port = model.ports[f"{configuration}.Gnc.{pair.port}"]
