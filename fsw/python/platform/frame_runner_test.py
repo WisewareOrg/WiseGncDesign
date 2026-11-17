@@ -1,11 +1,11 @@
 """The Python build's frame runner, on mock GNC sub-topologies of mock algorithms.
 
-The mock's FPP, in `mock/`, is a contract of its own: a source, run every tick, whose sample feeds
-a sink, run every second tick, and a command on the source. A second mock, rendered from the
-contract into a temporary directory, takes every sensor role the contract declares into one sink,
-so a tick's messages are read and converted on the runner's own path. The mock algorithms are
-written here, named as their FPP components; they log what they are given and write what each test
-needs.
+The mock, `MockFrame` of `fsw.mock.MOCK`, flies two mock algorithms: a source, run every tick,
+whose sample feeds a sink, run every second tick, and a command on the source. A second mock,
+rendered from the contract into a temporary directory, takes every sensor role the contract
+declares into one sink, so a tick's messages are read and converted on the runner's own path. The
+mock algorithms are written here, named as their FPP components; they log what they are given and
+write what each test needs.
 """
 
 import json
@@ -18,13 +18,9 @@ import pytest
 from fsw.codegen.deployment import Contract, configuration_model
 from fsw.codegen.fpp_types import named
 from fsw.codegen.roles import Role, roles
+from fsw.mock import MOCK, sub_topology
 from fsw.python import FrameRunner
 from ground.dictionary import Dictionary
-
-MOCK_DIR = Path(__file__).resolve().with_name("mock")
-
-MOCK = Contract((MOCK_DIR / "MockGnc.fpp",), MOCK_DIR / "gnc")
-"""The mock's contract: its two algorithms, and its one GNC sub-topology, `MockFrame`."""
 
 CONFIGURATION = "MockFrame"
 """The mock's configuration."""
@@ -319,22 +315,12 @@ def roles_contract(tmp_path_factory: pytest.TempPathFactory) -> tuple[Contract, 
         "module MockGnc {\n  passive component MockSink {\n"
         f"    sync input port schedIn: Svc.Sched\n{inputs}  }}\n}}\n"
     )
-    ports = "".join(f"    port {r.input} = sink.{r.input}\n" for r in declared)
     (directory / "gnc" / "MockRoles.fpp").write_text(
-        "module MockRoles {\n"
-        "  constant tickPeriod = 1.0\n"
-        "  constant sinkDivider = 1\n"
-        "  instance rateGroupDriver: Svc.RateGroupDriver base id 0x6000\n"
-        "  instance sink: MockGnc.MockSink base id 0x6100\n"
-        "  instance sinkRateGroup: Svc.PassiveRateGroup base id 0x6200\n"
-        "  topology Gnc {\n"
-        "    instance rateGroupDriver\n    instance sink\n    instance sinkRateGroup\n"
-        "    connections RateGroups {\n"
-        "      rateGroupDriver.CycleOut[0] -> sinkRateGroup.CycleIn\n"
-        "      sinkRateGroup.RateGroupMemberOut[0] -> sink.schedIn\n"
-        "    }\n"
-        f"    port tickIn = rateGroupDriver.CycleIn\n{ports}"
-        "  }\n}\n"
+        sub_topology(
+            "MockRoles",
+            [("sink", "MockGnc.MockSink")],
+            [f"port {r.input} = sink.{r.input}" for r in declared],
+        )
     )
     return Contract((sink,), directory / "gnc"), declared
 

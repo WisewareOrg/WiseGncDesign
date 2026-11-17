@@ -8,7 +8,7 @@ rungs and two scenarios:
     SYS901 <- SRS901, SRS902, SRS904      SYS902 <- SRS903
     TST901 links SRS901, SRS902, SRS903   TST902 links SRS902
 
-Flights fly the harness's test mock, `MockFlight` of `harness.mock.MOCK`, which claims SYS901.
+Flights fly the harness's test mock, `MockFlight` of `fsw.mock.MOCK`, which claims SYS901.
 The `variants` fixture renders the other configurations a test needs from two templates.
 """
 
@@ -31,9 +31,9 @@ from wise_dynamics.basilisk.vehicles import VEHICLES
 from fsw.codegen.deployment import Contract, configuration_model, framework_files
 from fsw.codegen.fpp_model import read
 from fsw.codegen.members import members
+from fsw.mock import MOCK, sub_topology
 from harness import requirements_tree
 from harness.mission import BUILDS, Mission, _claims, _record_flight, mission_tests
-from harness.mock import MOCK
 
 VEHICLE = "imu_spacecraft"
 ALPHA = """\
@@ -65,26 +65,6 @@ PARAMETER = """    command reg port cmdRegOut
     param gain: F64
 """
 """A test mock component's one parameter, with the ports a parameter needs."""
-
-SUB_TOPOLOGY = """module {name} {{
-  constant tickPeriod = 1.0
-  constant mockDivider = 1
-  instance rateGroupDriver: Svc.RateGroupDriver base id 0x6000
-  instance mockRateGroup: Svc.PassiveRateGroup base id 0x6100
-{instances}
-  topology Gnc {{
-    instance rateGroupDriver
-    instance mockRateGroup
-{uses}
-    connections RateGroups {{
-      rateGroupDriver.CycleOut[0] -> mockRateGroup.CycleIn
-{wires}
-    }}
-    port tickIn = rateGroupDriver.CycleIn
-  }}
-}}
-"""
-"""A test mock configuration: one rate group running its members in order."""
 
 SECOND = """from fsw.codegen.fpp_types import named
 
@@ -177,20 +157,7 @@ def variants(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Contract]:
     gnc.mkdir()
     shutil.copy(MOCK.gnc / "MockFlight.fpp", gnc)
     for name, flown in VARIANTS.items():
-        (gnc / f"{name}.fpp").write_text(
-            SUB_TOPOLOGY.format(
-                name=name,
-                instances="".join(
-                    f"  instance {i}: {c} base id {0x6200 + 0x100 * n:#x}\n"
-                    for n, (i, c) in enumerate(flown)
-                ),
-                uses="".join(f"    instance {i}\n" for i, _ in flown),
-                wires="\n".join(
-                    f"      mockRateGroup.RateGroupMemberOut[{n}] -> {i}.schedIn"
-                    for n, (i, _) in enumerate(flown)
-                ),
-            )
-        )
+        (gnc / f"{name}.fpp").write_text(sub_topology(name, flown))
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.syspath_prepend(str(root))
         yield Contract((*MOCK.algorithms, *components), gnc)
@@ -211,8 +178,8 @@ def flying(*missions: str, check: str = "") -> str:
 from pathlib import Path
 
 from fsw.codegen.deployment import Contract
+from fsw.mock import MOCK
 from harness.mission import Mission, mission_tests
-from harness.mock import MOCK
 
 {check}
 
@@ -610,7 +577,7 @@ def test_the_class_a_mission_flies_is_its_notebook_module_s_own(tree: Path) -> N
     """
     [cls] = mission()._found.classes
 
-    notebook = importlib.import_module("harness.mock.mock")
+    notebook = importlib.import_module("fsw.mock.mock")
     assert cls is notebook.Mock
     assert sys.modules[cls.__module__] is notebook
 
@@ -771,8 +738,8 @@ def test_a_check_is_given_the_case_s_run_file_and_its_messages_fail_the_case(
 SELF = """
 import pytest
 
+from fsw.mock import MOCK
 from harness.mission import Mission, mission_tests
-from harness.mock import MOCK
 {before}
 globals().update(mission_tests(Mission(
     vehicle="imu_spacecraft", gnc="MockFlight", build="python", scenarios=("TST901",), contract=MOCK

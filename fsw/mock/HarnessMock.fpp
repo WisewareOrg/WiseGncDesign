@@ -27,9 +27,9 @@ module HarnessMock {
     @ Makes the next step raise
     sync command fail
 
-    include "../../fsw/fpp/interfaces/Nav/BodyEci.fppi"
-    include "../../fsw/fpp/interfaces/Nav/NavState.fppi"
-    include "../../fsw/fpp/interfaces/Nav/InitNavState.fppi"
+    include "../fpp/interfaces/Nav/BodyEci.fppi"
+    include "../fpp/interfaces/Nav/NavState.fppi"
+    include "../fpp/interfaces/Nav/InitNavState.fppi"
 
   }
 

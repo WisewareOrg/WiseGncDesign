@@ -600,8 +600,8 @@ def test_a_flown_mission_is_judged_end_to_end(
     )
     project.makepyfile(
         test_flights="""
+from fsw.mock import MOCK
 from harness.mission import Mission, mission_tests
-from harness.mock import MOCK
 
 globals().update(
     mission_tests(
