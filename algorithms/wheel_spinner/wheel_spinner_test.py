@@ -50,7 +50,6 @@ def test_the_notebook_runs_end_to_end() -> None:
     run_notebook(Path(__file__).with_name("wheel_spinner.py"))
 
 
-@pytest.mark.xdist_group("notebooks")
 def test_the_parity_notebook_runs_end_to_end() -> None:
     """Every cell of the parity notebook runs, so the two builds agree on a twin per scenario."""
     if not built("WheelSpinning"):
