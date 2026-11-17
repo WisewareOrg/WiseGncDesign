@@ -15,8 +15,9 @@ from pathlib import Path
 import numpy as np
 
 from fsw.codegen.deployment import Contract
+from fsw.codegen.roles import Role
 
-__all__ = ["ARGS", "MOCK", "edited", "sub_topology"]
+__all__ = ["ARGS", "MOCK", "device", "edited", "sub_topology"]
 
 _HERE = Path(__file__).resolve().parent
 
@@ -97,4 +98,27 @@ def sub_topology(name: str, members: Sequence[tuple[str, str]], ports: Sequence[
             for n, (i, _) in enumerate(members)
         ),
         ports="".join(f"    {port}\n" for port in ports),
+    )
+
+
+def device(name: str, roles: Sequence[Role]) -> str:
+    """A test mock component taking each sensor role's GNC input and sending each actuator role's.
+
+    Args:
+        name: the component's name, in module `MockGnc`.
+        roles: the roles: a sensor's as `sync input port <role>In`, an actuator's as `output port
+            <role>Out`, each typed by the role's GNC struct.
+
+    Returns:
+        The component's FPP, stepped by `schedIn`.
+    """
+    ports = "".join(
+        f"    sync input port {role.input}: {role.icd}\n"
+        if role.sensor
+        else f"    output port {role.output}: {role.icd}\n"
+        for role in roles
+    )
+    return (
+        f"module MockGnc {{\n  passive component {name} {{\n"
+        f"    sync input port schedIn: Svc.Sched\n{ports}  }}\n}}\n"
     )

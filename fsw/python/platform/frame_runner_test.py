@@ -1,9 +1,10 @@
 """The Python build's frame runner, on mock GNC sub-topologies of mock algorithms.
 
 The mock, `MockFrame` of `fsw.mock.MOCK`, flies two mock algorithms: a source, run every tick,
-whose sample feeds a sink, run every second tick, and a command on the source. A second mock,
-rendered from the contract into a temporary directory, takes every sensor role the contract
-declares into one sink, so a tick's messages are read and converted on the runner's own path. The
+whose sample feeds a sink, run every second tick, and a command on the source; it takes no role. A
+second mock, rendered from the contract into a temporary directory, takes every role the contract
+declares at one device, so a tick's sensor messages are read and converted, and its actuator
+commands converted and written, on the runner's own path. The
 mock algorithms are written here, named as their FPP components; they log what they are given and
 write what each test needs.
 """
@@ -14,11 +15,12 @@ from typing import Any
 
 import numpy as np
 import pytest
+from Basilisk.architecture import messaging
 
 from fsw.codegen.deployment import Contract, configuration_model
 from fsw.codegen.fpp_types import named
 from fsw.codegen.roles import Role, roles
-from fsw.mock import MOCK, sub_topology
+from fsw.mock import MOCK, device, sub_topology
 from fsw.python import FrameRunner
 from ground.dictionary import Dictionary
 
@@ -272,37 +274,49 @@ def test_boot_drops_every_command_response_and_write_not_yet_drained(runner: Fra
     assert runner.values("source.level", [raw]).tolist() == [0.0]
 
 
-class MockSink:
-    """The mock that takes every sensor role: it logs each step's inputs."""
+class MockDevice:
+    """The mock that takes every role: it logs each step's inputs, and writes its commands.
+
+    It writes each actuator role's command, `commands`, on its odd-numbered steps, counted by its
+    own step count from 1, and nothing on the others.
+
+    Attributes:
+        commands: each actuator role's command, an ICD struct's tuple, by its output port.
+    """
+
+    commands: dict[str, Any] = {}
 
     def __init__(self, parameters: Any) -> None:
-        """Logs its parameters, which are none.
+        """Logs its parameters, which are none, and starts counting its steps.
 
         Args:
             parameters: its instance's parameters, from the case's record.
         """
-        LOG.append(("sink", "boot", parameters))
+        LOG.append(("device", "boot", parameters))
+        self._steps = 0
 
     def step(self, t: float, **inputs: Any) -> tuple[Any, Any]:
-        """Logs the step and its inputs.
+        """Logs the step and its inputs, and writes the commands on an odd-numbered step.
 
         Args:
             t: s, the time.
-            **inputs: each role's input, by the role.
+            **inputs: each sensor role's input, by the role.
 
         Returns:
-            No output, and no telemetry.
+            Each actuator role's command on an odd-numbered step, else nothing, and no telemetry.
         """
-        LOG.append(("sink", "step", t, inputs))
-        return named("MockGnc.MockSinkOutputs")(), named("MockGnc.MockSinkTelemetry")()
+        self._steps += 1
+        LOG.append(("device", "step", t, inputs))
+        written = self.commands if self._steps % 2 else dict.fromkeys(self.commands)
+        return named("MockGnc.MockDeviceOutputs")(**written), named("MockGnc.MockDeviceTelemetry")()
 
 
 @pytest.fixture(scope="session")
 def roles_contract(tmp_path_factory: pytest.TempPathFactory) -> tuple[Contract, list[Role]]:
-    """A mock contract whose one sink takes every role the repository's contract declares.
+    """A mock contract whose one device takes every role the repository's contract declares.
 
-    Rendered once per session: `fpp_types.load` holds the sink as defined at one path, so a render
-    at another path would define it again.
+    Rendered once per session: `fpp_types.load` holds the device as defined at one path, so a
+    render at another path would define it again.
 
     Args:
         tmp_path_factory: where the mock is rendered.
@@ -313,39 +327,60 @@ def roles_contract(tmp_path_factory: pytest.TempPathFactory) -> tuple[Contract, 
     declared = roles(configuration_model(CONFIGURATION, contract=MOCK))
     directory = tmp_path_factory.mktemp("roles")
     (directory / "gnc").mkdir()
-    inputs = "".join(f"    sync input port {r.input}: {r.icd}\n" for r in declared)
-    sink = directory / "MockSink.fpp"
-    sink.write_text(
-        "module MockGnc {\n  passive component MockSink {\n"
-        f"    sync input port schedIn: Svc.Sched\n{inputs}  }}\n}}\n"
-    )
+    fpp = directory / "MockDevice.fpp"
+    fpp.write_text(device("MockDevice", declared))
+    ports = [r.input if r.sensor else r.output for r in declared]
     (directory / "gnc" / "MockRoles.fpp").write_text(
         sub_topology(
             "MockRoles",
-            [("sink", "MockGnc.MockSink")],
-            [f"port {r.input} = sink.{r.input}" for r in declared],
+            [("device", "MockGnc.MockDevice")],
+            [f"port {port} = device.{port}" for port in ports],
         )
     )
-    return Contract((sink,), directory / "gnc"), declared
+    return Contract((fpp,), directory / "gnc"), declared
 
 
 @pytest.fixture
-def roles_runner(roles_contract: tuple[Contract, list[Role]], tmp_path: Path) -> FrameRunner:
-    """The rendered mock configuration, flown with `MockSink`, booted, the log cleared.
+def roles_runner(
+    roles_contract: tuple[Contract, list[Role]],
+    icd_messages: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> FrameRunner:
+    """The rendered mock configuration, flown with `MockDevice`, booted, the log cleared.
+
+    The device's commands are `icd_messages`' values of each actuator role's ICD struct.
 
     Args:
         roles_contract: the rendered contract and the roles.
+        icd_messages: a value of each ICD struct, its members' values distinct.
         tmp_path: where the case's record is written.
+        monkeypatch: sets the device's commands for the test.
 
     Returns:
         The frame runner.
     """
+    commands = {r.output: icd_messages[r.icd].value for r in roles_contract[1] if not r.sensor}
+    monkeypatch.setattr(MockDevice, "commands", commands)
     record = tmp_path / "run_0000.prm.json"
-    record.write_text(json.dumps({"MockRoles.sink": {}}))
-    runner = FrameRunner("MockRoles", record, (MockSink,), contract=roles_contract[0])
+    record.write_text(json.dumps({"MockRoles.device": {}}))
+    runner = FrameRunner("MockRoles", record, (MockDevice,), contract=roles_contract[0])
     runner.boot()
     LOG.clear()
     return runner
+
+
+def _sensor_messages(declared: list[Role], bus_messages: dict[str, Any]) -> dict[str, Any]:
+    """Each sensor role's message, as the host gives a build them.
+
+    Args:
+        declared: the roles.
+        bus_messages: a message of each bus struct.
+
+    Returns:
+        Each sensor role's payload, by the role.
+    """
+    return {role.role: bus_messages[role.bus].payload for role in declared if role.sensor}
 
 
 def test_each_role_s_message_reaches_the_step_as_its_icd_struct(
@@ -353,7 +388,7 @@ def test_each_role_s_message_reaches_the_step_as_its_icd_struct(
     roles_contract: tuple[Contract, list[Role]],
     bus_messages: dict[str, Any],
 ):
-    """A tick reads each role's message and converts it, so the step gets each role's ICD struct.
+    """A tick reads each sensor role's message and converts it, so the step gets its ICD struct.
 
     Each ICD field is its bus namesake's, ignoring case, by `fsw.codegen.fields`' rule.
 
@@ -362,15 +397,15 @@ def test_each_role_s_message_reaches_the_step_as_its_icd_struct(
         roles_contract: the rendered contract and the roles.
         bus_messages: a message of each bus struct, its members' values distinct.
     """
-    declared = roles_contract[1]
-    assert declared
+    sensors = [role for role in roles_contract[1] if role.sensor]
+    assert sensors
 
-    roles_runner.tick(NS, {role.role: bus_messages[role.bus].payload for role in declared})
+    roles_runner.tick(NS, _sensor_messages(roles_contract[1], bus_messages))
 
     [(_, _, t, inputs)] = [entry for entry in LOG if entry[1] == "step"]
     assert t == 1.0
-    assert set(inputs) == {role.role for role in declared}
-    for role in declared:
+    assert set(inputs) == {role.role for role in sensors}
+    for role in sensors:
         value = inputs[role.role]
         assert isinstance(value, named(role.icd)), role.role
         bus = {m.lower(): v for m, v in bus_messages[role.bus].values.items()}
@@ -383,16 +418,58 @@ def test_a_tick_missing_a_role_s_message_is_refused_naming_the_role(
     roles_contract: tuple[Contract, list[Role]],
     bus_messages: dict[str, Any],
 ):
-    """A vehicle without one of the configuration's roles fails the tick, naming that role.
+    """A vehicle without one of the configuration's sensor roles fails the tick, naming that role.
 
     Args:
         roles_runner: the frame runner on the rendered mock.
         roles_contract: the rendered contract and the roles.
         bus_messages: a message of each bus struct.
     """
-    declared = roles_contract[1]
-    for missing in declared:
-        messages = {r.role: bus_messages[r.bus].payload for r in declared if r != missing}
+    messages = _sensor_messages(roles_contract[1], bus_messages)
+    for missing in messages:
+        others = {role: m for role, m in messages.items() if role != missing}
 
-        with pytest.raises(KeyError, match=f"takes the role {missing.role},"):
-            roles_runner.tick(NS, messages)
+        with pytest.raises(KeyError, match=f"takes the role {missing},"):
+            roles_runner.tick(NS, others)
+
+
+def test_each_actuator_role_s_command_returns_as_its_message_in_the_ticks_gnc_wrote_it(
+    roles_runner: FrameRunner,
+    roles_contract: tuple[Contract, list[Role]],
+    bus_messages: dict[str, Any],
+    icd_messages: dict[str, Any],
+):
+    """A tick returns each actuator command GNC wrote as its Basilisk payload, and none it did not.
+
+    The device writes on its first and third steps: those ticks return a fresh
+    `messaging.<Name>Payload` per actuator role, each field the ICD field of its name, ignoring
+    case, by `fsw.codegen.fields`' rule; the second tick returns nothing.
+
+    Args:
+        roles_runner: the frame runner on the rendered mock.
+        roles_contract: the rendered contract and the roles.
+        bus_messages: a message of each bus struct.
+        icd_messages: a value of each ICD struct, the device's commands among them.
+    """
+    actuators = [role for role in roles_contract[1] if not role.sensor]
+    assert actuators
+    messages = _sensor_messages(roles_contract[1], bus_messages)
+
+    ticks = [roles_runner.tick(k * NS, messages) for k in (1, 2, 3)]
+
+    assert [sorted(commands) for commands in ticks] == [
+        sorted(role.role for role in actuators),
+        [],
+        sorted(role.role for role in actuators),
+    ]
+    payloads = {n.lower(): n for n in dir(messaging) if n.endswith("Payload")}
+    for commands in (ticks[0], ticks[2]):
+        for role in actuators:
+            payload = commands[role.role]
+            name = payloads[role.bus.removeprefix("Bus.").lower() + "payload"]
+            assert type(payload) is getattr(messaging, name), role.role
+            icd = {m.lower(): v for m, v in icd_messages[role.icd].values.items()}
+            for field in type(payload).__dtype__.names:
+                np.testing.assert_array_equal(
+                    getattr(payload, field), icd[field.lower()], role.role
+                )

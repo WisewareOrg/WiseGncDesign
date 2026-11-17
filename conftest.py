@@ -190,6 +190,51 @@ def bus_messages() -> dict[str, BusMessage]:
     return messages
 
 
+class IcdMessage(NamedTuple):
+    """A GNC struct's value.
+
+    Attributes:
+        value: the struct's `fsw.codegen.fpp_types` tuple, its members' values set.
+        values: each member's values by its FPP name, in the struct's order.
+    """
+
+    value: Any
+    values: dict[str, Any]
+
+
+@pytest.fixture
+def icd_messages(contract_model: Model) -> dict[str, IcdMessage]:
+    """A value of every GNC struct a role the contract declares carries, every value distinct.
+
+    Each element of each member of each struct takes the next of 0.5, 1.5, 2.5, ..., in its FPP
+    type and shape, so a field or element out of place changes the result.
+
+    Args:
+        contract_model: the contract's model, which declares the roles and shapes the structs.
+
+    Returns:
+        Each struct's value, by its qualified name.
+    """
+    from fsw.codegen import fpp_types
+    from fsw.codegen.deployment import CONTRACT
+    from fsw.codegen.fields import form
+    from fsw.codegen.roles import roles
+
+    fpp_types.load(CONTRACT)
+    counter = itertools.count()
+    messages = {}
+    for name in dict.fromkeys(role.icd for role in roles(contract_model)):
+        values = {}
+        for member in contract_model.types[name].members:
+            shape, element = form(member, contract_model.types)
+            count = int(np.prod(shape, dtype=int))
+            elements = [next(counter) + 0.5 for _ in range(count)]
+            values[member.name] = np.array(elements, element).reshape(shape)
+        value = fpp_types.named(name)(**{m: v.copy() for m, v in values.items()})
+        messages[name] = IcdMessage(value, values)
+    return messages
+
+
 @pytest.fixture
 def bus_by_role(
     configuration: str, bus_messages: dict[str, BusMessage]

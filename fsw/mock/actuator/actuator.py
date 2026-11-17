@@ -8,7 +8,10 @@ from fsw.codegen.fpp_types import named
 
 
 class Actuator:
-    """Sends one fixed wheel command at every step, as `Actuator.cpp` does."""
+    """Sends one fixed wheel command at every step, as `Actuator.cpp` does: element i (i + 1) mN*m.
+
+    The command stays inside a wheel's torque limit, so a flight checks the command, not the clamp.
+    """
 
     def __init__(self, parameters: Any) -> None:
         """Keeps nothing: it has no parameters.
