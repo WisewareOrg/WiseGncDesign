@@ -38,13 +38,16 @@ def _bus_out_ports() -> int:
     return bus_out.size
 
 
-def _stepped(prm: str, parameter_ids: list[int], port: int, data: bytes) -> ModuleType:
+def _stepped(
+    configuration: str, prm: str, parameter_ids: list[int], port: int, data: bytes
+) -> ModuleType:
     """A fresh copy, booted and stepped once on a role's own message on its port.
 
     A copy that raised is never reused, so each refused push flies its own copy, and the clean
     step first shows the port delivers, so a later raise comes from the push under test.
 
     Args:
+        configuration: the configuration power-cycled.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         port: the role's LabBusDriver port.
@@ -53,7 +56,7 @@ def _stepped(prm: str, parameter_ids: list[int], port: int, data: bytes) -> Modu
     Returns:
         The copy.
     """
-    fsw = power_cycle()
+    fsw = power_cycle(configuration)
     fsw.boot(prm, parameter_ids)
     fsw.step(t_ns=NS, bus=[(port, data)])
     return fsw
@@ -84,6 +87,7 @@ def test_every_role_s_bus_message_steps_without_an_assert(
     ("change", "source"), [(-1, _TOPOLOGY), (1, _DRIVER)], ids=["one-short", "one-over"]
 )
 def test_a_role_s_push_of_the_wrong_length_raises(
+    configuration: str,
     prm: str,
     parameter_ids: list[int],
     bus_by_role: dict[str, tuple[int, bytes]],
@@ -96,6 +100,7 @@ def test_a_role_s_push_of_the_wrong_length_raises(
     the port consumed every byte.
 
     Args:
+        configuration: the configuration.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus_by_role: each role's LabBusDriver port and message bytes.
@@ -104,7 +109,7 @@ def test_a_role_s_push_of_the_wrong_length_raises(
     """
     assert bus_by_role
     for port, data in bus_by_role.values():
-        fsw = _stepped(prm, parameter_ids, port, data)
+        fsw = _stepped(configuration, prm, parameter_ids, port, data)
         wrong = data[:change] if change < 0 else data + bytes(change)
 
         with pytest.raises(RuntimeError, match=source):
@@ -113,11 +118,16 @@ def test_a_role_s_push_of_the_wrong_length_raises(
 
 @pytest.mark.parametrize("push", ["unwired-port", "port-past-busOut", "empty"])
 def test_a_push_lab_bus_driver_cannot_deliver_raises(
-    prm: str, parameter_ids: list[int], bus_by_role: dict[str, tuple[int, bytes]], push: str
+    configuration: str,
+    prm: str,
+    parameter_ids: list[int],
+    bus_by_role: dict[str, tuple[int, bytes]],
+    push: str,
 ) -> None:
     """A role's message on a port nothing is wired to, or past `busOut`, or no bytes, raise.
 
     Args:
+        configuration: the configuration.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus_by_role: each role's LabBusDriver port and message bytes.
@@ -127,7 +137,7 @@ def test_a_push_lab_bus_driver_cannot_deliver_raises(
     unwired = sorted(set(range(_bus_out_ports())) - {port for port, _ in bus_by_role.values()})
     assert unwired, "every LabBusDriver port is wired"
     for port, data in bus_by_role.values():
-        fsw = _stepped(prm, parameter_ids, port, data)
+        fsw = _stepped(configuration, prm, parameter_ids, port, data)
         refused = {
             "unwired-port": (unwired[0], data),
             "port-past-busOut": (_bus_out_ports(), data),
