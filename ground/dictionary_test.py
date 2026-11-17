@@ -512,10 +512,16 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
         assert ids(generated, short) == ids(wise_fsw, short), instance.name
 
 
-def test_a_configuration_s_dictionary_is_its_own_deployment_generated_once_per_content():
-    """`from_sub_topology` names its deployment for the configuration and caches it per process."""
-    configuration = Dictionary.from_sub_topology("ImuDeadReckoning")
+def test_a_configuration_s_dictionary_is_its_own_deployment_generated_once_per_content(
+    configuration: str,
+):
+    """`from_sub_topology` names its deployment for the configuration and caches it per process.
 
-    assert configuration.metadata["deploymentName"] == "PyImuDeadReckoning.PyImuDeadReckoning"
-    assert configuration.algorithm_instances()
-    assert Dictionary.from_sub_topology("ImuDeadReckoning") is configuration
+    Args:
+        configuration: the configuration.
+    """
+    generated = Dictionary.from_sub_topology(configuration)
+
+    assert generated.metadata["deploymentName"] == f"Py{configuration}.Py{configuration}"
+    assert generated.algorithm_instances()
+    assert Dictionary.from_sub_topology(configuration) is generated
