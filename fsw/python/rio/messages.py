@@ -4,9 +4,9 @@ A message is read field by field with `fsw.codegen.fpp_types.converter`, so ever
 copy: the host's payload is a view of its reader's buffer, valid only during its tick. Its fields
 are read through `Basilisk.architecture.messaging`'s class of its name, which declares them: SWIG
 can return the payload as another module's class of that name, such as a simulation module's
-once that module is imported, which does not. Each actuator role's bus struct `Bus.<Name>` is
-written as a fresh `messaging.<Name>Payload`, each field from the bus member of its name, ignoring
-case, as `fsw/fpp/interfaces/bus_test.py` holds them.
+once that module is imported, which does not. Each actuator role's bus struct is written as a
+fresh payload of the class `fsw.payloads.payload_type` gives, each field from the bus member of
+its name, ignoring case.
 """
 
 import functools
@@ -17,6 +17,7 @@ import numpy as np
 from Basilisk.architecture import messaging
 
 from fsw.codegen.fpp_types import converter
+from fsw.payloads import payload_type
 from fsw.python.cdh.inputs import Pair
 
 __all__ = ["commands", "read"]
@@ -76,16 +77,6 @@ def commands(pairs: Sequence[Pair], buses: Mapping[str, Any]) -> dict[str, Any]:
     return {pair.role: _payload(buses[pair.role]) for pair in pairs if pair.role in buses}
 
 
-@functools.cache
-def _payloads() -> dict[str, type]:
-    """Each of `messaging`'s payload classes, by its name in lower case, read once.
-
-    Returns:
-        The classes.
-    """
-    return {n.lower(): getattr(messaging, n) for n in dir(messaging) if n.endswith("Payload")}
-
-
 def _payload(bus: Any) -> Any:
     """A bus struct as a fresh payload of the Basilisk message it mirrors.
 
@@ -93,10 +84,10 @@ def _payload(bus: Any) -> Any:
         bus: the bus struct's tuple, `Bus.<Name>`.
 
     Returns:
-        The `messaging.<Name>Payload` it mirrors, matched ignoring case, each field the bus member
-        of its name, ignoring case.
+        The `messaging.<Name>Payload` it mirrors, by `fsw.payloads.payload_type`, each field the
+        bus member of its name, ignoring case.
     """
-    payload = _payloads()[type(bus).__name__.lower() + "payload"]()
+    payload = payload_type(type(bus).__qualname__)()
     fields = {name.lower(): name for name in type(payload).__dtype__.names}
     for member, value in zip(bus._fields, bus, strict=True):
         setattr(payload, fields[member.lower()], np.asarray(value).tolist())

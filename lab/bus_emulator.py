@@ -6,7 +6,8 @@ Each bus struct in `fsw/fpp/interfaces/Bus.fpp`, `Bus.<Name>`, mirrors the Basil
 big-endian, packed and unframed. It is built from `Bus.fpp` at import, read alone, so no file is
 generated and no F´ framework clone is read; each payload type's packer is planned on its first
 message, and a member outside `fsw.codegen.fields.STRUCT_CODES` raises then. `deserialize` reads
-an actuator's bytes back with the same packer, into a fresh payload. Lab equipment: a real
+an actuator's bytes back with the same packer, into a fresh payload of the class
+`fsw.payloads.payload_type` gives. Lab equipment: a real
 vehicle's bus carries the bytes itself, and the Python build reads and writes messages without
 them.
 """
@@ -20,6 +21,7 @@ from Basilisk.architecture import messaging
 
 from fsw.codegen.fields import STRUCT_CODES
 from fsw.codegen.fpp_model import Struct, read
+from fsw.payloads import payload_type
 
 __all__ = ["BUS", "deserialize", "serialize"]
 
@@ -82,16 +84,6 @@ def serialize(message: Any) -> bytes:
     return packer.pack(*(value for field in fields for value in getattr(message, field)))
 
 
-@functools.cache
-def _payloads() -> dict[str, type]:
-    """Each of `messaging`'s payload classes, by its name in lower case, read once.
-
-    Returns:
-        The classes.
-    """
-    return {n.lower(): getattr(messaging, n) for n in dir(messaging) if n.endswith("Payload")}
-
-
 def deserialize(bus: str, data: bytes) -> Any:
     """A bus struct's bytes, as F´ serializes it, as a fresh payload of the message it mirrors.
 
@@ -106,7 +98,7 @@ def deserialize(bus: str, data: bytes) -> Any:
         The `messaging.<Name>Payload` the struct mirrors, matched ignoring case, each field set
         from its member's elements.
     """
-    payload = _payloads()[bus.removeprefix("Bus.").lower() + "payload"]()
+    payload = payload_type(bus)()
     packer, fields = _packer(type(payload))
     values = iter(packer.unpack(data))
     for member, field in zip(_STRUCTS[type(payload).__name__.lower()].members, fields, strict=True):

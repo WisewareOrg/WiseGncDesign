@@ -285,8 +285,9 @@ for an actuator, returns F´'s serialization of the struct the conversion makes 
 deserializes from the bytes. `lab.bus_emulator.serialize(message)` writes a Basilisk message as
 the bytes F´ serializes its bus struct to, and `lab.bus_emulator.deserialize(bus, data)` reads an
 actuator's bytes back into its Basilisk message, both built from `fsw/fpp/interfaces/Bus.fpp` at
-import; each is held to `bus_<Struct>`'s bytes. A bus or GNC field must be an array of one of `fsw.codegen.fields.STRUCT_CODES`'
-primitives; the generator and the emulator refuse anything else, naming it. The reasoning is in
+import; each is held to `bus_<Struct>`'s bytes. A bus or GNC field must be an array of one of
+`fsw.codegen.fields.STRUCT_CODES`' primitives; the generator and the emulator refuse anything else,
+naming it. The reasoning is in
 [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
 and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
 
