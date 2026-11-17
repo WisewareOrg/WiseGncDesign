@@ -18,11 +18,10 @@ from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
 from fsw.codegen.fpp_model import Model
+from fsw.codegen.members import DRIVER
+from fsw.codegen.members import members as rate_group_members
 
 __all__ = ["GncPartition", "MemberTelemetry"]
-
-_DRIVER = "Svc.RateGroupDriver"
-"""The component type of the sub-topology's rate group driver."""
 
 _RATE_GROUP = "Svc.PassiveRateGroup"
 """The component type of its rate groups."""
@@ -107,24 +106,10 @@ class GncPartition:
         component = {
             c.from_instance: model.instances[c.from_instance].component for c in connections
         } | {c.to_instance: model.instances[c.to_instance].component for c in connections}
-        drivers = sorted(i for i, kind in component.items() if kind == _DRIVER)
-        if len(drivers) != 1:
-            raise ValueError(f"{topology} has {len(drivers)} rate group drivers: {drivers}")
-        [driver] = drivers
-        # The model sorts connections by their from-port's number, so each filter keeps that order.
-        self.rate_groups = tuple(
-            c.to_instance
-            for c in connections
-            if c.from_instance == driver and c.from_port == "CycleOut"
-        )
-        self._members = tuple(
-            tuple(
-                c.to_instance
-                for c in connections
-                if c.from_instance == group and c.from_port == "RateGroupMemberOut"
-            )
-            for group in self.rate_groups
-        )
+        groups = rate_group_members(model, configuration)
+        driver = next(i for i, kind in component.items() if kind == DRIVER)
+        self.rate_groups = tuple(groups)
+        self._members = tuple(tuple(m.name for m in group) for group in groups.values())
         members = {m for group in self._members for m in group}
         by_name = {cls.__name__: cls for cls in classes}
         wanted = {m: model.instances[m].component.rsplit(".", 1)[-1] for m in members}
@@ -138,7 +123,7 @@ class GncPartition:
         self._classes = {m: by_name[name] for m, name in wanted.items()}
         self.components = {_name(m): model.instances[m].component for m in members}
 
-        scheduling = {i for i, kind in component.items() if kind in (_DRIVER, _RATE_GROUP)}
+        scheduling = {i for i, kind in component.items() if kind in (DRIVER, _RATE_GROUP)}
         order = {m: n for n, m in enumerate(m for group in self._members for m in group)}
         self._keywords: dict[str, set[str]] = {m: set() for m in members}
         self._routes: dict[tuple[str, str], tuple[str, str]] = {}

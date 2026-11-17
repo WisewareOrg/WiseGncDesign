@@ -4,8 +4,8 @@ A configuration's deployment topology is rendered from `fsw/fprime/deployment/Fs
 template CMake's `configure_file` renders for the F´ build, by the same `@CONFIGURATION@` token. The
 algorithms are those the F´ build takes: every directory under `algorithms/` with a
 `CMakeLists.txt`, and `algorithm_components` the components their `.fpp` files define.
-`configurations` names one configuration per GNC sub-topology. `gnc_instances` lists the GNC
-sub-topologies' instances, and `gnc_instance` finds a component's one instance among them.
+`configurations` names one configuration per GNC sub-topology, and `gnc_instances` lists the GNC
+sub-topologies' instances.
 `configuration_model` reads a configuration's contract and GNC sub-topology, `tick_period` its base
 tick's period, and `bus_port` the LabBusDriver port its deployment wires to a CDH input port.
 """
@@ -29,7 +29,6 @@ __all__ = [
     "contract_files",
     "fpp_files",
     "framework_files",
-    "gnc_instance",
     "gnc_instances",
     "tick_period",
 ]
@@ -207,25 +206,6 @@ def gnc_instances() -> tuple[Instance, ...]:
         for name, instance in read((*contract_files(), *sub_topologies)).instances.items()
         if name not in contract
     )
-
-
-def gnc_instance(component: str) -> Instance:
-    """The one instance of a component in the GNC sub-topologies.
-
-    Args:
-        component: the component's qualified FPP name, such as `Gnc.ImuDeadReckoner`.
-
-    Returns:
-        The instance, its qualified name such as `ImuDeadReckoning.nav`.
-
-    Raises:
-        ValueError: the component is instanced other than once, naming its instances.
-    """
-    found = [i for i in gnc_instances() if i.component == component]
-    if len(found) != 1:
-        names = [i.name for i in found]
-        raise ValueError(f"{component} is instanced {len(found)} times in fsw/fpp/gnc: {names}")
-    return found[0]
 
 
 @functools.cache

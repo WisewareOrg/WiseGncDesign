@@ -397,28 +397,3 @@ def test_an_output_feeding_more_than_one_input_is_refused_naming_it(tmp_path: Pa
 
     with pytest.raises(ValueError, match=r"source\.valueOut routes to more than one input"):
         GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
-
-
-def test_a_sub_topology_without_exactly_one_rate_group_driver_is_refused(tmp_path: Path):
-    """A second driver leaves the partition no one base tick.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    mock = (
-        MOCK.replace(
-            "  instance fastRateGroup:",
-            "  instance otherDriver: Svc.RateGroupDriver base id 0x4400\n  instance fastRateGroup:",
-        )
-        .replace(
-            "      rateGroupDriver.CycleOut[1] -> slowRateGroup.CycleIn\n",
-            "      otherDriver.CycleOut[0] -> slowRateGroup.CycleIn\n",
-        )
-        .replace(
-            "    instance rateGroupDriver\n",
-            "    instance rateGroupDriver\n    instance otherDriver\n",
-        )
-    )
-
-    with pytest.raises(ValueError, match="2 rate group drivers"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))

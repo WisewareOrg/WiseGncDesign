@@ -69,8 +69,8 @@ def nav_parameters() -> Gnc.ImuDeadReckonerParameters:
 
 @pytest.fixture
 def case_parameters(
-    case_parameters: tuple[Any, ...], nav_parameters: Gnc.ImuDeadReckonerParameters
-) -> tuple[Any, ...]:
+    case_parameters: dict[str, Any], nav_parameters: Gnc.ImuDeadReckonerParameters
+) -> dict[str, Any]:
     """The deployment's case parameters, nav's tuple replaced by `nav_parameters`.
 
     Args:
@@ -78,9 +78,12 @@ def case_parameters(
         nav_parameters: nav's parameters.
 
     Returns:
-        The tuples.
+        Each instance's tuple, by its qualified name.
     """
-    return tuple(nav_parameters if type(t) is type(nav_parameters) else t for t in case_parameters)
+    return {
+        instance: nav_parameters if type(t) is type(nav_parameters) else t
+        for instance, t in case_parameters.items()
+    }
 
 
 @pytest.fixture(scope="module")
@@ -394,14 +397,13 @@ def test_the_lab_adapter_mounts_the_imu_as_its_record_gives_it(
 
 
 FLIGHT = """
-from algorithms.imu_dead_reckoning import parameters
-from algorithms.imu_dead_reckoning.parity import fprime_dead_reckoner as fprime
 from harness.mission import Mission, mission_tests
-
 
 globals().update(
     mission_tests(
-        Mission(vehicle="imu_spacecraft", fsw=fprime, scenarios=("TST001",), parameters=parameters)
+        Mission(
+            vehicle="imu_spacecraft", gnc="ImuDeadReckoning", build="fprime", scenarios=("TST001",)
+        )
     )
 )
 """
@@ -450,7 +452,7 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
         pytester: the project the flights run in, each run in one process of its own, xdist off.
     """
     pytester.makepyfile(test_flights=FLIGHT)
-    test = "test_flights.py::Test_imu_spacecraft::test_fprime_dead_reckoner_leo500"
+    test = "test_flights.py::Test_imu_spacecraft::test_ImuDeadReckoning_fprime_leo500"
 
     options = ("-p", "no:cacheprovider", "-p", "no:xdist")
 

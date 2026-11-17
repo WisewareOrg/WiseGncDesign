@@ -1,6 +1,7 @@
 module Gnc {
 
   @ Strapdown inertial dead reckoning from one IMU: the F´ build of the notebook's estimator
+  @ provides: SYS001
   passive component ImuDeadReckoner {
 
     @ Steps the estimate to the current time with the held IMU reading

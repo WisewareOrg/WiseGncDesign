@@ -306,7 +306,7 @@ class Dictionary:
 
         Args:
             model: the component's `.fpp` files.
-            instance: the instance, such as `fsw.codegen.deployment.gnc_instance` gives it; its
+            instance: the instance, such as one of `fsw.codegen.deployment.gnc_instances`; its
                 unqualified name, `<instance>`, prefixes the dictionary's entries.
 
         Returns:

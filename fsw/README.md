@@ -62,12 +62,12 @@ write is pushed rather than sampled, is in
 This example runs in a notebook or at a prompt, with the `sim` group installed
 (`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
 at its nominal configuration, writes the case's parameter record from the notebook's
-`parameters(scenario)`, as the harness does beside each run file, and boots the dead reckoner idle
-with the values the Python build reads back from the record, hosted on that vehicle by
-WiseDynamics' `FswHost` as the harness hosts it. A ground procedure gives nav its state from
-tracking at t = 0, and the run lasts one minute, with the dynamics, the IMU and the dead reckoner
-all stepping at 1 Hz. The ground's record is then compared with the
-vehicle's truth:
+`parameters(scenario)` under nav's qualified instance, as the harness does beside each run file,
+and boots the `ImuDeadReckoning` configuration's Python build idle with the values it reads back
+from the record, hosted on that vehicle by WiseDynamics' `FswHost` as the harness hosts it. A
+ground procedure gives nav its state from tracking at t = 0, and the run lasts one minute, with the
+dynamics, the IMU and the dead reckoner all stepping at 1 Hz. The ground's record is then compared
+with the vehicle's truth:
 
 ```python
 >>> import tempfile
@@ -75,15 +75,17 @@ vehicle's truth:
 >>> import numpy as np
 >>> from wise_dynamics.basilisk import FswHost, ImuSpacecraft
 >>> from wise_dynamics.basilisk.scenarios.leo500 import Leo500
->>> from algorithms.imu_dead_reckoning import dead_reckoner, parameters
+>>> from algorithms.imu_dead_reckoning import ImuDeadReckoner, parameters
+>>> from fsw.python import FrameRunner
 >>> from ground.parameters import write
 >>> from ground.procedures import Ground
 >>> scenario = Leo500()
 >>> isinstance(scenario.vehicle, ImuSpacecraft)
 True
 >>> case = tempfile.TemporaryDirectory()
->>> record = write([parameters(scenario)], Path(case.name) / "run_0000.prm.json")
->>> fsw = dead_reckoner(scenario, record)
+>>> path = Path(case.name) / "run_0000.prm.json"
+>>> record = write({"ImuDeadReckoning.nav": parameters(scenario)}, path)
+>>> fsw = FrameRunner("ImuDeadReckoning", record, (ImuDeadReckoner,))
 >>> async def procedure(ground):
 ...     truth = ground.truth()
 ...     await ground.send(
@@ -114,13 +116,16 @@ True
 
 ## Adding an algorithm
 
-Write the algorithm in `algorithms`, with its component model, `<Name>.fpp`, beside its
-notebook: the ports its GNC sub-topology wires, the commands and telemetry it implements, and its
-parameters. Its class is named as the component and takes its `<Name>Parameters`; its `step` and
-command methods are as [the Python build](#the-python-build) says. Its notebook's
-`parameters(scenario)` gives its `<Name>Parameters` tuple for a case, which the ground writes as
-the case's record, keyed by the algorithm's instance in its GNC sub-topology; its builder takes the
-scenario and the record's path and returns the configuration's `FrameRunner`.
+Write the algorithm as the package `algorithms/<folder>/`, with its `__init__.py` and its component
+model, `<Name>.fpp`, beside its notebook, `<folder>.py`: the ports its GNC sub-topology wires, the
+commands and telemetry it implements, its parameters, and an `@ provides: SYS...` line per
+capability it claims. Its class, in the notebook, is named as the component and takes its
+`<Name>Parameters`; its `step` and command methods are as [the Python build](#the-python-build)
+says. Its notebook's `parameters(scenario)` gives its `<Name>Parameters` tuple for a case, which
+the ground writes as the case's record, keyed by the algorithm's instance in its GNC sub-topology;
+a component without parameters needs none. A mission flies a configuration by name,
+`Mission(gnc=…, build=…)`, and finds the class and `parameters` in the notebook by the
+component's name, importing the notebook as `algorithms.<folder>.<folder>`.
 
 ## The dictionary
 

@@ -18,8 +18,6 @@
 # %%
 """Strapdown inertial dead reckoning from one IMU."""
 
-from pathlib import Path
-
 import numpy as np
 from numba import njit
 from wise_dynamics.basilisk import Scenario
@@ -27,8 +25,7 @@ from wise_dynamics.basilisk import Scenario
 from algorithms.imu_dead_reckoning.gross_check import gross_check
 from algorithms.quaternion import dcm_NB, multiply
 from fsw.codegen.fpp_types import Gnc
-from fsw.python import FrameRunner
-from harness.mission import Mission, mission_tests, provides
+from harness.mission import Mission, mission_tests
 
 __all__ = ["ImuDeadReckoner"]
 
@@ -337,11 +334,12 @@ class ImuDeadReckoner:
 # ## The flight software
 #
 # `parameters` gives nav's parameters for a case: `mu` from the scenario and the IMU's mounting from
-# its vehicle. The ground writes them as the case's record, and `dead_reckoner` builds the Python
-# build of the `ImuDeadReckoning` configuration, whose GNC sub-topology flies the estimator as
-# `nav`: each boot builds it idle on the values the build's CDH reads back from the record, and the
-# harness hosts the build on the scenario's vehicle, whose dynamics and IMU step at its base tick.
-# The scenario's ground procedure gives it its state by command.
+# its vehicle. The ground writes them as the case's record. The `ImuDeadReckoning` configuration's
+# GNC sub-topology flies the estimator as `nav`, and a mission finds `ImuDeadReckoner` and
+# `parameters` here by the component's name. On the Python build each boot builds it idle on the
+# values the build's CDH reads back from the record, and the harness hosts the build on the
+# scenario's vehicle, whose dynamics and IMU step at its base tick. The scenario's ground procedure
+# gives it its state by command.
 
 
 # %%
@@ -359,22 +357,6 @@ def parameters(scenario: Scenario) -> Gnc.ImuDeadReckonerParameters:
     )
 
 
-@provides("SYS001")
-def dead_reckoner(scenario: Scenario, prm_path: Path) -> FrameRunner:
-    """The dead reckoner's configuration, its Python build flying the estimator as `nav`.
-
-    Its parameters are the case's record, read by the Python build's CDH at each boot.
-
-    Args:
-        scenario: the case's scenario, whose vehicle the harness hosts the build on.
-        prm_path: the case's parameter record.
-
-    Returns:
-        The build.
-    """
-    return FrameRunner("ImuDeadReckoning", prm_path, (ImuDeadReckoner,))
-
-
 # %% [markdown]
 # ## The mission
 #
@@ -388,8 +370,8 @@ def dead_reckoner(scenario: Scenario, prm_path: Path) -> FrameRunner:
 # %%
 MISSION = Mission(
     vehicle="imu_spacecraft",
-    fsw=dead_reckoner,
-    parameters=parameters,
+    gnc="ImuDeadReckoning",
+    build="python",
     rungs=("SRS001", "SRS002", "SRS003", "SRS004", "SRS005"),
     scenarios=("TST001", "TST002"),
     check=gross_check,
@@ -420,7 +402,7 @@ globals().update(mission_tests(MISSION))
 # judge()
 
 # %% active="ipynb"
-# runs = load_runs(Test_imu_spacecraft.test_dead_reckoner_leo500)
+# runs = load_runs(Test_imu_spacecraft.test_ImuDeadReckoning_python_leo500)
 # data = [{name: values for name, (values, _) in run["datasets"].items()} for run in runs]
 # metrics = {
 #     "attitude error (rad)": ("nav.bodyEciAttitude", "truth/q_BN", attitude_error_rad),
