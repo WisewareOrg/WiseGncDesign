@@ -371,22 +371,26 @@ def test_a_component_s_commands_channels_and_parameters_are_read(mock: Model):
 
 
 def test_a_component_s_general_ports_and_its_file_are_read(mock: Model):
-    """Each general port, in FPP's order with its size and arguments, and the component's file.
+    """Each general port in FPP's order, with its size, arguments and type, and the defining file.
 
-    A general port is one that is not a special port.
+    A general port is one that is not a special port; its type is its port type's qualified name.
 
     Args:
         mock: the mock model.
     """
     assert mock.components["Gnc.RateGroup"].outputs == (
-        Port("RateGroupMemberOut", 3, (Argument("ctx", "U32"),)),
+        Port("RateGroupMemberOut", 3, (Argument("ctx", "U32"),), "Gnc.Sched"),
     )
-    assert mock.components["Top.Driver"].outputs == (Port("tickOut", 1, (Argument("ctx", "U32"),)),)
+    assert mock.components["Top.Driver"].outputs == (
+        Port("tickOut", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
+    )
     assert mock.components["Gnc.Nav"].outputs == ()
     assert mock.components["Gnc.RateGroup"].inputs == (
-        Port("CycleIn", 1, (Argument("ctx", "U32"),)),
+        Port("CycleIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
     )
-    assert mock.components["Gnc.Nav"].inputs == (Port("schedIn", 1, (Argument("ctx", "U32"),)),)
+    assert mock.components["Gnc.Nav"].inputs == (
+        Port("schedIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
+    )
     assert mock.components["Top.Driver"].inputs == ()
     assert mock.components["Gnc.Nav"].file.name == "Gnc.fpp"
     assert mock.components["Top.Driver"].file.name == "Top.fpp"
@@ -394,7 +398,7 @@ def test_a_component_s_general_ports_and_its_file_are_read(mock: Model):
 
 
 def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
-    """A `serial` output port, which has no port type, is an output with no arguments.
+    """A `serial` output port, which has no port type, is an output with no arguments or type.
 
     Args:
         tmp_path: where the mock's model is written.
@@ -409,7 +413,7 @@ def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
 
     nav = read(_mock_files(tmp_path, gnc)).components["Gnc.Nav"]
 
-    assert nav.outputs == (Port("anyOut", 1, ()),)
+    assert nav.outputs == (Port("anyOut", 1, (), None),)
 
 
 def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):

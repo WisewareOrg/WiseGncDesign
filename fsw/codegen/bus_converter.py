@@ -27,7 +27,7 @@ import numpy as np
 
 from fsw.codegen.deployment import contract_files
 from fsw.codegen.fields import DTYPES, STRUCT_CODES, form, plan
-from fsw.codegen.fpp_model import Model, read
+from fsw.codegen.fpp_model import Component, Model, read
 from fsw.codegen.roles import CONVERTER, Role, roles
 
 __all__ = ["main", "render"]
@@ -284,6 +284,29 @@ def _pins(model: Model, found: list[Role]) -> str:
     return _PINS.format(component=CONVERTER, pins="\n".join(pins))
 
 
+def _usings(component: Component, found: list[Role]) -> str:
+    """The using declarations naming each actuator role's bus port buffer and serializer in `Cdh`.
+
+    Args:
+        component: the converter.
+        found: the roles.
+
+    Returns:
+        A comment and two declarations per actuator role, `<Port>` its `<role>Out`'s port type.
+    """
+    ports = {port.name: port.type for port in component.outputs}
+    lines = [
+        f"using {_cpp(ports[role.output])}{suffix};"
+        for role in found
+        if not role.sensor
+        for suffix in ("PortBuffer", "PortSerializer")
+    ]
+    if not lines:
+        return ""
+    comment = "// FPP 3.4.0 names a connected port's serializer unqualified, in this namespace."
+    return "\n".join([comment, *lines]) + "\n"
+
+
 def render(model: Model) -> dict[str, str]:
     """The component's C++, from `Cdh.BusConverter`'s roles.
 
@@ -319,11 +342,7 @@ def render(model: Model) -> dict[str, str]:
         definitions.append(_HANDLER.format(signature=signature, output=role.output, role=role.role))
     return {
         "BusConverter.hpp": _HEADER.format(
-            usings="".join(
-                f"using {_cpp(r.bus)}PortBuffer;\nusing {_cpp(r.bus)}PortSerializer;\n"
-                for r in found
-                if not r.sensor
-            ),
+            usings=_usings(component, found),
             component=CONVERTER,
             base=base.as_posix(),
             conversions="".join(conversions),
