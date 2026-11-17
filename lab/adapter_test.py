@@ -49,7 +49,7 @@ def adapter(fprime_configuration: str, prm_record: Path) -> Adapter:
 
 
 def _assert_commands_of_its_actuators(configuration: str, commands: dict[str, Any]) -> None:
-    """A tick's commands are of the actuator roles the configuration takes, each its message.
+    """A tick's commands are of the configuration's actuator roles, each its payload class.
 
     Args:
         configuration: the configuration.
@@ -93,7 +93,7 @@ def test_the_adapter_delivers_each_role_s_message_on_its_lab_bus_driver_port(
     Args:
         adapter: the configuration's adapter, booted.
         messages_by_role: a message for each sensor role the configuration takes.
-        bus: every role's bus message on its LabBusDriver port.
+        bus: every sensor role's bus message on its LabBusDriver port.
         monkeypatch: records the bus each step of the copy takes.
     """
     stepped = []
@@ -148,16 +148,17 @@ def test_each_boot_power_cycles_a_fresh_copy(
 
 
 def test_a_tick_missing_a_role_the_cdh_converts_is_refused_naming_it(
-    messages_by_role: dict[str, Any], adapter: Adapter
+    configuration: str, messages_by_role: dict[str, Any], adapter: Adapter
 ):
     """A tick without a converted role's message names the role and the messages it was given.
 
     Args:
+        configuration: the configuration.
         messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
     """
     if not messages_by_role:
-        pytest.skip("the configuration takes no sensor role")
+        pytest.skip(f"{configuration} takes no sensor role")
     role = sorted(messages_by_role)[0]
     messages = {other: m for other, m in messages_by_role.items() if other != role}
 

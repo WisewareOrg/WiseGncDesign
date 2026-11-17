@@ -75,7 +75,7 @@ def _stepped(
 
 
 def test_every_role_s_bus_message_steps_without_an_assert(
-    booted: ModuleType, bus: list[tuple[int, bytes]]
+    configuration: str, booted: ModuleType, bus: list[tuple[int, bytes]]
 ) -> None:
     """Every role's message, as the bus emulator writes it, steps the deployment on its port.
 
@@ -84,11 +84,12 @@ def test_every_role_s_bus_message_steps_without_an_assert(
     reading.
 
     Args:
+        configuration: the configuration.
         booted: the test's copy of the deployment, booted idle on the case's parameters.
         bus: every sensor role's bus message on its LabBusDriver port.
     """
     if not bus:
-        pytest.skip("the configuration takes no sensor role")
+        pytest.skip(f"{configuration} takes no sensor role")
 
     booted.step(t_ns=NS, bus=bus)
 
