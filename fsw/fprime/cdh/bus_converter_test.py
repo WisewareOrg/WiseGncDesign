@@ -1,10 +1,12 @@
-"""The generated `Cdh.BusConverter` converts each role's bus struct to its GNC struct in F´.
+"""The generated `Cdh.BusConverter` converts each role's struct in F´ as the Python build does.
 
-Through each role's test pin `cdh_<role>`: the bus emulator's bytes for the role's message,
-deserialized by F´, converted by the generated conversion and serialized back, compared with the
-GNC struct `fsw.codegen.fields.plan` takes from the same values. Each test ranges over every role
-of the contract's `Cdh.BusConverter`. Skipped without the deployment `just fsw` builds, as the
-`fsw` fixture skips.
+Through each role's test pin `cdh_<role>`. For a sensor: the bus emulator's bytes for the role's
+message, deserialized by F´, converted by the generated conversion and serialized back, compared
+with the GNC struct `fsw.codegen.fields.plan` takes from the same values. For an actuator: a GNC
+struct's bytes, packed by numpy, converted by F´ and read back by the bus emulator, compared with
+the payload the Python build's CDH-out and RIO-out make of the same struct. Each test ranges over
+every role of its direction the contract's `Cdh.BusConverter` declares. Skipped without the
+deployment `just fsw` builds, as the `fsw` fixture skips.
 """
 
 import functools
@@ -19,7 +21,9 @@ from fsw.codegen.deployment import contract_files
 from fsw.codegen.fields import DTYPES, form, plan
 from fsw.codegen.fpp_model import Model, read
 from fsw.codegen.roles import Role, roles
-from lab.bus_emulator import serialize
+from fsw.python.cdh import outputs
+from fsw.python.rio.messages import commands
+from lab.bus_emulator import deserialize, serialize
 
 
 @functools.cache
@@ -89,15 +93,30 @@ def _bus_bytes(message: Any, swap: tuple[str, str] | None = None) -> bytes:
     return _bytes([(DTYPES[m.type], values[m.name]) for m in message.struct.members])
 
 
-def _roles() -> list[Role]:
-    """Every role of the contract's `Cdh.BusConverter`, at least one.
+def _roles(sensor: bool) -> list[Role]:
+    """Every role of one direction the contract's `Cdh.BusConverter` declares, at least one.
+
+    Args:
+        sensor: whether the sensor roles, else the actuator roles.
 
     Returns:
         The roles.
     """
-    found = roles(_contract())
+    found = [role for role in roles(_contract()) if role.sensor == sensor]
     assert found
     return found
+
+
+def _icd_bytes(message: Any) -> bytes:
+    """A GNC struct's value serialized as F´ does, by numpy rather than F´.
+
+    Args:
+        message: the `IcdMessage`.
+
+    Returns:
+        The bytes.
+    """
+    return _bytes([(np.asarray(v).dtype, v) for v in message.values.values()])
 
 
 def test_each_role_s_bus_struct_converts_to_its_gnc_struct(
@@ -109,7 +128,7 @@ def test_each_role_s_bus_struct_converts_to_its_gnc_struct(
         fsw: a copy of the deployment.
         bus_messages: a message of each bus struct.
     """
-    for role in _roles():
+    for role in _roles(sensor=True):
         message = bus_messages[role.bus]
         converted = getattr(fsw, f"cdh_{role.role}")(serialize(message.payload))
         assert converted == _reading(role, message.values), role.role
@@ -125,7 +144,7 @@ def test_each_pin_reads_the_bytes_by_the_bus_layout(
         bus_messages: a message of each bus struct.
     """
     swapped = 0
-    for role in _roles():
+    for role in _roles(sensor=True):
         message = bus_messages[role.bus]
         converted = {name for _, name, _ in _planned(role)}
         pair = next(
@@ -150,17 +169,53 @@ def test_each_pin_reads_the_bytes_by_the_bus_layout(
     assert swapped
 
 
-def test_bytes_too_short_for_a_bus_struct_raise_naming_the_role(
-    fsw: ModuleType, bus_messages: dict[str, Any]
+def test_each_actuator_role_s_gnc_struct_converts_to_the_payload_the_python_build_makes(
+    fsw: ModuleType, icd_messages: dict[str, Any]
 ) -> None:
-    """A role's bytes one short of its bus struct fail F´'s deserialization, naming the role.
+    """F´'s conversion, read back by the emulator, is the payload the Python build's CDH makes.
+
+    The GNC struct's bytes are packed by numpy, big-endian; the same bytes little-endian give
+    another payload, so the comparison can fail.
+
+    Args:
+        fsw: a copy of the deployment.
+        icd_messages: a value of each GNC struct, its members' values distinct.
+    """
+    for role in _roles(sensor=False):
+        message = icd_messages[role.icd]
+        pairs = outputs.pairings([role])
+        python = commands(pairs, outputs.convert(pairs, {role.output: message.value}))[role.role]
+        converted = deserialize(role.bus, getattr(fsw, f"cdh_{role.role}")(_icd_bytes(message)))
+        fields = type(python).__dtype__.names
+        assert type(converted) is type(python), role.role
+        for field in fields:
+            assert list(getattr(converted, field)) == list(getattr(python, field)), role.role
+        swapped = message._replace(
+            values={m: np.asarray(v).byteswap() for m, v in message.values.items()}
+        )
+        other = deserialize(role.bus, getattr(fsw, f"cdh_{role.role}")(_icd_bytes(swapped)))
+        assert any(
+            list(getattr(other, field)) != list(getattr(python, field)) for field in fields
+        ), role.role
+
+
+def test_bytes_too_short_for_a_role_s_input_struct_raise_naming_the_role(
+    fsw: ModuleType, bus_messages: dict[str, Any], icd_messages: dict[str, Any]
+) -> None:
+    """Bytes one short of the struct a role's input takes fail F´'s deserialization, named.
+
+    A sensor's input takes its bus struct, an actuator's its GNC struct.
 
     Args:
         fsw: a copy of the deployment.
         bus_messages: a message of each bus struct.
+        icd_messages: a value of each GNC struct.
     """
-    for role in _roles():
-        short = serialize(bus_messages[role.bus].payload)[:-1]
-        match = rf"cdh_{role.role}: deserializing {re.escape(role.bus)} failed"
+    for role in roles(_contract()):
+        if role.sensor:
+            taken, data = role.bus, serialize(bus_messages[role.bus].payload)
+        else:
+            taken, data = role.icd, _icd_bytes(icd_messages[role.icd])
+        match = rf"cdh_{role.role}: deserializing {re.escape(taken)} failed"
         with pytest.raises(RuntimeError, match=match):
-            getattr(fsw, f"cdh_{role.role}")(short)
+            getattr(fsw, f"cdh_{role.role}")(data[:-1])
