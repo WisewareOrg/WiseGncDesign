@@ -13,7 +13,7 @@ from Basilisk.architecture import messaging
 from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
-from fsw.codegen.deployment import bus_port, contract_files
+from fsw.codegen.deployment import bus_port, configuration_model, contract_files
 from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_types import Gnc
 from fsw.codegen.roles import roles
@@ -154,23 +154,27 @@ def _state(epoch: float, attitude: np.ndarray = Q0) -> dict[str, Any]:
 
 
 def test_a_booted_reckoner_reports_idle_and_no_state(
+    configuration: str,
     booted: ModuleType,
     station: FprimeStation,
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
 ):
-    """Booted and ticked once, nav writes `navState` idle, once, and nothing else.
+    """Booted and ticked for one run of nav, nav writes `navState` idle, once, and nothing else.
 
-    Nav's divider is 1. That a rate group runs its members once every divider ticks is
-    `lab/link_test.py`'s `test_each_rate_group_runs_once_every_divider_ticks`.
+    That a rate group runs its members once every divider ticks is `lab/link_test.py`'s
+    `test_each_rate_group_runs_once_every_divider_ticks`.
 
     Args:
+        configuration: the dead reckoner's configuration.
         booted: the test's copy of the deployment, booted idle on the case's parameters.
         station: the station on it.
         decoded: drains the station's telemetry as values.
         imu_bus: the IMU message's bus for a reading.
     """
-    booted.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
+    divider = configuration_model(configuration).constants[f"{configuration}.navDivider"]
+    for tick in range(1, divider + 1):
+        booted.step(t_ns=tick * NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
 
     assert [(n, v) for n, _, v in decoded(station) if n.startswith("nav.")] == [
         ("nav.navState", "idle")

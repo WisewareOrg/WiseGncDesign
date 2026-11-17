@@ -38,6 +38,7 @@ def test_a_deployment_s_files_are_the_contract_s_then_its_gnc_and_topology(
         _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
         tmp_path / f"{configuration}Fsw.fpp",
     )
+    assert "@CONFIGURATION@" not in (tmp_path / f"{configuration}Fsw.fpp").read_text()
 
 
 def test_the_contract_holds_the_bus_structs_and_every_algorithm_s_files():
