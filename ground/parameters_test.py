@@ -22,7 +22,7 @@ from ground.dictionary import Dictionary
 from lab import dictionary_path
 
 STRAY = namedtuple("StrayParameters", ["gain"])
-"""A toy component's parameters tuple, of a component no GNC sub-topology instances."""
+"""A mock component's parameters tuple, of a component no GNC sub-topology instances."""
 STRAY.component = "Gnc.Stray"
 
 
@@ -75,11 +75,11 @@ def test_the_record_holds_every_field_under_the_instance_s_qualified_name(
 def test_the_record_holds_each_tuple_under_its_own_instance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, algorithm_parameters: dict[str, Any]
 ):
-    """A toy component's tuple is written beside the algorithms', under its own instance's name.
+    """A mock component's tuple is written beside the algorithms', under its own instance's name.
 
     Args:
         tmp_path: where the case's files are written.
-        monkeypatch: gives the GNC sub-topologies the toy component's instance.
+        monkeypatch: gives the GNC sub-topologies the mock component's instance.
         algorithm_parameters: each algorithm component's tuple.
     """
     other = Instance("Other.stray", "Gnc.Stray", 0x2000)

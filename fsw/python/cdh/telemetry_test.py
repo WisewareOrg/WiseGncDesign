@@ -14,16 +14,16 @@ def test_each_field_written_is_one_write_named_for_its_instance_in_field_order()
     """A `None` field is not written; an array is copied as written."""
     position = np.array([1.0, 2.0, 3.0])
 
-    writes = telemetry.writes("toy", Telemetry(position=position, count=0, mode="fast"))
+    writes = telemetry.writes("mock", Telemetry(position=position, count=0, mode="fast"))
     position[0] = 9.0
 
-    assert [name for name, _ in writes] == ["toy.mode", "toy.position", "toy.count"]
+    assert [name for name, _ in writes] == ["mock.mode", "mock.position", "mock.count"]
     assert writes[0][1] == "fast"
     np.testing.assert_array_equal(writes[1][1], [1.0, 2.0, 3.0])
     assert writes[2][1] == 0
-    assert [name for name, _ in telemetry.writes("toy", Telemetry(count=1))] == ["toy.count"]
+    assert [name for name, _ in telemetry.writes("mock", Telemetry(count=1))] == ["mock.count"]
 
 
 def test_nothing_returned_writes_nothing():
     """A handler returning `None` writes no telemetry."""
-    assert telemetry.writes("toy", None) == []
+    assert telemetry.writes("mock", None) == []

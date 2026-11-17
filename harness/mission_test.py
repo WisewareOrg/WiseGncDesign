@@ -850,14 +850,14 @@ class Broken(StubBuild):
 
 
 @provides("SYS901")
-def toy(scenario, prm_path):
+def mock(scenario, prm_path):
     return Broken()
 
 
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=toy, scenarios=("TST901",), parameters=parameters
+            vehicle="imu_spacecraft", fsw=mock, scenarios=("TST901",), parameters=parameters
         )
     )
 )

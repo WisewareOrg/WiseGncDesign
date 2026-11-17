@@ -1,4 +1,4 @@
-"""FPP's model read through the native `fpp to-json`: the real deployment's, and a toy's.
+"""FPP's model read through the native `fpp to-json`: the real deployment's, and a mock's.
 
 The contract test reads the WiseFsw deployment's FPP, so a `fprime-fpp` bump that moves the JSON
 shape fails here. Needs the F´ framework clone `just _sync` fetches, not an F´ build.
@@ -30,7 +30,7 @@ from fsw.codegen.fpp_model import (
     read,
 )
 
-_TOY_FRAMEWORK = (
+_MOCK_FRAMEWORK = (
     "Fw/Cmd/Cmd.fpp",
     "Fw/Prm/Prm.fpp",
     "Fw/Time/Time.fpp",
@@ -41,7 +41,7 @@ _TOY_FRAMEWORK = (
     "default/config/FpConfig.fpp",
     "default/config/FpConstants.fpp",
 )
-"""The F´ framework files, in the clone, that the toy model imports."""
+"""The F´ framework files, in the clone, that the mock model imports."""
 
 GNC = """\
 module Gnc {
@@ -159,8 +159,8 @@ module Top {
 """
 
 
-def _toy_files(directory: Path, gnc: str = GNC) -> list[Path]:
-    """The toy model's files, its two modules written into `directory`.
+def _mock_files(directory: Path, gnc: str = GNC) -> list[Path]:
+    """The mock model's files, its two modules written into `directory`.
 
     Args:
         directory: where `Gnc.fpp` and `Top.fpp` are written.
@@ -172,23 +172,23 @@ def _toy_files(directory: Path, gnc: str = GNC) -> list[Path]:
     (directory / "Gnc.fpp").write_text(gnc)
     (directory / "Top.fpp").write_text(TOP)
     return [
-        *(CLONE / path for path in _TOY_FRAMEWORK),
+        *(CLONE / path for path in _MOCK_FRAMEWORK),
         directory / "Gnc.fpp",
         directory / "Top.fpp",
     ]
 
 
 @pytest.fixture(scope="module")
-def toy(tmp_path_factory: pytest.TempPathFactory) -> Model:
-    """The toy model, read once.
+def mock(tmp_path_factory: pytest.TempPathFactory) -> Model:
+    """The mock model, read once.
 
     Args:
-        tmp_path_factory: where the toy's model is written.
+        tmp_path_factory: where the mock's model is written.
 
     Returns:
         The model.
     """
-    return read(_toy_files(tmp_path_factory.mktemp("toy")))
+    return read(_mock_files(tmp_path_factory.mktemp("mock")))
 
 
 def test_the_deployment_reads_back_with_every_connection_its_topology_declares(tmp_path: Path):
@@ -273,81 +273,81 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(t
     )
 
 
-def test_an_imported_sub_topology_s_connections_are_the_deployment_s_in_port_order(toy: Model):
+def test_an_imported_sub_topology_s_connections_are_the_deployment_s_in_port_order(mock: Model):
     """The deployment holds the imported group's connections, ordered by their from-numbers.
 
     Args:
-        toy: the toy model.
+        mock: the mock model.
     """
-    assert toy.topologies["Top.Deploy"] == (
+    assert mock.topologies["Top.Deploy"] == (
         Connection("Gnc.rg", "RateGroupMemberOut", 0, "Gnc.nav", "schedIn", 0),
         Connection("Gnc.rg", "RateGroupMemberOut", 1, "Gnc.ctrl", "schedIn", 0),
         Connection("Gnc.rg", "RateGroupMemberOut", 2, "Gnc.log", "schedIn", 0),
         Connection("Top.drv", "tickOut", 0, "Gnc.rg", "CycleIn", 0),
     )
-    assert toy.topologies["Gnc.Gnc"] == toy.topologies["Top.Deploy"][:3]
-    assert toy.instances["Gnc.rg"] == Instance("Gnc.rg", "Gnc.RateGroup", 0x4000)
-    assert toy.instances["Top.drv"] == Instance("Top.drv", "Top.Driver", 0x100)
+    assert mock.topologies["Gnc.Gnc"] == mock.topologies["Top.Deploy"][:3]
+    assert mock.instances["Gnc.rg"] == Instance("Gnc.rg", "Gnc.RateGroup", 0x4000)
+    assert mock.instances["Top.drv"] == Instance("Top.drv", "Top.Driver", 0x100)
 
 
 def test_a_topology_s_ports_are_read_as_the_instance_port_each_exposes(tmp_path: Path):
-    """Keyed `<topology>.<port>`: the toy's, and the dead reckoner's GNC sub-topology's.
+    """Keyed `<topology>.<port>`: the mock's, and the dead reckoner's GNC sub-topology's.
 
     Args:
-        tmp_path: where the toy's model and the deployment's topology are written.
+        tmp_path: where the mock's model and the deployment's topology are written.
     """
-    toy = read(_toy_files(tmp_path))
+    mock = read(_mock_files(tmp_path))
     model = read(fpp_files("ImuDeadReckoning", tmp_path))
 
-    assert toy.ports == {"Gnc.Gnc.tickIn": TopologyPort("Gnc.rg", "CycleIn")}
+    assert mock.ports == {"Gnc.Gnc.tickIn": TopologyPort("Gnc.rg", "CycleIn")}
     assert model.ports == {
         "ImuDeadReckoning.Gnc.tickIn": TopologyPort("ImuDeadReckoning.rateGroupDriver", "CycleIn"),
         "ImuDeadReckoning.Gnc.imuIn": TopologyPort("ImuDeadReckoning.nav", "imuIn"),
     }
 
 
-def test_numeric_constants_are_read_by_qualified_name_and_others_are_not(toy: Model):
+def test_numeric_constants_are_read_by_qualified_name_and_others_are_not(mock: Model):
     """Integer and float constants are read, the framework's too; strings and bools are not.
 
     Args:
-        toy: the toy model.
+        mock: the mock model.
     """
-    assert toy.constants["Gnc.navDivider"] == 1
-    assert isinstance(toy.constants["Gnc.navDivider"], int)
-    assert toy.constants["Gnc.gain"] == 2.5
-    assert "Gnc.label" not in toy.constants
-    assert "Gnc.enabled" not in toy.constants
-    assert isinstance(toy.constants["FW_COM_BUFFER_MAX_SIZE"], int)
+    assert mock.constants["Gnc.navDivider"] == 1
+    assert isinstance(mock.constants["Gnc.navDivider"], int)
+    assert mock.constants["Gnc.gain"] == 2.5
+    assert "Gnc.label" not in mock.constants
+    assert "Gnc.enabled" not in mock.constants
+    assert isinstance(mock.constants["FW_COM_BUFFER_MAX_SIZE"], int)
 
 
-def test_annotations_are_read_pre_lines_then_post_lines(toy: Model):
+def test_annotations_are_read_pre_lines_then_post_lines(mock: Model):
     """A definition's `@` lines, then its `@<` lines; one with none has an empty tuple.
 
     Args:
-        toy: the toy model.
+        mock: the mock model.
     """
-    assert toy.annotations["Gnc.nav"] == (
+    assert mock.annotations["Gnc.nav"] == (
         "pre-annotation on instance nav",
         "post-annotation on instance nav",
     )
-    assert toy.annotations["Gnc.Nav"] == (
+    assert mock.annotations["Gnc.Nav"] == (
         "A navigation component",
         "provides: SRS010 free text, with spaces",
     )
-    assert toy.annotations["Gnc.navDivider"] == ("nav runs every tick",)
-    assert toy.annotations["Gnc.Reading"] == ("One IMU reading",)
-    assert toy.annotations["Gnc.Gnc"] == ("GNC sub-topology",)
-    assert toy.annotations["Top.Deploy"] == ("The deployment",)
-    assert toy.annotations["Gnc.ctrl"] == ()
+    assert mock.annotations["Gnc.navDivider"] == ("nav runs every tick",)
+    assert mock.annotations["Gnc.Reading"] == ("One IMU reading",)
+    assert mock.annotations["Gnc.Gnc"] == ("GNC sub-topology",)
+    assert mock.annotations["Top.Deploy"] == ("The deployment",)
+    assert mock.annotations["Gnc.ctrl"] == ()
 
 
-def test_types_are_read_with_struct_members_in_declaration_order(toy: Model):
+def test_types_are_read_with_struct_members_in_declaration_order(mock: Model):
     """Structs keep FPP's member order; enums carry their constants and arrays their size.
 
     Args:
-        toy: the toy model.
+        mock: the mock model.
     """
-    assert toy.types["Gnc.Reading"] == Struct(
+    assert mock.types["Gnc.Reading"] == Struct(
         "Gnc.Reading",
         (
             Member("rate", "F64", None),
@@ -356,9 +356,9 @@ def test_types_are_read_with_struct_members_in_declaration_order(toy: Model):
             Member("label", "string", None),
         ),
     )
-    assert toy.types["Gnc.Mode"] == Enum("Gnc.Mode", "U8", {"idle": 0, "running": 3})
-    assert toy.types["Gnc.Vector3"] == Array("Gnc.Vector3", 3, "F64")
-    assert toy.types["Fw.CmdResponse"] == Enum(
+    assert mock.types["Gnc.Mode"] == Enum("Gnc.Mode", "U8", {"idle": 0, "running": 3})
+    assert mock.types["Gnc.Vector3"] == Array("Gnc.Vector3", 3, "F64")
+    assert mock.types["Fw.CmdResponse"] == Enum(
         "Fw.CmdResponse",
         "U8",
         {
@@ -372,16 +372,16 @@ def test_types_are_read_with_struct_members_in_declaration_order(toy: Model):
             "DISPATCHED_UNTRACKED": 7,
         },
     )
-    assert "Gnc.Seconds" not in toy.types
+    assert "Gnc.Seconds" not in mock.types
 
 
-def test_a_component_s_commands_channels_and_parameters_are_read(toy: Model):
+def test_a_component_s_commands_channels_and_parameters_are_read(mock: Model):
     """Declared commands, channels and parameters, with defaults; F´'s PRM commands are not.
 
     Args:
-        toy: the toy model.
+        mock: the mock model.
     """
-    nav = toy.components["Gnc.Nav"]
+    nav = mock.components["Gnc.Nav"]
 
     assert nav.name == "Gnc.Nav"
     assert nav.commands == (
@@ -405,40 +405,40 @@ def test_a_component_s_commands_channels_and_parameters_are_read(toy: Model):
     assert [type(p.default) for p in nav.parameters] == [float, str, type(None), int, bool, str]
 
 
-def test_a_component_s_general_output_ports_and_its_file_are_read(toy: Model):
+def test_a_component_s_general_output_ports_and_its_file_are_read(mock: Model):
     """Each output port that is not a special port, with its size and arguments, and the file.
 
     Args:
-        toy: the toy model.
+        mock: the mock model.
     """
-    assert toy.components["Gnc.RateGroup"].outputs == (
+    assert mock.components["Gnc.RateGroup"].outputs == (
         Port("RateGroupMemberOut", 3, (Argument("ctx", "U32"),)),
     )
-    assert toy.components["Top.Driver"].outputs == (Port("tickOut", 1, (Argument("ctx", "U32"),)),)
-    assert toy.components["Gnc.Nav"].outputs == ()
-    assert toy.components["Gnc.Nav"].file.name == "Gnc.fpp"
-    assert toy.components["Top.Driver"].file.name == "Top.fpp"
-    assert toy.components["Gnc.Nav"].file.is_absolute()
+    assert mock.components["Top.Driver"].outputs == (Port("tickOut", 1, (Argument("ctx", "U32"),)),)
+    assert mock.components["Gnc.Nav"].outputs == ()
+    assert mock.components["Gnc.Nav"].file.name == "Gnc.fpp"
+    assert mock.components["Top.Driver"].file.name == "Top.fpp"
+    assert mock.components["Gnc.Nav"].file.is_absolute()
 
 
-def test_a_component_s_general_input_ports_are_read_in_fpp_s_order(toy: Model):
+def test_a_component_s_general_input_ports_are_read_in_fpp_s_order(mock: Model):
     """Each input port that is not a special port, with its size and arguments.
 
     Args:
-        toy: the toy model.
+        mock: the mock model.
     """
-    assert toy.components["Gnc.RateGroup"].inputs == (
+    assert mock.components["Gnc.RateGroup"].inputs == (
         Port("CycleIn", 1, (Argument("ctx", "U32"),)),
     )
-    assert toy.components["Gnc.Nav"].inputs == (Port("schedIn", 1, (Argument("ctx", "U32"),)),)
-    assert toy.components["Top.Driver"].inputs == ()
+    assert mock.components["Gnc.Nav"].inputs == (Port("schedIn", 1, (Argument("ctx", "U32"),)),)
+    assert mock.components["Top.Driver"].inputs == ()
 
 
 def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
     """A `serial` output port, which has no port type, is an output with no arguments.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
     gnc = GNC.replace(
         "    command recv port cmdIn\n",
@@ -446,7 +446,7 @@ def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
     )
     assert gnc != GNC
 
-    nav = read(_toy_files(tmp_path, gnc)).components["Gnc.Nav"]
+    nav = read(_mock_files(tmp_path, gnc)).components["Gnc.Nav"]
 
     assert nav.outputs == (Port("anyOut", 1, ()),)
 
@@ -455,24 +455,24 @@ def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):
     """A default the reader does not convert raises, naming the parameter.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
     gnc = GNC.replace("param mounting: Vector3", "param mounting: Vector3 default [1.0, 0.0, 0.0]")
 
     with pytest.raises(ValueError, match="mounting"):
-        read(_toy_files(tmp_path, gnc))
+        read(_mock_files(tmp_path, gnc))
 
 
 def test_a_model_fpp_rejects_fails_with_its_stderr(tmp_path: Path):
     """`to-json`'s refusal raises with what it printed.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
     gnc = GNC.replace("instance nav: Nav", "instance nav: Navigator")
 
     with pytest.raises(RuntimeError, match="Navigator"):
-        read(_toy_files(tmp_path, gnc))
+        read(_mock_files(tmp_path, gnc))
 
 
 @pytest.mark.parametrize(
@@ -482,14 +482,14 @@ def test_a_renamed_analysis_key_fails_the_read(tmp_path: Path, key: str):
     """`parse` on output with a top-level analysis key it reads renamed raises, naming the key.
 
     Args:
-        tmp_path: where the toy's model and `to-json`'s output are written.
+        tmp_path: where the mock's model and `to-json`'s output are written.
         key: the analysis key renamed.
     """
     out = tmp_path / "out"
     model = tmp_path / "model"
     out.mkdir()
     model.mkdir()
-    command = [str(_FPP), "to-json", "-d", str(out), *map(str, _toy_files(model))]
+    command = [str(_FPP), "to-json", "-d", str(out), *map(str, _mock_files(model))]
     subprocess.run(command, check=True, capture_output=True)
     analysis = out / "fpp-analysis.json"
     document = json.loads(analysis.read_text())

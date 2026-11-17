@@ -1,6 +1,6 @@
 """The ground driven tick by tick against a stub edge: its waits, its commands and its record.
 
-The stub edge holds a toy component's dictionary, generated from FPP alone, and answers and writes
+The stub edge holds a mock component's dictionary, generated from FPP alone, and answers and writes
 what each test gives it; the tests that fly Leo500 host it, as a stub build, in `FswHost`.
 """
 
@@ -20,15 +20,15 @@ from ground.procedures import CommandFailed, Ground
 NS = 1_000_000_000
 """ns per s."""
 
-TOY = """\
-module Toy {
+MOCK = """\
+module Mock {
 
   enum Mode {
     slow
     fast
   }
 
-  passive component Toy {
+  passive component Mock {
     sync command setMode(mode: Mode)
     sync command setOffset(offset: Gnc.Vector3, gain: F32)
     telemetry mode: Mode
@@ -46,17 +46,17 @@ module Toy {
 
 @pytest.fixture(scope="module")
 def dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
-    """The toy's dictionary, instanced as `toy`.
+    """The mock's dictionary, instanced as `mock`.
 
     Args:
-        tmp_path_factory: where the toy's model is written.
+        tmp_path_factory: where the mock's model is written.
 
     Returns:
         The dictionary.
     """
-    model = tmp_path_factory.mktemp("toy") / "Toy.fpp"
-    model.write_text(TOY)
-    return Dictionary.from_component([model], Instance("Toy.toy", "Toy.Toy", 0x1000))
+    model = tmp_path_factory.mktemp("mock") / "Mock.fpp"
+    model.write_text(MOCK)
+    return Dictionary.from_component([model], Instance("Mock.mock", "Mock.Mock", 0x1000))
 
 
 class StubEdge:
@@ -74,7 +74,7 @@ class StubEdge:
         """Holds the dictionary, with nothing queued.
 
         Args:
-            dictionary: the toy's dictionary.
+            dictionary: the mock's dictionary.
         """
         self.dictionary = dictionary
         self.uplinked: list[tuple[str, dict[str, Any], int]] = []
@@ -153,7 +153,7 @@ def test_sleep_wakes_at_the_first_tick_at_or_after_its_duration(dictionary: Dict
     """From t = 0 at 1 s ticks, `sleep(2.5)` resumes at t = 3 s, not before.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     seen = []
 
@@ -181,7 +181,7 @@ def test_until_checks_now_then_each_tick_and_times_out_at_its_deadline(dictionar
     The timeout is kept whole in `failure` and raised from the tick.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     seen = []
 
@@ -217,7 +217,7 @@ def test_send_uplinks_the_command_by_name_and_returns_on_its_ok(dictionary: Dict
     The command log holds the command, its arguments as JSON, and its response and time.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     seen = []
     edge = StubEdge(dictionary)
@@ -228,11 +228,11 @@ def test_send_uplinks_the_command_by_name_and_returns_on_its_ok(dictionary: Dict
         Args:
             ground: the ground running it.
         """
-        await ground.send("toy.setMode", mode="fast")
+        await ground.send("mock.setMode", mode="fast")
         seen.append(ground.now_s)
 
     ground = _ground(edge, procedure)
-    assert edge.uplinked == [("toy.setMode", {"mode": "fast"}, 1)]
+    assert edge.uplinked == [("mock.setMode", {"mode": "fast"}, 1)]
     _tick(ground, 1)
     assert seen == []
 
@@ -243,7 +243,7 @@ def test_send_uplinks_the_command_by_name_and_returns_on_its_ok(dictionary: Dict
     assert ground.command_log == [
         {
             "t_s": 0.0,
-            "name": "toy.setMode",
+            "name": "mock.setMode",
             "args": {"mode": "fast"},
             "context": 1,
             "response": "OK",
@@ -257,7 +257,7 @@ def test_the_command_log_holds_array_and_numpy_arguments_as_plain_json(dictionar
     """An array and a numpy scalar argument are logged as a list and a float, as JSON writes them.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     edge = StubEdge(dictionary)
 
@@ -267,7 +267,7 @@ def test_the_command_log_holds_array_and_numpy_arguments_as_plain_json(dictionar
         Args:
             ground: the ground running it.
         """
-        await ground.send("toy.setOffset", offset=np.array([1.0, 2.0, 3.0]), gain=np.float32(0.25))
+        await ground.send("mock.setOffset", offset=np.array([1.0, 2.0, 3.0]), gain=np.float32(0.25))
 
     ground = _ground(edge, procedure)
 
@@ -282,7 +282,7 @@ def test_send_types_the_arguments_into_the_command_s_fpp_types_before_uplink(
     """The edge gets an F32 as F32 holds it and an array as an array; the log keeps them as given.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     edge = StubEdge(dictionary)
 
@@ -292,12 +292,12 @@ def test_send_types_the_arguments_into_the_command_s_fpp_types_before_uplink(
         Args:
             ground: the ground running it.
         """
-        await ground.send("toy.setOffset", offset=[1.0, 2.0, 3.0], gain=0.1)
+        await ground.send("mock.setOffset", offset=[1.0, 2.0, 3.0], gain=0.1)
 
     ground = _ground(edge, procedure)
 
     [(name, args, context)] = edge.uplinked
-    assert (name, sorted(args), context) == ("toy.setOffset", ["gain", "offset"], 1)
+    assert (name, sorted(args), context) == ("mock.setOffset", ["gain", "offset"], 1)
     assert args["gain"] == float(np.float32(0.1))
     assert isinstance(args["offset"], np.ndarray)
     np.testing.assert_array_equal(args["offset"], [1.0, 2.0, 3.0])
@@ -307,9 +307,9 @@ def test_send_types_the_arguments_into_the_command_s_fpp_types_before_uplink(
 @pytest.mark.parametrize(
     ("name", "args", "error", "match"),
     [
-        ("toy.setMod", {"mode": "fast"}, KeyError, "'toy.setMod'"),
-        ("toy.setMode", {"mood": "fast"}, ValueError, r"toy\.setMode takes \['mode'\]"),
-        ("toy.setMode", {"mode": "standby"}, ValueError, "parameter mode"),
+        ("mock.setMod", {"mode": "fast"}, KeyError, "'mock.setMod'"),
+        ("mock.setMode", {"mood": "fast"}, ValueError, r"mock\.setMode takes \['mode'\]"),
+        ("mock.setMode", {"mode": "standby"}, ValueError, "parameter mode"),
     ],
     ids=["unknown-command", "misnamed-argument", "no-constant"],
 )
@@ -319,7 +319,7 @@ def test_send_refuses_a_command_the_dictionary_cannot_type_before_uplink(
     """An unknown command, or arguments that do not fit, raise at `send`, and nothing goes up.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
         name: the command sent.
         args: its arguments.
         error: what `send` raises.
@@ -347,7 +347,7 @@ def test_consecutive_commands_take_fresh_contexts_and_each_resumes_on_its_own_an
     """Two sends uplink under contexts 1 and 2; an answer under another context resumes neither.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     seen = []
     edge = StubEdge(dictionary)
@@ -358,9 +358,9 @@ def test_consecutive_commands_take_fresh_contexts_and_each_resumes_on_its_own_an
         Args:
             ground: the ground running it.
         """
-        await ground.send("toy.setMode", mode="fast")
+        await ground.send("mock.setMode", mode="fast")
         seen.append(ground.now_s)
-        await ground.send("toy.setMode", mode="slow")
+        await ground.send("mock.setMode", mode="slow")
         seen.append(ground.now_s)
 
     ground = _ground(edge, procedure)
@@ -384,7 +384,7 @@ def test_a_command_answered_other_than_ok_fails_the_procedure_naming_it(dictiona
     """A `VALIDATION_ERROR` raises `CommandFailed` naming the command and the response.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     edge = StubEdge(dictionary)
 
@@ -394,13 +394,13 @@ def test_a_command_answered_other_than_ok_fails_the_procedure_naming_it(dictiona
         Args:
             ground: the ground running it.
         """
-        await ground.send("toy.setMode", mode="slow")
+        await ground.send("mock.setMode", mode="slow")
 
     ground = _ground(edge, procedure)
     edge.answers.append((1, "VALIDATION_ERROR", "not in this mode"))
 
     with pytest.raises(
-        CommandFailed, match="toy.setMode was answered VALIDATION_ERROR: not in this mode"
+        CommandFailed, match="mock.setMode was answered VALIDATION_ERROR: not in this mode"
     ) as raised:
         _tick(ground, 1)
 
@@ -413,7 +413,7 @@ def test_a_command_never_answered_times_out(dictionary: Dictionary):
     """With no response, `send` raises at its timeout.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
 
     async def procedure(ground: Ground) -> None:
@@ -422,12 +422,12 @@ def test_a_command_never_answered_times_out(dictionary: Dictionary):
         Args:
             ground: the ground running it.
         """
-        await ground.send("toy.setMode", timeout_s=1.0, mode="fast")
+        await ground.send("mock.setMode", timeout_s=1.0, mode="fast")
 
     ground = _ground(StubEdge(dictionary), procedure)
 
     with pytest.raises(
-        TimeoutError, match=r"at t = 1.0 s waiting until toy.setMode is answered, by t = 1.0 s"
+        TimeoutError, match=r"at t = 1.0 s waiting until mock.setMode is answered, by t = 1.0 s"
     ):
         _tick(ground, 1)
 
@@ -441,26 +441,26 @@ def test_every_write_is_recorded_with_its_tag_in_order_and_tlm_reads_the_latest(
     written has no dataset.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     seen = []
 
     async def procedure(ground: Ground) -> None:
-        """Records `toy.offset` at every tick.
+        """Records `mock.offset` at every tick.
 
         Args:
             ground: the ground running it.
         """
         while True:
-            seen.append(ground.tlm("toy.offset"))
+            seen.append(ground.tlm("mock.offset"))
             await ground.sleep(1.0)
 
     edge = StubEdge(dictionary)
     ground = _ground(edge, procedure)
-    edge.writes.append(("toy.offset", NS, np.array([1.0, 2.0, 3.0])))
-    edge.writes.append(("toy.offset", NS, np.array([4.0, 5.0, 6.0])))
+    edge.writes.append(("mock.offset", NS, np.array([1.0, 2.0, 3.0])))
+    edge.writes.append(("mock.offset", NS, np.array([4.0, 5.0, 6.0])))
     _tick(ground, 1, 2)
-    edge.writes.append(("toy.offset", 3 * NS, np.array([7.0, 8.0, 9.0])))
+    edge.writes.append(("mock.offset", 3 * NS, np.array([7.0, 8.0, 9.0])))
     _tick(ground, 3)
 
     datasets = ground.telemetry_datasets()
@@ -471,11 +471,11 @@ def test_every_write_is_recorded_with_its_tag_in_order_and_tlm_reads_the_latest(
         [4.0, 5.0, 6.0],
         [7.0, 8.0, 9.0],
     ]
-    assert sorted(datasets) == ["tlm/toy.offset", "tlm_t/toy.offset"]
-    values, units = datasets["tlm/toy.offset"]
+    assert sorted(datasets) == ["tlm/mock.offset", "tlm_t/mock.offset"]
+    values, units = datasets["tlm/mock.offset"]
     np.testing.assert_array_equal(values, np.arange(1.0, 10.0).reshape(3, 3))
     assert units == "m"
-    times, units = datasets["tlm_t/toy.offset"]
+    times, units = datasets["tlm_t/mock.offset"]
     np.testing.assert_array_equal(times, [1.0, 1.0, 3.0])
     assert units == "s"
 
@@ -486,7 +486,7 @@ def test_a_period_that_is_not_a_whole_multiple_of_the_flight_software_s_is_refus
     """A ground period that would tick between flight software ticks is refused, naming both.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     edge = StubEdge(dictionary)
 
@@ -505,7 +505,7 @@ async def _returns(ground: Ground) -> None:
 
 
 class StubBuild(StubEdge):
-    """The stub edge as a build `FswHost` hosts, for the flights: it plays the toy component.
+    """The stub edge as a build `FswHost` hosts, for the flights: it plays the mock component.
 
     Each tick answers every command uplinked since the last tick `OK`, writes `setMode`'s mode,
     and writes the tick's time as `offset`.
@@ -515,7 +515,7 @@ class StubBuild(StubEdge):
         """Holds the dictionary, with nothing uplinked.
 
         Args:
-            dictionary: the toy's dictionary.
+            dictionary: the mock's dictionary.
         """
         super().__init__(dictionary)
         self._run = 0
@@ -535,22 +535,22 @@ class StubBuild(StubEdge):
         """
         for name, args, context in self.uplinked[self._run :]:
             self.answers.append((context, "OK", None))
-            if name == "toy.setMode":
-                self.writes.append(("toy.mode", t_ns, args["mode"]))
+            if name == "mock.setMode":
+                self.writes.append(("mock.mode", t_ns, args["mode"]))
         self._run = len(self.uplinked)
-        self.writes.append(("toy.offset", t_ns, np.array([t_ns / NS, 0.0, 0.0])))
+        self.writes.append(("mock.offset", t_ns, np.array([t_ns / NS, 0.0, 0.0])))
         return {}
 
 
-async def _commands_the_toy(ground: Ground) -> None:
-    """Waits 60 s, sets the toy's mode and waits for the toy to report it.
+async def _commands_the_mock(ground: Ground) -> None:
+    """Waits 60 s, sets the mock's mode and waits for the mock to report it.
 
     Args:
         ground: the ground running it.
     """
     await ground.sleep(60.0)
-    await ground.send("toy.setMode", mode="fast")
-    await ground.until(lambda: ground.tlm("toy.mode") == "fast", timeout_s=5.0)
+    await ground.send("mock.setMode", mode="fast")
+    await ground.until(lambda: ground.tlm("mock.mode") == "fast", timeout_s=5.0)
 
 
 def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stops(
@@ -563,7 +563,7 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
     at 61 s on a 1 s ground and at 70 s on a 10 s one, which sees the command's answer then.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
     flights = {}
     for period_s, stops in ((1.0, False), (1.0, True), (10.0, True)):
@@ -571,14 +571,14 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
         fsw = StubBuild(dictionary)
         stop = scenario.stop_ground if stops else lambda: None
         tracking = scenario.vehicle.tracking()
-        ground = Ground(_commands_the_toy, fsw, tracking, stop, period_s=period_s)
+        ground = Ground(_commands_the_mock, fsw, tracking, stop, period_s=period_s)
         host = FswHost(fsw, scenario.vehicle)
         datasets = scenario.run(host, {}, duration_s=120.0, ground=ground)
         flights[period_s, stops] = (datasets | ground.telemetry_datasets(), ground.now_s)
 
     ticking, last_tick_s = flights.pop((1.0, False))
-    assert ticking["tlm_t/toy.offset"][0][[0, -1]].tolist() == [1.0, 120.0]
-    assert ticking["tlm_t/toy.mode"][0].tolist() == [61.0]
+    assert ticking["tlm_t/mock.offset"][0][[0, -1]].tolist() == [1.0, 120.0]
+    assert ticking["tlm_t/mock.mode"][0].tolist() == [61.0]
     assert last_tick_s == 120.0
     assert {key: last for key, (_, last) in flights.items()} == {
         (1.0, True): 61.0,
@@ -597,7 +597,7 @@ def test_the_ground_sends_a_command_s_arguments_as_f_prime_s_handler_gets_them(
     """Sent through the ground to a build, the F32 arrives as F32 holds it, the array whole.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
 
     async def procedure(ground: Ground) -> None:
@@ -606,7 +606,7 @@ def test_the_ground_sends_a_command_s_arguments_as_f_prime_s_handler_gets_them(
         Args:
             ground: the ground running it.
         """
-        await ground.send("toy.setOffset", offset=[1.0, 2.0, 3.0], gain=0.1)
+        await ground.send("mock.setOffset", offset=[1.0, 2.0, 3.0], gain=0.1)
 
     scenario = Leo500()
     fsw = StubBuild(dictionary)
@@ -615,7 +615,7 @@ def test_the_ground_sends_a_command_s_arguments_as_f_prime_s_handler_gets_them(
     scenario.run(FswHost(fsw, scenario.vehicle), {}, duration_s=5.0, ground=ground)
 
     [(name, received, _)] = fsw.uplinked
-    assert name == "toy.setOffset"
+    assert name == "mock.setOffset"
     assert received["gain"] == float(np.float32(0.1))
     assert isinstance(received["offset"], np.ndarray)
     np.testing.assert_array_equal(received["offset"], [1.0, 2.0, 3.0])
@@ -626,7 +626,7 @@ def test_tlm_refuses_a_channel_the_dictionary_lacks(dictionary: Dictionary):
     """A mistyped channel raises `KeyError` naming it, rather than reading `None` forever.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
 
     async def procedure(ground: Ground) -> None:
@@ -635,9 +635,9 @@ def test_tlm_refuses_a_channel_the_dictionary_lacks(dictionary: Dictionary):
         Args:
             ground: the ground running it.
         """
-        ground.tlm("toy.ofset")
+        ground.tlm("mock.ofset")
 
-    with pytest.raises(KeyError, match="'toy.ofset'"):
+    with pytest.raises(KeyError, match="'mock.ofset'"):
         _ground(StubEdge(dictionary), procedure)
 
 
@@ -645,7 +645,7 @@ def test_a_procedure_that_cannot_start_is_kept_whole(dictionary: Dictionary):
     """A procedure that does not take the ground fails at `Reset`, kept whole in `failure`.
 
     Args:
-        dictionary: the toy's dictionary.
+        dictionary: the mock's dictionary.
     """
 
     async def procedure() -> None:

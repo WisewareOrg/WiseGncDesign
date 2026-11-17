@@ -96,23 +96,23 @@ def test_a_message_with_no_bus_struct_is_refused_by_name() -> None:
 def test_a_member_outside_the_emulator_s_domain_is_refused_by_name(
     member: Member, named: str, bus_messages: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A toy bus struct with a scalar, `bool` or unused-primitive member raises, naming it.
+    """A mock bus struct with a scalar, `bool` or unused-primitive member raises, naming it.
 
-    The toy, `Bus.Toy`, stands in for a bus struct's mirror for the test, and the packers are
+    The mock, `Bus.Mock`, stands in for a bus struct's mirror for the test, and the packers are
     replanned.
 
     Args:
         member: the member outside the domain.
         named: the member as the refusal names it, a pattern.
-        bus_messages: a message of each bus struct, one of whose payloads the toy mirrors.
+        bus_messages: a message of each bus struct, one of whose payloads the mock mirrors.
         monkeypatch: replaces the struct's mirror for the test.
     """
     payload = next(iter(bus_messages.values())).payload
-    toy = Struct("Bus.Toy", (member,))
-    monkeypatch.setitem(bus_emulator._STRUCTS, type(payload).__name__.lower(), toy)
+    mock = Struct("Bus.Mock", (member,))
+    monkeypatch.setitem(bus_emulator._STRUCTS, type(payload).__name__.lower(), mock)
     bus_emulator._packer.cache_clear()
     try:
-        with pytest.raises(KeyError, match=rf"Bus\.Toy\.{named}, which the bus emulator"):
+        with pytest.raises(KeyError, match=rf"Bus\.Mock\.{named}, which the bus emulator"):
             serialize(payload)
     finally:
         bus_emulator._packer.cache_clear()

@@ -87,7 +87,7 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
 
     The Basilisk fact it rests on: once a simulation module that declares a message's payload is
     imported, SWIG returns a reader's payload as that module's class of the same name, which has no
-    `__dtype__`. This toy class is one such class, carrying the payload's fields.
+    `__dtype__`. This mock class is one such class, carrying the payload's fields.
 
     Args:
         bus_messages: a message of each bus struct.

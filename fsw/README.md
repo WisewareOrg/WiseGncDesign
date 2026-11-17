@@ -136,7 +136,7 @@ importing its GNC sub-topology, its rate groups' entries beside its algorithms',
 `fpp-to-dict` in a temporary directory against the F´ framework clone `just pinned` or `just local`
 fetches. Nothing is compiled, nothing is written in the tree, and each content of the model is
 generated once per process. `Dictionary.from_component(model, instance)` generates one
-component's alike, instanced alone, for toys and tests:
+component's alike, instanced alone, for mocks and tests:
 
 ```python
 >>> from ground.dictionary import Dictionary

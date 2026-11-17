@@ -1,6 +1,6 @@
 """The Python build's GNC partition runs a sub-topology's algorithms as its FPP wires them.
 
-A toy sub-topology of three components on two rate groups, read from a temporary `.fpp` with the
+A mock sub-topology of three components on two rate groups, read from a temporary `.fpp` with the
 contract, flown with stub classes that log each step.
 """
 
@@ -14,8 +14,8 @@ from fsw.codegen.fpp_model import Model, read
 from fsw.python.gnc.partition import GncPartition
 from fsw.python.platform.rates import RateGroupDriver, dividers
 
-TOY = """\
-module Toy {
+MOCK = """\
+module Mock {
 
   constant fastDivider = 1
   constant slowDivider = 2
@@ -81,7 +81,7 @@ module Toy {
 """
 
 Value = namedtuple("Value", ["x"])
-"""The toy's `Toy.Value`."""
+"""The mock's `Mock.Value`."""
 
 SourceOutputs = namedtuple("SourceOutputs", ["valueOut", "echoOut"], defaults=[None, None])
 """The source's outputs; `echoOut` is written on odd seeds only."""
@@ -163,45 +163,45 @@ class Slow(Sink):
         return Nothing(), Nothing()
 
 
-def _model(directory: Path, toy: str = TOY) -> Model:
-    """The toy sub-topology's model, read with the contract.
+def _model(directory: Path, mock: str = MOCK) -> Model:
+    """The mock sub-topology's model, read with the contract.
 
     Args:
-        directory: where `Toy.fpp` is written.
-        toy: the toy's FPP.
+        directory: where `Mock.fpp` is written.
+        mock: the mock's FPP.
 
     Returns:
         The model.
     """
-    (directory / "Toy.fpp").write_text(toy)
-    return read([*contract_files(), directory / "Toy.fpp"])
+    (directory / "Mock.fpp").write_text(mock)
+    return read([*contract_files(), directory / "Mock.fpp"])
 
 
 @pytest.fixture(scope="module")
 def model(tmp_path_factory: pytest.TempPathFactory) -> Model:
-    """The toy's model, read once.
+    """The mock's model, read once.
 
     Args:
-        tmp_path_factory: where the toy is written.
+        tmp_path_factory: where the mock is written.
 
     Returns:
         The model.
     """
-    return _model(tmp_path_factory.mktemp("toy"))
+    return _model(tmp_path_factory.mktemp("mock"))
 
 
 @pytest.fixture
 def gnc(model: Model) -> GncPartition:
-    """The toy's partition, booted, with the log cleared.
+    """The mock's partition, booted, with the log cleared.
 
     Args:
-        model: the toy's model.
+        model: the mock's model.
 
     Returns:
         The partition.
     """
     LOG.clear()
-    partition = GncPartition(model, "Toy", (Sink, Slow, Source))
+    partition = GncPartition(model, "Mock", (Sink, Slow, Source))
     partition.boot({"source": "p", "sink": None, "slow": None})
     return partition
 
@@ -215,7 +215,7 @@ def test_members_run_in_rate_group_order_and_an_output_reaches_a_later_member_in
     CDH writes every sub-topology port but the driver's `tickIn`.
 
     Args:
-        gnc: the toy's partition.
+        gnc: the mock's partition.
     """
     gnc.write("seedIn", Value(3.0))
 
@@ -237,11 +237,11 @@ def test_frames_follow_the_fpp_rate_constants_and_an_input_keeps_its_latest_valu
     An unwritten output, the echo of an even seed, leaves slow's input at the last echo.
 
     Args:
-        gnc: the toy's partition.
-        model: the toy's model.
+        gnc: the mock's partition.
+        model: the mock's model.
     """
     driver = RateGroupDriver(dividers(model, gnc.rate_groups))
-    assert gnc.rate_groups == ("Toy.fastRateGroup", "Toy.slowRateGroup")
+    assert gnc.rate_groups == ("Mock.fastRateGroup", "Mock.slowRateGroup")
     for t, seed in ((1.0, 1.0), (2.0, 3.0), (3.0, 4.0), (4.0, 5.0), (5.0, 6.0)):
         gnc.write("seedIn", Value(seed))
         gnc.run(t, driver.tick())
@@ -258,7 +258,7 @@ def test_a_step_whose_input_was_never_written_raises_naming_the_port(gnc: GncPar
     """No input has a default: the source's seed was never written.
 
     Args:
-        gnc: the toy's partition.
+        gnc: the mock's partition.
     """
     with pytest.raises(RuntimeError, match=r"source\.seedIn"):
         gnc.run(1.0, [0])
@@ -268,7 +268,7 @@ def test_boot_drops_every_input_held(gnc: GncPartition):
     """A power cycle leaves no input written: the seed written before boot is gone after it.
 
     Args:
-        gnc: the toy's partition.
+        gnc: the mock's partition.
     """
     gnc.write("seedIn", Value(3.0))
 
@@ -282,7 +282,7 @@ def test_boot_builds_every_algorithm_afresh(gnc: GncPartition):
     """A second boot replaces each algorithm with a new one on the parameters given.
 
     Args:
-        gnc: the toy's partition.
+        gnc: the mock's partition.
     """
     first = gnc.algorithms["source"]
 
@@ -306,27 +306,27 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
     """Each member's component needs its class, matched by name, and every class a member.
 
     Args:
-        model: the toy's model.
+        model: the mock's model.
         classes: the classes given.
         named: the error, naming the class missing or the class matching no member.
     """
     with pytest.raises(ValueError, match=named):
-        GncPartition(model, "Toy", classes)
+        GncPartition(model, "Mock", classes)
 
 
 def test_a_data_input_not_named_in_ends_is_refused_naming_it(tmp_path: Path):
     """A connected input's keyword is its name without `In`, so another name has none.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    toy = TOY.replace(
+    mock = MOCK.replace(
         "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
         "    sync input port value: Value\n  }\n\n  passive component Slow",
     ).replace("source.valueOut -> sink.valueIn", "source.valueOut -> sink.value")
 
     with pytest.raises(ValueError, match=r"sink\.value\b"):
-        GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
+        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
 
 
 def test_a_backward_edge_is_refused_naming_it(tmp_path: Path):
@@ -335,10 +335,10 @@ def test_a_backward_edge_is_refused_naming_it(tmp_path: Path):
     Slow runs after sink, so `slow -> sink` would reach sink only at its next run.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    toy = (
-        TOY.replace(
+    mock = (
+        MOCK.replace(
             "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
             "    sync input port valueIn: Value\n    sync input port backIn: Value\n  }\n\n"
             "  passive component Slow",
@@ -354,16 +354,16 @@ def test_a_backward_edge_is_refused_naming_it(tmp_path: Path):
     )
 
     with pytest.raises(ValueError, match=r"slow\.backOut -> sink\.backIn is a backward edge"):
-        GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
+        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
 
 
 def test_a_self_loop_is_refused_as_a_backward_edge(tmp_path: Path):
     """An edge from a member to itself reaches it only at its next run, a delayed feedback.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    toy = TOY.replace(
+    mock = MOCK.replace(
         "    output port echoOut: Value\n",
         "    output port echoOut: Value\n    output port loopOut: Value\n"
         "    sync input port loopIn: Value\n",
@@ -373,17 +373,17 @@ def test_a_self_loop_is_refused_as_a_backward_edge(tmp_path: Path):
     )
 
     with pytest.raises(ValueError, match=r"source\.loopOut -> source\.loopIn is a backward edge"):
-        GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
+        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
 
 
 def test_an_output_feeding_more_than_one_input_is_refused_naming_it(tmp_path: Path):
     """FPP fans one output out only through a port array; the partition refuses it, naming it.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    toy = (
-        TOY.replace("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n")
+    mock = (
+        MOCK.replace("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n")
         .replace(
             "      source.valueOut -> sink.valueIn\n",
             "      source.valueOut[0] -> sink.valueIn\n      source.valueOut[1] -> slow.doubleIn\n",
@@ -396,17 +396,17 @@ def test_an_output_feeding_more_than_one_input_is_refused_naming_it(tmp_path: Pa
     )
 
     with pytest.raises(ValueError, match=r"source\.valueOut routes to more than one input"):
-        GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
+        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
 
 
 def test_a_sub_topology_without_exactly_one_rate_group_driver_is_refused(tmp_path: Path):
     """A second driver leaves the partition no one base tick.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
-    toy = (
-        TOY.replace(
+    mock = (
+        MOCK.replace(
             "  instance fastRateGroup:",
             "  instance otherDriver: Svc.RateGroupDriver base id 0x4400\n  instance fastRateGroup:",
         )
@@ -421,4 +421,4 @@ def test_a_sub_topology_without_exactly_one_rate_group_driver_is_refused(tmp_pat
     )
 
     with pytest.raises(ValueError, match="2 rate group drivers"):
-        GncPartition(_model(tmp_path, toy), "Toy", (Sink, Slow, Source))
+        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))

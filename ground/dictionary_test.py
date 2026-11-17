@@ -1,4 +1,4 @@
-"""The dictionary against a toy component's, generated from FPP alone: names and types.
+"""The dictionary against a mock component's, generated from FPP alone: names and types.
 
 Needs the F´ framework clone `just _sync` fetches. Holding each GNC instance's generated dictionary
 to WiseFsw's also needs the deployment `just fsw` builds, and skips without it.
@@ -12,18 +12,18 @@ import pytest
 from fsw.codegen.fpp_model import Instance
 from ground.dictionary import Dictionary
 
-TOY = """\
-module Toy {
+MOCK = """\
+module Mock {
 
   enum Mode {
     slow
     fast
   }
 
-  passive component Toy {
+  passive component Mock {
 
-    @ Sets the toy
-    sync command setToy(
+    @ Sets the mock
+    sync command setMock(
       gain: F32
       enabled: bool
       mode: Mode
@@ -66,36 +66,38 @@ ARGS = {
 }
 
 
-def _toy(directory: Path, toy: str = TOY, extra: str = EXTRA, base_id: int = 0x1000) -> Dictionary:
-    """The toy's dictionary, its model written into `directory`, instanced as `toy`.
+def _mock(
+    directory: Path, mock: str = MOCK, extra: str = EXTRA, base_id: int = 0x1000
+) -> Dictionary:
+    """The mock's dictionary, its model written into `directory`, instanced as `mock`.
 
     Args:
-        directory: where the toy's `.fpp` and the `.fppi` it includes are written.
-        toy: the component model.
+        directory: where the mock's `.fpp` and the `.fppi` it includes are written.
+        mock: the component model.
         extra: the included group.
         base_id: the instance's base ID.
 
     Returns:
         The dictionary `from_component` generates.
     """
-    (directory / "Toy.fpp").write_text(toy)
+    (directory / "Mock.fpp").write_text(mock)
     (directory / "Extra.fppi").write_text(extra)
     return Dictionary.from_component(
-        [directory / "Toy.fpp"], Instance("Toy.toy", "Toy.Toy", base_id)
+        [directory / "Mock.fpp"], Instance("Mock.mock", "Mock.Mock", base_id)
     )
 
 
 @pytest.fixture
-def toy(tmp_path: Path) -> Dictionary:
-    """The toy's dictionary.
+def mock(tmp_path: Path) -> Dictionary:
+    """The mock's dictionary.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
 
     Returns:
         The dictionary.
     """
-    return _toy(tmp_path)
+    return _mock(tmp_path)
 
 
 def test_from_component_writes_nothing_beside_the_model_and_generates_once_per_content(
@@ -104,47 +106,47 @@ def test_from_component_writes_nothing_beside_the_model_and_generates_once_per_c
     """The deployment is never written in the model's directory; a second call is the cached one.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
-    first = _toy(tmp_path)
+    first = _mock(tmp_path)
 
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["Extra.fppi", "Toy.fpp"]
-    assert _toy(tmp_path) is first
-    assert first.metadata["deploymentName"] == "PyToy.PyToy"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["Extra.fppi", "Mock.fpp"]
+    assert _mock(tmp_path) is first
+    assert first.metadata["deploymentName"] == "PyMock.PyMock"
 
 
 def test_from_component_regenerates_when_a_group_beside_the_model_changes(tmp_path: Path):
     """An edited `.fppi` the component includes gives a new dictionary with the edit.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
-    before = _toy(tmp_path)
+    before = _mock(tmp_path)
 
-    after = _toy(tmp_path, extra=EXTRA.replace("extra", "other"))
+    after = _mock(tmp_path, extra=EXTRA.replace("extra", "other"))
 
     assert after is not before
-    assert "other" in after.entries("toy")["channels"]
-    assert "extra" not in after.entries("toy")["channels"]
+    assert "other" in after.entries("mock")["channels"]
+    assert "extra" not in after.entries("mock")["channels"]
 
 
 def test_from_component_raises_with_the_tool_s_error_for_a_bad_model(tmp_path: Path):
     """A model `fpp-to-dict` rejects raises, naming the component and carrying the tool's stderr.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
-    with pytest.raises(RuntimeError, match=r"(?s)rejected Toy\.Toy.*symbol Missing"):
-        _toy(tmp_path, toy=TOY.replace("telemetry count: U8", "telemetry count: Missing"))
+    with pytest.raises(RuntimeError, match=r"(?s)rejected Mock\.Mock.*symbol Missing"):
+        _mock(tmp_path, mock=MOCK.replace("telemetry count: U8", "telemetry count: Missing"))
 
 
-def test_every_dictionary_carries_f_prime_s_command_responses(toy: Dictionary):
+def test_every_dictionary_carries_f_prime_s_command_responses(mock: Dictionary):
     """A Python build's dictionary has `Fw.CmdResponse`'s constants, from `Interfaces.fpp`.
 
     Args:
-        toy: the toy's dictionary.
+        mock: the mock's dictionary.
     """
-    assert toy.responses == {
+    assert mock.responses == {
         "OK": 0,
         "INVALID_OPCODE": 1,
         "VALIDATION_ERROR": 2,
@@ -156,13 +158,13 @@ def test_every_dictionary_carries_f_prime_s_command_responses(toy: Dictionary):
     }
 
 
-def test_arguments_are_typed_as_f_prime_s_handler_gets_them(toy: Dictionary):
+def test_arguments_are_typed_as_f_prime_s_handler_gets_them(mock: Dictionary):
     """An F32 as F32 holds it, a bool as a bool, an enum by name, an array as an array.
 
     Args:
-        toy: the toy's dictionary.
+        mock: the mock's dictionary.
     """
-    args = toy.arguments("toy.setToy", ARGS)
+    args = mock.arguments("mock.setMock", ARGS)
 
     assert list(args) == ["gain", "enabled", "mode", "offset", "mounting", "count"]
     assert args["gain"] == float(np.float32(0.1))
@@ -189,17 +191,17 @@ def test_arguments_are_typed_as_f_prime_s_handler_gets_them(toy: Dictionary):
     ids=["missing", "extra", "short-array", "none", "no-constant", "above-u8", "below-u8"],
 )
 def test_arguments_that_will_not_fit_are_refused_naming_what(
-    toy: Dictionary, args: dict, match: str
+    mock: Dictionary, args: dict, match: str
 ):
     """Missing arguments, or one that does not fit its type, raise naming it.
 
     Args:
-        toy: the toy's dictionary.
+        mock: the mock's dictionary.
         args: the arguments.
         match: what the error names.
     """
     with pytest.raises(ValueError, match=match):
-        toy.arguments("toy.setToy", args)
+        mock.arguments("mock.setMock", args)
 
 
 def test_a_command_with_a_parameter_type_not_coded_loads_and_refuses_its_arguments(
@@ -208,99 +210,99 @@ def test_a_command_with_a_parameter_type_not_coded_loads_and_refuses_its_argumen
     """A string parameter does not stop the load; typing that command's arguments is refused.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
-    labelled = _toy(
+    labelled = _mock(
         tmp_path,
-        toy=TOY.replace("    @ Sets", "    sync command label(note: string)\n\n    @ Sets"),
+        mock=MOCK.replace("    @ Sets", "    sync command label(note: string)\n\n    @ Sets"),
     )
 
-    assert labelled.command("toy.label").types is None
-    with pytest.raises(ValueError, match=r"toy\.label has a parameter type .* does not code"):
-        labelled.arguments("toy.label", {"note": "hello"})
+    assert labelled.command("mock.label").types is None
+    with pytest.raises(ValueError, match=r"mock\.label has a parameter type .* does not code"):
+        labelled.arguments("mock.label", {"note": "hello"})
 
 
-def test_a_mistyped_name_is_refused_naming_it(toy: Dictionary):
+def test_a_mistyped_name_is_refused_naming_it(mock: Dictionary):
     """A channel or command the dictionary lacks raises `KeyError` naming it.
 
     Args:
-        toy: the toy's dictionary.
+        mock: the mock's dictionary.
     """
-    with pytest.raises(KeyError, match="'toy.gian'"):
-        toy.channel("toy.gian")
-    with pytest.raises(KeyError, match="'toy.setTyo'"):
-        toy.command("toy.setTyo")
-    with pytest.raises(KeyError, match="'toy.setTyo'"):
-        toy.arguments("toy.setTyo", ARGS)
+    with pytest.raises(KeyError, match="'mock.gian'"):
+        mock.channel("mock.gian")
+    with pytest.raises(KeyError, match="'mock.setTyo'"):
+        mock.command("mock.setTyo")
+    with pytest.raises(KeyError, match="'mock.setTyo'"):
+        mock.arguments("mock.setTyo", ARGS)
 
 
-def test_values_in_the_channel_s_type_come_back_in_one_batch_with_their_units(toy: Dictionary):
+def test_values_in_the_channel_s_type_come_back_in_one_batch_with_their_units(mock: Dictionary):
     """Arrays come back (N, *shape), a bool as 1.0, an enum as its name; units are the format's.
 
     Args:
-        toy: the toy's dictionary.
+        mock: the mock's dictionary.
     """
-    offset, mounting = toy.channel("toy.offset"), toy.channel("toy.mounting")
+    offset, mounting = mock.channel("mock.offset"), mock.channel("mock.mounting")
 
     np.testing.assert_array_equal(
         offset.from_raw(np.array([[1, 2, 3], [4, 5, 6]], ">f8")), [[1, 2, 3], [4, 5, 6]]
     )
     np.testing.assert_array_equal(mounting.from_raw(MOUNTING[None].astype(">f8"))[0], MOUNTING)
-    assert toy.channel("toy.enabled").from_raw(np.array([0xFF, 0], "u1")).tolist() == [1.0, 0.0]
-    assert toy.channel("toy.mode").from_raw(np.array([1, 0], ">i4")).tolist() == ["fast", "slow"]
+    assert mock.channel("mock.enabled").from_raw(np.array([0xFF, 0], "u1")).tolist() == [1.0, 0.0]
+    assert mock.channel("mock.mode").from_raw(np.array([1, 0], ">i4")).tolist() == ["fast", "slow"]
     assert offset.from_raw(np.empty((0, 3), ">f8")).shape == (0, 3)
-    assert [offset.units, mounting.units, toy.channel("toy.extra").units] == ["m", "", "s"]
-    assert toy.channels_by_id[offset.id] is offset
+    assert [offset.units, mounting.units, mock.channel("mock.extra").units] == ["m", "", "s"]
+    assert mock.channels_by_id[offset.id] is offset
 
 
-def test_an_enum_value_that_is_no_constant_fails_naming_the_channel(toy: Dictionary):
+def test_an_enum_value_that_is_no_constant_fails_naming_the_channel(mock: Dictionary):
     """A raw enum value outside the enum's constants raises, naming the channel.
 
     Args:
-        toy: the toy's dictionary.
+        mock: the mock's dictionary.
     """
-    with pytest.raises(ValueError, match=r"channel toy\.mode has no constant 7"):
-        toy.channel("toy.mode").from_raw(np.array([7], ">i4"))
+    with pytest.raises(ValueError, match=r"channel mock\.mode has no constant 7"):
+        mock.channel("mock.mode").from_raw(np.array([7], ">i4"))
 
 
-def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
+def test_written_values_are_held_to_the_channel_s_type(mock: Dictionary):
     """Values a Python algorithm writes come back as the serialized ones do, an F32 truncated.
 
     Args:
-        toy: the toy's dictionary.
+        mock: the mock's dictionary.
     """
-    offset = toy.channel("toy.offset")
+    offset = mock.channel("mock.offset")
 
     np.testing.assert_array_equal(
         offset.pack_many([np.array([1.0, 2.0, 3.0]), [4, 5, 6]]), [[1, 2, 3], [4, 5, 6]]
     )
-    np.testing.assert_array_equal(toy.channel("toy.mounting").pack_many([MOUNTING])[0], MOUNTING)
-    assert toy.channel("toy.enabled").pack_many([True, False]).tolist() == [1.0, 0.0]
-    assert toy.channel("toy.mode").pack_many(["slow"]).tolist() == ["slow"]
-    assert toy.channel("toy.count").pack_many([np.uint8(7), 255, 0]).tolist() == [7.0, 255.0, 0.0]
-    assert toy.channel("toy.gain").pack_many([2, 0.1]).tolist() == [2.0, float(np.float32(0.1))]
+    np.testing.assert_array_equal(mock.channel("mock.mounting").pack_many([MOUNTING])[0], MOUNTING)
+    assert mock.channel("mock.enabled").pack_many([True, False]).tolist() == [1.0, 0.0]
+    assert mock.channel("mock.mode").pack_many(["slow"]).tolist() == ["slow"]
+    assert mock.channel("mock.count").pack_many([np.uint8(7), 255, 0]).tolist() == [7.0, 255.0, 0.0]
+    assert mock.channel("mock.gain").pack_many([2, 0.1]).tolist() == [2.0, float(np.float32(0.1))]
     assert offset.pack_many([]).shape == (0, 3)
-    assert toy.channel("toy.mode").pack_many([]).shape == (0,)
+    assert mock.channel("mock.mode").pack_many([]).shape == (0,)
 
 
 @pytest.mark.parametrize(
     ("channel", "values"),
     [
-        ("toy.gain", [0.5, None]),
-        ("toy.gain", ["1.5"]),
-        ("toy.gain", [True]),
-        ("toy.gain", [np.array([1.0, 2.0, 3.0])]),
-        ("toy.offset", [1.0]),
-        ("toy.offset", [[1.0, 2.0]]),
-        ("toy.offset", [[1.0, 2.0, 3.0], [1.0, 2.0]]),
-        ("toy.mounting", [np.eye(3)[0]]),
-        ("toy.count", [1.5]),
-        ("toy.count", [300]),
-        ("toy.count", [-1]),
-        ("toy.count", [2**70]),
-        ("toy.enabled", [1]),
-        ("toy.mode", ["standby"]),
-        ("toy.mode", [None]),
+        ("mock.gain", [0.5, None]),
+        ("mock.gain", ["1.5"]),
+        ("mock.gain", [True]),
+        ("mock.gain", [np.array([1.0, 2.0, 3.0])]),
+        ("mock.offset", [1.0]),
+        ("mock.offset", [[1.0, 2.0]]),
+        ("mock.offset", [[1.0, 2.0, 3.0], [1.0, 2.0]]),
+        ("mock.mounting", [np.eye(3)[0]]),
+        ("mock.count", [1.5]),
+        ("mock.count", [300]),
+        ("mock.count", [-1]),
+        ("mock.count", [2**70]),
+        ("mock.enabled", [1]),
+        ("mock.mode", ["standby"]),
+        ("mock.mode", [None]),
     ],
     ids=[
         "none",
@@ -321,17 +323,17 @@ def test_written_values_are_held_to_the_channel_s_type(toy: Dictionary):
     ],
 )
 def test_a_written_value_that_will_not_fit_fails_naming_the_channel(
-    toy: Dictionary, channel: str, values: list
+    mock: Dictionary, channel: str, values: list
 ):
     """A value F´'s packing would reject fails the batch, naming the channel.
 
     Args:
-        toy: the toy's dictionary.
+        mock: the mock's dictionary.
         channel: the channel written.
         values: its writes, one of them bad.
     """
     with pytest.raises(ValueError, match=rf"channel {channel} "):
-        toy.channel(channel).pack_many(values)
+        mock.channel(channel).pack_many(values)
 
 
 def test_a_channel_of_a_type_not_coded_is_refused_at_load_naming_channel_and_type(
@@ -340,13 +342,13 @@ def test_a_channel_of_a_type_not_coded_is_refused_at_load_naming_channel_and_typ
     """A struct channel fails the dictionary's load, naming the channel and its type.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
-    toy = TOY.replace("  passive", "  struct Pair { a: F64, b: F64 }\n\n  passive")
-    toy = toy.replace("telemetry count: U8", "telemetry count: Pair")
+    mock = MOCK.replace("  passive", "  struct Pair { a: F64, b: F64 }\n\n  passive")
+    mock = mock.replace("telemetry count: U8", "telemetry count: Pair")
 
-    with pytest.raises(ValueError, match=r"channel toy\.count has type Toy\.Pair"):
-        _toy(tmp_path, toy=toy)
+    with pytest.raises(ValueError, match=r"channel mock\.count has type Mock\.Pair"):
+        _mock(tmp_path, mock=mock)
 
 
 @pytest.mark.parametrize(
@@ -370,28 +372,28 @@ def test_entries_differ_when_the_contract_does(tmp_path: Path, before: str, afte
     """
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
-    assert before in TOY
+    assert before in MOCK
 
-    changed = _toy(tmp_path / "b", toy=TOY.replace(before, after))
+    changed = _mock(tmp_path / "b", mock=MOCK.replace(before, after))
 
-    assert _toy(tmp_path / "a").entries("toy") != changed.entries("toy")
+    assert _mock(tmp_path / "a").entries("mock") != changed.entries("mock")
 
 
 def test_entries_are_equal_when_only_ids_and_opcodes_differ(tmp_path: Path):
     """A channel ID and an opcode set by hand leave `entries` unchanged.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
-    toy = TOY.replace('format "{} rad"', 'id 0x20 format "{} rad"')
-    toy = toy.replace("      count: U8\n    )", "      count: U8\n    ) opcode 5")
-    moved = _toy(tmp_path / "b", toy=toy)
-    original = _toy(tmp_path / "a")
+    mock = MOCK.replace('format "{} rad"', 'id 0x20 format "{} rad"')
+    mock = mock.replace("      count: U8\n    )", "      count: U8\n    ) opcode 5")
+    moved = _mock(tmp_path / "b", mock=mock)
+    original = _mock(tmp_path / "a")
 
-    assert moved.channel("toy.gain").id != original.channel("toy.gain").id
-    assert moved.entries("toy") == original.entries("toy")
+    assert moved.channel("mock.gain").id != original.channel("mock.gain").id
+    assert moved.entries("mock") == original.entries("mock")
 
 
 _PARAMETERS = """    param get port prmGetOut
@@ -399,53 +401,55 @@ _PARAMETERS = """    param get port prmGetOut
     param limit: F32
     param mounting: Gnc.Matrix3
 """
-"""Parameters given to the toy, with the ports a component with parameters needs."""
+"""Parameters given to the mock, with the ports a component with parameters needs."""
 
 
 def test_each_parameter_is_listed_by_id_with_its_name(tmp_path: Path):
-    """The toy's two parameters come by ID, named `toy.<parameter>`; their commands are marked.
+    """The mock's two parameters come by ID, named `mock.<parameter>`; their commands are marked.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
-    toy = _toy(tmp_path, toy=TOY.replace("    time get port", _PARAMETERS + "    time get port"))
+    mock = _mock(
+        tmp_path, mock=MOCK.replace("    time get port", _PARAMETERS + "    time get port")
+    )
 
-    named = {p.name: p for p in toy.parameters_by_id.values()}
+    named = {p.name: p for p in mock.parameters_by_id.values()}
 
-    assert sorted(named) == ["toy.limit", "toy.mounting"]
-    assert all(toy.parameters_by_id[p.id] is p for p in named.values())
-    assert toy.command("toy.LIMIT_PRM_SET").kind == "set"
-    assert toy.command("toy.LIMIT_PRM_SAVE").kind == "save"
-    assert toy.command("toy.setToy").kind == "sync"
+    assert sorted(named) == ["mock.limit", "mock.mounting"]
+    assert all(mock.parameters_by_id[p.id] is p for p in named.values())
+    assert mock.command("mock.LIMIT_PRM_SET").kind == "set"
+    assert mock.command("mock.LIMIT_PRM_SAVE").kind == "save"
+    assert mock.command("mock.setMock").kind == "sync"
 
 
 def test_the_instance_s_parameters_are_numbered_from_its_base_id(tmp_path: Path):
-    """Instanced at base ID 0x2000, the toy's two parameters are 0x2000 and 0x2001.
+    """Instanced at base ID 0x2000, the mock's two parameters are 0x2000 and 0x2001.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
-    toy = TOY.replace("    time get port", _PARAMETERS + "    time get port")
+    mock = MOCK.replace("    time get port", _PARAMETERS + "    time get port")
 
-    dictionary = _toy(tmp_path, toy=toy, base_id=0x2000)
+    dictionary = _mock(tmp_path, mock=mock, base_id=0x2000)
 
     named = dictionary.parameters_by_id.values()
-    assert {p.name: p.id for p in named} == {"toy.limit": 0x2000, "toy.mounting": 0x2001}
+    assert {p.name: p.id for p in named} == {"mock.limit": 0x2000, "mock.mounting": 0x2001}
 
 
 def test_a_parameter_of_a_type_not_coded_does_not_stop_the_dictionary_loading(tmp_path: Path):
     """A struct and a string parameter load: no consumer reads a parameter's type.
 
     Args:
-        tmp_path: where the toy's model is written.
+        tmp_path: where the mock's model is written.
     """
-    toy = TOY.replace("  passive", "  struct Pair { a: F64, b: F64 }\n\n  passive")
+    mock = MOCK.replace("  passive", "  struct Pair { a: F64, b: F64 }\n\n  passive")
     added = "    param pair: Pair\n    param label: string\n"
-    toy = toy.replace("    time get port", _PARAMETERS + added + "    time get port")
+    mock = mock.replace("    time get port", _PARAMETERS + added + "    time get port")
 
-    names = {p.name for p in _toy(tmp_path, toy=toy).parameters_by_id.values()}
+    names = {p.name for p in _mock(tmp_path, mock=mock).parameters_by_id.values()}
 
-    assert {"toy.pair", "toy.label"} <= names
+    assert {"mock.pair", "mock.label"} <= names
 
 
 def test_the_algorithm_instances_are_the_gnc_instances_of_an_algorithm_it_holds(
@@ -453,23 +457,23 @@ def test_the_algorithm_instances_are_the_gnc_instances_of_an_algorithm_it_holds(
 ):
     """A GNC instance is one of the dictionary's when it has entries there and is an algorithm's.
 
-    The toy's dictionary holds `PyToy.toy`; a second instance of its component has no entries in
-    it, and while the toy is no algorithm's component neither instance is.
+    The mock's dictionary holds `PyMock.mock`; a second instance of its component has no entries in
+    it, and while the mock is no algorithm's component neither instance is.
 
     Args:
-        tmp_path: where the toy's model is written.
-        monkeypatch: gives the GNC sub-topologies the toy's instances, and the algorithms its
+        tmp_path: where the mock's model is written.
+        monkeypatch: gives the GNC sub-topologies the mock's instances, and the algorithms its
             component.
     """
-    toy = _toy(tmp_path)
-    held = Instance("PyToy.toy", "Toy.Toy", 0x1000)
-    absent = Instance("PyToy.other", "Toy.Toy", 0x2000)
+    mock = _mock(tmp_path)
+    held = Instance("PyMock.mock", "Mock.Mock", 0x1000)
+    absent = Instance("PyMock.other", "Mock.Mock", 0x2000)
     monkeypatch.setattr("ground.dictionary.gnc_instances", lambda: (held, absent))
-    monkeypatch.setattr("ground.dictionary.algorithm_components", lambda: {"Toy.Toy"})
+    monkeypatch.setattr("ground.dictionary.algorithm_components", lambda: {"Mock.Mock"})
 
-    assert toy.algorithm_instances() == (held,)
+    assert mock.algorithm_instances() == (held,)
     monkeypatch.setattr("ground.dictionary.algorithm_components", lambda: set())
-    assert toy.algorithm_instances() == ()
+    assert mock.algorithm_instances() == ()
 
 
 def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_parameter_ids(

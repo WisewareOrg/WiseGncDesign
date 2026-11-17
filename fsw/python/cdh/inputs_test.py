@@ -1,7 +1,7 @@
 """The Python build's CDH-in pairs each sensor role from FPP and converts its bus struct to ICD.
 
 Each configuration's pairing is read from the contract and its sub-topology, every algorithm a
-class named for its component; the refusals are read from a toy converter, built from the
+class named for its component; the refusals are read from a mock converter, built from the
 contract's first role; the conversion ranges over every role, on `bus_messages`' values.
 """
 
@@ -29,7 +29,7 @@ ROLES = roles(read(contract_files()))
 """Every role of the contract's `Cdh.BusConverter`."""
 
 ROLE = ROLES[0]
-"""The role the toy converter carries."""
+"""The role the mock converter carries."""
 
 CDH = f"""\
 module Cdh {{
@@ -39,11 +39,11 @@ module Cdh {{
   }}
 }}
 """
-"""A toy converter of the contract's first role alone."""
+"""A mock converter of the contract's first role alone."""
 
 
 def _model(directory: Path, cdh: str = CDH) -> Model:
-    """A toy converter's model, with the framework and the interfaces.
+    """A mock converter's model, with the framework and the interfaces.
 
     Args:
         directory: where `Cdh.fpp` is written.
@@ -111,7 +111,7 @@ def test_a_role_the_sub_topology_does_not_take_is_skipped(tmp_path: Path):
     """A converter role with no sub-topology input of its name is not paired.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
     assert pairings(_model(tmp_path), ()) == []
 
@@ -120,7 +120,7 @@ def test_a_role_without_its_output_is_refused_naming_it(tmp_path: Path):
     """Each bus-typed `<role>In` needs `<role>Out`, which the GNC's type is carried on.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
     cdh = CDH.replace(f"output port {ROLE.output}:", "output port notAnOut:")
 
@@ -132,7 +132,7 @@ def test_a_role_whose_output_is_a_bus_struct_is_refused_naming_it(tmp_path: Path
     """A bus-typed input converts to the GNC's type, never to another bus struct.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
     cdh = CDH.replace(
         f"output port {ROLE.output}: {ROLE.icd}", f"output port {ROLE.output}: {ROLE.bus}"
@@ -146,7 +146,7 @@ def test_a_sub_topology_input_no_role_feeds_is_refused_naming_it(tmp_path: Path)
     """A data input of the sub-topology with no converter pair would never be written.
 
     Args:
-        tmp_path: where the toy is written.
+        tmp_path: where the mock is written.
     """
     with pytest.raises(ValueError, match=r"\['notARoleIn'\]"):
         pairings(_model(tmp_path), (ROLE.input, "notARoleIn"))
