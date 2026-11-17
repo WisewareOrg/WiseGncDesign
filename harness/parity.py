@@ -1,7 +1,7 @@
 """Parity: the Python and F´ builds' flights of one configuration agree on what FPP declares.
 
-Parity is an analyzer in ADR 0004 rev 2's sense, a function over run files. Its unit is a twin: one
-flight on each build of the same vehicle, configuration and scenario, case `k` against case `k`.
+See ADR 0004, "Parity is an analyzer whose spec is a minimum". Its unit is a twin: one flight on
+each build of the same vehicle, configuration and scenario, case `k` against case `k`.
 Everything it compares is read from the contract, so an algorithm adds nothing here:
 
 - the telemetry of every channel each algorithm member's component declares, where the members are
