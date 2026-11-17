@@ -1,10 +1,18 @@
-"""The FPP file lists: a deployment's is the contract's, its GNC sub-topology and its topology."""
+"""The FPP file lists, and each configuration's deployment, its role wiring generated from FPP.
 
+A deployment's file list is the contract's, its GNC sub-topology and its rendered topology. The
+role wiring is checked on mock configurations rendered from the contract's roles, read through
+FPP's own analysis; which configurations the F´ build builds, on a mock contract.
+"""
+
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from fsw.codegen.deployment import (
+    CONTRACT,
+    Contract,
     algorithm_components,
     algorithm_files,
     bus_port,
@@ -12,14 +20,25 @@ from fsw.codegen.deployment import (
     configurations,
     contract_files,
     fpp_files,
+    fprime_configurations,
     gnc_instances,
+    main,
     tick_period,
 )
 from fsw.codegen.fpp_model import Model, read
-from fsw.codegen.roles import roles
-from fsw.mock import MOCK
+from fsw.codegen.roles import Role, roles, taken
+from fsw.mock import MOCK, device, edited, sub_topology
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
+
+DECLARED = roles(read(contract_files()))
+"""Every role the contract declares."""
+
+SENSORS = [role for role in DECLARED if role.sensor]
+"""Every sensor role."""
+
+ACTUATORS = [role for role in DECLARED if not role.sensor]
+"""Every actuator role."""
 
 
 def test_a_deployment_s_files_are_the_contract_s_then_its_gnc_and_topology(
@@ -38,7 +57,9 @@ def test_a_deployment_s_files_are_the_contract_s_then_its_gnc_and_topology(
         _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
         tmp_path / f"{configuration}Fsw.fpp",
     )
-    assert "@CONFIGURATION@" not in (tmp_path / f"{configuration}Fsw.fpp").read_text()
+    text = (tmp_path / f"{configuration}Fsw.fpp").read_text()
+    assert "@CONFIGURATION@" not in text
+    assert "@SIMULATION@" not in text
 
 
 def test_the_contract_holds_the_bus_structs_and_every_algorithm_s_files():
@@ -102,22 +123,118 @@ def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
         tick_period("MockFrame", contract=MOCK)
 
 
-def test_a_cdh_port_s_bus_port_is_the_lab_bus_driver_port_the_deployment_wires_to_it(
-    configuration: str, contract_model: Model
+def _mock(directory: Path, name: str, exposed: Sequence[Role]) -> Contract:
+    """A mock contract of one configuration, whose device takes every declared role.
+
+    Args:
+        directory: where the device and the configuration are written.
+        name: the configuration.
+        exposed: the roles its sub-topology exposes.
+
+    Returns:
+        The contract.
+    """
+    (directory / "gnc").mkdir()
+    fpp = directory / "Device.fpp"
+    fpp.write_text(device("Device", DECLARED))
+    ports = [role.input if role.sensor else role.output for role in exposed]
+    (directory / "gnc" / f"{name}.fpp").write_text(
+        sub_topology(
+            name, [("device", "MockGnc.Device")], [f"port {p} = device.{p}" for p in ports]
+        )
+    )
+    return Contract((fpp,), directory / "gnc")
+
+
+def _simulation(model: Model, name: str) -> set[tuple[str, str, int, str, str, int]]:
+    """A rendered deployment's connections to and from LabBusDriver and the CDH.
+
+    Args:
+        model: the deployment's model.
+        name: the configuration.
+
+    Returns:
+        Each connection, as its ends with the deployment's module dropped from each instance.
+    """
+    simulation = {"WiseFsw.labBusDriver", "WiseFsw.cdh"}
+    return {
+        (
+            c.from_instance.removeprefix("WiseFsw."),
+            c.from_port,
+            c.from_index,
+            c.to_instance.removeprefix("WiseFsw."),
+            c.to_port,
+            c.to_index,
+        )
+        for c in model.topologies[f"WiseFsw.{name}Fsw"]
+        if {c.from_instance, c.to_instance} & simulation
+    }
+
+
+@pytest.mark.parametrize(
+    "exposed",
+    [DECLARED, SENSORS, ACTUATORS, []],
+    ids=["every-role", "sensors-only", "actuators-only", "no-role"],
+)
+def test_a_configuration_s_role_wiring_is_generated_from_the_roles_it_takes(
+    tmp_path: Path, exposed: list[Role]
 ):
-    """Each role's `cdh.<role>In` is fed by the `labBusDriver.busOut` index the template wires.
+    """The k-th sensor is fed from `busOut[k]`, the k-th actuator feeds `busIn[k]`, through cdh.
+
+    FPP's own analysis accepts each rendered deployment, so each end is type-checked; a
+    configuration taking no role renders an empty Simulation group.
+
+    Args:
+        tmp_path: where the mock and its deployment are rendered.
+        exposed: the roles the mock's sub-topology exposes.
+    """
+    assert SENSORS and ACTUATORS
+    name = "Wired"
+    contract = _mock(tmp_path, name, exposed)
+    gnc = f"{name}.device"
+
+    model = read(fpp_files(name, tmp_path, contract=contract))
+
+    sensors = [role for role in exposed if role.sensor]
+    actuators = [role for role in exposed if not role.sensor]
+    wired = {
+        connection
+        for k, role in enumerate(sensors)
+        for connection in (
+            ("labBusDriver", "busOut", k, "cdh", role.input, 0),
+            ("cdh", role.output, 0, gnc, role.input, 0),
+        )
+    } | {
+        connection
+        for k, role in enumerate(actuators)
+        for connection in (
+            (gnc, role.output, 0, "cdh", role.input, 0),
+            ("cdh", role.output, 0, "labBusDriver", "busIn", k),
+        )
+    }
+    assert _simulation(model, name) == wired
+    text = (tmp_path / f"{name}Fsw.fpp").read_text()
+    assert "@" not in text.replace("@ ", "")
+    for of in (sensors, actuators):
+        for k, role in enumerate(of):
+            port = role.input if role.sensor else role.output
+            assert bus_port(name, port, contract=contract) == k, role.role
+
+
+def test_the_repository_s_configurations_wire_their_roles_through_the_shared_template(
+    configuration: str,
+):
+    """Each taken role's LabBusDriver index is its place among the roles of its direction.
 
     Args:
         configuration: the configuration.
-        contract_model: the contract's model, which declares the roles.
     """
-    declared = roles(contract_model)
-    template = (_REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()
-    assert declared
-
-    for role in declared:
-        port = bus_port(configuration, role.input)
-        assert f"labBusDriver.busOut[{port}] -> cdh.{role.input}" in template, role.role
+    found = taken(configuration_model(configuration), configuration)
+    for direction in (True, False):
+        of = [role for role in found if role.sensor == direction]
+        for k, role in enumerate(of):
+            port = role.input if role.sensor else role.output
+            assert bus_port(configuration, port) == k, role.role
 
 
 def test_a_cdh_port_no_lab_bus_driver_port_feeds_is_refused_naming_it(configuration: str):
@@ -133,45 +250,75 @@ def test_a_cdh_port_no_lab_bus_driver_port_feeds_is_refused_naming_it(configurat
 
 
 def test_a_cdh_port_two_lab_bus_driver_ports_feed_is_refused_naming_both(
-    configuration: str,
-    contract_model: Model,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """A template that wires a second LabBusDriver port to a role's input raises, naming both.
 
-    The second port is the lowest that no role's input takes.
-
     Args:
-        configuration: the configuration.
-        contract_model: the contract's model, which declares the roles.
-        tmp_path: where the twice-wired template is written.
+        tmp_path: where the mock, its deployment and the twice-wired template are written.
         monkeypatch: renders the deployment from that template.
     """
-    declared = roles(contract_model)
-    role = declared[0]
-    port = bus_port(configuration, role.input)
-    taken = {bus_port(configuration, r.input) for r in declared}
-    [bus_out] = [
-        p for p in contract_model.components["Bus.LabBusDriver"].outputs if p.name == "busOut"
-    ]
-    free = [i for i in range(bus_out.size) if i not in taken]
-    assert free, "every LabBusDriver port is taken"
-    other = free[0]
-    wired = f"labBusDriver.busOut[{port}] -> cdh.{role.input}"
+    name = "Twice"
+    contract = _mock(tmp_path, name, SENSORS)
+    role = SENSORS[0]
+    other = len(SENSORS)
     original = (_REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()
-    assert wired in original
     template = tmp_path / "Fsw.fpp.in"
     template.write_text(
-        original.replace(wired, f"{wired}\n      labBusDriver.busOut[{other}] -> cdh.{role.input}")
+        edited(
+            original,
+            (
+                "@SIMULATION@\n",
+                f"@SIMULATION@\n      labBusDriver.busOut[{other}] -> cdh.{role.input}\n",
+            ),
+        )
     )
     monkeypatch.setattr("fsw.codegen.deployment._TEMPLATE", template)
-    bus_port.cache_clear()
-    try:
-        found = ", ".join(map(str, sorted((port, other))))
-        with pytest.raises(
-            ValueError, match=rf"cdh\.{role.input} to LabBusDriver port\(s\) \[{found}\], not one"
-        ):
-            bus_port(configuration, role.input)
-    finally:
-        bus_port.cache_clear()
+
+    with pytest.raises(
+        ValueError, match=rf"cdh\.{role.input} to LabBusDriver port\(s\) \[0, {other}\], not one"
+    ):
+        bus_port(name, role.input, contract=contract)
+
+
+def test_the_f_prime_build_builds_a_configuration_only_when_each_member_has_an_f_prime_component(
+    tmp_path: Path,
+):
+    """A member whose component's `.fpp` has no `CMakeLists.txt` beside it keeps it out of F´.
+
+    Args:
+        tmp_path: where the mock is written.
+    """
+    contract = _mock(tmp_path, "Gated", DECLARED)
+    assert fprime_configurations(contract=contract) == ()
+
+    (tmp_path / "CMakeLists.txt").touch()
+
+    assert fprime_configurations(contract=contract) == ("Gated",)
+    assert fprime_configurations() == configurations()
+
+
+def test_the_renderer_renders_and_names_every_f_prime_configuration_of_both_contracts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """`python -m fsw.codegen.deployment <dir>` prints a line per configuration it renders, alone.
+
+    Each line is the configuration, a tab, and its GNC sub-topology's path; the repository's
+    contract's and the test mocks' F´ configurations are each rendered into `<dir>/<name>/`.
+
+    Args:
+        tmp_path: the directory.
+        capsys: reads what the renderer prints.
+    """
+    main([str(tmp_path)])
+
+    expected = [
+        f"{name}\t{contract.gnc / f'{name}.fpp'}"
+        for contract in (CONTRACT, MOCK)
+        for name in fprime_configurations(contract=contract)
+    ]
+    assert expected
+    assert capsys.readouterr().out.splitlines() == expected
+    for line in expected:
+        name = line.split("\t")[0]
+        assert (tmp_path / name / f"{name}Fsw.fpp").is_file(), name
