@@ -108,7 +108,7 @@ class FrameRunner:
         for port, value in inputs.convert(self._pairs, read).items():
             self._gnc.write(port, value)
         t = t_ns / _NANOSECONDS_PER_SECOND
-        for member in self._gnc.run(t, self._driver.tick()):
+        for member in self._gnc.run(t, self._driver.tick()).telemetry:
             self._link.log(member.instance, member.telemetry, t_ns)
         return messages.commands()
 
