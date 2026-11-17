@@ -219,7 +219,8 @@ def _command(runner: FrameRunner, instance: str) -> tuple[str, dict[str, Any], d
         command = runner.dictionary.command(f"{instance}.{name}")
         if command.kind in ("set", "save") or not params or command.types is None:
             continue
-        if command.types[0].constants is None and command.types[0].bools is None:
+        first = command.types[0]
+        if first.constants is None and first.bools is None and first.dtype.kind in "fi":
             taken = {p: _value(t, 1.0) for p, t in zip(command.params, command.types, strict=True)}
             refused = {**taken, command.params[0]: _value(command.types[0], -1.0)}
             return f"{instance}.{name}", taken, refused
@@ -303,8 +304,10 @@ def test_a_tick_converts_each_message_steps_at_its_time_and_commands_nothing(
             for role, payload in messages_by_role.items()
         )
     }
+    assert set().union(*(inputs for *_, inputs in steps)) == set(messages_by_role)
     for instance, _, t, inputs in steps:
         assert t == 2.0, instance
+        assert inputs, instance
         for keyword, value in inputs.items():
             for field in value._fields:
                 np.testing.assert_array_equal(
@@ -343,6 +346,7 @@ def test_commands_run_by_name_before_the_step_and_answer_with_f_prime_s_response
     runner.uplink(name, refused, 8)
     for context, set_ in enumerate(sets[:1], 9):
         runner.uplink(set_, {"val": _value(runner.dictionary.command(set_).types[0], 1.0)}, context)
+    runner.uplink(f"{instance}.notACommand", {}, 10)
     assert runner.responses() == []
 
     runner.tick(1_000_000_000, messages_by_role)
@@ -356,6 +360,7 @@ def test_commands_run_by_name_before_the_step_and_answer_with_f_prime_s_response
         (7, "OK", None),
         (8, "VALIDATION_ERROR", f"{first}'s {next(iter(refused))} is negative"),
         *[(9, "INVALID_OPCODE", None) for _ in sets[:1]],
+        (10, "INVALID_OPCODE", None),
     ]
     assert runner.responses() == []
     channel = _first_channel(runner, instance)
