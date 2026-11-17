@@ -17,39 +17,20 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import jupytext
+import nbformat
 import pandas as pd
 from IPython.display import Image, display
 from jupyter_client.kernelspec import KernelSpecManager
+from nbclient import NotebookClient
+from nbclient.exceptions import CellExecutionError
+from traitlets.config import Config
 from wise_dynamics.sessions import current_session
 
 from harness import requirements_tree
 from harness.judging import skipped_folders
 
 KERNEL = "wise-gnc-design"
-
-_EXECUTE = """
-import sys
-from pathlib import Path
-
-import jupytext
-import nbformat
-from jupytext.kernels import kernelspec_from_language
-from nbclient import NotebookClient
-from traitlets.config import Config
-
-path, out, ip = sys.argv[1:]
-notebook = jupytext.read(path)
-if not notebook.metadata.get("kernelspec", {}).get("name"):
-    language = notebook.metadata["jupytext"]["main_language"]
-    notebook.metadata["kernelspec"] = kernelspec_from_language(language)
-config = Config({"KernelManager": {"transport": "ipc", "ip": ip}})
-resources = {"metadata": {"path": str(Path(path).parent)}}
-NotebookClient(notebook, timeout=None, resources=resources, config=config).execute()
-nbformat.write(notebook, out)
-"""
-"""Executes a percent-format notebook in its folder, as `jupytext --execute` does, in the kernel
-jupytext picks for its language, over IPC sockets at a path prefix given: `<notebook> <executed
-copy> <socket prefix>`."""
 
 
 def _report() -> Path:
@@ -181,18 +162,21 @@ def run_notebook(path: Path) -> None:
         )
     with tempfile.TemporaryDirectory() as tmp:
         sessions = shlex.quote(f"{tmp}/sessions")
-        addopts = f"{os.environ.get('PYTEST_ADDOPTS', '')} -o sim_out={sessions}"
-        result = subprocess.run(
-            [sys.executable, "-c", _EXECUTE, str(path), f"{tmp}/run.ipynb", f"{tmp}/kernel"],
-            env={
-                **os.environ,
-                "JPY_SESSION_NAME": str(path),
-                "WISE_DYNAMICS_CAPPED": "1",
-                "PYTEST_ADDOPTS": addopts,
-            },
-            capture_output=True,
-            text=True,
-            check=False,
+        client = NotebookClient(
+            jupytext.read(path),
+            timeout=None,
+            kernel_name=KERNEL,
+            resources={"metadata": {"path": str(path.parent)}},
+            config=Config({"KernelManager": {"transport": "ipc", "ip": f"{tmp}/kernel"}}),
         )
-    if result.returncode:
-        raise RuntimeError(f"{path.name} failed:\n{result.stderr}")
+        env = {
+            **os.environ,
+            "JPY_SESSION_NAME": str(path),
+            "WISE_DYNAMICS_CAPPED": "1",
+            "PYTEST_ADDOPTS": f"{os.environ.get('PYTEST_ADDOPTS', '')} -o sim_out={sessions}",
+        }
+        try:
+            client.execute(env=env)
+        except CellExecutionError as error:
+            raise RuntimeError(f"{path.name} failed:\n{error}") from error
+        nbformat.write(client.nb, f"{tmp}/run.ipynb")
