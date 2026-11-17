@@ -15,23 +15,28 @@ from fsw.codegen.deployment import (
     gnc_instances,
     tick_period,
 )
-from fsw.codegen.fpp_model import read
+from fsw.codegen.fpp_model import Model, read
+from fsw.codegen.roles import roles
+from fsw.mock import MOCK
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
 
 
-def test_a_deployment_s_files_are_the_contract_s_then_its_gnc_and_topology(tmp_path: Path):
+def test_a_deployment_s_files_are_the_contract_s_then_its_gnc_and_topology(
+    configuration: str, tmp_path: Path
+):
     """`fpp_files` extends `contract_files`, so both builds read one list.
 
     Args:
+        configuration: the configuration.
         tmp_path: where the deployment's topology is rendered.
     """
-    files = fpp_files("ImuDeadReckoning", tmp_path)
+    files = fpp_files(configuration, tmp_path)
 
     assert files == (
         *contract_files(),
-        _REPOSITORY / "fsw" / "fpp" / "gnc" / "ImuDeadReckoning.fpp",
-        tmp_path / "ImuDeadReckoningFsw.fpp",
+        _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
+        tmp_path / f"{configuration}Fsw.fpp",
     )
 
 
@@ -40,8 +45,7 @@ def test_the_contract_holds_the_bus_structs_and_every_algorithm_s_files():
     files = contract_files()
 
     assert _REPOSITORY / "fsw" / "fpp" / "interfaces" / "Bus.fpp" in files
-    reckoner = _REPOSITORY / "algorithms" / "imu_dead_reckoning" / "ImuDeadReckoner.fpp"
-    assert reckoner in algorithm_files()
+    assert algorithm_files()
     assert set(algorithm_files()) <= set(files)
 
 
@@ -72,9 +76,10 @@ def test_the_configurations_are_the_gnc_sub_topologies_sorted_by_name():
 
 def test_a_configuration_s_base_tick_period_is_its_fpp_constant():
     """`tickPeriod`, in s, beside the sub-topology's dividers, read from its model once."""
-    assert tick_period("ImuDeadReckoning") == 1.0
-    assert configuration_model("ImuDeadReckoning") is configuration_model("ImuDeadReckoning")
-    assert "ImuDeadReckoning.Gnc" in configuration_model("ImuDeadReckoning").topologies
+    assert tick_period("MockFrame", contract=MOCK) == 0.5
+    model = configuration_model("MockFrame", contract=MOCK)
+    assert configuration_model("MockFrame", contract=MOCK) is model
+    assert "MockFrame.Gnc" in model.topologies
 
 
 def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
@@ -85,52 +90,86 @@ def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
     Args:
         monkeypatch: gives the configuration a model without the constant.
     """
-    model = configuration_model("ImuDeadReckoning")
-    constants = {k: v for k, v in model.constants.items() if k != "ImuDeadReckoning.tickPeriod"}
+    model = configuration_model("MockFrame", contract=MOCK)
+    constants = {k: v for k, v in model.constants.items() if k != "MockFrame.tickPeriod"}
     monkeypatch.setattr(
         "fsw.codegen.deployment.configuration_model",
         lambda _, **__: model._replace(constants=constants),
     )
 
-    with pytest.raises(KeyError, match=r"ImuDeadReckoning\.tickPeriod"):
-        tick_period("ImuDeadReckoning")
+    with pytest.raises(KeyError, match=r"MockFrame\.tickPeriod"):
+        tick_period("MockFrame", contract=MOCK)
 
 
-def test_a_cdh_port_s_bus_port_is_the_lab_bus_driver_port_the_deployment_wires_to_it():
-    """The IMU's `cdh.imuIn` is fed by `labBusDriver.busOut[0]` in the rendered topology."""
-    assert bus_port("ImuDeadReckoning", "imuIn") == 0
+def test_each_role_s_cdh_input_is_fed_by_a_lab_bus_driver_port_of_its_own(
+    configuration: str, contract_model: Model
+):
+    """Each role's `cdh.<role>In` is fed by one LabBusDriver port, no two roles by the same.
+
+    Args:
+        configuration: the configuration.
+        contract_model: the contract's model, which declares the roles.
+    """
+    declared = roles(contract_model)
+    assert declared
+
+    ports = [bus_port(configuration, role.input) for role in declared]
+
+    assert len(set(ports)) == len(ports)
 
 
-def test_a_cdh_port_no_lab_bus_driver_port_feeds_is_refused_naming_it():
-    """A port the deployment leaves off LabBusDriver raises, naming it and the configuration."""
+def test_a_cdh_port_no_lab_bus_driver_port_feeds_is_refused_naming_it(configuration: str):
+    """A port the deployment leaves off LabBusDriver raises, naming it and the configuration.
+
+    Args:
+        configuration: the configuration.
+    """
     with pytest.raises(
-        ValueError, match=r"ImuDeadReckoning.*cdh\.starIn.*LabBusDriver port\(s\) \[\]"
+        ValueError, match=rf"{configuration}.*cdh\.notARoleIn.*LabBusDriver port\(s\) \[\]"
     ):
-        bus_port("ImuDeadReckoning", "starIn")
+        bus_port(configuration, "notARoleIn")
 
 
 def test_a_cdh_port_two_lab_bus_driver_ports_feed_is_refused_naming_both(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    configuration: str,
+    contract_model: Model,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    """A template that wires a second LabBusDriver port to `cdh.imuIn` raises, naming both ports.
+    """A template that wires a second LabBusDriver port to a role's input raises, naming both.
+
+    The second port is the lowest that no role's input takes.
 
     Args:
+        configuration: the configuration.
+        contract_model: the contract's model, which declares the roles.
         tmp_path: where the twice-wired template is written.
         monkeypatch: renders the deployment from that template.
     """
-    template = tmp_path / "Fsw.fpp.in"
-    wired = "labBusDriver.busOut[0] -> cdh.imuIn"
+    declared = roles(contract_model)
+    role = declared[0]
+    port = bus_port(configuration, role.input)
+    taken = {bus_port(configuration, r.input) for r in declared}
+    [bus_out] = [
+        p for p in contract_model.components["Bus.LabBusDriver"].outputs if p.name == "busOut"
+    ]
+    free = [i for i in range(bus_out.size) if i not in taken]
+    assert free, "every LabBusDriver port is taken"
+    other = free[0]
+    wired = f"labBusDriver.busOut[{port}] -> cdh.{role.input}"
     original = (_REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()
     assert wired in original
+    template = tmp_path / "Fsw.fpp.in"
     template.write_text(
-        original.replace(wired, f"{wired}\n      labBusDriver.busOut[1] -> cdh.imuIn")
+        original.replace(wired, f"{wired}\n      labBusDriver.busOut[{other}] -> cdh.{role.input}")
     )
     monkeypatch.setattr("fsw.codegen.deployment._TEMPLATE", template)
     bus_port.cache_clear()
     try:
+        found = ", ".join(map(str, sorted((port, other))))
         with pytest.raises(
-            ValueError, match=r"cdh\.imuIn to LabBusDriver port\(s\) \[0, 1\], not one"
+            ValueError, match=rf"cdh\.{role.input} to LabBusDriver port\(s\) \[{found}\], not one"
         ):
-            bus_port("ImuDeadReckoning", "imuIn")
+            bus_port(configuration, role.input)
     finally:
         bus_port.cache_clear()
