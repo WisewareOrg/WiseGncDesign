@@ -102,7 +102,7 @@ def _differ(python: Any, fprime: Any, scale: float) -> str | None:
     if p.dtype.kind != "f":
         return None if np.array_equal(p, f) else "differs"
     finite = np.isfinite(p)
-    same = np.isnan(p) & np.isnan(f) | (p == f)
+    same = (np.isnan(p) & np.isnan(f)) | (p == f)
     if np.any(finite != np.isfinite(f)) or np.any(~finite & ~same):
         return "is non-finite in different places or values"
     worst = _magnitude(np.subtract(f, p, out=np.zeros_like(p), where=finite))
