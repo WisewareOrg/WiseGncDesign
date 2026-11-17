@@ -63,7 +63,7 @@ def _stepped(
 
 
 def test_every_role_s_bus_message_steps_without_an_assert(
-    fsw: ModuleType, prm: str, parameter_ids: list[int], bus: list[tuple[int, bytes]]
+    booted: ModuleType, bus: list[tuple[int, bytes]]
 ) -> None:
     """Every role's message, as the bus emulator writes it, steps the deployment on its port.
 
@@ -72,15 +72,12 @@ def test_every_role_s_bus_message_steps_without_an_assert(
     reading.
 
     Args:
-        fsw: a copy of the deployment.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
+        booted: the test's copy of the deployment, booted idle on the case's parameters.
         bus: every role's bus message on its LabBusDriver port.
     """
     assert bus
-    fsw.boot(prm, parameter_ids)
 
-    fsw.step(t_ns=NS, bus=bus)
+    booted.step(t_ns=NS, bus=bus)
 
 
 @pytest.mark.parametrize(

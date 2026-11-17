@@ -41,21 +41,17 @@ def _id(dictionary: Dictionary, name: str) -> int:
 
 
 def test_a_case_s_file_boots_every_parameter_valid(
-    fsw: ModuleType,
+    booted: ModuleType,
     dictionary: Dictionary,
     prm_record: Path,
-    prm: str,
-    parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
     """The case's record holds every parameter of the deployment, and booted on it the copy steps.
 
     Args:
-        fsw: the test's copy.
+        booted: the test's copy of the deployment, booted idle on the case's parameters.
         dictionary: the copy's dictionary.
         prm_record: the case's parameter record.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
     recorded = {
@@ -65,10 +61,9 @@ def test_a_case_s_file_boots_every_parameter_valid(
     }
     assert recorded == {p.name for p in dictionary.parameters_by_id.values()}
 
-    fsw.boot(prm, parameter_ids)
-    fsw.step(t_ns=NS, bus=bus)
+    booted.step(t_ns=NS, bus=bus)
 
-    assert fsw.telemetry()
+    assert booted.telemetry()
 
 
 def test_a_missing_file_fails_the_boot(fsw: ModuleType, tmp_path: Path, parameter_ids: list[int]):

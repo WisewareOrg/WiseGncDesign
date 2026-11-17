@@ -53,26 +53,20 @@ def _responses(station: FprimeStation) -> list[tuple[int, str]]:
 
 
 def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
-    fsw: ModuleType,
+    booted: ModuleType,
     station: FprimeStation,
-    prm: str,
-    parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
     """An uplinked command waits for the next step, then answers `OK` under the ground's context.
 
     Args:
-        fsw: the test's copy of the deployment.
+        booted: the test's copy of the deployment, booted idle on the case's parameters.
         station: the station on it.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
-    fsw.boot(prm, parameter_ids)
-
     station.uplink("cmdDisp.CMD_NO_OP", {}, 42)
     assert _responses(station) == []
-    fsw.step(t_ns=NS, bus=bus)
+    booted.step(t_ns=NS, bus=bus)
 
     assert _responses(station) == [(42, "OK")]
 
@@ -88,12 +82,10 @@ def test_a_packet_larger_than_f_prime_s_buffer_is_refused_naming_its_size(fsw: M
 
 
 def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
-    fsw: ModuleType,
+    booted: ModuleType,
     station: FprimeStation,
     rate_groups: list[str],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
-    prm: str,
-    parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
     """Each rate group's writes of two ticks come down in the order written, tagged with each tick.
@@ -102,17 +94,14 @@ def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
     `CycleCount` counts up from 1 by one per run, at whatever divider it runs.
 
     Args:
-        fsw: the test's copy of the deployment.
+        booted: the test's copy of the deployment, booted idle on the case's parameters.
         station: the station on it.
         rate_groups: the copy's rate groups.
         decoded: drains the station's telemetry as values.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
-    fsw.boot(prm, parameter_ids)
-    fsw.step(t_ns=NS, bus=bus)
-    fsw.step(t_ns=2 * NS, bus=bus)
+    booted.step(t_ns=NS, bus=bus)
+    booted.step(t_ns=2 * NS, bus=bus)
 
     writes = _health(decoded(station), rate_groups)
 
@@ -126,29 +115,24 @@ def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
 
 
 def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
-    fsw: ModuleType,
+    booted: ModuleType,
     station: FprimeStation,
     rate_groups: list[str],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
-    prm: str,
-    parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
     """A tick at 1.500007 s tags its writes with that time in ns, microseconds included.
 
     Args:
-        fsw: the test's copy of the deployment.
+        booted: the test's copy of the deployment, booted idle on the case's parameters.
         station: the station on it.
         rate_groups: the copy's rate groups.
         decoded: drains the station's telemetry as values.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
-    fsw.boot(prm, parameter_ids)
     t_ns = NS + 500_000_000 + 7_000
 
-    fsw.step(t_ns=t_ns, bus=bus)
+    booted.step(t_ns=t_ns, bus=bus)
 
     writes = _health(decoded(station), rate_groups)
     assert writes
@@ -156,12 +140,10 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
 
 
 def test_each_rate_group_runs_once_every_divider_ticks(
-    fsw: ModuleType,
+    booted: ModuleType,
     station: FprimeStation,
     configuration: str,
     tmp_path: Path,
-    prm: str,
-    parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
     """Each rate group's `CycleCount` advances by one once every divider ticks, its own divider.
@@ -171,12 +153,10 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     number of every divider, which holds whatever tick the driver starts on.
 
     Args:
-        fsw: the test's copy of the deployment.
+        booted: the test's copy of the deployment, booted idle on the case's parameters.
         station: the station on it.
         configuration: the copy's configuration.
         tmp_path: where the configuration's topology is rendered.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
     constants = read(fpp_files(configuration, tmp_path)).constants
@@ -187,11 +167,10 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     }
     assert dividers
     ticks = 10 * math.lcm(*dividers.values())
-    fsw.boot(prm, parameter_ids)
     station.telemetry()
 
     for tick in range(1, ticks + 1):
-        fsw.step(t_ns=tick * NS, bus=bus)
+        booted.step(t_ns=tick * NS, bus=bus)
 
     writes = station.telemetry()
     for group, divider in dividers.items():
@@ -202,26 +181,21 @@ def test_each_rate_group_runs_once_every_divider_ticks(
 
 
 def test_the_pump_raises_naming_a_queue_its_bound_leaves_holding_messages(
-    fsw: ModuleType,
+    booted: ModuleType,
     station: FprimeStation,
-    prm: str,
-    parameter_ids: list[int],
 ):
     """A queue still holding messages after the pump's rounds raises, naming it, never hangs.
 
     Args:
-        fsw: the test's copy of the deployment.
+        booted: the test's copy of the deployment, booted idle on the case's parameters.
         station: the station on it.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
     """
-    fsw.boot(prm, parameter_ids)
     station.uplink("cmdDisp.CMD_NO_OP", {}, 3)
 
     with pytest.raises(
         RuntimeError, match=r"queue WiseFsw\.cmdDisp did not drain: messages left 1, rounds 1$"
     ):
-        fsw.pump(rounds=1)
-    fsw.pump()
+        booted.pump(rounds=1)
+    booted.pump()
 
     assert _responses(station) == [(3, "OK")]

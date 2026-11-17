@@ -63,6 +63,9 @@ class Source:
         self._level = level
         return named("MockGnc.SourceTelemetry")(level=level)
 
+    def reset(self) -> None:
+        """Writes nothing."""
+
     def step(self, t: float) -> tuple[Any, Any]:
         """Logs the step and sends the sample.
 
@@ -144,6 +147,7 @@ def test_the_frame_runner_is_the_mock_configuration_s_build(runner: FrameRunner)
             "GAIN_PRM_SET": [["val", "F64"]],
             "GAIN_PRM_SAVE": [],
             "setLevel": [["level", "F64"]],
+            "reset": [],
         },
         "channels": {"level": ["F64", None]},
     }

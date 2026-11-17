@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from fsw.codegen.deployment import gnc_instances
-from fsw.codegen.fpp_model import Instance
+from fsw.mock import ARGS
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import dictionary_path
@@ -24,67 +24,8 @@ from lab.power_cycle import power_cycle
 TEST_COMMAND = "cmdDisp.CMD_TEST_CMD_1"
 """F´'s CommandDispatcher's test command, which takes arguments, in every deployment."""
 
-MOCK = """\
-module Mock {
-
-  enum Mode {
-    slow
-    fast
-  }
-
-  passive component Mock {
-    sync command setMock(
-      gain: F32
-      enabled: bool
-      mode: Mode
-      offset: Gnc.Vector3
-      mounting: Gnc.Matrix3
-      count: U8
-    )
-    sync command label(note: string)
-    telemetry gain: F32
-    telemetry enabled: bool
-    telemetry mode: Mode
-    telemetry offset: Gnc.Vector3 format "{} m"
-    telemetry mounting: Gnc.Matrix3
-    time get port timeCaller
-    telemetry port tlmOut
-    command reg port cmdRegOut
-    command recv port cmdIn
-    command resp port cmdResponseOut
-  }
-
-}
-"""
-
-MOUNTING = np.arange(9.0).reshape(3, 3)
-
-ARGS = {
-    "gain": 0.1,
-    "enabled": True,
-    "mode": "fast",
-    "offset": [1.0, 2.0, 3.0],
-    "mounting": MOUNTING,
-    "count": 7,
-}
-
 NS = 1_000_000_000
 """ns per s."""
-
-
-@pytest.fixture(scope="module")
-def mock_dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
-    """The mock's dictionary, instanced as `mock`.
-
-    Args:
-        tmp_path_factory: where the mock's model is written.
-
-    Returns:
-        The dictionary.
-    """
-    model = tmp_path_factory.mktemp("mock") / "Mock.fpp"
-    model.write_text(MOCK)
-    return Dictionary.from_component([model], Instance("Mock.mock", "Mock.Mock", 0x1000))
 
 
 @pytest.fixture(scope="module")
@@ -98,25 +39,6 @@ def mock(mock_dictionary: Dictionary) -> FprimeStation:
         The station.
     """
     return FprimeStation(ModuleType("no_deployment"), mock_dictionary)
-
-
-@pytest.fixture
-def booted_station(
-    fsw: ModuleType, dictionary: Dictionary, prm: str, parameter_ids: list[int]
-) -> FprimeStation:
-    """A station on the deployment, booted idle on the case's parameters.
-
-    Args:
-        fsw: the test's copy of the deployment.
-        dictionary: its dictionary.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
-
-    Returns:
-        The station.
-    """
-    fsw.boot(prm, parameter_ids)
-    return FprimeStation(fsw, dictionary)
 
 
 def test_a_command_packet_is_f_prime_s(mock: FprimeStation, mock_dictionary: Dictionary):
@@ -137,28 +59,19 @@ def test_a_command_packet_is_f_prime_s(mock: FprimeStation, mock_dictionary: Dic
     assert packet[111:] == bytes([7])
 
 
-def test_a_command_the_dictionary_lacks_is_refused_naming_it(mock: FprimeStation):
-    """Encoding a name the dictionary lacks raises `KeyError` naming it.
-
-    Args:
-        mock: the mock's station.
-    """
-    with pytest.raises(KeyError, match="'mock.setTyo'"):
-        mock.encode_command("mock.setTyo", {})
-
-
 @pytest.mark.parametrize(
     ("name", "args", "error", "match"),
     [
         ("mock.setMock", {k: v for k, v in ARGS.items() if k != "mode"}, KeyError, "'mode'"),
         ("mock.label", {"note": "hello"}, ValueError, r"mock\.label has a parameter type"),
+        ("mock.setTyo", {}, KeyError, "'mock.setTyo'"),
     ],
-    ids=["missing-argument", "type-not-coded"],
+    ids=["missing-argument", "type-not-coded", "unknown-command"],
 )
 def test_a_command_the_station_cannot_encode_is_refused_naming_what(
     mock: FprimeStation, name: str, args: dict, error: type, match: str
 ):
-    """A missing argument, or a parameter of a type not coded, raises naming it.
+    """A missing argument, a parameter of a type not coded, or an unknown command raises naming it.
 
     Args:
         mock: the mock's station.
@@ -182,7 +95,7 @@ def test_serialized_writes_become_values_in_one_batch(mock: FprimeStation):
         [[1, 2, 3], [4, 5, 6]],
     )
     mounting = mock.values("mock.mounting", [struct.pack(">9d", *range(9))])
-    np.testing.assert_array_equal(mounting[0], MOUNTING)
+    np.testing.assert_array_equal(mounting[0], ARGS["mounting"])
     assert mock.values("mock.enabled", [b"\xff", b"\x00"]).tolist() == [1.0, 0.0]
     assert mock.values("mock.mode", [struct.pack(">i", 1)]).tolist() == ["fast"]
     assert mock.values("mock.gain", [struct.pack(">f", 0.1)]).tolist() == [float(np.float32(0.1))]
@@ -285,8 +198,8 @@ def _gnc_writes(
     ],
 )
 def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_the_gnc_runs_as_untouched(
-    fsw: ModuleType,
-    booted_station: FprimeStation,
+    booted: ModuleType,
+    station: FprimeStation,
     configuration: str,
     dictionary: Dictionary,
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
@@ -301,8 +214,8 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_the_gnc_runs_as_u
     The GNC instances write on the step what a copy with no packet writes on the same step.
 
     Args:
-        fsw: the test's copy of the deployment.
-        booted_station: the station on it.
+        booted: the test's copy of the deployment, booted idle on the case's parameters.
+        station: the station on it.
         configuration: the copy's configuration.
         dictionary: its dictionary.
         decoded: drains a station's telemetry as values.
@@ -318,8 +231,8 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_the_gnc_runs_as_u
     expected = _gnc_writes(decoded(FprimeStation(untouched, dictionary)), configuration)
     assert expected
 
-    fsw.uplink(change(_test_command(dictionary), _unknown_opcode(configuration)), 7)
-    fsw.step(t_ns=NS, bus=bus)
+    booted.uplink(change(_test_command(dictionary), _unknown_opcode(configuration)), 7)
+    booted.step(t_ns=NS, bus=bus)
 
-    assert booted_station.responses() == [(7, response, None)]
-    assert _gnc_writes(decoded(booted_station), configuration) == expected
+    assert station.responses() == [(7, response, None)]
+    assert _gnc_writes(decoded(station), configuration) == expected

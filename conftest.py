@@ -71,6 +71,22 @@ def fsw(configuration: str) -> ModuleType:
 
 
 @pytest.fixture
+def booted(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> ModuleType:
+    """The test's copy of the deployment, booted idle on the case's parameters.
+
+    Args:
+        fsw: the test's copy.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
+
+    Returns:
+        The copy, `fsw` itself.
+    """
+    fsw.boot(prm, parameter_ids)
+    return fsw
+
+
+@pytest.fixture
 def station(fsw: ModuleType, dictionary: Dictionary) -> FprimeStation:
     """The ground station on the test's copy, on the dictionary the build generated.
 
