@@ -1,15 +1,13 @@
 """The bus emulator: a Basilisk message as the bytes a vehicle's bus carries, and back, by Bus.fpp.
 
 Each bus struct in `fsw/fpp/interfaces/Bus.fpp`, `Bus.<Name>`, mirrors the Basilisk payload
-`messaging.<Name>Payload`, matched ignoring case as `fsw/fpp/interfaces/bus_test.py` holds them.
-`serialize` writes a payload as F´ serializes its bus struct: each member in declaration order,
-big-endian, packed and unframed. It is built from `Bus.fpp` at import, read alone, so no file is
-generated and no F´ framework clone is read; each payload type's packer is planned on its first
-message, and a member outside `fsw.codegen.fields.STRUCT_CODES` raises then. `deserialize` reads
-an actuator's bytes back with the same packer, into a fresh payload of the class
-`fsw.payloads.payload_type` gives. Lab equipment: a real
-vehicle's bus carries the bytes itself, and the Python build reads and writes messages without
-them.
+`fsw.payloads.payload_type` gives. `serialize` writes a payload as F´ serializes its bus struct:
+each member in declaration order, big-endian, packed and unframed. It is built from `Bus.fpp` at
+import, read alone, so no file is generated and no F´ framework clone is read; each payload type's
+packer is planned on its first message, and a member outside `fsw.codegen.fields.STRUCT_CODES`
+raises then. `deserialize` reads an actuator's bytes back with the same packer, into a fresh
+payload. Lab equipment: a real vehicle's bus carries the bytes itself, and the Python build reads
+and writes messages without them.
 """
 
 import functools
@@ -95,8 +93,8 @@ def deserialize(bus: str, data: bytes) -> Any:
         data: the bytes.
 
     Returns:
-        The `messaging.<Name>Payload` the struct mirrors, matched ignoring case, each field set
-        from its member's elements.
+        The payload class the struct mirrors, by `fsw.payloads.payload_type`, each field set from
+        its member's elements.
     """
     payload = payload_type(bus)()
     packer, fields = _packer(type(payload))
