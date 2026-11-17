@@ -17,19 +17,6 @@ x = 1
 
 
 @pytest.mark.xdist_group("notebooks")
-def test_a_notebook_whose_cells_all_run_passes(tmp_path: Path) -> None:
-    """The control: a notebook-only cell that holds passes the run.
-
-    Args:
-        tmp_path: the test's directory.
-    """
-    notebook = tmp_path / "ok.py"
-    notebook.write_text(CELLS.format(body="assert x == 1"))
-
-    run_notebook(notebook)
-
-
-@pytest.mark.xdist_group("notebooks")
 def test_an_error_in_a_notebook_only_cell_fails_the_run(tmp_path: Path) -> None:
     """The seeded error: a notebook-only cell that raises fails the run.
 
@@ -48,7 +35,8 @@ def test_the_run_is_capped_and_names_the_notebook_as_its_session(tmp_path: Path)
     """The kernel sees the cap and the notebook's path, so a run cannot fly the full campaign.
 
     It runs in the notebook's folder, as in Lab, so it finds the session the notebook's flights
-    land in; the executed copy is written elsewhere.
+    land in; the executed copy is written elsewhere. Its notebook-only cell holds, so it is also
+    the control for the seeded error: a notebook whose cells all run passes.
 
     Args:
         tmp_path: the test's directory.
