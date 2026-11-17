@@ -64,10 +64,10 @@ This example runs in a notebook or at a prompt, with the `sim` group installed
 at its nominal configuration, writes the case's parameter record from the notebook's
 `parameters(scenario)` under nav's qualified instance, as the harness does beside each run file,
 and boots the `ImuDeadReckoning` configuration's Python build idle with the values it reads back
-from the record, hosted on that vehicle by WiseDynamics' `FswHost` as the harness hosts it. A ground procedure gives nav its state from
-tracking at t = 0, and the run lasts one minute, with the dynamics, the IMU and the dead reckoner
-all stepping at 1 Hz. The ground's record is then compared with the
-vehicle's truth:
+from the record, hosted on that vehicle by WiseDynamics' `FswHost` as the harness hosts it. A
+ground procedure gives nav its state from tracking at t = 0, and the run lasts one minute, with the
+dynamics, the IMU and the dead reckoner all stepping at 1 Hz. The ground's record is then compared
+with the vehicle's truth:
 
 ```python
 >>> import tempfile

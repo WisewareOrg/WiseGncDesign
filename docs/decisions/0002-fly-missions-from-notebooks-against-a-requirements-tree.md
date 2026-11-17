@@ -58,8 +58,9 @@ follow.
 - **The vehicle is a mission parameter**, flown through the simulator's `sim_vehicle` mark and its
   `VEHICLES` registry. One session may hold several vehicles.
 - **A flight is a vehicle, an FSW and a scenario**, the FSW being a configuration flown on a build.
-  `mission_tests` makes a class per vehicle and a test per FSW and scenario, so each flight has a folder of its own in the session. Two missions
-  flying the same flight are an error raised before anything flies.
+  `mission_tests` makes a class per vehicle and a test per FSW and scenario, so each flight has a
+  folder of its own in the session. Two missions flying the same flight are an error raised before
+  anything flies.
 - **The rungs a flight is judged on are worked out**: the rungs its scenario links to that sit under
   a capability its FSW claims. A mission's rung filter is optional; each rung it lists must be one
   of those, checked against the union of the mission's scenarios when the `Mission` is built, so a
