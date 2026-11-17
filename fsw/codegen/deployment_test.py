@@ -101,21 +101,22 @@ def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
         tick_period("MockFrame", contract=MOCK)
 
 
-def test_each_role_s_cdh_input_is_fed_by_a_lab_bus_driver_port_of_its_own(
+def test_a_cdh_port_s_bus_port_is_the_lab_bus_driver_port_the_deployment_wires_to_it(
     configuration: str, contract_model: Model
 ):
-    """Each role's `cdh.<role>In` is fed by one LabBusDriver port, no two roles by the same.
+    """Each role's `cdh.<role>In` is fed by the `labBusDriver.busOut` index the template wires.
 
     Args:
         configuration: the configuration.
         contract_model: the contract's model, which declares the roles.
     """
     declared = roles(contract_model)
+    template = (_REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()
     assert declared
 
-    ports = [bus_port(configuration, role.input) for role in declared]
-
-    assert len(set(ports)) == len(ports)
+    for role in declared:
+        port = bus_port(configuration, role.input)
+        assert f"labBusDriver.busOut[{port}] -> cdh.{role.input}" in template, role.role
 
 
 def test_a_cdh_port_no_lab_bus_driver_port_feeds_is_refused_naming_it(configuration: str):
