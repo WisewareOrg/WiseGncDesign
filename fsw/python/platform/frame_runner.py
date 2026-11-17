@@ -1,10 +1,11 @@
 """The Python build: one frame per base tick, through its partitions, as a WiseDynamics FSW build.
 
 Each tick is one frame (ADR 0005 rev 1): CDH-in's ground link runs the commands uplinked since the
-last tick, RIO-in reads each paired role's message as its bus struct, CDH-in converts it to its GNC
+last tick, RIO-in reads each sensor role's message as its bus struct, CDH-in converts it to its GNC
 input, GNC runs the rate groups the base tick fires, CDH-out's ground link logs every telemetry
-write, and RIO-out returns the actuator commands. The configuration's FPP gives all of it: the GNC
-sub-topology's wiring and rates, the pairing, the dictionary and the base tick. The radio edge is
+write and CDH-out converts each actuator output GNC wrote to its bus struct, and RIO-out returns
+those as the actuator commands. The configuration's FPP gives all of it: the GNC sub-topology's
+wiring and rates, the roles it takes, the dictionary and the base tick. The radio edge is
 CDH's `GroundLink`, which the frame runner forwards to.
 """
 
@@ -16,7 +17,8 @@ import numpy as np
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import CONTRACT, Contract, configuration_model, tick_period
-from fsw.python.cdh import commands, inputs, parameters
+from fsw.codegen.roles import taken
+from fsw.python.cdh import commands, inputs, outputs, parameters
 from fsw.python.cdh.ground_link import GroundLink
 from fsw.python.gnc.partition import GncPartition
 from fsw.python.platform.rates import RateGroupDriver, dividers
@@ -66,7 +68,9 @@ class FrameRunner:
         model = configuration_model(configuration, contract=contract)
         self._configuration = configuration
         self._gnc = GncPartition(model, configuration, components)
-        self._pairs = inputs.pairings(model, self._gnc.inputs)
+        roles = taken(model, configuration)
+        self._pairs = inputs.pairings([role for role in roles if role.sensor])
+        self._commands = outputs.pairings([role for role in roles if not role.sensor])
         self._dividers = dividers(model, self._gnc.rate_groups)
         self._prm_path = Path(prm_path)
         self.period_s = tick_period(configuration, contract=contract)
@@ -101,16 +105,18 @@ class FrameRunner:
             messages_by_role: each role's Basilisk message payload, valid during this call only.
 
         Returns:
-            The actuator commands, by role.
+            The actuator commands, by role: each a fresh `messaging.<Name>Payload` of the message
+            the role's bus struct mirrors, for each actuator output GNC wrote this frame.
         """
         self._link.run_commands(t_ns)
         read = messages.read(self._pairs, messages_by_role)
         for port, value in inputs.convert(self._pairs, read).items():
             self._gnc.write(port, value)
         t = t_ns / _NANOSECONDS_PER_SECOND
-        for member in self._gnc.run(t, self._driver.tick()).telemetry:
+        frame = self._gnc.run(t, self._driver.tick())
+        for member in frame.telemetry:
             self._link.log(member.instance, member.telemetry, t_ns)
-        return messages.commands()
+        return messages.commands(self._commands, outputs.convert(self._commands, frame.outputs))
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command at the ground link, which runs it at the next tick.

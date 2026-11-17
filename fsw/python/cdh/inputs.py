@@ -3,28 +3,27 @@
 The pairing is FPP's, `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp`, read by
 `fsw.codegen.roles` as the F´ build's CDH reads it; a `Pair` names one role's. The bus struct is
 converted to the ICD struct field by field with `fsw.codegen.fpp_types.converter`, every array a
-fresh copy.
+fresh copy. CDH-out, `fsw.python.cdh.outputs`, pairs the actuator roles with the same `Pair`.
 """
 
 import functools
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
 from fsw.codegen import fpp_types
-from fsw.codegen.fpp_model import Model
-from fsw.codegen.roles import CONVERTER, roles
+from fsw.codegen.roles import Role
 
 __all__ = ["Pair", "convert", "pairings"]
 
 
 class Pair(NamedTuple):
-    """A role's message, from its bus struct to the ICD struct its GNC port takes.
+    """A role's struct, between the bus and the GNC sub-topology's port.
 
     Attributes:
         role: the vehicle's role, `<role>`.
         bus: the bus struct's tuple, mirroring the role's Basilisk message.
-        icd: the ICD struct's tuple, which the GNC port takes.
-        port: the GNC sub-topology's port, `<role>In`.
+        icd: the ICD struct's tuple, which the GNC port takes or sends.
+        port: the GNC sub-topology's port: `<role>In` for a sensor, `<role>Out` for an actuator.
     """
 
     role: str
@@ -33,32 +32,19 @@ class Pair(NamedTuple):
     port: str
 
 
-def pairings(model: Model, ports: Collection[str]) -> list[Pair]:
-    """Every role a GNC sub-topology takes, paired by `Cdh.BusConverter` to its port.
-
-    A bus-typed `<role>In` of the converter needs a `<role>Out` that is not bus-typed; a role whose
-    port the sub-topology lacks is not taken, and every port it has must be a role's.
+def pairings(roles: Sequence[Role]) -> list[Pair]:
+    """Each sensor role's pair, from its bus struct to the ICD struct its port `<role>In` takes.
 
     Args:
-        model: the model holding the converter.
-        ports: the sub-topology's input ports, as `GncPartition.inputs` gives them.
+        roles: the sensor roles a configuration takes, as `fsw.codegen.roles.taken` gives them.
 
     Returns:
-        The pairs, in the converter's port order.
-
-    Raises:
-        ValueError: a role has no `<role>Out`, or a bus-typed one, naming the role; or a port is no
-            role's, naming it.
+        The pairs, in the roles' order.
     """
-    pairs = [
+    return [
         Pair(role.role, fpp_types.named(role.bus), fpp_types.named(role.icd), role.input)
-        for role in roles(model)
-        if role.input in ports
+        for role in roles
     ]
-    unfed = sorted(set(ports) - {pair.port for pair in pairs})
-    if unfed:
-        raise ValueError(f"the sub-topology's inputs {unfed} are fed by no role of {CONVERTER}")
-    return pairs
 
 
 @functools.cache
