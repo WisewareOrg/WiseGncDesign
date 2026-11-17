@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import fpp_files, framework_files
+from fsw.codegen.deployment import algorithm_components, fpp_files, framework_files
 from fsw.codegen.fpp_model import (
     _FPP,
     Argument,
@@ -30,6 +30,7 @@ from fsw.codegen.fpp_model import (
     read,
 )
 from fsw.codegen.members import members
+from fsw.codegen.roles import roles
 from fsw.mock import edited
 
 GNC = """\
@@ -190,8 +191,9 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
     Every connection end is an instance of the model, of a component it defines. Each GNC member's
     connections show F´'s pattern graphs were read: a member with commands registers with the
     dispatcher and is sent commands by it, one with channels reaches the ground link and the clock,
-    and one with parameters reads PrmDb. The sub-topology's tick comes in at its rate group
-    driver.
+    and one with parameters reads PrmDb. Each role the sub-topology takes comes from the CDH's
+    output into a member, every algorithm instance is a member its rate groups run, and the
+    sub-topology's tick comes in at its rate group driver.
 
     Args:
         configuration: the configuration.
@@ -222,6 +224,21 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
             assert ("WiseFsw.simTime", "timeGetPort") in targets, member.name
         if component.parameters:
             assert ("WiseFsw.prmDb", "getPrm") in targets, member.name
+    names = {member.name for member in flown}
+    for role in roles(model):
+        port = model.ports.get(f"{configuration}.Gnc.{role.input}")
+        if port is None:
+            continue
+        cdh = ("WiseFsw.cdh", role.output, port.instance, port.port)
+        ends = {(c.from_instance, c.from_port, c.to_instance, c.to_port) for c in connections}
+        assert cdh in ends, role.role
+        assert port.instance in names, role.role
+    algorithms = {
+        name
+        for name, instance in model.instances.items()
+        if name.startswith(f"{configuration}.") and instance.component in algorithm_components()
+    }
+    assert algorithms <= names
     tick = model.ports[f"{configuration}.Gnc.tickIn"]
     assert model.instances[tick.instance].component == "Svc.RateGroupDriver"
     assert tick.port == "CycleIn"
