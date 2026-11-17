@@ -1,4 +1,4 @@
-"""The F´ build of the dead reckoner against the notebook's, driven directly with no simulator.
+"""The F´ build of the dead reckoner against the notebook's, and its mission flown twice.
 
 One test drives it through the lab adapter, `lab.Adapter`, on Basilisk's IMU message, and one flies
 the dead reckoner's mission twice, in processes of their own, to hold that no case carries over to
@@ -442,9 +442,9 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
 
     The rate group's health datasets are compared with nav's: its `CycleCount` and the channels it
     writes only on change are what a deployment kept across cases would carry over. It also holds
-    the rate group's health to F´'s stub clock, under nav's real load: a wall clock would make its
-    cycle times differ between the two runs. Case 0's run file differs from case 1's, so a
-    comparison that cannot tell cases apart would show.
+    the rate group's health to F´'s stub clock, under nav's real load: its cycle times read 0, where
+    a wall clock would make them differ between the two runs. Case 0's run file differs from case
+    1's, so a comparison that cannot tell cases apart would show.
 
     Args:
         pytester: the project the flights run in, each run in one process of its own, xdist off.
@@ -464,6 +464,7 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
     alone, after, first = _contents(alone), _contents(after), _contents(first)
     assert any(name.startswith("tlm/nav.") for name in alone)
     assert any(name.startswith("tlm/navRateGroup.") for name in alone)
+    assert not alone["tlm/navRateGroup.CycleTime"][0].any()
     assert sorted(alone) == sorted(after)
     for name, value in alone.items():
         np.testing.assert_equal(after[name], value, err_msg=name)

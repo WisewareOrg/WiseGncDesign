@@ -13,7 +13,9 @@ import numpy as np
 import pytest
 
 from fsw.codegen import fpp_types
-from fsw.codegen.deployment import tick_period
+from fsw.codegen.deployment import contract_files, tick_period
+from fsw.codegen.fpp_model import read
+from fsw.codegen.roles import roles
 from fsw.python import FrameRunner
 from ground.dictionary import Dictionary, Type
 
@@ -236,8 +238,11 @@ def test_the_frame_runner_is_the_configuration_s_build(configuration: str, runne
     """
     assert runner.period_s == tick_period(configuration)
     assert runner.build == {"host": "fsw.python.FrameRunner"}
-    assert runner.dictionary is Dictionary.from_sub_topology(configuration)
+    generated = Dictionary.from_sub_topology(configuration)
+    assert runner.dictionary.metadata == generated.metadata
     assert _instances(runner)
+    for instance in _instances(runner):
+        assert runner.dictionary.entries(instance) == generated.entries(instance), instance
 
 
 def test_boot_builds_each_algorithm_afresh_on_its_record_parameters(
@@ -297,21 +302,18 @@ def test_a_tick_converts_each_message_steps_at_its_time_and_commands_nothing(
     assert commands == {}
     steps = [entry for entry in LOG if entry[1] == "step"]
     assert [instance for instance, *_ in steps] == _instances(runner)
-    payloads = {
-        role: {m.lower(): v for m, v in message.values.items()}
-        for role, message in (
-            (role, next(b for b in bus_messages.values() if b.payload is payload))
-            for role, payload in messages_by_role.items()
-        )
-    }
+    by_role = {role.role: role for role in roles(read(contract_files()))}
     assert set().union(*(inputs for *_, inputs in steps)) == set(messages_by_role)
     for instance, _, t, inputs in steps:
         assert t == 2.0, instance
         assert inputs, instance
         for keyword, value in inputs.items():
+            role = by_role[keyword]
+            assert isinstance(value, fpp_types.named(role.icd)), keyword
+            payload = {m.lower(): v for m, v in bus_messages[role.bus].values.items()}
             for field in value._fields:
                 np.testing.assert_array_equal(
-                    getattr(value, field), payloads[keyword][field.lower()], err_msg=keyword
+                    getattr(value, field), payload[field.lower()], err_msg=keyword
                 )
     writes = runner.telemetry()
     assert [(n, t_ns) for n, t_ns, _ in writes] == [
@@ -344,8 +346,9 @@ def test_commands_run_by_name_before_the_step_and_answer_with_f_prime_s_response
     ]
     runner.uplink(name, taken, 7)
     runner.uplink(name, refused, 8)
-    for context, set_ in enumerate(sets[:1], 9):
-        runner.uplink(set_, {"val": _value(runner.dictionary.command(set_).types[0], 1.0)}, context)
+    if sets:
+        set_type = runner.dictionary.command(sets[0]).types[0]
+        runner.uplink(sets[0], {"val": _value(set_type, 1.0)}, 9)
     runner.uplink(f"{instance}.notACommand", {}, 10)
     assert runner.responses() == []
 
@@ -358,8 +361,12 @@ def test_commands_run_by_name_before_the_step_and_answer_with_f_prime_s_response
     first = name.split(".")[1]
     assert runner.responses() == [
         (7, "OK", None),
-        (8, "VALIDATION_ERROR", f"{first}'s {next(iter(refused))} is negative"),
-        *[(9, "INVALID_OPCODE", None) for _ in sets[:1]],
+        (
+            8,
+            "VALIDATION_ERROR",
+            f"{first}'s {runner.dictionary.command(name).params[0]} is negative",
+        ),
+        *([(9, "INVALID_OPCODE", None)] if sets else []),
         (10, "INVALID_OPCODE", None),
     ]
     assert runner.responses() == []
