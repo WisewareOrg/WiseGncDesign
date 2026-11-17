@@ -21,6 +21,7 @@ from algorithms.imu_dead_reckoning.imu_dead_reckoning import (
 )
 from fsw.codegen.fpp_types import Gnc
 from harness.notebook import run_notebook
+from lab import built
 
 _IDENTITY = np.eye(3)
 # The tests' IMU mounting [PB]: the platform frame is the body frame.
@@ -277,3 +278,11 @@ def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() 
 def test_the_notebook_runs_end_to_end() -> None:
     """Every cell of the algorithm notebook runs, the notebook-only cells included."""
     run_notebook(Path(__file__).with_name("imu_dead_reckoning.py"))
+
+
+@pytest.mark.xdist_group("notebooks")
+def test_the_parity_notebook_runs_end_to_end() -> None:
+    """Every cell of the parity notebook runs, so the two builds agree on a twin per scenario."""
+    if not built("ImuDeadReckoning"):
+        pytest.skip("the F´ build is absent; run `just fsw`")
+    run_notebook(Path(__file__).with_name("parity.py"))

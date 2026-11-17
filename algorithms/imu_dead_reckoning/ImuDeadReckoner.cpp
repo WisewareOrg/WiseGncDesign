@@ -1,4 +1,4 @@
-// The math is imu_dead_reckoning.py's; its notebook holds the two builds to parity case by case.
+// The math is imu_dead_reckoning.py's; parity.py holds the two builds to parity case by case.
 #include "algorithms/imu_dead_reckoning/ImuDeadReckoner.hpp"
 
 namespace Gnc {

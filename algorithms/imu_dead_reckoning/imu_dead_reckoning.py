@@ -360,13 +360,11 @@ def parameters(scenario: Scenario) -> Gnc.ImuDeadReckonerParameters:
 # %% [markdown]
 # ## The mission
 #
-# The dead reckoner on the IMU spacecraft, flown on both builds through the scenarios the
-# requirements tree names (each sets its own duration and case count) and judged by `just judge` on
-# the attitude ladder and the velocity and position rungs. The F´ build's flights need its
-# deployment, built by `just fsw`, and are skipped without it. Case `k` flies the same dispersions
-# and sensor noise on both builds, so the two are held to parity case by case. Each case also passes
-# the gross check in `gross_check.py`, which bounds every error by the growth the case's drawn
-# biases, the IMU noise, the 1 s step and the orbit imply, from the epoch the ground commanded.
+# The dead reckoner on the IMU spacecraft, flown through the scenarios the requirements tree names
+# (each sets its own duration and case count) and judged by `just judge` on the attitude ladder and
+# the velocity and position rungs. Each case also passes the gross check in `gross_check.py`, which
+# bounds every error by the growth the case's drawn biases, the IMU noise, the 1 s step and the
+# orbit imply, from the epoch the ground commanded.
 
 
 # %%
@@ -378,19 +376,18 @@ MISSION = Mission(
     scenarios=("TST001", "TST002"),
     check=gross_check,
 )
-MISSIONS = [MISSION, MISSION.but(build="fprime")]
 
 # %%
 # %%monte_carlo
-globals().update(mission_tests(*MISSIONS))
+globals().update(mission_tests(MISSION))
 
 
 # %% [markdown]
 # ## The errors
 #
-# The cells below run in the notebook only: the judged rungs, the two builds held to parity by
-# `harness/parity.py`, then each error at every estimate the dead reckoner wrote, for every case,
-# computed with the analyzers' own error math against truth at each write's time.
+# The cells below run in the notebook only: the judged rungs, then each error at every estimate
+# the dead reckoner wrote, for every case, computed with the analyzers' own error math against
+# truth at each write's time.
 
 
 # %% active="ipynb"
@@ -403,14 +400,6 @@ globals().update(mission_tests(*MISSIONS))
 # from wise_dynamics.notebook import load_runs
 #
 # judge()
-
-# %% active="ipynb"
-# # Parity runs only where the F´ build exists, and then must compare a twin per scenario at least.
-# from harness.parity import session_parity
-# from lab import built
-#
-# if built(MISSION.gnc):
-#     assert session_parity() >= len(MISSION.scenarios)
 
 # %% active="ipynb"
 # runs = load_runs(Test_imu_spacecraft.test_ImuDeadReckoning_python_leo500)
