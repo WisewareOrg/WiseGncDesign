@@ -281,34 +281,34 @@ def rate_groups(configuration: str) -> list[str]:
 def algorithm_parameters() -> dict[str, Any]:
     """Each algorithm component's parameters, every element distinct, of its FPP shape and type.
 
-    The components are those an algorithm's `.fpp` defines. Each element of each parameter takes
-    the next of 0.5, 1.5, 2.5, ..., in its FPP type, so a parameter or element out of place shows.
-    A parameter of an enum, struct or string type gets none, and fails `parameters_from`.
+    The components are `fsw.codegen.deployment.algorithm_components`. Each element of each
+    parameter takes the next of 0.5, 1.5, 2.5, ..., in its FPP type, so a parameter or element out
+    of place shows.
 
     Returns:
         Each component's `<Name>Parameters` tuple, by its qualified name.
+
+    Raises:
+        ValueError: a parameter is not a number or an array of them, naming it.
     """
     from fsw.codegen import fpp_types
-    from fsw.codegen.deployment import algorithm_files, contract_files
-    from fsw.codegen.fields import DTYPES
-    from fsw.codegen.fpp_model import Array, read
+    from fsw.codegen.deployment import algorithm_components, contract_files
+    from fsw.codegen.fields import form
+    from fsw.codegen.fpp_model import Member, read
 
     model = read(contract_files())
-    algorithms = set(algorithm_files())
     counter = itertools.count()
     tuples = {}
-    for component in model.components.values():
-        if component.file not in algorithms:
-            continue
+    for name in sorted(algorithm_components()):
         values = {}
-        for parameter in component.parameters:
-            shape, type_name = (), parameter.type
-            while isinstance(array := model.types.get(type_name), Array):
-                shape, type_name = (*shape, array.size), array.element
+        for parameter in model.components[name].parameters:
+            shape, element = form(Member(parameter.name, parameter.type, None), model.types)
+            if not isinstance(element, np.dtype):
+                raise ValueError(f"{name}.{parameter.name} is {element}, not a number")
             elements = [next(counter) + 0.5 for _ in range(int(np.prod(shape, dtype=int)))]
-            values[parameter.name] = np.array(elements, DTYPES[type_name]).reshape(shape).tolist()
-        tuple_type = fpp_types.named(f"{component.name}Parameters")
-        tuples[component.name] = fpp_types.parameters_from(tuple_type, values)
+            values[parameter.name] = np.array(elements, element).reshape(shape).tolist()
+        tuple_type = fpp_types.named(f"{name}Parameters")
+        tuples[name] = fpp_types.parameters_from(tuple_type, values)
     return tuples
 
 

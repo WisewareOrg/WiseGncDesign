@@ -16,8 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import CLONE, algorithm_files, contract_files, gnc_instances
-from fsw.codegen.fpp_model import read
+from fsw.codegen.deployment import CLONE, algorithm_components, gnc_instances
 
 _REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -80,15 +79,11 @@ def _algorithm_names() -> re.Pattern[str]:
         each instance name as a whole word.
     """
     directories = {path.parts[1] for path in _tracked("algorithms") if len(path.parts) > 2}
-    in_algorithms = set(algorithm_files())
-    algorithm_components = {
-        c.name for c in read(contract_files()).components.values() if c.file in in_algorithms
-    }
     substrings, words = set(directories), set()
     for instance in gnc_instances():
         configuration, name = instance.name.split(".")
         substrings.add(configuration)
-        if instance.component in algorithm_components:
+        if instance.component in algorithm_components():
             substrings.add(instance.component.split(".")[-1])
             words.add(name)
     alternatives = [re.escape(name) for name in sorted(substrings)]

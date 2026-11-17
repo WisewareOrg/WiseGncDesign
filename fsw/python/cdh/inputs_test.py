@@ -13,7 +13,7 @@ import pytest
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import (
-    algorithm_files,
+    algorithm_components,
     configuration_model,
     contract_files,
     framework_files,
@@ -74,12 +74,10 @@ def _algorithm_classes(model: Model, configuration: str) -> list[type]:
     Returns:
         The classes.
     """
-    in_algorithms = set(algorithm_files())
     components = {
         instance.component
         for name, instance in model.instances.items()
-        if name.startswith(f"{configuration}.")
-        and model.components[instance.component].file in in_algorithms
+        if name.startswith(f"{configuration}.") and instance.component in algorithm_components()
     }
     return [type(component.rsplit(".", 1)[-1], (), {}) for component in sorted(components)]
 

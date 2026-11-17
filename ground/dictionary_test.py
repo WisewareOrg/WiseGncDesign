@@ -465,10 +465,10 @@ def test_the_algorithm_instances_are_the_gnc_instances_of_an_algorithm_it_holds(
     held = Instance("PyToy.toy", "Toy.Toy", 0x1000)
     absent = Instance("PyToy.other", "Toy.Toy", 0x2000)
     monkeypatch.setattr("ground.dictionary.gnc_instances", lambda: (held, absent))
-    monkeypatch.setattr("ground.dictionary._algorithm_components", lambda: {"Toy.Toy"})
+    monkeypatch.setattr("ground.dictionary.algorithm_components", lambda: {"Toy.Toy"})
 
     assert toy.algorithm_instances() == (held,)
-    monkeypatch.setattr("ground.dictionary._algorithm_components", lambda: set())
+    monkeypatch.setattr("ground.dictionary.algorithm_components", lambda: set())
     assert toy.algorithm_instances() == ()
 
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from fsw.codegen.deployment import (
+    algorithm_components,
     algorithm_files,
     bus_port,
     configuration_model,
@@ -15,7 +16,7 @@ from fsw.codegen.deployment import (
     gnc_instances,
     tick_period,
 )
-from fsw.codegen.fpp_model import Instance
+from fsw.codegen.fpp_model import Instance, read
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
 
@@ -43,6 +44,20 @@ def test_the_contract_holds_the_bus_structs_and_every_algorithm_s_files():
     reckoner = _REPOSITORY / "algorithms" / "imu_dead_reckoning" / "ImuDeadReckoner.fpp"
     assert reckoner in algorithm_files()
     assert set(algorithm_files()) <= set(files)
+
+
+def test_the_algorithm_components_are_those_an_algorithm_s_fpp_defines():
+    """Each is defined in an algorithm's file; a GNC instance's component is one, or is F´'s."""
+    found = algorithm_components()
+    components = read(contract_files()).components
+
+    assert found
+    for name in found:
+        assert components[name].file in algorithm_files(), name
+    for instance in gnc_instances():
+        in_algorithm = components[instance.component].file in algorithm_files()
+        assert (instance.component in found) == in_algorithm, instance.name
+    assert "Svc.PassiveRateGroup" not in found
 
 
 def test_the_configurations_are_the_gnc_sub_topologies_sorted_by_name():

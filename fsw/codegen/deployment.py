@@ -3,11 +3,11 @@
 A configuration's deployment topology is rendered from `fsw/fprime/deployment/Fsw.fpp.in`, the
 template CMake's `configure_file` renders for the F´ build, by the same `@CONFIGURATION@` token. The
 algorithms are those the F´ build takes: every directory under `algorithms/` with a
-`CMakeLists.txt`. `configurations` names one configuration per GNC sub-topology. `gnc_instances`
-lists the GNC sub-topologies' instances, and `gnc_instance` finds a component's one instance among
-them. `configuration_model` reads a configuration's contract and GNC sub-topology, `tick_period`
-its base tick's period, and `bus_port` the LabBusDriver port its deployment wires to a CDH input
-port.
+`CMakeLists.txt`, and `algorithm_components` the components their `.fpp` files define.
+`configurations` names one configuration per GNC sub-topology. `gnc_instances` lists the GNC
+sub-topologies' instances, and `gnc_instance` finds a component's one instance among them.
+`configuration_model` reads a configuration's contract and GNC sub-topology, `tick_period` its base
+tick's period, and `bus_port` the LabBusDriver port its deployment wires to a CDH input port.
 """
 
 import functools
@@ -18,6 +18,7 @@ from fsw.codegen.fpp_model import Instance, Model, read
 
 __all__ = [
     "CLONE",
+    "algorithm_components",
     "algorithm_files",
     "bus_port",
     "configuration_model",
@@ -104,6 +105,19 @@ def algorithm_files() -> tuple[Path, ...]:
     """
     algorithms = sorted(_REPOSITORY.glob("algorithms/*/CMakeLists.txt"))
     return tuple(fpp for build in algorithms for fpp in sorted(build.parent.glob("*.fpp")))
+
+
+@functools.cache
+def algorithm_components() -> frozenset[str]:
+    """The components an algorithm's `.fpp` defines, read once per process.
+
+    Returns:
+        Their qualified names.
+    """
+    algorithms = set(algorithm_files())
+    return frozenset(
+        c.name for c in read(contract_files()).components.values() if c.file in algorithms
+    )
 
 
 def contract_files() -> tuple[Path, ...]:
