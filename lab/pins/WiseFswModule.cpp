@@ -97,7 +97,7 @@ PYBIND11_MODULE(_wise_fsw, m) {
             for (const auto& message : bus) {
                 const std::string data = message.second;
                 WiseFsw::labBusDriver.push(message.first, reinterpret_cast<const U8*>(data.data()),
-                                     static_cast<FwSizeType>(data.size()));
+                                           static_cast<FwSizeType>(data.size()));
             }
             WiseFsw::simTime.tick();
         },

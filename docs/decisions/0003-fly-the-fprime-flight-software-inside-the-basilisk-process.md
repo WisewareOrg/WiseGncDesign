@@ -13,8 +13,8 @@
   telemetry in Basilisk message structs and the boot(prm_path) check; the lab is ADR 0006 rev 1;
   fetching by tag and the flight's record become consequences, their rejected alternatives standing
   in rev 2, and a flight's end belonging to the scenario moves to the README (issue 85 one decision
-  per ADR); the spike's bus driver is named by its job (issue 63 The lab's bus driver carries bus
-  data into the F´ build).
+  per ADR); the spike's bus driver, named SimHub at `9eccec3`, is named by its job, as this
+  repository's is LabBusDriver (issue 63 The lab's bus driver carries bus data into the F´ build).
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
   telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).

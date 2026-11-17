@@ -7,8 +7,9 @@
 ## Revisions
 
 - **rev 1** — 2026-11-14 — first written, moved out of ADR 0003 rev 3 (issue 85 one decision
-  per ADR); the bus driver is LabBusDriver, named for its job, and the spike's by its job
-  (issue 63 The lab's bus driver carries bus data into the F´ build).
+  per ADR); the bus driver, named SimHub at `9eccec3`, is LabBusDriver, named for its job, and
+  F´'s Svc.GenericHub is a rejected alternative, from the spike in the decision comment of
+  2026-11-16 on issue 63 The lab's bus driver carries bus data into the F´ build.
 
 ## Context
 
@@ -55,6 +56,11 @@ The little-endian push is the failure the comparison would have shown.
   passed, and a real bus driver takes bytes.
 - **Per-algorithm sim glue, as at `6f6276e`.** Every added algorithm or sensor needs C++ in the
   bridge and the pins. Rejected.
+- **F´'s Svc.GenericHub in place of LabBusDriver.** FPP 3.4.0 writes serial-to-typed port calls
+  with unqualified serializer names, so a hub outside module Bus does not compile. It also needs a
+  buffer manager, an allocator and its own hub-to-hub framing, and its source shows it would pass
+  a long push silently and drop a wrong port silently. Rejected (the spike in the decision comment
+  of 2026-11-16 on issue 63 The lab's bus driver carries bus data into the F´ build).
 
 ## Consequences
 

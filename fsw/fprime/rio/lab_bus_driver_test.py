@@ -27,7 +27,7 @@ _TOPOLOGY = r'^Assert: "[^"]*FswTopologyAc\.cpp:\d+"'
 
 
 @functools.cache
-def _hub_ports() -> int:
+def _bus_out_ports() -> int:
     """The size of LabBusDriver's `busOut`, read from its FPP.
 
     Returns:
@@ -64,8 +64,8 @@ def test_every_role_s_bus_message_steps_without_an_assert(
 ) -> None:
     """Every role's message, as the bus emulator writes it, steps the deployment on its port.
 
-    The values' proof is elsewhere: the bus emulator's and `cdh_<role>`'s tests, and the dead
-    reckoner's F´ test, reading for reading.
+    The values' proof is elsewhere: #62's bus emulator test, the `cdh_<role>` pin test, and the
+    dead reckoner's `fprime_test.py` plus the F´ campaign, reading for reading.
 
     Args:
         fsw: a copy of the deployment.
@@ -123,13 +123,13 @@ def test_a_push_lab_bus_driver_cannot_deliver_raises(
         push: the push refused.
     """
     assert bus_by_role
-    unwired = sorted(set(range(_hub_ports())) - {port for port, _ in bus_by_role.values()})
+    unwired = sorted(set(range(_bus_out_ports())) - {port for port, _ in bus_by_role.values()})
     assert unwired, "every LabBusDriver port is wired"
     for port, data in bus_by_role.values():
         fsw = _stepped(prm, parameter_ids, port, data)
         refused = {
             "unwired-port": (unwired[0], data),
-            "port-past-busOut": (_hub_ports(), data),
+            "port-past-busOut": (_bus_out_ports(), data),
             "empty": (port, b""),
         }[push]
 
