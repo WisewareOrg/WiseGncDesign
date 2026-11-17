@@ -286,15 +286,76 @@ def test_the_f_prime_build_builds_a_configuration_only_when_each_member_has_an_f
 ):
     """A member whose component's `.fpp` has no `CMakeLists.txt` beside it keeps it out of F´.
 
+    The configuration's two members' components are defined in two directories; it is built only
+    once both hold a `CMakeLists.txt`.
+
     Args:
         tmp_path: where the mock is written.
     """
-    contract = _mock(tmp_path, "Gated", DECLARED)
+    (tmp_path / "gnc").mkdir()
+    fpps = []
+    for name in ("First", "Second"):
+        (tmp_path / name).mkdir()
+        fpps.append(tmp_path / name / f"{name}.fpp")
+        fpps[-1].write_text(device(name, []))
+    (tmp_path / "gnc" / "Gated.fpp").write_text(
+        sub_topology("Gated", [("first", "MockGnc.First"), ("second", "MockGnc.Second")])
+    )
+    contract = Contract(tuple(fpps), tmp_path / "gnc")
     assert fprime_configurations(contract=contract) == ()
 
-    (tmp_path / "CMakeLists.txt").touch()
+    (tmp_path / "First" / "CMakeLists.txt").touch()
+    assert fprime_configurations(contract=contract) == ()
 
+    (tmp_path / "Second" / "CMakeLists.txt").touch()
     assert fprime_configurations(contract=contract) == ("Gated",)
+
+
+def test_each_contract_s_f_prime_configurations_are_those_whose_members_have_f_prime_components():
+    """The repository's are not none; the test mocks' are MockActuation, never a Python-only one.
+
+    `MockFlight` and `MockFrame` fly test mocks with no F´ component, as a Python-only algorithm's
+    configuration does, so `just fsw` and CI's import step, which build and import this set, leave
+    them out.
+    """
+    assert fprime_configurations()
+    assert set(fprime_configurations()) <= set(configurations())
+    assert fprime_configurations(contract=MOCK) == ("MockActuation",)
+    assert {"MockFlight", "MockFrame"} <= set(configurations(contract=MOCK))
+
+
+def test_every_algorithm_s_fpp_is_in_the_contract_with_or_without_an_f_prime_component(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """An algorithm is found by its `.fpp` alone, so a Python-only algorithm is in the contract.
+
+    Args:
+        tmp_path: the repository the algorithms are read from.
+        monkeypatch: points `fsw.codegen.deployment` at it.
+    """
+    for name, fprime in (("built", True), ("python_only", False)):
+        (tmp_path / "algorithms" / name).mkdir(parents=True)
+        (tmp_path / "algorithms" / name / f"{name}.fpp").touch()
+        if fprime:
+            (tmp_path / "algorithms" / name / "CMakeLists.txt").touch()
+    monkeypatch.setattr("fsw.codegen.deployment._REPOSITORY", tmp_path)
+
+    assert algorithm_files() == (
+        tmp_path / "algorithms" / "built" / "built.fpp",
+        tmp_path / "algorithms" / "python_only" / "python_only.fpp",
+    )
+
+
+@pytest.mark.parametrize("configuration", ["MockFlight"], scope="module")
+def test_a_test_reaching_the_f_prime_build_skips_a_configuration_it_does_not_build(
+    fprime_configuration: str,
+):
+    """`fprime_configuration` skips a configuration the F´ build does not build, so this never runs.
+
+    Args:
+        fprime_configuration: a configuration the F´ build does not build, which skips the test.
+    """
+    pytest.fail(f"fprime_configuration gave {fprime_configuration}, which F´ does not build")
 
 
 def test_the_renderer_renders_and_names_every_f_prime_configuration_of_both_contracts(
