@@ -223,10 +223,10 @@ compiles its GNC sub-topology with it; the shared instances are in
 a `CMakeLists.txt`, and F´ finds which algorithms a configuration links from its FPP. Each
 `_wise_fsw.step(t_ns, bus)` sets SimTime to the simulation's time, runs the queued commands, pushes
 each `(port, bytes)` of `bus` out on LabBusDriver's serial port `busOut[port]`, and then SimTime
-ticks the driver once, so nav runs on every `navDivider`-th step. LabBusDriver is the RIO bus
-driver the lab uses, receiving raw bus bytes from the bus emulator: the typed port each `busOut`
-connects to deserializes the bytes as F´ serializes the bus struct, and bytes it does not consume
-exactly trip F´'s assert. `Fsw.fpp.in` wires each role by hand:
+ticks the rate-group driver once, so nav runs on every `navDivider`-th step. LabBusDriver is the
+RIO bus driver the lab uses, receiving raw bus bytes from the bus emulator: the typed port each
+`busOut` connects to deserializes the bytes as F´ serializes the bus struct, and bytes it does not
+consume exactly trip F´'s assert. `Fsw.fpp.in` wires each role by hand:
 `labBusDriver.busOut[i] -> cdh.<role>In`, and `cdh.<role>Out` to the sub-topology's `<role>In`,
 where `cdh` is the generated `Cdh.BusConverter`; an added sensor is wired there.
 `fsw.codegen.deployment.bus_port(configuration, "<role>In")` reads `i` back from the rendered

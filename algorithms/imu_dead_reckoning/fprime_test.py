@@ -72,7 +72,7 @@ def case_parameters(
 
 @pytest.fixture(scope="module")
 def imu_bus() -> Callable[[Any, Any], list[tuple[int, bytes]]]:
-    """The bus a step takes for one IMU reading: nav's role's message bytes on its bus driver port.
+    """One IMU reading's bus for a step: nav's role's message bytes on its LabBusDriver port.
 
     The role is the contract's `Cdh.BusConverter` role whose GNC struct nav's `imuIn` takes, and
     its port the one the configuration's deployment wires to the role's CDH input.
