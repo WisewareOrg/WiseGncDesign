@@ -1,8 +1,9 @@
 module Cdh {
 
-  @ Converts each sensor role's bus struct to the GNC's FPP type: a role's port pair, its stem the
-  @ role, its input `<role>In` typed by the bus struct and its output `<role>Out` by the GNC struct;
-  @ a configuration takes the role at its GNC sub-topology's port `<role>In`
+  @ Converts each role's struct between the bus and the GNC: a role's port pair, its stem the role,
+  @ an input `<role>In` and an output `<role>Out`. A sensor's input is typed by the bus struct and
+  @ its output by the GNC struct; an actuator's the reverse. A configuration takes a sensor role at
+  @ its GNC sub-topology's port `<role>In` and an actuator role at its port `<role>Out`
   passive component BusConverter {
 
     @ The IMU's message, as the bus carries it
@@ -10,6 +11,12 @@ module Cdh {
 
     @ The IMU's reading, as the GNC takes it
     output port imuOut: Gnc.ImuReading
+
+    @ The wheel's command, as the GNC sends it
+    sync input port wheelIn: Gnc.WheelCommand
+
+    @ The wheel's torque message, as the bus carries it
+    output port wheelOut: Bus.ArrayMotorTorqueMsg
 
   }
 
