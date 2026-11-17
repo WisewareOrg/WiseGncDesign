@@ -11,7 +11,9 @@
   F´'s Svc.GenericHub is a rejected alternative, from the spike in the decision comment of
   2026-11-16 on issue 63 The lab's bus driver carries bus data into the F´ build; the extension
   named `_wise_fsw_<configuration>` (issue 64 The F´ build on WiseDynamics' host module, one
-  extension per configuration).
+  extension per configuration); the actuator direction, bytes back out through LabBusDriver and
+  the emulator, and the role wiring generated (issue 95 Generate the actuator direction and each
+  configuration's role wiring, in both builds).
 
 ## Context
 
@@ -49,8 +51,10 @@ The little-endian push is the failure the comparison would have shown.
   ground segment (ADR 0004 rev 2) or the lab's own; the lab's pins are compiled in as a test
   connector.
 - **Bus structs in FPP mirror Basilisk messages**, each held to the real message by a test.
-- **A bus emulator, generated from the bus structs, turns Basilisk messages into their bytes.**
-- **LabBusDriver takes the bytes on F´ `serial` ports** and delivers typed bus structs.
+- **A bus emulator, generated from the bus structs, turns Basilisk messages into their bytes**, and
+  an actuator's bytes back into its Basilisk message.
+- **LabBusDriver takes the bytes on F´ `serial` ports** and delivers typed bus structs, and takes
+  typed bus structs back as bytes on `serial` ports.
 - **No part of the lab, and no sim glue, names an algorithm.**
 
 ## Alternatives considered
@@ -67,5 +71,6 @@ The little-endian push is the failure the comparison would have shown.
 
 ## Consequences
 
-- An added sensor is a bus struct and FPP wiring; no sim glue is written for it.
+- An added sensor or actuator is FPP declarations; its wiring is generated, and no sim glue is
+  written for it.
 - The bus structs are a hand-kept mirror of Basilisk's messages; a test fails when one drifts.

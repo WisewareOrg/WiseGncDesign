@@ -24,15 +24,18 @@ in `fsw/python/<partition>/`, and FPP gives each its structure:
   rate group `<stem>RateGroup` every `<stem>Divider`-th tick, counting ticks as F´'s
   `Svc.RateGroupDriver` does.
 - **RIO** reads each sensor role's message as its bus struct, copying it within the tick, and
-  returns the actuator commands, `{}` while the build writes no actuator.
+  returns the actuator commands: for each actuator role GNC wrote in the frame, a fresh
+  `messaging.<Name>Payload` of the message its bus struct mirrors; a role GNC did not write is
+  absent, and keeps its last command on the vehicle.
 - **CDH** dispatches each command by name to its algorithm's method of that name, with F´'s
-  responses, converts each role's bus struct to its GNC input, logs every telemetry write tagged
-  with the tick's time, and reads each algorithm's parameters from the case's record at boot. Its
-  `GroundLink` holds what the ground uplinks and drains, and the frame runner presents the radio
-  edge through it.
-  `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each role, as its annotation states.
+  responses, converts each sensor role's bus struct to its GNC input and each actuator role's GNC
+  output to its bus struct, logs every telemetry write tagged with the tick's time, and reads each
+  algorithm's parameters from the case's record at boot. Its `GroundLink` holds what the ground
+  uplinks and drains, and the frame runner presents the radio edge through it.
+  `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each role, as its annotation states, and
+  a configuration takes the roles its sub-topology exposes (`fsw.codegen.roles.taken`).
 - **GNC** runs the sub-topology's algorithms in its rate groups' order, routing each output to the
-  input it is wired to.
+  input it is wired to, and returns what its members wrote on the sub-topology's output ports.
 
 Each module's docstrings say what it refuses. An algorithm's `step(t, ...)` takes a keyword per
 data input, named as the input port without its `In`, in the input's FPP type, and returns its
@@ -229,24 +232,32 @@ cannot hold.
 The dead reckoner's GNC sub-topology, `fsw/fpp/gnc/ImuDeadReckoning.fpp`, holds nav, the F´ rate
 group that runs it, the rate-group driver, and its rate as the FPP constant `navDivider`; `phase`
 blocks on the driver and the rate group pass the constant to their `configure()`. Each GNC
-sub-topology exposes the ports `tickIn` and `imuIn`, which the deployment wires.
-Each configuration's deployment, `WiseFsw.<Cfg>Fsw`, is rendered at build time from the templates
-in `fsw/fprime/deployment/`, one per file in `fsw/fpp/gnc/`, into the build directory, where it
-compiles its GNC sub-topology with it; the shared instances are in
-`fsw/fprime/deployment/instances.fpp`. The F´ build takes every directory under `algorithms/` with
-a `CMakeLists.txt`, and F´ finds which algorithms a configuration links from its FPP. Each
-`_wise_fsw_<configuration>.step(t_ns, bus)` sets SimTime to the simulation's time, runs the queued
-commands, pushes each `(port, bytes)` of `bus` out on LabBusDriver's serial port `busOut[port]`, and
-then SimTime ticks the rate-group driver once, so nav runs on every `navDivider`-th step.
-LabBusDriver is the RIO bus driver the lab uses, receiving raw bus bytes from the bus emulator: the
+sub-topology exposes the port `tickIn`, and a port per role it takes: `<role>In` for a sensor,
+`<role>Out` for an actuator.
+Each configuration's deployment, `WiseFsw.<Cfg>Fsw`, is rendered at configure time by
+`python -m fsw.codegen.deployment` from `fsw/fprime/deployment/Fsw.fpp.in`, its role wiring
+generated, and the other templates in `fsw/fprime/deployment/` by CMake, into the build directory,
+where it compiles its GNC sub-topology with it; the shared instances are in
+`fsw/fprime/deployment/instances.fpp`. The F´ build builds the configurations
+`fsw.codegen.deployment.fprime_configurations` selects, those whose every member's component has an
+F´ component: its `.fpp` sits beside a `CMakeLists.txt`, as in every directory under `algorithms/`
+the F´ build takes, and in `fsw/mock/actuator/`, the test mock flown by `MockActuation`. F´ finds
+which algorithms a configuration links from its FPP. Each `_wise_fsw_<configuration>.step(t_ns,
+bus)` sets SimTime to the simulation's time, runs the queued commands, pushes each `(port, bytes)`
+of `bus` out on LabBusDriver's serial port `busOut[port]`, then SimTime ticks the rate-group driver
+once, so nav runs on every `navDivider`-th step, and returns each `(port, bytes)` the step's GNC
+sent LabBusDriver's serial port `busIn[port]`. LabBusDriver is the RIO bus driver the lab uses: the
 typed port each `busOut` connects to deserializes the bytes as F´ serializes the bus struct, and
-bytes it does not consume exactly trip F´'s assert. `Fsw.fpp.in` wires each role by hand:
-`labBusDriver.busOut[i] -> cdh.<role>In`, and `cdh.<role>Out` to the sub-topology's `<role>In`,
-where `cdh` is the generated `Cdh.BusConverter`; an added sensor is wired there. Each tick, the
-adapter pushes each role's message, as `lab.bus_emulator` writes it, on the port
+bytes it does not consume exactly trip F´'s assert; each `busIn` holds the bytes of the bus struct
+its typed port sends until the step drains them. The template's role wiring is generated from the
+roles the sub-topology exposes: the k-th sensor role's `labBusDriver.busOut[k] -> cdh.<role>In` and
+`cdh.<role>Out` to the sub-topology's `<role>In`, and the k-th actuator role's sub-topology
+`<role>Out` to `cdh.<role>In` and `cdh.<role>Out -> labBusDriver.busIn[k]`, where `cdh` is the
+generated `Cdh.BusConverter`; an added sensor or actuator is FPP declarations alone. Each tick, the
+adapter pushes each sensor role's message, as `lab.bus_emulator` writes it, on the port
 `fsw.codegen.deployment.bus_port(configuration, "<role>In")` reads back from the rendered
-deployment, for every role `fsw.codegen.roles` reads; a tick missing one names it. The adapter
-commands no actuator.
+deployment; a tick missing one names it. It returns, for each actuator role's bytes the step
+returned, the Basilisk message `lab.bus_emulator.deserialize` reads them back as.
 
 The rate group's health telemetry is recorded with every other channel; the deployment links F´'s
 stub `Os::RawTime`, so its cycle times read 0. Each case flies a fresh copy of the deployment, so

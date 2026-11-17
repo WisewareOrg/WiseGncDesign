@@ -10,7 +10,9 @@ WiseDynamics' host module)
 - **rev 1** — 2026-11-13 — first written (issue 52 tooling checks); FPP carries each sensor role's
   bus-to-GNC pairing, and the Python build's frame refuses delayed feedback and fan-out (issue 61
   The Python frame runner, on WiseDynamics' host module); F´ in a repository of its own rejected,
-  moved from ADR 0003 rev 3 (issue 85 one decision per ADR).
+  moved from ADR 0003 rev 3 (issue 85 one decision per ADR); FPP pairs each actuator role too, its
+  direction the reverse of a sensor's (issue 95 Generate the actuator direction and each
+  configuration's role wiring, in both builds).
 
 ## Context
 
@@ -34,10 +36,11 @@ way through, partitioned as real flight software is.
   - platform is the clock, the tick and the tasks.
 - **GNC touches neither edge.**
 - **Each build has its own CDH**, however thin.
-- **FPP pairs each sensor role's bus struct with the GNC's struct.** A CDH component,
-  `Cdh.BusConverter` in `fsw/fpp/interfaces/`, has per role an input `<role>In` typed by the bus
-  struct and an output `<role>Out` typed by the GNC's struct; FPP type-checks both ends, and each
-  build's CDH reads the same declaration.
+- **FPP pairs each role's bus struct with the GNC's struct.** A CDH component,
+  `Cdh.BusConverter` in `fsw/fpp/interfaces/`, has per role an input `<role>In` and an output
+  `<role>Out`: a sensor's `<role>In` is typed by the bus struct and its `<role>Out` by the GNC's;
+  an actuator's the reverse. FPP type-checks both ends, and each build's CDH reads the same
+  declaration.
 - **An algorithm's code lives in `algorithms/<name>/`, and GNC wires it in.** A configuration
   reaches its algorithms only through its GNC sub-topology.
 - **RIO, CDH and platform name no algorithm**; ADR 0006 rev 1 holds the lab and the sim glue to the
@@ -67,4 +70,5 @@ way through, partitioned as real flight software is.
 - The Python build's GNC refuses a backward edge (one-frame-delayed feedback) and an output feeding
   more than one input, until an algorithm needs either.
 - The Python build converts each role's message twice per tick, Basilisk payload to bus struct in
-  RIO and bus struct to GNC struct in CDH, as the F´ path does.
+  RIO and bus struct to GNC struct in CDH for a sensor, and back for an actuator, as the F´ path
+  does.
