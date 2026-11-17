@@ -136,8 +136,11 @@ def run_notebook(path: Path) -> None:
     """Execute a notebook end to end in the `wise-gnc-design` kernel, capped at two cases a flight.
 
     The kernel runs in the notebook's folder, as in Lab, so the session it finds is the one its
-    flights land in. The executed copy goes to a temporary directory, never beside the notebook.
-    Cells that only the notebook runs, such as those that judge and plot, run too.
+    flights land in. Its sessions are kept in a temporary directory of the run's own, the `sim_out`
+    every pytest the run starts takes through `PYTEST_ADDOPTS`, so two runs at once, or one run
+    and the project's own sessions, never fly or judge in one session. The executed copy goes to
+    that directory too, never beside the notebook. Cells that only the notebook runs, such as
+    those that judge and plot, run too.
 
     Args:
         path: the notebook's percent-format file.
@@ -150,6 +153,7 @@ def run_notebook(path: Path) -> None:
             f"the {KERNEL} kernel is not registered; run `just local` or `just pinned`"
         )
     with tempfile.TemporaryDirectory() as tmp:
+        addopts = f"{os.environ.get('PYTEST_ADDOPTS', '')} -o sim_out={tmp}/sessions"
         result = subprocess.run(
             [
                 sys.executable,
@@ -162,7 +166,12 @@ def run_notebook(path: Path) -> None:
                 "-o",
                 f"{tmp}/run.ipynb",
             ],
-            env={**os.environ, "JPY_SESSION_NAME": str(path), "WISE_DYNAMICS_CAPPED": "1"},
+            env={
+                **os.environ,
+                "JPY_SESSION_NAME": str(path),
+                "WISE_DYNAMICS_CAPPED": "1",
+                "PYTEST_ADDOPTS": addopts,
+            },
             capture_output=True,
             text=True,
             check=False,
