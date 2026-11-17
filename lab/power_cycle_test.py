@@ -4,7 +4,6 @@ That a whole flight carries nothing to the next case is a mission's, so it is te
 algorithm a mission flies. Skipped without the deployment `just fsw` builds.
 """
 
-import importlib.util
 import sys
 
 import pytest
@@ -12,9 +11,9 @@ import pytest
 from fsw.codegen.deployment import configurations
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab.power_cycle import _loaded_stamps, dictionary_path, power_cycle, source
+from lab.power_cycle import _loaded_stamps, built, dictionary_path, power_cycle, source
 
-if not all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations()):
+if not all(built(c) for c in configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000

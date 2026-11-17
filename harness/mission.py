@@ -40,7 +40,7 @@ from ground import parameters
 from ground.fprime_station import FprimeStation
 from ground.procedures import Ground
 from harness import requirements_tree
-from lab import Adapter
+from lab import Adapter, built
 
 BUILDS = ("fprime", "python")
 """The builds a configuration flies on: the F´ build in the lab, and the Python build."""
@@ -327,17 +327,33 @@ def _write_flight_json(self: object, request: pytest.FixtureRequest, sim_test_di
     """Record the facts of the flight this test flies, where the judge reads them.
 
     Autouse, so it runs before `sim_scenario` and a case that crashes in setup still leaves it.
-    The write merges, so a `build` that an earlier case of the flight recorded survives it.
 
     Args:
         self: the vehicle's test class.
         request: the fixture request, whose function carries the mission and scenario.
         sim_test_directory: the test's directory in the session.
     """
-    mission, scenario_id = request.function.mission, request.function.scenario_id
-    sim_test_directory.mkdir(parents=True, exist_ok=True)
+    _record_flight(request.function.mission, request.function.scenario_id, sim_test_directory)
+
+
+def _record_flight(mission: Mission, scenario_id: str, directory: Path) -> None:
+    """Record a flight's facts in its folder's `flight.json`, or skip an F´ flight not built.
+
+    The write merges, so a `build` that an earlier case of the flight recorded survives it. An F´
+    flight whose configuration's extension is absent removes the `flight.json` an earlier flight
+    left, so the folder, left with no run of this flight, is judged and compared by nothing.
+
+    Args:
+        mission: the mission.
+        scenario_id: the TST ID it flies.
+        directory: the test's directory in the session.
+    """
+    if mission.build == "fprime" and not built(mission.gnc):
+        (directory / "flight.json").unlink(missing_ok=True)
+        pytest.skip(f"the F´ build of {mission.gnc} is absent; run `just fsw`")
+    directory.mkdir(parents=True, exist_ok=True)
     _merge_json(
-        sim_test_directory / "flight.json",
+        directory / "flight.json",
         {
             "scenario": scenario_id,
             "fsw": {"gnc": mission.gnc, "build": mission.build},
@@ -381,8 +397,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     sides, or the F´ build's `lab.Adapter`, with an `FprimeStation` on its pins as the radio edge.
     WiseDynamics' `FswHost` hosts the build. A `Ground` flies the procedure against the radio edge
     and records the run file. An exception the procedure raised is re-raised whole, and a procedure
-    still waiting when the flight ends fails the case. An F´ build's test is skipped when its
-    configuration's extension is absent.
+    still waiting when the flight ends fails the case.
 
     Args:
         mission: the mission.
@@ -466,13 +481,6 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             pytest.fail("\n".join(problems), pytrace=False)
 
     test.pytestmark = [*test.pytestmark, *definition.pytestmark]
-    if mission.build == "fprime":
-        test.pytestmark.append(
-            pytest.mark.skipif(
-                importlib.util.find_spec(f"lab._wise_fsw_{mission.gnc}") is None,
-                reason=f"the F´ build of {mission.gnc} is absent; run `just fsw`",
-            )
-        )
     test.__name__ = f"test_{mission.gnc}_{mission.build}_{definition.__name__}"
     test.mission = mission
     test.scenario_id = scenario_id

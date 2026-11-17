@@ -406,11 +406,10 @@ globals().update(mission_tests(*MISSIONS))
 
 # %% active="ipynb"
 # # Parity runs only where the F´ build exists, and then must compare a twin per scenario at least.
-# import importlib.util
-#
 # from harness.parity import session_parity
+# from lab import built
 #
-# if importlib.util.find_spec(f"lab._wise_fsw_{MISSION.gnc}") is not None:
+# if built(MISSION.gnc):
 #     assert session_parity() >= len(MISSION.scenarios)
 
 # %% active="ipynb"

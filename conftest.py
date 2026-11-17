@@ -8,7 +8,6 @@ Basilisk and F´ are imported, only by the fixtures that need them.
 
 from __future__ import annotations
 
-import importlib.util
 import itertools
 from collections.abc import Callable
 from pathlib import Path
@@ -63,9 +62,10 @@ def fsw(configuration: str) -> ModuleType:
     Returns:
         The copy.
     """
-    if importlib.util.find_spec(f"lab._wise_fsw_{configuration}") is None:
+    from lab.power_cycle import built, power_cycle
+
+    if not built(configuration):
         pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
-    from lab.power_cycle import power_cycle
 
     return power_cycle(configuration)
 

@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 from types import ModuleType
 
-__all__ = ["dictionary_path", "power_cycle", "source"]
+__all__ = ["built", "dictionary_path", "power_cycle", "source"]
 
 _LAB = Path(__file__).parent
 """The directory `just fsw` builds each configuration's extension and dictionary into."""
@@ -49,6 +49,30 @@ def dictionary_path(configuration: str) -> Path:
     return _LAB / f"{configuration}FswTopologyDictionary.json"
 
 
+def _extension(configuration: str) -> str:
+    """A configuration's extension's module name.
+
+    Args:
+        configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`.
+
+    Returns:
+        `lab._wise_fsw_<configuration>`.
+    """
+    return f"lab._wise_fsw_{configuration}"
+
+
+def built(configuration: str) -> bool:
+    """Whether `just fsw` has built a configuration's extension.
+
+    Args:
+        configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`.
+
+    Returns:
+        True when its extension can be found.
+    """
+    return importlib.util.find_spec(_extension(configuration)) is not None
+
+
 def source(configuration: str) -> Path:
     """A configuration's extension file, checked to be built and unchanged since first checked.
 
@@ -66,7 +90,7 @@ def source(configuration: str) -> Path:
         ModuleNotFoundError: the extension is not built.
         RuntimeError: the extension file changed after this process first checked it.
     """
-    spec = importlib.util.find_spec(f"lab._wise_fsw_{configuration}")
+    spec = importlib.util.find_spec(_extension(configuration))
     if spec is None:
         raise ModuleNotFoundError(
             f"the F´ deployment of {configuration} is not built; run `just fsw`"
