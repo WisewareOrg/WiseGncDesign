@@ -119,9 +119,10 @@ everywhere, even with `--full-monte-carlo`, and the session name `scratch` is re
 
 - **Machinery apart from content.** `harness/`, a package at the repository root imported as
   `harness.<module>`, holds what knows no specific requirement, metric or scenario: the mission
-  code, the judging fixtures as a pytest plugin, `judge()` and `plots()`, and the tree reader.
-  Content stays where it is read: `analysis/` holds only the analyzers, `scenarios/` holds how each
-  TST is flown, and `algorithms/`, `missions/`, `fsw/`, `ground/` and `lab/` hold the rest.
+  code, the judging fixtures as a pytest plugin, `judge()` and `plots()`, the tree reader, and
+  cross-build parity. Content stays where it is read: `analysis/` holds only the rung analyzers the
+  judge runs, `scenarios/` holds how each TST is flown, and `algorithms/`, `missions/`, `fsw/`,
+  `ground/` and `lab/` hold the rest.
 - **Tests sit beside the code they test**, with no central `tests/` folder. Same-named test files
   stay apart under `--import-mode=importlib`.
 - **An algorithm is a package around its notebook.** The notebook keeps the derivation and the
