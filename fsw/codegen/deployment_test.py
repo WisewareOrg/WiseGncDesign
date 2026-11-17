@@ -5,6 +5,7 @@ role wiring is checked on mock configurations rendered from the contract's roles
 FPP's own analysis; which configurations the F´ build builds, on a mock contract.
 """
 
+import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from fsw.codegen.deployment import (
     fprime_configurations,
     gnc_instances,
     main,
+    render,
     tick_period,
 )
 from fsw.codegen.fpp_model import Model, read
@@ -219,6 +221,27 @@ def test_a_configuration_s_role_wiring_is_generated_from_the_roles_it_takes(
         for k, role in enumerate(of):
             port = role.input if role.sensor else role.output
             assert bus_port(name, port, contract=contract) == k, role.role
+
+
+def test_a_render_leaves_a_topology_whose_text_is_unchanged_untouched(
+    configuration: str, tmp_path: Path
+):
+    """A second render keeps the file, so the F´ build does not autocode it again; a stale one goes.
+
+    Args:
+        configuration: the configuration.
+        tmp_path: where the topology is rendered.
+    """
+    topology = render(configuration, tmp_path)
+    os.utime(topology, ns=(0, 0))
+
+    assert render(configuration, tmp_path) == topology
+    assert topology.stat().st_mtime_ns == 0
+
+    text = topology.read_text()
+    topology.write_text(text + "\n")
+    render(configuration, tmp_path)
+    assert topology.read_text() == text
 
 
 def test_the_repository_s_configurations_wire_their_roles_through_the_shared_template(

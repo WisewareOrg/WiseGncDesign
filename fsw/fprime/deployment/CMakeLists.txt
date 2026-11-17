@@ -16,16 +16,6 @@ register_fprime_module(
     Svc_PrmDb
 )
 
-# A change to anything the render reads reruns it: the contracts' FPP, the template and the renderer;
-# the algorithms' FPP joins it beside the algorithms' glob in fsw/fprime/CMakeLists.txt.
-file(GLOB WISE_RENDER_INPUTS CONFIGURE_DEPENDS
-    "${FPRIME_PROJECT_ROOT}/fsw/fpp/gnc/*.fpp"
-    "${FPRIME_PROJECT_ROOT}/fsw/fpp/interfaces/*.fpp"
-    "${FPRIME_PROJECT_ROOT}/fsw/mock/*.fpp"
-    "${FPRIME_PROJECT_ROOT}/fsw/mock/*/*.fpp"
-    "${FPRIME_PROJECT_ROOT}/fsw/codegen/*.py"
-    "${CMAKE_CURRENT_LIST_DIR}/Fsw.fpp.in")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${WISE_RENDER_INPUTS})
 execute_process(
     COMMAND "${Python_EXECUTABLE}" -m fsw.codegen.deployment "${CMAKE_CURRENT_BINARY_DIR}"
     WORKING_DIRECTORY "${FPRIME_PROJECT_ROOT}"

@@ -171,7 +171,8 @@ def render(configuration: str, directory: Path, *, contract: Contract = CONTRACT
     The template's `@SIMULATION@` line becomes, for the k-th sensor role the configuration takes,
     `labBusDriver.busOut[k] -> cdh.<role>In` and `cdh.<role>Out -> <configuration>.Gnc.<role>In`,
     and for the k-th actuator role `<configuration>.Gnc.<role>Out -> cdh.<role>In` and
-    `cdh.<role>Out -> labBusDriver.busIn[k]`, in `Cdh.BusConverter`'s order.
+    `cdh.<role>Out -> labBusDriver.busIn[k]`, in `Cdh.BusConverter`'s order. A topology whose text
+    is unchanged is not rewritten, so the F´ build does not autocode and compile it again.
 
     Args:
         configuration: the configuration, the name of its GNC sub-topology in the contract's
@@ -202,10 +203,10 @@ def render(configuration: str, directory: Path, *, contract: Contract = CONTRACT
         )
     ]
     text = _TEMPLATE.read_text().replace("@CONFIGURATION@", configuration)
+    text = text.replace("@SIMULATION@\n", "".join(f"      {line}\n" for line in wiring))
     topology = directory / f"{configuration}Fsw.fpp"
-    topology.write_text(
-        text.replace("@SIMULATION@\n", "".join(f"      {line}\n" for line in wiring))
-    )
+    if not topology.is_file() or topology.read_text() != text:
+        topology.write_text(text)
     return topology
 
 
