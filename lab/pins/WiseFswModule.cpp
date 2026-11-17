@@ -79,8 +79,8 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         py::arg("prm_path"), py::arg("parameter_ids"),
         "Sets the topology up and boots it at t = 0 s, every component idle: PrmDb loads prm_path, an absolute "
         "path whose directory is its sandbox. Raises ValueError for a relative path, one in the root directory or "
-        "one longer than FileNameStringSize less its terminator, and RuntimeError naming each of parameter_ids that is not valid once loaded. A copy boots once: a second "
-        "boot raises RuntimeError.");
+        "one longer than F´'s file names hold, and RuntimeError naming each of parameter_ids that is not valid once "
+        "loaded. A copy boots once: a second boot raises RuntimeError.");
 
     m.def(
         "uplink",

@@ -244,7 +244,7 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
     past: int,
     boots: bool,
 ):
-    """`FileNameStringSize` holds a path one character shorter; a longer one is refused by length.
+    """F´'s `FileNameStringSize` less its terminator is the longest path; a longer one is refused.
 
     Args:
         fsw: the test's copy.
