@@ -64,7 +64,11 @@ __all__ = ["WheelSpinner"]
 
 
 # %%
-WHEELS = read(contract_files()).types["Gnc.WheelCommand"].members[0].size
+WHEELS = next(
+    member.size
+    for member in read(contract_files()).types["Gnc.WheelCommand"].members
+    if member.name == "motorTorque"
+)
 """The wheels a `Gnc.WheelCommand` commands: its `motorTorque` array's length in the contract."""
 
 
