@@ -7,15 +7,15 @@ links:
 - SRS006: ZDPGvG4g4HHAHjox9fSBbChJdPxkxZJfYb3ikzo-lpU=
 normative: true
 rationale: |
-  230 cases are the fewest at which the judge's one-sided Clopper-Pearson rule decides p 0.99 at
-  c 0.90, with no failure allowed.
+  Its case count is the fewest at which the judge's one-sided Clopper-Pearson rule decides the p
+  and c of SRS006<!-- Wheel momentum: 1e-4 N m s at p 0.99, c 0.90 -->, with no failure allowed.
 ref: ''
 references:
 - keyword: def wheel_leo500(
   path: scenarios/wheel_leo.py
   sha: a0c01b1a11627107dbcb24bd719f6aa2dacd43e1af3efa0c579b479ec03fc6cf
   type: file
-reviewed: pPQ4ZUnHQQBw5N43xUQtEn7V5qtaS8eLg4SJmsT6PgU=
+reviewed: 3ZgFCGg8PJavGrVyU3CgaU8pko-tG_11XE-8KmgsP40=
 status: proposed
 text: |
   A mission's FSW boots in the leo500 scenario on the mission's vehicle and runs for 5700 s with no

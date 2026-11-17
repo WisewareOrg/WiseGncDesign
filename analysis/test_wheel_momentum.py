@@ -20,8 +20,10 @@ def wheel_momentum_error_N_m_s(
 ) -> np.ndarray:
     """|H - (H0 + integral of the commanded torque)| at each sample.
 
-    A torque written at t_k acts from t_k until the next write, and none acts before the first, so
-    the integral up to t is the sum of each torque over the part of its interval before t.
+    A torque written at t_k acts from t_k until the next write, and none acts before the first: a
+    zero torque held from the first sample stands for that, so every sample has a torque acting,
+    and the integral up to t is the impulse at that torque's write plus the torque times the time
+    since it.
 
     Args:
         t_s: (N,) s, the sample times, the first of which is H0's.
@@ -32,13 +34,11 @@ def wheel_momentum_error_N_m_s(
     Returns:
         (N,) N*m*s.
     """
-    impulse_at_write = np.concatenate(([0.0], np.cumsum(torque_N_m[:-1] * np.diff(t_written_s))))
-    acting = np.searchsorted(t_written_s, t_s, side="right") - 1
-    k = np.maximum(acting, 0)
-    impulse = np.where(
-        acting >= 0, impulse_at_write[k] + torque_N_m[k] * (t_s - t_written_s[k]), 0.0
-    )
-    return np.abs(H - (H[0] + impulse))
+    t_w = np.concatenate(([t_s[0]], t_written_s))
+    u = np.concatenate(([0.0], torque_N_m))
+    impulse_at_write = np.concatenate(([0.0], np.cumsum(u[:-1] * np.diff(t_w))))
+    k = np.searchsorted(t_w, t_s, side="right") - 1
+    return np.abs(H - (H[0] + impulse_at_write[k] + u[k] * (t_s - t_w[k])))
 
 
 @pytest.mark.parametrize("requirement_id", rungs(__file__))

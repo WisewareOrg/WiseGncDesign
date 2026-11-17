@@ -10,7 +10,7 @@
 #
 # A test controller with no input: each step it commands one constant motor torque on a reaction
 # wheel, so the wheel keeps spinning up. It proves the actuator path, from the GNC's wheel command
-# through both edges to Basilisk's wheel, and a real controller takes its place later.
+# through both edges to Basilisk's wheel.
 
 
 # %%
@@ -18,6 +18,8 @@
 
 import numpy as np
 
+from fsw.codegen.deployment import contract_files
+from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_types import Gnc
 from harness.mission import Mission, mission_tests
 
@@ -43,8 +45,10 @@ __all__ = ["WheelSpinner"]
 # the time since then. The hub turns the other way as the wheel spins up, which moves $\Omega$
 # itself away from $u_s t / J_s$, but not $H_s$.
 #
-# On the wheel spacecraft's Honeywell HR16, $J_s$ is its 50 N·m·s maximum momentum over its
-# 6000 rpm maximum speed, about 0.08 kg·m². A torque of 1 mN·m, far inside its 0.2 N·m limit,
+# The wheel's size and limits are the vehicle's: WiseDynamics' `imu_wheel_spacecraft` carries one
+# Honeywell HR16 from Basilisk's `rwFactory`, and its docstring gives them. For the HR16 as that
+# vehicle builds it at WiseDynamics a6195a6, $J_s$ is its 50 N·m·s maximum momentum over its
+# 6000 rpm maximum speed, about 0.08 kg·m², so a torque of 1 mN·m, far inside its 0.2 N·m limit,
 # adds 5.7 N·m·s over 5700 s, about 72 rad/s, far inside its 628 rad/s limit.
 
 
@@ -52,13 +56,18 @@ __all__ = ["WheelSpinner"]
 # ## Interface
 #
 # The spinner plays the F´ instance `spinner`. Its contract is `WheelSpinner.fpp` beside this
-# notebook: `step` takes no input and returns a `Gnc.WheelSpinnerOutputs`, the command on
-# `wheelOut` as a `Gnc.WheelCommand`, and a `Gnc.WheelSpinnerTelemetry`, the commanded torque on
-# the channel `wheelTorque`. Its one parameter, `motorTorque`, is the torque in N·m on the first of
-# the command's 36 wheels; the rest are zero.
+# notebook: it has no input port, so `step` takes only the time, and returns a
+# `Gnc.WheelSpinnerOutputs`, the command on `wheelOut` as a `Gnc.WheelCommand`, and a
+# `Gnc.WheelSpinnerTelemetry`, the commanded torque on the channel `wheelTorque`. Its one
+# parameter, `motorTorque`, is the torque in N·m on the first of the command's wheels; the rest are
+# zero. The command's length is read from the contract, as `WHEELS`.
 
 
 # %%
+WHEELS = read(contract_files()).types["Gnc.WheelCommand"].members[0].size
+"""The wheels a `Gnc.WheelCommand` commands: its `motorTorque` array's length in the contract."""
+
+
 class WheelSpinner:
     """Commands one constant motor torque on the first wheel at every step."""
 
@@ -69,7 +78,7 @@ class WheelSpinner:
             parameters: `motorTorque`, N*m, the torque on the first wheel.
         """
         self._torque = float(parameters.motorTorque)
-        motor_torque = np.zeros(36)
+        motor_torque = np.zeros(WHEELS)
         motor_torque[0] = self._torque
         self._command = Gnc.WheelCommand(motorTorque=motor_torque)
 

@@ -2,10 +2,9 @@
 
 from pathlib import Path
 
-import numpy as np
 import pytest
 
-from algorithms.wheel_spinner.wheel_spinner import WheelSpinner, parameters
+from algorithms.wheel_spinner.wheel_spinner import WHEELS, WheelSpinner, parameters
 from fsw.codegen.fpp_types import Gnc
 from harness.notebook import run_notebook
 
@@ -33,9 +32,10 @@ def test_each_step_commands_the_parameter_s_torque_on_the_first_wheel_alone_and_
 
     assert type(outputs) is Gnc.WheelSpinnerOutputs
     assert type(outputs.wheelOut) is Gnc.WheelCommand
-    expected = np.zeros(36)
-    expected[0] = 2.5e-3
-    np.testing.assert_array_equal(outputs.wheelOut.motorTorque, expected)
+    motor_torque = outputs.wheelOut.motorTorque
+    assert motor_torque.shape == (WHEELS,)
+    assert motor_torque[0] == 2.5e-3
+    assert not motor_torque[1:].any()
     assert telemetry == Gnc.WheelSpinnerTelemetry(wheelTorque=2.5e-3)
 
 
