@@ -12,12 +12,13 @@ Flights fly the harness's test mock, `MockFlight` of `harness.mock.MOCK`, which 
 The `variants` fixture renders the other configurations a test needs from two templates.
 """
 
+import importlib
 import json
 import os
 import shutil
 import sys
 import tomllib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 import h5py
@@ -141,27 +142,31 @@ def _component(
 
 
 @pytest.fixture(scope="session")
-def variants(tmp_path_factory: pytest.TempPathFactory) -> Contract:
+def variants(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Contract]:
     """The test mock's contract, with the configurations `VARIANTS` names rendered beside its own.
 
     Rendered once per session, since `fsw.codegen.fpp_types.load` holds each name to one
     definition. The `HarnessVariant` components are `Second` (SYS902, with its notebook),
     `Unclaimed` (no claim, no notebook), `Classless` (a notebook without its class) and
-    `Parameterless` (a parameter, and a notebook with its class and no `parameters`).
+    `Parameterless` (a parameter, and a notebook with its class and no `parameters`). Each is in
+    `<root>/harness_variants/<folder>/`, and `<root>` is on `sys.path` for the session, so each
+    notebook imports as `harness_variants.<folder>.<folder>`.
 
     Args:
         tmp_path_factory: where the contract is rendered.
 
-    Returns:
-        The contract, `MockFlight` and every variant among its configurations.
+    Yields:
+        Contract: the contract, `MockFlight` and every variant among its configurations.
     """
     root = tmp_path_factory.mktemp("variants")
+    package = root / "harness_variants"
+    package.mkdir()
     components = (
-        _component(root, "Second", ["provides: SYS902"], notebook=SECOND),
-        _component(root, "Unclaimed"),
-        _component(root, "Classless", ["provides: SYS901"], notebook=""),
+        _component(package, "Second", ["provides: SYS902"], notebook=SECOND),
+        _component(package, "Unclaimed"),
+        _component(package, "Classless", ["provides: SYS901"], notebook=""),
         _component(
-            root, "Parameterless", ["provides: SYS901"], True, "class Parameterless:\n    pass\n"
+            package, "Parameterless", ["provides: SYS901"], True, "class Parameterless:\n    pass\n"
         ),
     )
     gnc = root / "gnc"
@@ -182,7 +187,9 @@ def variants(tmp_path_factory: pytest.TempPathFactory) -> Contract:
                 ),
             )
         )
-    return Contract((*MOCK.algorithms, *components), gnc)
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.syspath_prepend(str(root))
+        yield Contract((*MOCK.algorithms, *components), gnc)
 
 
 def flying(*missions: str, check: str = "") -> str:
@@ -563,6 +570,19 @@ def test_one_configuration_flown_on_both_builds_is_two_flights(configuration: st
     assert len({name.removeprefix(prefix).split("_", 1)[1] for name in names}) == 1
 
 
+def test_the_class_a_mission_flies_is_its_notebook_module_s_own(tree: Path) -> None:
+    """The class is the one importing the notebook by its dotted name gives, from that module.
+
+    Args:
+        tree: the tree.
+    """
+    [cls] = mission()._found.classes
+
+    notebook = importlib.import_module("harness.mock.mock")
+    assert cls is notebook.Mock
+    assert sys.modules[cls.__module__] is notebook
+
+
 @pytest.mark.parametrize(
     ("lines", "claimed"),
     [
@@ -827,6 +847,7 @@ def test_a_case_s_parameter_record_is_written_beside_its_run_file_from_each_memb
     project: pytest.Pytester,
     variants: Contract,
     fly_in_a_subprocess: Callable[..., pytest.RunResult],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Each member's tuple, from its notebook's `parameters`, under its qualified instance.
 
@@ -837,7 +858,10 @@ def test_a_case_s_parameter_record_is_written_beside_its_run_file_from_each_memb
         project: the project.
         variants: the rendered configurations, `Both` among them.
         fly_in_a_subprocess: runs the project in a subprocess.
+        monkeypatch: puts the variants' root on the subprocess's path.
     """
+    path = [str(variants.gnc.parent), *filter(None, [os.environ.get("PYTHONPATH")])]
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(path))
     project.makepyfile(
         test_flights=flying(
             f'gnc="Both", build="python", scenarios=("TST901",), contract={in_notebook(variants)}'

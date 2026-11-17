@@ -12,6 +12,7 @@ of their own.
 """
 
 import functools
+import importlib
 import importlib.util
 import json
 import os
@@ -19,7 +20,7 @@ import re
 import sys
 import tempfile
 import weakref
-from collections.abc import Callable, Coroutine, Iterator
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
@@ -107,62 +108,28 @@ def _claims(model: Model, component: Component) -> list[str]:
     return claimed
 
 
-def _loaded(path: Path) -> Iterator[ModuleType]:
-    """Every module loaded, or loading, from a file.
-
-    Args:
-        path: the file, resolved.
-
-    Yields:
-        ModuleType: each module whose `__file__` is the file.
-    """
-    for module in list(sys.modules.values()):
-        file = getattr(module, "__file__", None)
-        if file and Path(file).resolve() == path:
-            yield module
-
-
-def _load(path: Path) -> ModuleType:
-    """A file loaded as a module of its own, registered before it runs.
-
-    Registering it first lets a reference back to itself, while it loads, find it.
-
-    Args:
-        path: the file, resolved.
-
-    Returns:
-        The module.
-
-    Raises:
-        BaseException: the file raised while loading; it is then not left registered, so a later
-            load runs it afresh.
-    """
-    module_name = f"_loaded_{path}"
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    try:
-        spec.loader.exec_module(module)
-    except BaseException:
-        del sys.modules[module_name]
-        raise
-    return module
-
-
 def _notebook(component: Component) -> ModuleType:
     """The notebook of a component's algorithm, `<folder>/<folder>.py` beside its `.fpp`.
 
-    A module already loaded, or loading, from the file is the notebook; otherwise the file is
-    loaded.
+    It is imported by its dotted name relative to the first `sys.path` entry holding it, so a
+    module already imported under that name is the notebook. A notebook missing, or one raising
+    while it imports, raises as Python's import does.
 
     Args:
         component: the component.
 
     Returns:
         The notebook's module.
+
+    Raises:
+        ValueError: no `sys.path` entry holds the notebook's file, naming it.
     """
     path = (component.file.parent / f"{component.file.parent.name}.py").resolve()
-    return next(_loaded(path), None) or _load(path)
+    for entry in sys.path:
+        root = Path(entry or ".").resolve()
+        if path.is_relative_to(root):
+            return importlib.import_module(".".join(path.relative_to(root).with_suffix("").parts))
+    raise ValueError(f"no sys.path entry holds {path}, the notebook of {component.name}")
 
 
 def _configuration(gnc: str, build: str, contract: Contract) -> _Configuration:
@@ -514,7 +481,8 @@ def _definition(
 
     A module already loaded, or loading, from the referenced file supplies it, so a notebook can
     define a scenario that its own missions fly: the module pytest or the judge is importing, or in
-    a kernel the notebook's own namespace. Otherwise the file is loaded as `_load` loads it.
+    a kernel the notebook's own namespace. Otherwise the file is imported, registered before it
+    runs so that a reference back to itself finds it there.
 
     Args:
         reference: the reference, its `path` relative to the repository and its `keyword`, the
@@ -527,16 +495,28 @@ def _definition(
     Raises:
         ValueError: the file references a definition it has not yet defined, because a mission
             flying it comes first.
+        BaseException: the file raised while importing; it is then not left registered, so a
+            later lookup imports it afresh.
     """
     reference = dict(reference)
     path = (root / reference["path"]).resolve()
     name = re.match(r"def (\w+)\(", reference["keyword"]).group(1)
-    for module in _loaded(path):
-        if hasattr(module, name):
+    for module in list(sys.modules.values()):
+        file = getattr(module, "__file__", None)
+        if file and Path(file).resolve() == path and hasattr(module, name):
             return getattr(module, name)
     main = sys.modules.get("__main__")
     if getattr(main, "__file__", None) is None and hasattr(getattr(main, name, None), "pytestmark"):
         return getattr(main, name)
-    if f"_loaded_{path}" in sys.modules:
+    module_name = f"_scenarios_{path}"
+    if module_name in sys.modules:
         raise ValueError(f"{reference['path']} flies {name} before it defines it")
-    return getattr(_load(path), name)
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        del sys.modules[module_name]
+        raise
+    return getattr(module, name)
