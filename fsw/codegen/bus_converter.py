@@ -9,9 +9,9 @@ outside `fsw.codegen.fields.STRUCT_CODES` raises when the code is generated.
 It also emits the lab's test pins, `BusConverterPins.hpp`, which each configuration's extension,
 `_wise_fsw_<configuration>`, includes once: `bus_<Struct>(<member>=...)` returns F´'s
 serialization of a bus struct built from its members' values, one pin per bus struct a role takes;
-and `cdh_<role>(data)` returns F´'s serialization of `convert_<role>`'s result for the struct its
-`<role>In` takes, which F´ deserializes from the bytes: the bus struct for a sensor, the GNC struct
-for an actuator.
+and `cdh_<role>(bus_bytes)` for a sensor, `cdh_<role>(icd_bytes)` for an actuator, returns F´'s
+serialization of `convert_<role>`'s result for the struct its `<role>In` takes, which F´
+deserializes from the bytes: the bus struct for a sensor, the GNC struct for an actuator.
 
 `python -m fsw.codegen.bus_converter <directory>` writes the three files into the directory from
 the contract, `fsw.codegen.deployment.contract_files()`; CMake runs it during `just fsw`, into the
@@ -303,7 +303,7 @@ def _usings(component: Component, found: list[Role]) -> str:
     ]
     if not lines:
         return ""
-    comment = "// FPP 3.4.0 names a connected port's serializer unqualified, in this namespace."
+    comment = "// FPP's autocoder names a connected port's serializer unqualified, here."
     return "\n".join([comment, *lines]) + "\n"
 
 

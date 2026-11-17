@@ -175,7 +175,7 @@ def test_the_tool_writes_the_component_and_its_pins_for_every_role(tmp_path: Pat
 def test_each_actuator_role_s_bus_port_serializer_is_named_into_namespace_cdh() -> None:
     """For each actuator role, the header brings its bus port's buffer and serializer into `Cdh`.
 
-    FPP 3.4.0 writes the deployment's call from `Cdh.BusConverter`'s typed `<role>Out` into
+    FPP's autocoder writes the deployment's call from `Cdh.BusConverter`'s typed `<role>Out` into
     LabBusDriver's serial input with the port's `<Port>PortBuffer` and `<Port>PortSerializer`
     unqualified, inside namespace `Cdh`; `<Port>` is the output port's type, read from FPP.
     """

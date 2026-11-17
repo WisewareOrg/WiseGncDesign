@@ -11,8 +11,9 @@ WiseDynamics' host module)
   bus-to-GNC pairing, and the Python build's frame refuses delayed feedback and fan-out (issue 61
   The Python frame runner, on WiseDynamics' host module); F´ in a repository of its own rejected,
   moved from ADR 0003 rev 3 (issue 85 one decision per ADR); FPP pairs each actuator role too, its
-  direction the reverse of a sensor's (issue 95 Generate the actuator direction and each
-  configuration's role wiring, in both builds).
+  direction the reverse of a sensor's, and a configuration takes only the roles its GNC
+  sub-topology exposes (issue 95 Generate the actuator direction and each configuration's role
+  wiring, in both builds).
 
 ## Context
 
@@ -66,6 +67,8 @@ way through, partitioned as real flight software is.
 ## Consequences
 
 - A second algorithm joins a configuration in FPP, with no glue written for it in either build.
+- A configuration takes only the roles its GNC sub-topology exposes; its role wiring is generated
+  from those ports.
 - Both builds have the same shape, so a reader of one can find their way in the other.
 - The Python build's GNC refuses a backward edge (one-frame-delayed feedback) and an output feeding
   more than one input, until an algorithm needs either.

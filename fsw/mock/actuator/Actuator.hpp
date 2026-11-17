@@ -11,7 +11,7 @@ class Actuator final : public ActuatorComponentBase {
     explicit Actuator(const char* compName);
 
   private:
-    //! Sends the command: element i is (i + 1) mN*m, as actuator.py's, inside a wheel's torque limit.
+    //! Sends the command, as actuator.py's.
     void schedIn_handler(FwIndexType portNum, U32 context) override;
 };
 

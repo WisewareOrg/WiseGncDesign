@@ -3,9 +3,8 @@
 The fixtures of a configuration's F´ build range over every configuration, one per GNC
 sub-topology. A test or fixture reaching the F´ build takes `fprime_configuration`, which skips a
 configuration the F´ build does not build; one needing the build, or the dictionary it generates,
-skips without it. Every pytest run loads this
-file, the judge's included, so the FPP model is read, and Basilisk and F´ are imported, only by the
-fixtures that need them.
+skips without it. Every pytest run loads this file, the judge's included, so the FPP model is
+read, and Basilisk and F´ are imported, only by the fixtures that need them.
 """
 
 from __future__ import annotations

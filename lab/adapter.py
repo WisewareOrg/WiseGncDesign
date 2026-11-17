@@ -32,9 +32,9 @@ class Adapter:
     the bus emulator writes it, on the LabBusDriver port the deployment wires to the CDH's
     `<role>In`, ticks the rate groups, drains the copy's telemetry writes, and returns the bytes the
     CDH's `<role>Out` sent each actuator role's LabBusDriver port, as the bus emulator reads them
-    back. The radio link is the copy's
-    pins, in bytes: `uplink` and `responses` reach the current copy, and `telemetry` returns what
-    the ticks drained. `ground.fprime_station.FprimeStation` is the ground's codec for them.
+    back. The radio link is the copy's pins, in bytes: `uplink` and `responses` reach the current
+    copy, and `telemetry` returns what the ticks drained. `ground.fprime_station.FprimeStation` is
+    the ground's codec for them.
 
     Attributes:
         period_s: s, the base tick's period, the configuration's FPP constant `tickPeriod`.
