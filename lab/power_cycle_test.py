@@ -138,49 +138,56 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
 def test_two_copies_in_one_process_share_no_state(
     configuration: str,
     dictionary: Dictionary,
+    rate_groups: list[str],
     prm: str,
     parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
     """A copy left mid-flight, a command queued and its link undrained, reaches no later copy.
 
-    The later copy boots idle and answers nothing; the earlier one flies on from its own state.
+    The later copy's rate groups count its one tick and it answers nothing; the earlier one's count
+    its own two ticks, and it answers both its commands.
 
     Args:
         configuration: the configuration power-cycled.
         dictionary: its dictionary.
+        rate_groups: its rate groups.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
+    assert rate_groups
     earlier, later = power_cycle(configuration), power_cycle(configuration)
     earlier_station = FprimeStation(earlier, dictionary)
     later_station = FprimeStation(later, dictionary)
     earlier.boot(prm, parameter_ids)
-    earlier_station.uplink("nav.initNavState", STATE, 1)
+    earlier_station.uplink("cmdDisp.CMD_NO_OP", {}, 1)
     earlier.step(t_ns=NS, bus=bus)
-    earlier_station.uplink("nav.initNavState", STATE, 2)
+    earlier_station.uplink("cmdDisp.CMD_NO_OP", {}, 2)
 
     later.boot(prm, parameter_ids)
     later.step(t_ns=NS, bus=bus)
     earlier.step(t_ns=2 * NS, bus=bus)
 
-    def nav_states(station: FprimeStation) -> list[tuple[int, str]]:
-        """Drains a station's telemetry and keeps nav's state writes.
+    def counts(station: FprimeStation) -> dict[str, list[int]]:
+        """Drains a station's telemetry and keeps each rate group's `CycleCount` writes.
 
         Args:
             station: the station on one copy.
 
         Returns:
-            Each `nav.navState` write's F´ time tag and value, oldest first.
+            Each rate group's counts, oldest first.
         """
-        writes = [(t, raw) for name, t, raw in station.telemetry() if name == "nav.navState"]
-        values = station.values("nav.navState", [raw for _, raw in writes])
-        return [(t, value) for (t, _), value in zip(writes, values.tolist(), strict=True)]
+        writes = station.telemetry()
+        names = {group: f"{group}.CycleCount" for group in rate_groups}
+        return {
+            group: station.values(name, [raw for n, _, raw in writes if n == name]).tolist()
+            for group, name in names.items()
+        }
 
-    assert nav_states(later_station) == [(NS, "idle")]
+    assert counts(later_station) == {group: [1] for group in rate_groups}
+    assert counts(earlier_station) == {group: [1, 2] for group in rate_groups}
     assert later_station.responses() == []
-    assert nav_states(earlier_station)[-1] == (2 * NS, "propagated")
     assert [context for context, _, _ in earlier_station.responses()] == [1, 2]
 
 

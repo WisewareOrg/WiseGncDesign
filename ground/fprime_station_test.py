@@ -1,8 +1,8 @@
 """The F´ ground station: names to command packets, and telemetry bytes to values.
 
 The codec runs against a toy component's dictionary, generated from FPP alone. The packets that
-reach the deployment crafted or malformed need the deployment `just fsw` builds, and skip without
-it.
+reach the deployment crafted or malformed are made from F´'s own `cmdDisp.CMD_TEST_CMD_1`, which
+every deployment has; they need the deployment `just fsw` builds, and skip without it.
 """
 
 import json
@@ -14,13 +14,15 @@ from typing import Any
 import numpy as np
 import pytest
 
+from fsw.codegen.deployment import gnc_instances
 from fsw.codegen.fpp_model import Instance
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import dictionary_path
+from lab.power_cycle import power_cycle
 
-DICTIONARY = dictionary_path("ImuDeadReckoning")
-"""The dictionary the build of nav's configuration generated, built or not."""
+TEST_COMMAND = "cmdDisp.CMD_TEST_CMD_1"
+"""F´'s CommandDispatcher's test command, which takes arguments, in every deployment."""
 
 TOY = """\
 module Toy {
@@ -69,17 +71,6 @@ ARGS = {
 NS = 1_000_000_000
 """ns per s."""
 
-STATE = {
-    "epoch": 0.0,
-    "attitude": np.array([1.0, 0.0, 0.0, 0.0]),
-    "position": np.array([6871.0e3, 0.0, 0.0]),
-    "velocity": np.array([0.0, 5.4e3, 5.4e3]),
-}
-"""`nav.initNavState`'s arguments: a state at t = 0."""
-
-WISE_FSW = Dictionary(DICTIONARY) if DICTIONARY.exists() else None
-"""The deployment's dictionary, which the build generated, or `None` without the build."""
-
 
 @pytest.fixture(scope="module")
 def toy_dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
@@ -110,11 +101,14 @@ def toy(toy_dictionary: Dictionary) -> FprimeStation:
 
 
 @pytest.fixture
-def booted_station(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> FprimeStation:
+def booted_station(
+    fsw: ModuleType, dictionary: Dictionary, prm: str, parameter_ids: list[int]
+) -> FprimeStation:
     """A station on the deployment, booted idle on the case's parameters.
 
     Args:
         fsw: the test's copy of the deployment.
+        dictionary: its dictionary.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
 
@@ -122,7 +116,7 @@ def booted_station(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> Fprim
         The station.
     """
     fsw.boot(prm, parameter_ids)
-    return FprimeStation(fsw, WISE_FSW)
+    return FprimeStation(fsw, dictionary)
 
 
 def test_a_command_packet_is_f_prime_s(toy: FprimeStation, toy_dictionary: Dictionary):
@@ -220,34 +214,66 @@ def test_values_takes_whole_serialized_values_only(
         toy.values(channel, serialized)
 
 
-def _init() -> bytes:
-    """`nav.initNavState` with `STATE`, as the station encodes it.
+def _test_command(dictionary: Dictionary) -> bytes:
+    """`cmdDisp.CMD_TEST_CMD_1` with an argument of each parameter's type, as the station codes it.
+
+    Args:
+        dictionary: the deployment's dictionary.
 
     Returns:
         The packet.
     """
-    station = FprimeStation(ModuleType("no_deployment"), WISE_FSW)
-    return station.encode_command("nav.initNavState", WISE_FSW.arguments("nav.initNavState", STATE))
+    command = dictionary.command(TEST_COMMAND)
+    args = {
+        param: 1.5 if type_.dtype.kind == "f" else 1
+        for param, type_ in zip(command.params, command.types, strict=True)
+    }
+    station = FprimeStation(ModuleType("no_deployment"), dictionary)
+    return station.encode_command(TEST_COMMAND, dictionary.arguments(TEST_COMMAND, args))
 
 
-def _unknown_opcode() -> int:
-    """An opcode no instance of the deployment has.
+def _unknown_opcode(configuration: str) -> int:
+    """An opcode no instance of the configuration's deployment has.
+
+    Args:
+        configuration: the configuration.
 
     Returns:
         One past the largest opcode.
     """
-    return max(c["opcode"] for c in json.loads(DICTIONARY.read_text())["commands"]) + 1
+    document = json.loads(dictionary_path(configuration).read_text())
+    return max(c["opcode"] for c in document["commands"]) + 1
+
+
+def _gnc_writes(
+    writes: list[tuple[str, int, Any]], configuration: str
+) -> list[tuple[str, int, Any]]:
+    """The writes of the configuration's GNC instances among drained ones.
+
+    Args:
+        writes: drained writes, as `decoded` gives them.
+        configuration: the configuration.
+
+    Returns:
+        Those writes, in order, each value as plain lists.
+    """
+    prefixes = tuple(
+        f"{i.name.removeprefix(f'{configuration}.')}."
+        for i in gnc_instances()
+        if i.name.startswith(f"{configuration}.")
+    )
+    return [(n, t, np.asarray(v).tolist()) for n, t, v in writes if n.startswith(prefixes)]
 
 
 @pytest.mark.parametrize(
     ("change", "response"),
     [
-        (lambda init: init[:2] + _unknown_opcode().to_bytes(4, "big") + init[6:], "INVALID_OPCODE"),
-        (lambda init: b"\x00\x01" + init[2:], "VALIDATION_ERROR"),
-        (lambda init: init[:4], "VALIDATION_ERROR"),
-        (lambda init: init[:-8], "FORMAT_ERROR"),
-        (lambda init: init[:6], "FORMAT_ERROR"),
-        (lambda init: init + bytes(8), "FORMAT_ERROR"),
+        (lambda good, unknown: good[:2] + unknown.to_bytes(4, "big") + good[6:], "INVALID_OPCODE"),
+        (lambda good, unknown: b"\x00\x01" + good[2:], "VALIDATION_ERROR"),
+        (lambda good, unknown: good[:4], "VALIDATION_ERROR"),
+        (lambda good, unknown: good[:-1], "FORMAT_ERROR"),
+        (lambda good, unknown: good[:6], "FORMAT_ERROR"),
+        (lambda good, unknown: good + bytes(8), "FORMAT_ERROR"),
     ],
     ids=[
         "unknown-opcode",
@@ -258,27 +284,42 @@ def _unknown_opcode() -> int:
         "extra",
     ],
 )
-def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
+def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_the_gnc_runs_as_untouched(
     fsw: ModuleType,
     booted_station: FprimeStation,
+    configuration: str,
+    dictionary: Dictionary,
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
-    change: object,
+    change: Callable[[bytes, int], bytes],
     response: str,
+    prm: str,
+    parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
 ):
     """F´ answers a bad packet with its `Fw.CmdResponse`, named, with no reason, and runs nothing.
 
+    The GNC instances write on the step what a copy with no packet writes on the same step.
+
     Args:
         fsw: the test's copy of the deployment.
         booted_station: the station on it.
-        decoded: drains the station's telemetry as values.
-        change: makes the bad packet from a good `nav.initNavState`.
+        configuration: the copy's configuration.
+        dictionary: its dictionary.
+        decoded: drains a station's telemetry as values.
+        change: makes the bad packet from a good `cmdDisp.CMD_TEST_CMD_1` and an unknown opcode.
         response: the response F´ gives it.
+        prm: the case's parameter file.
+        parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
     """
-    fsw.uplink(change(_init()), 7)
+    untouched = power_cycle(configuration)
+    untouched.boot(prm, parameter_ids)
+    untouched.step(t_ns=NS, bus=bus)
+    expected = _gnc_writes(decoded(FprimeStation(untouched, dictionary)), configuration)
+    assert expected
+
+    fsw.uplink(change(_test_command(dictionary), _unknown_opcode(configuration)), 7)
     fsw.step(t_ns=NS, bus=bus)
 
     assert booted_station.responses() == [(7, response, None)]
-    writes = [write for write in decoded(booted_station) if write[0].startswith("nav.")]
-    assert writes == [("nav.navState", NS, "idle")]
+    assert _gnc_writes(decoded(booted_station), configuration) == expected

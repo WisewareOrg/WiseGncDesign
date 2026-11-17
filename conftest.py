@@ -257,6 +257,26 @@ def case_parameters(dictionary: Dictionary) -> tuple[Any, ...]:
     return tuple(tuples)
 
 
+@pytest.fixture(scope="session")
+def rate_groups(configuration: str) -> list[str]:
+    """The configuration's rate groups, its GNC sub-topology's `Svc.PassiveRateGroup` instances.
+
+    Args:
+        configuration: the configuration.
+
+    Returns:
+        Their unqualified names, sorted.
+    """
+    from fsw.codegen.deployment import configuration_model
+
+    instances = configuration_model(configuration).instances
+    return sorted(
+        name.rsplit(".", 1)[-1]
+        for name, instance in instances.items()
+        if name.startswith(f"{configuration}.") and instance.component == "Svc.PassiveRateGroup"
+    )
+
+
 @pytest.fixture
 def algorithm_parameters() -> dict[str, Any]:
     """Each algorithm component's parameters, every element distinct, of its FPP shape and type.
