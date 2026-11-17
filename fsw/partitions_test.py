@@ -4,11 +4,10 @@ The names are read from the tree: each directory under `algorithms/`, each confi
 component and instance name of each GNC instance of a component an algorithm defines, so F´'s own
 components, such as a rate group, are not names. A name matches regardless of case; an instance
 name matches only as a whole word, so `nav` is not found in `navigate`. The files are the tracked
-ones, so a generated dictionary or extension beside them is not read, and each directory must
-give at least one, so a renamed directory fails rather than passing over nothing. Test files,
-`*_test.py` and `conftest.py`, are left out until #93 Framework tests range over the contract,
-never nav or the IMU deletes the exclusion. The names are read from FPP, so the first grep skips
-without the F´ framework clone, as the F´ tests skip without the F´ build.
+ones, tests included, so a generated dictionary or extension beside them is not read, and each
+directory must give at least one, so a renamed directory fails rather than passing over nothing.
+The names are read from FPP, so the first grep skips without the F´ framework clone, as the F´
+tests skip without the F´ build.
 """
 
 import re
@@ -38,7 +37,7 @@ DEPLOYMENT = "fsw/fprime/deployment"
 
 
 def _tracked(*paths: str) -> list[Path]:
-    """The files git tracks under the paths, test files included.
+    """The files git tracks under the paths.
 
     Args:
         *paths: directories, relative to the repository.
@@ -57,7 +56,7 @@ def _tracked(*paths: str) -> list[Path]:
 
 
 def _scanned(*directories: str) -> list[Path]:
-    """The tracked files under the directories that are not tests, at least one from each.
+    """The tracked files under the directories, at least one from each.
 
     Args:
         *directories: directories, relative to the repository.
@@ -67,7 +66,7 @@ def _scanned(*directories: str) -> list[Path]:
     """
     files = []
     for directory in directories:
-        found = [path for path in _tracked(directory) if not _is_test(path)]
+        found = _tracked(directory)
         assert found, f"{directory} holds no tracked file to scan"
         files += found
     return files
@@ -81,10 +80,10 @@ def _algorithm_names() -> re.Pattern[str]:
         each instance name as a whole word.
     """
     directories = {path.parts[1] for path in _tracked("algorithms") if len(path.parts) > 2}
-    without_algorithms = tuple(f for f in contract_files() if f not in algorithm_files())
-    algorithm_components = set(read(contract_files()).components) - set(
-        read(without_algorithms).components
-    )
+    in_algorithms = set(algorithm_files())
+    algorithm_components = {
+        c.name for c in read(contract_files()).components.values() if c.file in in_algorithms
+    }
     substrings, words = set(directories), set()
     for instance in gnc_instances():
         configuration, name = instance.name.split(".")
@@ -97,20 +96,8 @@ def _algorithm_names() -> re.Pattern[str]:
     return re.compile("|".join(alternatives), re.IGNORECASE)
 
 
-def _is_test(path: Path) -> bool:
-    """Whether a file is a test file, which the first grep leaves out.
-
-    Args:
-        path: the file.
-
-    Returns:
-        True for `*_test.py` and `conftest.py`.
-    """
-    return path.name.endswith("_test.py") or path.name == "conftest.py"
-
-
 def test_no_generic_partition_or_lab_file_names_an_algorithm():
-    """No tracked file but a test under a generic partition or `lab/` holds an algorithm's name."""
+    """No tracked file under a generic partition or `lab/` holds an algorithm's name."""
     if not CLONE.is_dir():
         pytest.skip("the F´ framework clone is absent; run `just pinned`")
     pattern = _algorithm_names()
