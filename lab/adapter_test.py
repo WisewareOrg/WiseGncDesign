@@ -17,6 +17,7 @@ from fsw.codegen.deployment import configuration_model, fprime_configurations, t
 from fsw.codegen.roles import taken
 from fsw.mock import MOCK
 from fsw.mock.actuator.actuator import Actuator
+from fsw.payloads import payload_type
 from fsw.python.cdh import outputs
 from fsw.python.rio.messages import commands
 from ground.fprime_station import FprimeStation
@@ -47,19 +48,38 @@ def adapter(fprime_configuration: str, prm_record: Path) -> Adapter:
     return adapter
 
 
-def test_the_adapter_ticks_at_its_configuration_s_base_tick_and_commands_nothing(
-    configuration: str, messages_by_role: dict[str, Any], adapter: Adapter
-):
-    """Booted, each tick on every role's message returns no command.
+def _assert_commands_of_its_actuators(configuration: str, commands: dict[str, Any]) -> None:
+    """A tick's commands are of the actuator roles the configuration takes, each its message.
 
     Args:
         configuration: the configuration.
-        messages_by_role: a message for each role the CDH converts.
+        commands: what a tick returned, by role.
+    """
+    actuators = {
+        role.role: role
+        for role in taken(configuration_model(configuration), configuration)
+        if not role.sensor
+    }
+    assert set(commands) <= set(actuators), sorted(commands)
+    for role, payload in commands.items():
+        assert type(payload) is payload_type(actuators[role].bus), role
+
+
+def test_the_adapter_ticks_at_its_configuration_s_base_tick_and_commands_only_its_actuators(
+    configuration: str, messages_by_role: dict[str, Any], adapter: Adapter
+):
+    """Booted, each tick returns commands of the configuration's actuator roles alone, if any.
+
+    A configuration taking no actuator role commands nothing.
+
+    Args:
+        configuration: the configuration.
+        messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
     """
     assert adapter.period_s == tick_period(configuration)
-    assert adapter.tick(NS, messages_by_role) == {}
-    assert adapter.tick(2 * NS, messages_by_role) == {}
+    for k in (1, 2):
+        _assert_commands_of_its_actuators(configuration, adapter.tick(k * NS, messages_by_role))
 
 
 def test_the_adapter_delivers_each_role_s_message_on_its_lab_bus_driver_port(
@@ -72,7 +92,7 @@ def test_the_adapter_delivers_each_role_s_message_on_its_lab_bus_driver_port(
 
     Args:
         adapter: the configuration's adapter, booted.
-        messages_by_role: a message for each role the CDH converts.
+        messages_by_role: a message for each sensor role the configuration takes.
         bus: every role's bus message on its LabBusDriver port.
         monkeypatch: records the bus each step of the copy takes.
     """
@@ -110,18 +130,21 @@ def test_the_adapter_makes_the_case_s_dat_beside_its_record(adapter: Adapter, pr
     assert prm_record.with_suffix("").with_suffix(".prm.dat").is_file()
 
 
-def test_each_boot_power_cycles_a_fresh_copy(messages_by_role: dict[str, Any], adapter: Adapter):
+def test_each_boot_power_cycles_a_fresh_copy(
+    configuration: str, messages_by_role: dict[str, Any], adapter: Adapter
+):
     """A second boot powers on another copy, where one copy refuses a second boot.
 
     Args:
-        messages_by_role: a message for each role the CDH converts.
+        configuration: the configuration.
+        messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
     """
     adapter.tick(NS, messages_by_role)
 
     adapter.boot()
 
-    assert adapter.tick(NS, messages_by_role) == {}
+    _assert_commands_of_its_actuators(configuration, adapter.tick(NS, messages_by_role))
 
 
 def test_a_tick_missing_a_role_the_cdh_converts_is_refused_naming_it(
@@ -130,9 +153,11 @@ def test_a_tick_missing_a_role_the_cdh_converts_is_refused_naming_it(
     """A tick without a converted role's message names the role and the messages it was given.
 
     Args:
-        messages_by_role: a message for each role the CDH converts.
+        messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
     """
+    if not messages_by_role:
+        pytest.skip("the configuration takes no sensor role")
     role = sorted(messages_by_role)[0]
     messages = {other: m for other, m in messages_by_role.items() if other != role}
 
@@ -149,7 +174,7 @@ def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(
     """A tick at a whole microsecond steps; one nanoseconds past it raises, naming its time.
 
     Args:
-        messages_by_role: a message for each role the CDH converts.
+        messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
         excess_ns: ns past a whole microsecond.
     """
@@ -202,7 +227,7 @@ def test_a_command_goes_up_to_the_current_copy_and_its_response_comes_back(
     """Through the station on the adapter, a command runs at the next tick, answered by context.
 
     Args:
-        messages_by_role: a message for each role the CDH converts.
+        messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
     """
     station = FprimeStation(adapter, adapter.dictionary)
@@ -221,7 +246,7 @@ def test_the_telemetry_is_every_write_the_ticks_drained_since_the_last_call(
     """Two ticks' writes come down together, each tagged with its tick, then none until the next.
 
     Args:
-        messages_by_role: a message for each role the CDH converts.
+        messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
     """
     adapter.tick(NS, messages_by_role)
@@ -240,7 +265,7 @@ def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(
     """A power cycle keeps no write of the copy before it.
 
     Args:
-        messages_by_role: a message for each role the CDH converts.
+        messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
     """
     adapter.tick(NS, messages_by_role)

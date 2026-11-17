@@ -39,6 +39,7 @@ from fsw.codegen.deployment import (
 )
 from fsw.codegen.fpp_model import read
 from fsw.codegen.members import members
+from fsw.codegen.roles import taken
 from fsw.mock import MOCK, sub_topology
 from harness import requirements_tree
 from harness.mission import BUILDS, Mission, _claims, _record_flight, mission_tests
@@ -490,6 +491,30 @@ def test_each_lookup_that_fails_is_refused_naming_what_it_looked_for(
         Mission(VEHICLE, gnc, build, ("TST901",), contract=variants)
 
 
+def _vehicle_for(configuration: str) -> str:
+    """The first vehicle, by name, that reads each sensor role and writes each actuator role taken.
+
+    Args:
+        configuration: a repository configuration.
+
+    Returns:
+        The vehicle's name in `VEHICLES`.
+
+    Raises:
+        AssertionError: no vehicle carries the configuration's roles, naming them.
+    """
+    found = taken(configuration_model(configuration), configuration)
+    sensors = {role.role for role in found if role.sensor}
+    actuators = {role.role for role in found if not role.sensor}
+    for name in sorted(VEHICLES):
+        vehicle = VEHICLES[name]()
+        if sensors <= set(vehicle.readers()) and actuators <= set(vehicle.writers()):
+            return name
+    raise AssertionError(
+        f"no vehicle reads {sorted(sensors)} and writes {sorted(actuators)} for {configuration}"
+    )
+
+
 def _claimed(configuration: str) -> tuple[list[str], str]:
     """A repository configuration's sorted claims, and the first scenario judging a rung under them.
 
@@ -643,7 +668,9 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
     if not built(fprime_configuration):
         pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
     _, scenario = _claimed(fprime_configuration)
-    flight = Mission(sorted(VEHICLES)[0], fprime_configuration, "fprime", (scenario,))
+    flight = Mission(
+        _vehicle_for(fprime_configuration), fprime_configuration, "fprime", (scenario,)
+    )
     [(cls, vehicle_class)] = mission_tests(flight).items()
     [name] = [name for name in vars(vehicle_class) if name.startswith("test_")]
     test = f"test_flights.py::{cls}::{name}"

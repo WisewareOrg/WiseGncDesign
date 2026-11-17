@@ -281,23 +281,26 @@ def bus_by_role(
 
 
 @pytest.fixture
-def messages_by_role(bus_messages: dict[str, BusMessage], contract_model: Model) -> dict[str, Any]:
+def messages_by_role(configuration: str, bus_messages: dict[str, BusMessage]) -> dict[str, Any]:
     """Each sensor role's bus message as a Basilisk payload, as WiseDynamics' host gives a build.
 
-    The roles are the sensor roles of the contract's `Cdh.BusConverter`, each with its bus
-    struct's message.
+    The roles are the sensor roles the configuration takes (`fsw.codegen.roles.taken`), each with
+    its bus struct's message.
 
     Args:
+        configuration: the configuration.
         bus_messages: a message of each bus struct.
-        contract_model: the contract's model, which declares the roles.
 
     Returns:
         Each role's payload, by the role's name.
     """
-    from fsw.codegen.roles import roles
+    from fsw.codegen.deployment import configuration_model
+    from fsw.codegen.roles import taken
 
     return {
-        role.role: bus_messages[role.bus].payload for role in roles(contract_model) if role.sensor
+        role.role: bus_messages[role.bus].payload
+        for role in taken(configuration_model(configuration), configuration)
+        if role.sensor
     }
 
 

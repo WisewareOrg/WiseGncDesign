@@ -85,9 +85,10 @@ def test_every_role_s_bus_message_steps_without_an_assert(
 
     Args:
         booted: the test's copy of the deployment, booted idle on the case's parameters.
-        bus: every role's bus message on its LabBusDriver port.
+        bus: every sensor role's bus message on its LabBusDriver port.
     """
-    assert bus
+    if not bus:
+        pytest.skip("the configuration takes no sensor role")
 
     booted.step(t_ns=NS, bus=bus)
 
@@ -125,7 +126,8 @@ def test_a_push_lab_bus_driver_cannot_deliver_raises(
         push: the push refused, from the role's port and bytes and the unwired ports.
         source: the assert expected, by its file.
     """
-    assert bus_by_role
+    if not bus_by_role:
+        pytest.skip(f"{configuration} takes no sensor role")
     unwired = sorted(set(range(_bus_out_ports())) - {port for port, _ in bus_by_role.values()})
     assert unwired, "every LabBusDriver port is wired"
     for port, data in bus_by_role.values():
