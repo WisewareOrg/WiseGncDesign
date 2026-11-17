@@ -1,12 +1,14 @@
-"""The bus emulator: a Basilisk message as the bytes a vehicle's bus carries, built from Bus.fpp.
+"""The bus emulator: a Basilisk message as the bytes a vehicle's bus carries, and back, by Bus.fpp.
 
 Each bus struct in `fsw/fpp/interfaces/Bus.fpp`, `Bus.<Name>`, mirrors the Basilisk payload
 `messaging.<Name>Payload`, matched ignoring case as `fsw/fpp/interfaces/bus_test.py` holds them.
 `serialize` writes a payload as F´ serializes its bus struct: each member in declaration order,
 big-endian, packed and unframed. It is built from `Bus.fpp` at import, read alone, so no file is
 generated and no F´ framework clone is read; each payload type's packer is planned on its first
-message, and a member outside `fsw.codegen.fields.STRUCT_CODES` raises then. Lab equipment: a real
-vehicle's bus delivers the bytes itself, and the Python build reads messages without them.
+message, and a member outside `fsw.codegen.fields.STRUCT_CODES` raises then. `deserialize` reads
+an actuator's bytes back with the same packer, into a fresh payload. Lab equipment: a real
+vehicle's bus carries the bytes itself, and the Python build reads and writes messages without
+them.
 """
 
 import functools
@@ -19,7 +21,7 @@ from Basilisk.architecture import messaging
 from fsw.codegen.fields import STRUCT_CODES
 from fsw.codegen.fpp_model import Struct, read
 
-__all__ = ["BUS", "serialize"]
+__all__ = ["BUS", "deserialize", "serialize"]
 
 BUS = Path(__file__).resolve().parents[1] / "fsw" / "fpp" / "interfaces" / "Bus.fpp"
 """The bus structs' FPP file."""
@@ -78,3 +80,35 @@ def serialize(message: Any) -> bytes:
     """
     packer, fields = _packer(getattr(messaging, type(message).__name__))
     return packer.pack(*(value for field in fields for value in getattr(message, field)))
+
+
+@functools.cache
+def _payloads() -> dict[str, type]:
+    """Each of `messaging`'s payload classes, by its name in lower case, read once.
+
+    Returns:
+        The classes.
+    """
+    return {n.lower(): getattr(messaging, n) for n in dir(messaging) if n.endswith("Payload")}
+
+
+def deserialize(bus: str, data: bytes) -> Any:
+    """A bus struct's bytes, as F´ serializes it, as a fresh payload of the message it mirrors.
+
+    Bytes of another length than the struct's raise `struct.error`; a struct with a member outside
+    `fsw.codegen.fields.STRUCT_CODES` raises `KeyError`, naming it.
+
+    Args:
+        bus: the bus struct's qualified name, `Bus.<Name>`.
+        data: the bytes.
+
+    Returns:
+        The `messaging.<Name>Payload` the struct mirrors, matched ignoring case, each field set
+        from its member's elements.
+    """
+    payload = _payloads()[bus.removeprefix("Bus.").lower() + "payload"]()
+    packer, fields = _packer(type(payload))
+    values = iter(packer.unpack(data))
+    for member, field in zip(_STRUCTS[type(payload).__name__.lower()].members, fields, strict=True):
+        setattr(payload, field, [next(values) for _ in range(member.size)])
+    return payload

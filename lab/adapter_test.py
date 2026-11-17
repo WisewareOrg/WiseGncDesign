@@ -11,11 +11,11 @@ from typing import Any
 
 import pytest
 
-from fsw.codegen.deployment import configurations, tick_period
+from fsw.codegen.deployment import fprime_configurations, tick_period
 from ground.fprime_station import FprimeStation
 from lab import Adapter, built
 
-if not all(built(c) for c in configurations()):
+if not all(built(c) for c in fprime_configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 REPOSITORY = Path(__file__).parents[1]
@@ -72,15 +72,18 @@ def test_the_adapter_delivers_each_role_s_message_on_its_lab_bus_driver_port(
     stepped = []
     step = adapter._fsw.step
 
-    def recorded(t_ns: int, bus: list[tuple[int, bytes]]) -> None:
+    def recorded(t_ns: int, bus: list[tuple[int, bytes]]) -> list[tuple[int, bytes]]:
         """Records the step's bus, then steps the copy.
 
         Args:
             t_ns: ns, the step's time.
             bus: the step's `(port, bytes)` pairs.
+
+        Returns:
+            What the step returns: the bytes its GNC sent each actuator port.
         """
         stepped.append(list(bus))
-        step(t_ns=t_ns, bus=bus)
+        return step(t_ns=t_ns, bus=bus)
 
     monkeypatch.setattr(adapter._fsw, "step", recorded)
 
