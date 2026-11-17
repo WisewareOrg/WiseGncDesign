@@ -20,6 +20,7 @@ import pytest
 from fsw.codegen.deployment import configurations
 
 if TYPE_CHECKING:
+    from fsw.codegen.fpp_model import Model
     from ground.dictionary import Dictionary
     from ground.fprime_station import FprimeStation
 
@@ -126,6 +127,19 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
     return drain
 
 
+@pytest.fixture(scope="session")
+def contract_model() -> Model:
+    """The repository's contract's model, read once per session.
+
+    Returns:
+        The model `fsw.codegen.fpp_model.read` gives of `fsw.codegen.deployment.contract_files`.
+    """
+    from fsw.codegen.deployment import contract_files
+    from fsw.codegen.fpp_model import read
+
+    return read(contract_files())
+
+
 class BusMessage(NamedTuple):
     """A bus struct and a Basilisk message of it.
 
@@ -176,7 +190,7 @@ def bus_messages() -> dict[str, BusMessage]:
 
 @pytest.fixture
 def bus_by_role(
-    configuration: str, bus_messages: dict[str, BusMessage]
+    configuration: str, bus_messages: dict[str, BusMessage], contract_model: Model
 ) -> dict[str, tuple[int, bytes]]:
     """Each role's LabBusDriver port and its bus message's bytes, as the bus emulator writes them.
 
@@ -188,12 +202,12 @@ def bus_by_role(
     Args:
         configuration: the configuration.
         bus_messages: a message of each bus struct.
+        contract_model: the contract's model, which declares the roles.
 
     Returns:
         Each role's `(port, bytes)`, by the role's name.
     """
-    from fsw.codegen.deployment import bus_port, contract_files
-    from fsw.codegen.fpp_model import read
+    from fsw.codegen.deployment import bus_port
     from fsw.codegen.roles import roles
     from lab.bus_emulator import serialize
 
@@ -202,27 +216,26 @@ def bus_by_role(
             bus_port(configuration, role.input),
             serialize(bus_messages[role.bus].payload),
         )
-        for role in roles(read(contract_files()))
+        for role in roles(contract_model)
     }
 
 
 @pytest.fixture
-def messages_by_role(bus_messages: dict[str, BusMessage]) -> dict[str, Any]:
+def messages_by_role(bus_messages: dict[str, BusMessage], contract_model: Model) -> dict[str, Any]:
     """Each role's bus message as a Basilisk payload, as WiseDynamics' host gives a build them.
 
     The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's message.
 
     Args:
         bus_messages: a message of each bus struct.
+        contract_model: the contract's model, which declares the roles.
 
     Returns:
         Each role's payload, by the role's name.
     """
-    from fsw.codegen.deployment import contract_files
-    from fsw.codegen.fpp_model import read
     from fsw.codegen.roles import roles
 
-    return {role.role: bus_messages[role.bus].payload for role in roles(read(contract_files()))}
+    return {role.role: bus_messages[role.bus].payload for role in roles(contract_model)}
 
 
 @pytest.fixture
@@ -239,7 +252,7 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
 
 
 @pytest.fixture(scope="session")
-def case_parameters(dictionary: Dictionary) -> dict[str, Any]:
+def case_parameters(dictionary: Dictionary, contract_model: Model) -> dict[str, Any]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
     The instances are those the deployment's dictionary holds, so the case skips without it. A
@@ -248,16 +261,13 @@ def case_parameters(dictionary: Dictionary) -> dict[str, Any]:
 
     Args:
         dictionary: the configuration's dictionary, which names the instances.
+        contract_model: the contract's model, which shapes the parameters.
 
     Returns:
         Each instance's `<Name>Parameters` tuple, by its qualified name.
     """
-    from fsw.codegen.deployment import contract_files
-    from fsw.codegen.fpp_model import read
-
-    model = read(contract_files())
     return {
-        instance.name: _parameters(model, instance.component, lambda count: [0.0] * count)
+        instance.name: _parameters(contract_model, instance.component, lambda count: [0.0] * count)
         for instance in dictionary.algorithm_instances()
     }
 
@@ -311,7 +321,7 @@ def rate_groups(configuration: str) -> list[str]:
 
 
 @pytest.fixture
-def algorithm_parameters() -> dict[str, Any]:
+def algorithm_parameters(contract_model: Model) -> dict[str, Any]:
     """Each algorithm component's parameters, every element distinct, of its FPP shape and type.
 
     The components are `fsw.codegen.deployment.algorithm_components`. Each element of each
@@ -319,16 +329,19 @@ def algorithm_parameters() -> dict[str, Any]:
     of place shows; a parameter that is not a number or an array of them raises `ValueError`,
     naming it.
 
+    Args:
+        contract_model: the contract's model, which shapes the parameters.
+
     Returns:
         Each component's `<Name>Parameters` tuple, by its qualified name.
     """
-    from fsw.codegen.deployment import algorithm_components, contract_files
-    from fsw.codegen.fpp_model import read
+    from fsw.codegen.deployment import algorithm_components
 
-    model = read(contract_files())
     counter = itertools.count()
     return {
-        name: _parameters(model, name, lambda count: [next(counter) + 0.5 for _ in range(count)])
+        name: _parameters(
+            contract_model, name, lambda count: [next(counter) + 0.5 for _ in range(count)]
+        )
         for name in sorted(algorithm_components())
     }
 
