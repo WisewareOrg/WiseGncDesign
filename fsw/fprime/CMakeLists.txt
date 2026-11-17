@@ -36,6 +36,8 @@ endforeach ()
 # one reruns it.
 file(GLOB WISE_ALGORITHM_FPP CONFIGURE_DEPENDS "${FPRIME_PROJECT_ROOT}/algorithms/*/*.fpp")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${WISE_ALGORITHM_FPP})
+# The test mock's F´ component, MockGnc.Actuator, which the test mock configuration MockActuation flies.
+add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/fsw/mock/actuator")
 # pybind11, for the hand-written module that hosts each configuration's deployment in the
 # simulation's process, and `_wise_fsw`, the target building every configuration's extension and
 # dictionary. The F´ sub-builds only gather model information and compile nothing.
