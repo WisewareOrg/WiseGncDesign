@@ -1,0 +1,31 @@
+active: true
+c: 0.9
+derived: false
+header: |
+  Wheel momentum: 1e-4 N m s at p 0.99, c 0.90
+level: 2.1
+links:
+- SYS002: piYtZDQX4EzXOwr6zG2B3F3GITeUzHstIvbMpMGTnmo=
+normative: true
+p: 0.99
+rationale: |
+  The wheel's spin-axis momentum gains exactly the torque the flight software commands, so a
+  command lost, late or misread between the GNC and the wheel moves it off the commanded torque's
+  integral. 1e-4 N*m*s is about 1e-3 rad/s of wheel speed on the HR16's spin inertia.
+ref: ''
+references:
+- keyword: def test_wheel_momentum(
+  path: analysis/test_wheel_momentum.py
+  type: file
+reviewed: Nw4I0rLRwRSvGI6N-0fhfzDONtSmddNPh5TdUihuRrE=
+status: proposed
+text: |
+  Over the whole of every dispersed run, the wheel's spin-axis momentum shall stay within x N*m*s
+  of its initial momentum plus the integral of the motor torque the flight software commanded, in
+  at least a share p of runs, demonstrated at confidence c.
+verification-justification: |
+  Judged from the worst error over each run, at every dynamics step, against each commanded torque
+  held from its telemetry write until the next. It does not establish the error under wheel
+  friction or saturation, which no scenario models, or beyond the run's duration.
+verification-method: test
+x: 0.0001
