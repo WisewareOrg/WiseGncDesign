@@ -1,8 +1,8 @@
 """An F´ JSON dictionary as the hosts and the ground use it: names and types.
 
 Entries are named `<instance>.<entry>` with the instance's module dropped, so
-`ImuDeadReckoning.nav.navState` is `nav.navState`. A type's numpy dtype is big-endian, as F´
-serializes it; the bytes themselves are the F´ ground station's, `ground.fprime_station`.
+`<configuration>.<instance>.<entry>` is `<instance>.<entry>`. A type's numpy dtype is big-endian,
+as F´ serializes it; the bytes themselves are the F´ ground station's, `ground.fprime_station`.
 """
 
 import functools
@@ -317,7 +317,7 @@ class Dictionary:
         Args:
             model: the component's `.fpp` files.
             instance: the instance, such as `fsw.codegen.deployment.gnc_instance` gives it; its
-                unqualified name, such as `nav`, prefixes the dictionary's entries.
+                unqualified name, `<instance>`, prefixes the dictionary's entries.
 
         Returns:
             The dictionary, as `_generate` gives it.
@@ -350,8 +350,7 @@ class Dictionary:
         rejects raises `RuntimeError` with the tool's stderr.
 
         Args:
-            configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`,
-                such as `ImuDeadReckoning`.
+            configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`.
 
         Returns:
             The dictionary, as `_generate` gives it.
@@ -419,7 +418,7 @@ class Dictionary:
         definition without annotations, so two dictionaries compare equal when the contract is.
 
         Args:
-            instance: the instance name, such as `nav`.
+            instance: the instance's unqualified name.
 
         Returns:
             `commands`: name to its `[parameter name, type]` pairs; `channels`: name to

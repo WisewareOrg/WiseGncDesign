@@ -68,8 +68,8 @@ def test_every_role_s_bus_message_steps_without_an_assert(
     """Every role's message, as the bus emulator writes it, steps the deployment on its port.
 
     The values' proof is elsewhere: the bus emulator's test from #62 CDH generator, F´ half, the
-    `cdh_<role>` pin test, and the dead reckoner's `fprime_test.py` plus the F´ campaign, reading
-    for reading.
+    `cdh_<role>` pin test, and an algorithm's own F´ test plus the F´ campaign, reading for
+    reading.
 
     Args:
         fsw: a copy of the deployment.

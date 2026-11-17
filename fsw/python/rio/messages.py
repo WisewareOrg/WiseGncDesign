@@ -3,8 +3,8 @@
 A message is read field by field with `fsw.codegen.fpp_types.converter`, so every array is a fresh
 copy: the host's payload is a view of its reader's buffer, valid only during its tick. Its fields
 are read through `Basilisk.architecture.messaging`'s class of its name, which declares them: SWIG
-can return the payload as another module's class of that name, such as
-`Basilisk.simulation.imuSensor`'s once that module is imported, which does not.
+can return the payload as another module's class of that name, such as a simulation module's
+once that module is imported, which does not.
 """
 
 import functools

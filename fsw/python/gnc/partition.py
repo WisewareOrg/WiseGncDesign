@@ -32,10 +32,10 @@ def _name(instance: str) -> str:
     """An instance's name with its module dropped, as the dictionary names it.
 
     Args:
-        instance: its qualified name, such as `ImuDeadReckoning.nav`.
+        instance: its qualified name, `<configuration>.<instance>`.
 
     Returns:
-        The name, such as `nav`.
+        The name, `<instance>`.
     """
     return instance.split(".", 1)[1]
 
@@ -65,7 +65,7 @@ class MemberTelemetry(NamedTuple):
     """What one member wrote in a frame.
 
     Attributes:
-        instance: its instance's name, such as `nav`.
+        instance: its instance's unqualified name.
         telemetry: its `<Name>Telemetry` tuple.
     """
 
@@ -81,7 +81,7 @@ class GncPartition:
             rate groups are named by their position here.
         components: each member's FPP component's qualified name, by its instance's name.
         inputs: the sub-topology's input ports the CDH writes, every `port` but its driver's.
-        algorithms: each algorithm `boot` built, by its instance's name, such as `nav`.
+        algorithms: each algorithm `boot` built, by its instance's unqualified name.
     """
 
     rate_groups: tuple[str, ...]
@@ -94,7 +94,7 @@ class GncPartition:
 
         Args:
             model: the model holding the sub-topology `<configuration>.Gnc`.
-            configuration: the configuration, such as `ImuDeadReckoning`.
+            configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`.
             classes: the algorithms' classes, one per member's component, each named as it.
 
         Raises:
@@ -183,7 +183,7 @@ class GncPartition:
         """Writes a sub-topology input, which its instance holds until the next write.
 
         Args:
-            port: the sub-topology's port, such as `imuIn`.
+            port: the sub-topology's port, `<role>In`.
             value: the value, in the port's FPP type.
         """
         instance, keyword = self._ports[port]
