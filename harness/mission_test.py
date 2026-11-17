@@ -1,14 +1,16 @@
 """Missions: what a flight judges, what a mission refuses, and the record a flight leaves.
 
-Every test but two reads a requirements tree it writes in `tmp_path`, by pointing the tree root
-at it, so none depends on the repository's own tree; those two build missions of the repository's
-configurations against the repository's tree, flying nothing. The tree holds two capabilities, four
+Every test but three reads a requirements tree it writes in `tmp_path`, by pointing the tree root
+at it, so none depends on the repository's own tree; two of those build missions of the
+repository's configurations against the repository's tree, flying nothing, and one flies each
+configuration's F´ build through the repository's tree. The tree holds two capabilities, four
 rungs and two scenarios:
 
     SYS901 <- SRS901, SRS902, SRS904      SYS902 <- SRS903
     TST901 links SRS901, SRS902, SRS903   TST902 links SRS902
 
-Flights fly the harness's test mock, `MockFlight` of `fsw.mock.MOCK`, which claims SYS901.
+The other flights fly the harness's test mock, `MockFlight` of `fsw.mock.MOCK`, which claims
+SYS901.
 The `variants` fixture renders the other configurations a test needs from two templates.
 """
 
@@ -24,6 +26,7 @@ from pathlib import Path
 from types import ModuleType
 
 import h5py
+import numpy as np
 import pytest
 import yaml
 from wise_dynamics.basilisk.vehicles import VEHICLES
@@ -34,6 +37,7 @@ from fsw.codegen.members import members
 from fsw.mock import MOCK, sub_topology
 from harness import requirements_tree
 from harness.mission import BUILDS, Mission, _claims, _record_flight, mission_tests
+from lab import built
 
 VEHICLE = "imu_spacecraft"
 ALPHA = """\
@@ -567,6 +571,96 @@ def test_one_configuration_flown_on_both_builds_is_two_flights(
         else:
             _record_flight(mission, scenario, folder)
             assert json.loads((folder / "flight.json").read_text())["fsw"]["build"] == build
+
+
+FPRIME_FLIGHT = """
+from harness.mission import Mission, mission_tests
+
+globals().update(
+    mission_tests(
+        Mission(vehicle="{vehicle}", gnc="{gnc}", build="fprime", scenarios=("{scenario}",))
+    )
+)
+"""
+"""A notebook flying a repository configuration's F´ build through one scenario."""
+
+
+def _contents(path: Path) -> dict[str, object]:
+    """Every dataset of a run file, and every root attribute but its creation time.
+
+    Args:
+        path: the run file.
+
+    Returns:
+        Each dataset's values and attributes by its path, and each root attribute by `@<name>`.
+    """
+    contents: dict[str, object] = {}
+
+    def visit(name: str, node: object) -> None:
+        """Keep a dataset's values and attributes.
+
+        Args:
+            name: the node's path in the file.
+            node: the group or dataset.
+        """
+        if isinstance(node, h5py.Dataset):
+            contents[name] = (node[()], dict(node.attrs))
+
+    with h5py.File(path, "r") as f:
+        f.visititems(visit)
+        contents |= {f"@{k}": v for k, v in f.attrs.items() if k != "created_utc"}
+    return contents
+
+
+def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
+    configuration: str, rate_groups: list[str], pytester: pytest.Pytester
+):
+    """Case 1 flown alone and after case 0 in one process gives the same run file, every row.
+
+    Each configuration's F´ build flies the first scenario that judges a rung under its claims.
+    The rate groups' health datasets are compared with the GNC members': their `CycleCount` and the
+    channels they write only on change are what a deployment kept across cases would carry over.
+    It also holds the rate groups' health to F´'s stub clock, under the members' real load: their
+    cycle times read 0, where a wall clock would make them differ between the two runs. Case 0's
+    run file differs from case 1's, so a comparison that cannot tell cases apart would show.
+
+    Args:
+        configuration: the configuration.
+        rate_groups: the configuration's rate groups.
+        pytester: the project the flights run in, each run in one process of its own, xdist off.
+    """
+    if not built(configuration):
+        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
+    _, scenario = _claimed(configuration)
+    flight = Mission(sorted(VEHICLES)[0], configuration, "fprime", (scenario,))
+    [(cls, vehicle_class)] = mission_tests(flight).items()
+    [name] = [name for name in vars(vehicle_class) if name.startswith("test_")]
+    test = f"test_flights.py::{cls}::{name}"
+    pytester.makepyfile(
+        test_flights=FPRIME_FLIGHT.format(
+            vehicle=flight.vehicle, gnc=configuration, scenario=scenario
+        )
+    )
+    options = ("-p", "no:cacheprovider", "-p", "no:xdist")
+
+    pytester.runpytest_subprocess(*options, f"{test}[1]").assert_outcomes(passed=1)
+    [alone] = pytester.path.rglob("run_0001.h5")
+    alone = shutil.move(alone, pytester.path / "alone.h5")
+    pytester.runpytest_subprocess(*options, f"{test}[0]", f"{test}[1]").assert_outcomes(passed=2)
+    [first] = pytester.path.rglob("run_0000.h5")
+    [after] = pytester.path.rglob("run_0001.h5")
+
+    alone, after, first = _contents(alone), _contents(after), _contents(first)
+    flown = members(configuration_model(configuration), configuration).values()
+    gnc = {member.name.rsplit(".", 1)[-1] for group in flown for member in group}
+    assert any(name.startswith(tuple(f"tlm/{m}." for m in gnc)) for name in alone)
+    for group in rate_groups:
+        assert not alone[f"tlm/{group}.CycleTime"][0].any(), group
+    assert sorted(alone) == sorted(after)
+    for name, value in alone.items():
+        np.testing.assert_equal(after[name], value, err_msg=name)
+    with pytest.raises(AssertionError):
+        np.testing.assert_equal(first, alone)
 
 
 def test_the_class_a_mission_flies_is_its_notebook_module_s_own(tree: Path) -> None:

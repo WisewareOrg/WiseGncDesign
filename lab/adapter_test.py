@@ -55,6 +55,41 @@ def test_the_adapter_ticks_at_its_configuration_s_base_tick_and_commands_nothing
     assert adapter.tick(2 * NS, messages_by_role) == {}
 
 
+def test_the_adapter_delivers_each_role_s_message_on_its_lab_bus_driver_port(
+    adapter: Adapter,
+    messages_by_role: dict[str, Any],
+    bus: list[tuple[int, bytes]],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A tick steps the copy with each role's message, as the bus emulator writes it, on its port.
+
+    Args:
+        adapter: the configuration's adapter, booted.
+        messages_by_role: a message for each role the CDH converts.
+        bus: every role's bus message on its LabBusDriver port.
+        monkeypatch: records the bus each step of the copy takes.
+    """
+    stepped = []
+    step = adapter._fsw.step
+
+    def recorded(t_ns: int, bus: list[tuple[int, bytes]]) -> None:
+        """Records the step's bus, then steps the copy.
+
+        Args:
+            t_ns: ns, the step's time.
+            bus: the step's `(port, bytes)` pairs.
+        """
+        stepped.append(list(bus))
+        step(t_ns=t_ns, bus=bus)
+
+    monkeypatch.setattr(adapter._fsw, "step", recorded)
+
+    adapter.tick(NS, messages_by_role)
+
+    assert len(stepped) == 1
+    assert sorted(stepped[0]) == sorted(bus)
+
+
 def test_the_adapter_makes_the_case_s_dat_beside_its_record(adapter: Adapter, prm_record: Path):
     """The `.dat` PrmDb boots on is made beside the record when the adapter is built.
 
