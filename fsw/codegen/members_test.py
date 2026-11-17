@@ -110,3 +110,25 @@ def test_a_sub_topology_with_two_drivers_is_refused_naming_them(tmp_path: Path):
         r"\['MembersMock\.driver', 'MembersMock\.other'\]",
     ):
         members(_model(tmp_path, second_driver=True), "MembersMock")
+
+
+def test_a_sub_topology_with_no_driver_is_refused(tmp_path: Path):
+    """No driver leaves no order of rate groups.
+
+    Args:
+        tmp_path: where the mock's FPP is written.
+    """
+    fpp = tmp_path / "Driverless.fpp"
+    fpp.write_text(
+        "module Driverless {\n"
+        "  passive component Member {\n    sync input port schedIn: Svc.Sched\n  }\n"
+        "  instance a: Member base id 0x100\n"
+        "  instance rateGroup: Svc.PassiveRateGroup base id 0x200\n"
+        "  topology Gnc {\n    instance a\n    instance rateGroup\n"
+        "    connections RateGroups {\n      rateGroup.RateGroupMemberOut[0] -> a.schedIn\n    }\n"
+        "  }\n"
+        "}\n"
+    )
+
+    with pytest.raises(ValueError, match=r"Driverless\.Gnc has 0 rate group drivers: \[\]"):
+        members(read((*framework_files(), fpp)), "Driverless")

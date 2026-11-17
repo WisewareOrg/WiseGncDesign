@@ -25,10 +25,11 @@ import pytest
 import yaml
 from wise_dynamics.basilisk.vehicles import VEHICLES
 
-from fsw.codegen.deployment import configuration_model
+from fsw.codegen.deployment import configuration_model, framework_files
+from fsw.codegen.fpp_model import read
 from fsw.codegen.members import members
 from harness import requirements_tree
-from harness.mission import Mission, _claims, mission_tests
+from harness.mission import BUILDS, Mission, _claims, mission_tests
 from harness.mock import MOCK
 
 VEHICLE = "imu_spacecraft"
@@ -324,33 +325,134 @@ def test_a_configuration_claims_the_union_of_its_members_claims(tree: Path) -> N
         mission("FirstMockOnly", rungs=("SRS901", "SRS903"))
 
 
-def test_an_fprime_mission_is_built_without_its_configuration_s_extension(
-    configuration: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """No lookup of the F´ build's reaches the extension; only a case's `lab.Adapter` needs it.
-
-    Each configuration flies the repository's tree through the first scenario that judges a rung
-    under its claims, with its extension made absent.
+def _claimed(configuration: str) -> list[str]:
+    """A repository configuration's claims, the union of its members' components', sorted.
 
     Args:
         configuration: the configuration.
-        monkeypatch: makes the configuration's extension absent.
+
+    Returns:
+        The SYS IDs.
     """
-    monkeypatch.setitem(sys.modules, f"lab._wise_fsw_{configuration}", None)
     model = configuration_model(configuration)
-    claims = {
-        uid
-        for group in members(model, configuration).values()
-        for instance in group
-        for uid in _claims(model, model.components[instance.component])
-    }
-    scenario = next(
+    return sorted(
+        {
+            uid
+            for group in members(model, configuration).values()
+            for instance in group
+            for uid in _claims(model, model.components[instance.component])
+        }
+    )
+
+
+def _first_scenario(claims: list[str]) -> str:
+    """The first scenario of the repository's tree that judges a rung under the claims.
+
+    Args:
+        claims: the SYS IDs.
+
+    Returns:
+        The TST ID.
+    """
+    return next(
         uid for uid in requirements_tree.items("TST") if requirements_tree.flight_rungs(uid, claims)
     )
 
-    flown = Mission(sorted(VEHICLES)[0], configuration, "fprime", (scenario,))
 
-    assert (flown.gnc, flown.build) == (configuration, "fprime")
+@pytest.mark.parametrize("build", BUILDS)
+def test_each_configuration_s_mission_is_built_on_each_build_without_the_f_prime_extension(
+    configuration: str, build: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every lookup succeeds on the repository's contract, and none reaches the F´ extension.
+
+    Each configuration flies the repository's tree through the first scenario that judges a rung
+    under its claims, with its extension made absent; only a case's `lab.Adapter` needs it. The
+    mission claims the union of its members' claims.
+
+    Args:
+        configuration: the configuration.
+        build: the build.
+        monkeypatch: makes the configuration's extension absent.
+    """
+    monkeypatch.setitem(sys.modules, f"lab._wise_fsw_{configuration}", None)
+    claims = _claimed(configuration)
+
+    flown = Mission(sorted(VEHICLES)[0], configuration, build, (_first_scenario(claims),))
+
+    assert list(flown._found.capabilities) == claims
+
+
+def test_one_configuration_flown_on_both_builds_is_two_flights(configuration: str) -> None:
+    """The flight's key holds the build, so the two builds of one scenario are two tests.
+
+    Args:
+        configuration: the configuration.
+    """
+    scenario = _first_scenario(_claimed(configuration))
+    python = Mission(sorted(VEHICLES)[0], configuration, "python", (scenario,))
+
+    [vehicle_class] = mission_tests(python, python.but(build="fprime")).values()
+
+    names = sorted(name for name in vars(vehicle_class) if name.startswith("test_"))
+    prefix = f"test_{configuration}_"
+    assert [name.removeprefix(prefix).split("_", 1)[0] for name in names] == ["fprime", "python"]
+    assert len({name.removeprefix(prefix).split("_", 1)[1] for name in names}) == 1
+
+
+CLAIMS = """
+module ClaimsMock {{
+
+  @ A test mock whose claims are its annotation lines; it provides an estimate in prose
+{claims}
+  passive component Claims {{
+    sync input port schedIn: Svc.Sched
+  }}
+
+}}
+"""
+"""A test mock component carrying the `@ provides` lines a test gives it."""
+
+
+@pytest.mark.parametrize(
+    ("lines", "claimed"),
+    [
+        (["@ provides: SYS901"], ["SYS901"]),
+        (["@ provides: SYS901", "@ provides: SYS902"], ["SYS901", "SYS902"]),
+    ],
+)
+def test_a_component_claims_one_id_per_provides_line(
+    tree: Path, tmp_path: Path, lines: list[str], claimed: list[str]
+) -> None:
+    """Each `@ provides:` line is one claim; a line that only mentions providing is none.
+
+    Args:
+        tree: the tree, which holds SYS901 and SYS902.
+        tmp_path: where the test mock's FPP is written.
+        lines: its `@ provides` lines.
+        claimed: the IDs it claims.
+    """
+    fpp = tmp_path / "ClaimsMock.fpp"
+    fpp.write_text(CLAIMS.format(claims="\n".join(f"  {line}" for line in lines)))
+    model = read((*framework_files(), fpp))
+
+    assert _claims(model, model.components["ClaimsMock.Claims"]) == claimed
+
+
+def test_two_ids_on_one_provides_line_are_refused_as_one_unknown_id(
+    tree: Path, tmp_path: Path
+) -> None:
+    """One ID per line: `SYS901, SYS902` is not an ID the tree holds.
+
+    Args:
+        tree: the tree, which holds SYS901 and SYS902.
+        tmp_path: where the test mock's FPP is written.
+    """
+    fpp = tmp_path / "ClaimsMock.fpp"
+    fpp.write_text(CLAIMS.format(claims="  @ provides: SYS901, SYS902"))
+    model = read((*framework_files(), fpp))
+
+    with pytest.raises(ValueError, match=r"\['SYS901, SYS902'\].*ClaimsMock\.Claims"):
+        _claims(model, model.components["ClaimsMock.Claims"])
 
 
 def test_two_missions_flying_the_same_flight_are_refused(tree: Path) -> None:
