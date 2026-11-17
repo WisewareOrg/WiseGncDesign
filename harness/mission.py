@@ -114,7 +114,7 @@ def _loaded(path: Path) -> Iterator[ModuleType]:
         path: the file, resolved.
 
     Yields:
-        Each module whose `__file__` is the file.
+        ModuleType: each module whose `__file__` is the file.
     """
     for module in list(sys.modules.values()):
         file = getattr(module, "__file__", None)
@@ -527,8 +527,6 @@ def _definition(
     Raises:
         ValueError: the file references a definition it has not yet defined, because a mission
             flying it comes first.
-        BaseException: the file raised while importing; it is then not left registered, so a
-            later lookup imports it afresh.
     """
     reference = dict(reference)
     path = (root / reference["path"]).resolve()
