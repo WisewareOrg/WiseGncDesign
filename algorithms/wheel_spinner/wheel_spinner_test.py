@@ -44,7 +44,6 @@ def test_a_case_s_parameters_command_one_millinewton_metre() -> None:
     assert parameters(None) == Gnc.WheelSpinnerParameters(motorTorque=1e-3)
 
 
-@pytest.mark.xdist_group("notebooks")
 def test_the_notebook_runs_end_to_end() -> None:
     """Every cell of the algorithm notebook runs, the notebook-only cells included."""
     run_notebook(Path(__file__).with_name("wheel_spinner.py"))
