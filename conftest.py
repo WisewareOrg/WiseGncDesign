@@ -258,6 +258,41 @@ def case_parameters(dictionary: Dictionary) -> tuple[Any, ...]:
 
 
 @pytest.fixture
+def algorithm_parameters() -> dict[str, Any]:
+    """Each algorithm component's parameters, every element distinct, of its FPP shape and type.
+
+    The components are those an algorithm's `.fpp` defines. Each element of each parameter takes
+    the next of 0.5, 1.5, 2.5, ..., in its FPP type, so a parameter or element out of place shows.
+    A parameter of an enum, struct or string type gets none, and fails `parameters_from`.
+
+    Returns:
+        Each component's `<Name>Parameters` tuple, by its qualified name.
+    """
+    from fsw.codegen import fpp_types
+    from fsw.codegen.deployment import algorithm_files, contract_files
+    from fsw.codegen.fields import DTYPES
+    from fsw.codegen.fpp_model import Array, read
+
+    model = read(contract_files())
+    algorithms = set(algorithm_files())
+    counter = itertools.count()
+    tuples = {}
+    for component in model.components.values():
+        if component.file not in algorithms:
+            continue
+        values = {}
+        for parameter in component.parameters:
+            shape, type_name = (), parameter.type
+            while isinstance(array := model.types.get(type_name), Array):
+                shape, type_name = (*shape, array.size), array.element
+            elements = [next(counter) + 0.5 for _ in range(int(np.prod(shape, dtype=int)))]
+            values[parameter.name] = np.array(elements, DTYPES[type_name]).reshape(shape).tolist()
+        tuple_type = fpp_types.named(f"{component.name}Parameters")
+        tuples[component.name] = fpp_types.parameters_from(tuple_type, values)
+    return tuples
+
+
+@pytest.fixture
 def prm_record(case_parameters: tuple[Any, ...], tmp_path: Path) -> Path:
     """A case's parameter record, written as the ground writes it, in a case directory of its own.
 
