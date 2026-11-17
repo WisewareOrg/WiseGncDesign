@@ -250,8 +250,9 @@ def load(contract: Contract) -> None:
     """Generates a contract's tuples, once per contract, so `named` and the converters resolve them.
 
     A struct or algorithm component already generated with an equal definition, such as the
-    framework's and the interfaces' every contract shares, keeps its tuples; this module's own
-    namespaces, which are the repository's contract's, gain nothing of another contract's.
+    framework's and the interfaces' every contract shares, keeps its tuples. A module the
+    repository's contract already has is merged into a copy that `named` reads, so this module's
+    namespaces, the repository's, gain nothing of another contract's.
 
     Args:
         contract: the contract.
@@ -270,26 +271,29 @@ def load(contract: Contract) -> None:
         if _DEFINITIONS.get(name, definition) != definition:
             raise ValueError(f"{name} is already generated from another definition")
     for top, space in _build(model, contract.algorithms).items():
-        if top in _namespaces:
-            _merge(space, _namespaces[top])
-        else:
-            _namespaces[top] = space
+        held = _namespaces.get(top)
+        _namespaces[top] = space if held is None else _merged(held, space)
     _LOADED.add(contract)
 
 
-def _merge(space: SimpleNamespace, into: SimpleNamespace) -> None:
-    """Adds a namespace's names that another lacks, nested namespaces merged alike.
+def _merged(held: SimpleNamespace, space: SimpleNamespace) -> SimpleNamespace:
+    """A copy of a namespace with another's names it lacks, nested namespaces merged alike.
 
     Args:
+        held: the namespace copied; a name it has keeps its value, and it is left as it is.
         space: the namespace whose names are added.
-        into: the namespace added to; a name it already has keeps its value.
+
+    Returns:
+        The copy.
     """
+    merged = SimpleNamespace(**vars(held))
     for name, value in vars(space).items():
-        held = getattr(into, name, None)
-        if isinstance(value, SimpleNamespace) and isinstance(held, SimpleNamespace):
-            _merge(value, held)
-        elif held is None:
-            setattr(into, name, value)
+        kept = getattr(held, name, None)
+        if isinstance(value, SimpleNamespace) and isinstance(kept, SimpleNamespace):
+            setattr(merged, name, _merged(kept, value))
+        elif kept is None:
+            setattr(merged, name, value)
+    return merged
 
 
 _namespaces: dict[str, SimpleNamespace] = {}

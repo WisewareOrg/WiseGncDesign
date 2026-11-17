@@ -521,3 +521,22 @@ def test_a_contract_redefining_a_generated_name_is_refused_naming_it(tmp_path: P
 
     with pytest.raises(ValueError, match=re.escape(name)):
         fpp_types.load(_contract(tmp_path, redefined))
+
+
+def test_a_contract_s_new_name_in_an_existing_module_leaves_that_module_s_namespace_as_it_is(
+    tmp_path: Path,
+):
+    """A struct a contract adds to a module the repository's has resolves, and the module does not.
+
+    Args:
+        tmp_path: where the contract is written.
+    """
+    gnc = dict(vars(Gnc))
+
+    fpp_types.load(
+        _contract(tmp_path, "module Gnc {\n  struct MockAdded {\n    value: F64\n  }\n}\n")
+    )
+
+    assert named("Gnc.MockAdded")._fields == ("value",)
+    assert not hasattr(Gnc, "MockAdded")
+    assert dict(vars(Gnc)) == gnc

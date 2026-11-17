@@ -301,7 +301,8 @@ class MockSink:
 def roles_contract(tmp_path_factory: pytest.TempPathFactory) -> tuple[Contract, list[Role]]:
     """A mock contract whose one sink takes every role the repository's contract declares.
 
-    Rendered once per session: a contract's tuples are loaded once, by each file's content and path.
+    Rendered once per session: `fpp_types.load` holds the sink as defined at one path, so a render
+    at another path would define it again.
 
     Args:
         tmp_path_factory: where the mock is rendered.
