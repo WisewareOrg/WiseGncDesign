@@ -12,6 +12,7 @@ so the first grep skips without the F´ framework clone, as the F´ tests skip w
 
 import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -96,29 +97,36 @@ def _algorithm_names() -> re.Pattern[str]:
     return re.compile("|".join(alternatives), re.IGNORECASE)
 
 
+def _hits(directories: tuple[str, ...], predicate: Callable[[str], object]) -> list[str]:
+    """Each line of the tracked files under the directories that the predicate holds for.
+
+    Args:
+        directories: directories, relative to the repository, each giving at least one file.
+        predicate: whether a line is a hit.
+
+    Returns:
+        Each hit as `<path>:<line number>: <line>`.
+    """
+    return [
+        f"{path}:{number}: {line.strip()}"
+        for path in _scanned(*directories)
+        for number, line in enumerate((_REPOSITORY / path).read_text().splitlines(), 1)
+        if predicate(line)
+    ]
+
+
 def test_no_generic_partition_or_lab_file_names_an_algorithm():
     """No tracked file under a generic partition or `lab/` holds an algorithm's name."""
     if not CLONE.is_dir():
         pytest.skip("the F´ framework clone is absent; run `just pinned`")
-    pattern = _algorithm_names()
 
-    found = [
-        f"{path}:{number}: {line.strip()}"
-        for path in _scanned(*GENERIC)
-        for number, line in enumerate((_REPOSITORY / path).read_text().splitlines(), 1)
-        if pattern.search(line)
-    ]
+    found = _hits(GENERIC, _algorithm_names().search)
 
     assert not found, "an algorithm is named in a generic partition:\n" + "\n".join(found)
 
 
 def test_the_deployment_reaches_no_algorithm_by_its_path():
     """No tracked file rendering a deployment names a path under `algorithms/`."""
-    found = [
-        f"{path}:{number}: {line.strip()}"
-        for path in _scanned(DEPLOYMENT)
-        for number, line in enumerate((_REPOSITORY / path).read_text().splitlines(), 1)
-        if "algorithms/" in line
-    ]
+    found = _hits((DEPLOYMENT,), lambda line: "algorithms/" in line)
 
     assert not found, "a deployment template names an algorithm's path:\n" + "\n".join(found)

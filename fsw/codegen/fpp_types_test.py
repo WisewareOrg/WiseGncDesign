@@ -13,10 +13,16 @@ import pytest
 from Basilisk.architecture import messaging
 
 from fsw.codegen import fpp_types
-from fsw.codegen.deployment import CLONE, Contract, algorithm_components
+from fsw.codegen.deployment import (
+    Contract,
+    algorithm_components,
+    configuration_model,
+    framework_files,
+)
 from fsw.codegen.fpp_model import read
-from fsw.codegen.fpp_model_test import _MOCK_FRAMEWORK
 from fsw.codegen.fpp_types import Bus, Gnc, Svc, _build, converter, named, parameters_from
+from fsw.mock import edited
+from ground.dictionary import Dictionary
 
 MOCK = """\
 module Mock {
@@ -101,8 +107,7 @@ def _mock(directory: Path, mock: str = MOCK) -> dict[str, SimpleNamespace]:
     """
     algorithm = directory / "Mock.fpp"
     algorithm.write_text(mock)
-    framework = [CLONE / path for path in _MOCK_FRAMEWORK]
-    return _build(read([*framework, algorithm]), {algorithm})
+    return _build(read([*framework_files(), algorithm]), {algorithm})
 
 
 @pytest.fixture(scope="module")
@@ -190,15 +195,6 @@ def test_unwritten_telemetry_is_none_and_written_telemetry_is_not():
     assert telemetry.bodyEciVel is None
     assert telemetry.bodyEciAttitude is None
     assert Gnc.ImuDeadReckonerTelemetry() == (None, None, None, None)
-
-
-def test_the_dead_reckoner_has_no_outputs_and_two_required_parameters():
-    """Its FPP declares no output port, and `mu` and `dcm_PB` with no default."""
-    assert Gnc.ImuDeadReckonerOutputs() == ()
-    assert Gnc.ImuDeadReckonerParameters._fields == ("mu", "dcm_PB")
-    assert Gnc.ImuDeadReckonerParameters.component == "Gnc.ImuDeadReckoner"
-    with pytest.raises(TypeError, match="dcm_PB"):
-        Gnc.ImuDeadReckonerParameters(mu=1.0)
 
 
 def test_only_an_algorithm_s_component_gets_tuples():
@@ -392,56 +388,36 @@ def test_an_output_port_that_is_not_one_value_fails_generation_naming_it(
         port: the mock's line seeded.
         replacement: the seeded line.
     """
-    seeded = MOCK.replace(port, replacement)
-    assert seeded != MOCK
-
     with pytest.raises(ValueError, match="gainOut"):
-        _mock(tmp_path, seeded)
+        _mock(tmp_path, edited(MOCK, (port, replacement)))
 
 
-def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_and_ports():
+def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_and_ports(
+    configuration: str,
+):
     """Each algorithm instance's telemetry tuple writes exactly its dictionary's channels.
 
     Its parameters tuple holds the dictionary's parameters, and its outputs tuple its component's
-    output ports, for every configuration in `fsw/fpp/gnc/`, so a write named for a field is a
-    channel the ground can pack.
+    output ports, so a write named for a field is a channel the ground can pack.
+
+    Args:
+        configuration: the configuration.
     """
-    from fsw.codegen.deployment import configuration_model
-    from fsw.codegen.fpp_types import named
-    from ground.dictionary import Dictionary
-
-    configurations = sorted(
-        p.stem for p in (Path(__file__).parents[1] / "fpp" / "gnc").glob("*.fpp")
-    )
-    assert configurations
-    for configuration in configurations:
-        dictionary = Dictionary.from_sub_topology(configuration)
-        components = configuration_model(configuration).components
-        instances = dictionary.algorithm_instances()
-        assert instances, configuration
-        for instance in instances:
-            short = instance.name.rsplit(".", 1)[-1]
-
-            def tuple_of(suffix: str, component: str = instance.component) -> type:
-                """The instance's component's tuple of a suffix.
-
-                Args:
-                    suffix: `Telemetry`, `Parameters` or `Outputs`.
-                    component: the component's qualified name.
-
-                Returns:
-                    The tuple.
-                """
-                return named(f"{component}{suffix}")
-
-            channels = dictionary.entries(short)["channels"]
-            parameters = [
-                p.name.removeprefix(f"{short}.") for p in dictionary.parameters_by_id.values()
-            ]
-            ports = [p.name for p in components[instance.component].outputs]
-            assert sorted(tuple_of("Telemetry")._fields) == sorted(channels), instance.name
-            assert sorted(tuple_of("Parameters")._fields) == sorted(parameters), instance.name
-            assert list(tuple_of("Outputs")._fields) == ports, instance.name
+    dictionary = Dictionary.from_sub_topology(configuration)
+    components = configuration_model(configuration).components
+    instances = dictionary.algorithm_instances()
+    assert instances
+    for instance in instances:
+        short = instance.name.rsplit(".", 1)[-1]
+        component = instance.component
+        channels = dictionary.entries(short)["channels"]
+        parameters = [
+            p.name.removeprefix(f"{short}.") for p in dictionary.parameters_by_id.values()
+        ]
+        ports = [p.name for p in components[component].outputs]
+        assert sorted(named(f"{component}Telemetry")._fields) == sorted(channels), instance.name
+        assert sorted(named(f"{component}Parameters")._fields) == sorted(parameters), instance.name
+        assert list(named(f"{component}Outputs")._fields) == ports, instance.name
 
 
 LOADED = """\

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import CLONE, fpp_files
+from fsw.codegen.deployment import fpp_files, framework_files
 from fsw.codegen.fpp_model import (
     _FPP,
     Argument,
@@ -29,19 +29,7 @@ from fsw.codegen.fpp_model import (
     parse,
     read,
 )
-
-_MOCK_FRAMEWORK = (
-    "Fw/Cmd/Cmd.fpp",
-    "Fw/Prm/Prm.fpp",
-    "Fw/Time/Time.fpp",
-    "Fw/Tlm/Tlm.fpp",
-    "Fw/Types/Types.fpp",
-    "cmake/platform/unix/Platform/PlatformTypes.fpp",
-    "default/config/ComCfg.fpp",
-    "default/config/FpConfig.fpp",
-    "default/config/FpConstants.fpp",
-)
-"""The F´ framework files, in the clone, that the mock model imports."""
+from fsw.mock import edited
 
 GNC = """\
 module Gnc {
@@ -66,6 +54,8 @@ module Gnc {
   }
 
   array Vector3 = [3] F64
+
+  array Matrix = [3] Vector3
 
   type Seconds = F64
 
@@ -160,7 +150,7 @@ module Top {
 
 
 def _mock_files(directory: Path, gnc: str = GNC) -> list[Path]:
-    """The mock model's files, its two modules written into `directory`.
+    """The mock model's files, its two modules written into `directory`, with the framework's.
 
     Args:
         directory: where `Gnc.fpp` and `Top.fpp` are written.
@@ -172,7 +162,7 @@ def _mock_files(directory: Path, gnc: str = GNC) -> list[Path]:
     (directory / "Gnc.fpp").write_text(gnc)
     (directory / "Top.fpp").write_text(TOP)
     return [
-        *(CLONE / path for path in _MOCK_FRAMEWORK),
+        *framework_files(),
         directory / "Gnc.fpp",
         directory / "Top.fpp",
     ]
@@ -342,7 +332,7 @@ def test_annotations_are_read_pre_lines_then_post_lines(mock: Model):
 
 
 def test_types_are_read_with_struct_members_in_declaration_order(mock: Model):
-    """Structs keep FPP's member order; enums carry their constants and arrays their size.
+    """Structs keep FPP's member order; enums carry their constants, arrays their size and element.
 
     Args:
         mock: the mock model.
@@ -358,6 +348,7 @@ def test_types_are_read_with_struct_members_in_declaration_order(mock: Model):
     )
     assert mock.types["Gnc.Mode"] == Enum("Gnc.Mode", "U8", {"idle": 0, "running": 3})
     assert mock.types["Gnc.Vector3"] == Array("Gnc.Vector3", 3, "F64")
+    assert mock.types["Gnc.Matrix"] == Array("Gnc.Matrix", 3, "Gnc.Vector3")
     assert mock.types["Fw.CmdResponse"] == Enum(
         "Fw.CmdResponse",
         "U8",
@@ -440,11 +431,13 @@ def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
     Args:
         tmp_path: where the mock's model is written.
     """
-    gnc = GNC.replace(
-        "    command recv port cmdIn\n",
-        "    output port anyOut: serial\n    command recv port cmdIn\n",
+    gnc = edited(
+        GNC,
+        (
+            "    command recv port cmdIn\n",
+            "    output port anyOut: serial\n    command recv port cmdIn\n",
+        ),
     )
-    assert gnc != GNC
 
     nav = read(_mock_files(tmp_path, gnc)).components["Gnc.Nav"]
 
@@ -457,7 +450,9 @@ def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):
     Args:
         tmp_path: where the mock's model is written.
     """
-    gnc = GNC.replace("param mounting: Vector3", "param mounting: Vector3 default [1.0, 0.0, 0.0]")
+    gnc = edited(
+        GNC, ("param mounting: Vector3", "param mounting: Vector3 default [1.0, 0.0, 0.0]")
+    )
 
     with pytest.raises(ValueError, match="mounting"):
         read(_mock_files(tmp_path, gnc))
@@ -469,7 +464,7 @@ def test_a_model_fpp_rejects_fails_with_its_stderr(tmp_path: Path):
     Args:
         tmp_path: where the mock's model is written.
     """
-    gnc = GNC.replace("instance nav: Nav", "instance nav: Navigator")
+    gnc = edited(GNC, ("instance nav: Nav", "instance nav: Navigator"))
 
     with pytest.raises(RuntimeError, match="Navigator"):
         read(_mock_files(tmp_path, gnc))

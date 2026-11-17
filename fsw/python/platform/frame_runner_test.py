@@ -153,7 +153,7 @@ def test_the_frame_runner_is_the_mock_configuration_s_build(runner: FrameRunner)
     }
 
 
-def test_boot_builds_each_algorithm_afresh_on_its_record_parameters(runner: FrameRunner):
+def test_boot_builds_each_algorithm_on_its_record_parameters(runner: FrameRunner):
     """Each boot is a power cycle: a new algorithm on the parameters the case's record holds.
 
     Args:

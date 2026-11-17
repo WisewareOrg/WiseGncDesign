@@ -11,6 +11,7 @@ import pytest
 
 from fsw.codegen.deployment import contract_files
 from fsw.codegen.fpp_model import Model, read
+from fsw.mock import edited
 from fsw.python.gnc.partition import GncPartition
 from fsw.python.platform.rates import RateGroupDriver, dividers
 
@@ -314,86 +315,85 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
         GncPartition(model, "Mock", classes)
 
 
-def test_a_data_input_not_named_in_ends_is_refused_naming_it(tmp_path: Path):
-    """A connected input's keyword is its name without `In`, so another name has none.
+@pytest.mark.parametrize(
+    ("edits", "match"),
+    [
+        (
+            (
+                (
+                    "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
+                    "    sync input port value: Value\n  }\n\n  passive component Slow",
+                ),
+                ("source.valueOut -> sink.valueIn", "source.valueOut -> sink.value"),
+            ),
+            r"sink\.value\b",
+        ),
+        (
+            (
+                (
+                    "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
+                    "    sync input port valueIn: Value\n    sync input port backIn: Value\n  }\n\n"
+                    "  passive component Slow",
+                ),
+                (
+                    "    sync input port valueIn: Value\n  }\n\n  instance",
+                    "    sync input port valueIn: Value\n    output port backOut: Value\n  }\n\n"
+                    "  instance",
+                ),
+                (
+                    "      source.echoOut -> slow.valueIn\n",
+                    "      source.echoOut -> slow.valueIn\n      slow.backOut -> sink.backIn\n",
+                ),
+            ),
+            r"slow\.backOut -> sink\.backIn is a backward edge",
+        ),
+        (
+            (
+                (
+                    "    output port echoOut: Value\n",
+                    "    output port echoOut: Value\n    output port loopOut: Value\n"
+                    "    sync input port loopIn: Value\n",
+                ),
+                (
+                    "      source.echoOut -> slow.valueIn\n",
+                    "      source.echoOut -> slow.valueIn\n      source.loopOut -> source.loopIn\n",
+                ),
+            ),
+            r"source\.loopOut -> source\.loopIn is a backward edge",
+        ),
+        (
+            (
+                ("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n"),
+                (
+                    "      source.valueOut -> sink.valueIn\n",
+                    "      source.valueOut[0] -> sink.valueIn\n"
+                    "      source.valueOut[1] -> slow.doubleIn\n",
+                ),
+                (
+                    "    sync input port valueIn: Value\n  }\n\n  instance",
+                    "    sync input port valueIn: Value\n"
+                    "    sync input port doubleIn: Value\n  }\n\n  instance",
+                ),
+            ),
+            r"source\.valueOut routes to more than one input",
+        ),
+    ],
+    ids=["data-input-not-in", "backward-edge", "self-loop", "fan-out"],
+)
+def test_a_wiring_the_partition_cannot_run_is_refused_naming_it(
+    tmp_path: Path, edits: tuple[tuple[str, str], ...], match: str
+):
+    """A wiring the partition cannot run raises, naming the port or the edge.
+
+    A connected input's keyword is its name without `In`, so another name has none. An edge into a
+    member that runs earlier in the frame, slow's into sink or source's into itself, reaches it
+    only at its next run, a delayed feedback, which is not supported. FPP fans one output out only
+    through a port array, which the partition refuses.
 
     Args:
         tmp_path: where the mock is written.
+        edits: the mock's edits, as `fsw.mock.edited` applies them.
+        match: what the error names.
     """
-    mock = MOCK.replace(
-        "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
-        "    sync input port value: Value\n  }\n\n  passive component Slow",
-    ).replace("source.valueOut -> sink.valueIn", "source.valueOut -> sink.value")
-
-    with pytest.raises(ValueError, match=r"sink\.value\b"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
-
-
-def test_a_backward_edge_is_refused_naming_it(tmp_path: Path):
-    """An edge into a member that runs earlier in the frame is a delayed feedback, not supported.
-
-    Slow runs after sink, so `slow -> sink` would reach sink only at its next run.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    mock = (
-        MOCK.replace(
-            "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
-            "    sync input port valueIn: Value\n    sync input port backIn: Value\n  }\n\n"
-            "  passive component Slow",
-        )
-        .replace(
-            "    sync input port valueIn: Value\n  }\n\n  instance",
-            "    sync input port valueIn: Value\n    output port backOut: Value\n  }\n\n  instance",
-        )
-        .replace(
-            "      source.echoOut -> slow.valueIn\n",
-            "      source.echoOut -> slow.valueIn\n      slow.backOut -> sink.backIn\n",
-        )
-    )
-
-    with pytest.raises(ValueError, match=r"slow\.backOut -> sink\.backIn is a backward edge"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
-
-
-def test_a_self_loop_is_refused_as_a_backward_edge(tmp_path: Path):
-    """An edge from a member to itself reaches it only at its next run, a delayed feedback.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    mock = MOCK.replace(
-        "    output port echoOut: Value\n",
-        "    output port echoOut: Value\n    output port loopOut: Value\n"
-        "    sync input port loopIn: Value\n",
-    ).replace(
-        "      source.echoOut -> slow.valueIn\n",
-        "      source.echoOut -> slow.valueIn\n      source.loopOut -> source.loopIn\n",
-    )
-
-    with pytest.raises(ValueError, match=r"source\.loopOut -> source\.loopIn is a backward edge"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
-
-
-def test_an_output_feeding_more_than_one_input_is_refused_naming_it(tmp_path: Path):
-    """FPP fans one output out only through a port array; the partition refuses it, naming it.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    mock = (
-        MOCK.replace("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n")
-        .replace(
-            "      source.valueOut -> sink.valueIn\n",
-            "      source.valueOut[0] -> sink.valueIn\n      source.valueOut[1] -> slow.doubleIn\n",
-        )
-        .replace(
-            "    sync input port valueIn: Value\n  }\n\n  instance",
-            "    sync input port valueIn: Value\n    sync input port doubleIn: Value\n  }\n\n"
-            "  instance",
-        )
-    )
-
-    with pytest.raises(ValueError, match=r"source\.valueOut routes to more than one input"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
+    with pytest.raises(ValueError, match=match):
+        GncPartition(_model(tmp_path, edited(MOCK, *edits)), "Mock", (Sink, Slow, Source))
