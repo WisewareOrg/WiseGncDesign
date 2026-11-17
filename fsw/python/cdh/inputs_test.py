@@ -120,12 +120,13 @@ def test_a_role_the_sub_topology_does_not_take_is_skipped(tmp_path: Path):
 @pytest.mark.parametrize(
     ("cdh_edits", "inputs", "match"),
     [
-        (
+        pytest.param(
             ((f"output port {ROLE.output}:", "output port notAnOut:"),),
             (ROLE.input,),
             f"role {ROLE.role}",
+            id="no-output",
         ),
-        (
+        pytest.param(
             (
                 (
                     f"output port {ROLE.output}: {ROLE.icd}",
@@ -134,10 +135,10 @@ def test_a_role_the_sub_topology_does_not_take_is_skipped(tmp_path: Path):
             ),
             (ROLE.input,),
             f"role {ROLE.role}",
+            id="output-a-bus-struct",
         ),
-        ((), (ROLE.input, "notARoleIn"), r"\['notARoleIn'\]"),
+        pytest.param((), (ROLE.input, "notARoleIn"), r"\['notARoleIn'\]", id="input-no-role-feeds"),
     ],
-    ids=["no-output", "output-a-bus-struct", "input-no-role-feeds"],
 )
 def test_a_converter_or_input_pairings_cannot_take_is_refused_naming_it(
     tmp_path: Path,

@@ -318,7 +318,7 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
 @pytest.mark.parametrize(
     ("edits", "match"),
     [
-        (
+        pytest.param(
             (
                 (
                     "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
@@ -327,8 +327,9 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
                 ("source.valueOut -> sink.valueIn", "source.valueOut -> sink.value"),
             ),
             r"sink\.value\b",
+            id="data-input-not-in",
         ),
-        (
+        pytest.param(
             (
                 (
                     "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
@@ -346,8 +347,9 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
                 ),
             ),
             r"slow\.backOut -> sink\.backIn is a backward edge",
+            id="backward-edge",
         ),
-        (
+        pytest.param(
             (
                 (
                     "    output port echoOut: Value\n",
@@ -360,8 +362,9 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
                 ),
             ),
             r"source\.loopOut -> source\.loopIn is a backward edge",
+            id="self-loop",
         ),
-        (
+        pytest.param(
             (
                 ("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n"),
                 (
@@ -376,9 +379,9 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
                 ),
             ),
             r"source\.valueOut routes to more than one input",
+            id="fan-out",
         ),
     ],
-    ids=["data-input-not-in", "backward-edge", "self-loop", "fan-out"],
 )
 def test_a_wiring_the_partition_cannot_run_is_refused_naming_it(
     tmp_path: Path, edits: tuple[tuple[str, str], ...], match: str

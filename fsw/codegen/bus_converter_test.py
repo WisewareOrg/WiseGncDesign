@@ -77,60 +77,61 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(
 @pytest.mark.parametrize(
     ("edits", "match"),
     [
-        (
+        pytest.param(
             (
                 ("struct B { n: [2] F64 }", "struct B { m: [2] Gnc.Row }"),
                 ("struct BIcd { n: [2] F64 }", "struct BIcd { m: Mat }"),
             ),
             r"Gnc\.BIcd\.m is \(2, 3\) float64, which the F´ CDH",
+            id="array-of-arrays",
         ),
-        (
+        pytest.param(
             (
                 ("struct A { extra", "struct A { x: F64, extra"),
                 ("struct AIcd { V", "struct AIcd { X: F64, V"),
             ),
             r"Gnc\.AIcd\.X is \(\) float64, which the F´ CDH",
+            id="scalar",
         ),
-        (
+        pytest.param(
             (
                 ("struct A { extra", "struct A { f: [2] bool, extra"),
                 ("struct AIcd { V", "struct AIcd { f: [2] bool, V"),
             ),
             r"Gnc\.AIcd\.f is \(2,\) bool, which the F´ CDH",
+            id="bool",
         ),
-        (
+        pytest.param(
             (
                 ("struct A { extra", "struct A { f: [2] U32, extra"),
                 ("struct AIcd { V", "struct AIcd { f: [2] U32, V"),
             ),
             r"Gnc\.AIcd\.f is \(2,\) uint32, which the F´ CDH",
+            id="unused-primitive",
         ),
-        (
+        pytest.param(
             (
                 ("struct A { extra", "struct A { e: [2] Gnc.Mode, extra"),
                 ("struct AIcd { V", "struct AIcd { e: [2] Mode, V"),
             ),
             r"Gnc\.AIcd\.e is \(2,\) Gnc\.Mode, which the F´ CDH",
+            id="not-a-number",
         ),
-        ((("extra: [2] F64", "extra: F64"),), r"Bus\.A\.extra is F64, which the bus pin"),
-        (
+        pytest.param(
+            (("extra: [2] F64", "extra: F64"),),
+            r"Bus\.A\.extra is F64, which the bus pin",
+            id="bus-scalar",
+        ),
+        pytest.param(
             (("extra: [2] F64", "extra: [2] bool"),),
             r"Bus\.A\.extra is \[2\] bool, which the bus pin",
+            id="bus-bool",
         ),
-        (
+        pytest.param(
             (("extra: [2] F64", "extra: [2] U32"),),
             r"Bus\.A\.extra is \[2\] U32, which the bus pin",
+            id="bus-unused-primitive",
         ),
-    ],
-    ids=[
-        "array-of-arrays",
-        "scalar",
-        "bool",
-        "unused-primitive",
-        "not-a-number",
-        "bus-scalar",
-        "bus-bool",
-        "bus-unused-primitive",
     ],
 )
 def test_a_field_outside_the_domain_is_refused_by_name(

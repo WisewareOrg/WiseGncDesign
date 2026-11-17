@@ -12,7 +12,7 @@ from fsw.python.cdh import commands
 from ground.dictionary import Dictionary
 
 
-class Mock:
+class Source:
     """`fsw.mock`'s `MockGnc.Source`: `setLevel` refuses a negative level; `reset` writes none."""
 
     def setLevel(self, level: float) -> Any:
@@ -39,6 +39,8 @@ class Mock:
 def dictionary() -> Dictionary:
     """The dictionary of `MockFrame` of `fsw.mock.MOCK`, whose `source` is mocked.
 
+    It loads `MOCK`'s tuples, which `Source.setLevel`'s `named` resolves.
+
     Returns:
         The dictionary.
     """
@@ -56,7 +58,7 @@ def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
     Args:
         dictionary: the mock's dictionary.
     """
-    handlers = commands.handlers(dictionary, {"source": Mock()})
+    handlers = commands.handlers(dictionary, {"source": Source()})
 
     assert commands.dispatch(handlers, "source.setLevel", {"level": 2.0}) == (
         "OK",
@@ -81,7 +83,7 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
         dictionary: the mock's dictionary.
     """
 
-    class Broken(Mock):
+    class Broken(Source):
         """A mock whose `reset` fails."""
 
         def reset(self) -> None:
@@ -102,8 +104,8 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
     "algorithm",
     [
         object(),
-        type("Renamed", (Mock,), {"setLevel": lambda self, value: None})(),
-        type("Extra", (Mock,), {"setLevel": lambda self, level, scale: None})(),
+        type("Renamed", (Source,), {"setLevel": lambda self, value: None})(),
+        type("Extra", (Source,), {"setLevel": lambda self, level, scale: None})(),
     ],
     ids=["no method", "other parameter", "extra parameter"],
 )
@@ -128,7 +130,7 @@ def test_arguments_reach_the_handler_as_given(dictionary: Dictionary):
     """
     received = []
 
-    class Recording(Mock):
+    class Recording(Source):
         """A mock keeping what `setLevel` receives."""
 
         def setLevel(self, level: float) -> None:

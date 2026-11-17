@@ -161,10 +161,8 @@ def test_values_in_the_channel_s_type_come_back_in_one_batch_with_their_units(
     Args:
         mock_dictionary: the mock's dictionary.
     """
-    offset, mounting = (
-        mock_dictionary.channel("mock.offset"),
-        mock_dictionary.channel("mock.mounting"),
-    )
+    mock = mock_dictionary
+    offset, mounting = mock.channel("mock.offset"), mock.channel("mock.mounting")
 
     np.testing.assert_array_equal(
         offset.from_raw(np.array([[1, 2, 3], [4, 5, 6]], ">f8")), [[1, 2, 3], [4, 5, 6]]
@@ -172,21 +170,11 @@ def test_values_in_the_channel_s_type_come_back_in_one_batch_with_their_units(
     np.testing.assert_array_equal(
         mounting.from_raw(ARGS["mounting"][None].astype(">f8"))[0], ARGS["mounting"]
     )
-    assert mock_dictionary.channel("mock.enabled").from_raw(np.array([0xFF, 0], "u1")).tolist() == [
-        1.0,
-        0.0,
-    ]
-    assert mock_dictionary.channel("mock.mode").from_raw(np.array([1, 0], ">i4")).tolist() == [
-        "fast",
-        "slow",
-    ]
+    assert mock.channel("mock.enabled").from_raw(np.array([0xFF, 0], "u1")).tolist() == [1.0, 0.0]
+    assert mock.channel("mock.mode").from_raw(np.array([1, 0], ">i4")).tolist() == ["fast", "slow"]
     assert offset.from_raw(np.empty((0, 3), ">f8")).shape == (0, 3)
-    assert [offset.units, mounting.units, mock_dictionary.channel("mock.extra").units] == [
-        "m",
-        "",
-        "s",
-    ]
-    assert mock_dictionary.channels_by_id[offset.id] is offset
+    assert [offset.units, mounting.units, mock.channel("mock.extra").units] == ["m", "", "s"]
+    assert mock.channels_by_id[offset.id] is offset
 
 
 def test_an_enum_value_that_is_no_constant_fails_naming_the_channel(mock_dictionary: Dictionary):
@@ -205,27 +193,21 @@ def test_written_values_are_held_to_the_channel_s_type(mock_dictionary: Dictiona
     Args:
         mock_dictionary: the mock's dictionary.
     """
-    offset = mock_dictionary.channel("mock.offset")
+    mock = mock_dictionary
+    offset = mock.channel("mock.offset")
 
     np.testing.assert_array_equal(
         offset.pack_many([np.array([1.0, 2.0, 3.0]), [4, 5, 6]]), [[1, 2, 3], [4, 5, 6]]
     )
     np.testing.assert_array_equal(
-        mock_dictionary.channel("mock.mounting").pack_many([ARGS["mounting"]])[0], ARGS["mounting"]
+        mock.channel("mock.mounting").pack_many([ARGS["mounting"]])[0], ARGS["mounting"]
     )
-    assert mock_dictionary.channel("mock.enabled").pack_many([True, False]).tolist() == [1.0, 0.0]
-    assert mock_dictionary.channel("mock.mode").pack_many(["slow"]).tolist() == ["slow"]
-    assert mock_dictionary.channel("mock.count").pack_many([np.uint8(7), 255, 0]).tolist() == [
-        7.0,
-        255.0,
-        0.0,
-    ]
-    assert mock_dictionary.channel("mock.gain").pack_many([2, 0.1]).tolist() == [
-        2.0,
-        float(np.float32(0.1)),
-    ]
+    assert mock.channel("mock.enabled").pack_many([True, False]).tolist() == [1.0, 0.0]
+    assert mock.channel("mock.mode").pack_many(["slow"]).tolist() == ["slow"]
+    assert mock.channel("mock.count").pack_many([np.uint8(7), 255, 0]).tolist() == [7.0, 255.0, 0.0]
+    assert mock.channel("mock.gain").pack_many([2, 0.1]).tolist() == [2.0, float(np.float32(0.1))]
     assert offset.pack_many([]).shape == (0, 3)
-    assert mock_dictionary.channel("mock.mode").pack_many([]).shape == (0,)
+    assert mock.channel("mock.mode").pack_many([]).shape == (0,)
 
 
 @pytest.mark.parametrize(

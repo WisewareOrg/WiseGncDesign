@@ -258,21 +258,23 @@ def test_rule(allowed_failures, n, p, c, expected):
 @pytest.mark.parametrize(
     ("cases", "outcomes", "lines", "cell", "rollup"),
     [
-        (
+        pytest.param(
             {"bad": (3,), "flight": only("SRS901")},
             {"passed": 1, "skipped": 2},
             [],
             "| SRS901 | pass | 1/10/10 | 1 | 3 |",
             None,
+            id="within-allowance",
         ),
-        (
+        pytest.param(
             {"bad": (3,), "crashed": (5,), "flight": only("SRS901")},
             {"failed": 1, "skipped": 2},
             [f"*{NODEID}: 2 failed, 1 allowed*"],
             "| SRS901 | fail | 2/10/10 | 1 | 3, 5 (crash) |",
             None,
+            id="crash",
         ),
-        (
+        pytest.param(
             {"bad": (2, 7), "flight": only("SRS901")},
             {"failed": 1, "skipped": 2},
             [
@@ -281,52 +283,48 @@ def test_rule(allowed_failures, n, p, c, expected):
             ],
             "| SRS901 | fail | 2/10/10 | 1 | 2, 7 |\n",
             f"| SRS901 | [fail, 2 of 1 allowed]({NODE}/SRS901.png) | fail |",
+            id="over-allowance",
         ),
-        (
+        pytest.param(
             {"crashed": tuple(range(PLANNED)), "flight": only("SRS901")},
             {"failed": 1, "skipped": 2},
             [],
             "| SRS901 | fail | 10/10/10 | 1 |",
             None,
+            id="all-crashed",
         ),
-        (
+        pytest.param(
             {"missing": (4,), "planned": 5, "flight": only("SRS901")},
             {"passed": 1, "skipped": 2},
             [],
             "| SRS901 | pass | 0/4/5 | 0 |",
             None,
+            id="missing-case",
         ),
-        (
+        pytest.param(
             {"bad": (2, 7), "kind": "velocity", "flight": only(KINDS["velocity"])},
             {"failed": 1, "skipped": 2},
             [f"*{NODEID}: 2 failed, 1 allowed*"],
             None,
             None,
+            id="velocity",
         ),
-        (
+        pytest.param(
             {"bad": (2, 7), "kind": "position", "flight": only(KINDS["position"])},
             {"failed": 1, "skipped": 2},
             [f"*{NODEID}: 2 failed, 1 allowed*"],
             None,
             None,
+            id="position",
         ),
-        (
+        pytest.param(
             {"bad": (2,), "nan": (5,), "kind": "velocity", "flight": only("SRS902")},
             {"failed": 1, "skipped": 2},
             [],
             "| SRS902 | fail | 2/10/10 | 1 | 2, 5 |",
             None,
+            id="nan",
         ),
-    ],
-    ids=[
-        "within-allowance",
-        "crash",
-        "over-allowance",
-        "all-crashed",
-        "missing-case",
-        "velocity",
-        "position",
-        "nan",
     ],
 )
 def test_a_rung_is_judged_on_the_runs_found(
@@ -349,7 +347,7 @@ def test_a_rung_is_judged_on_the_runs_found(
         project: the project.
         cases: the folder's cases, as `write_cases` takes them.
         outcomes: the judge's outcomes.
-        lines: lines the judge prints, as `fnmatch_lines` takes them.
+        lines: lines the judge prints, as `fnmatch_lines` takes them, or none.
         cell: a row of the test's matrix, or None.
         rollup: a row of the session's matrix, or None.
     """
@@ -358,8 +356,7 @@ def test_a_rung_is_judged_on_the_runs_found(
     result = judge(project)
 
     result.assert_outcomes(**outcomes)
-    if lines:
-        result.stdout.fnmatch_lines(lines)
+    result.stdout.fnmatch_lines(lines)
     if cell is not None:
         assert cell in cell_matrix(project)
     matrix = (session(project) / "report" / "matrix.md").read_text()
