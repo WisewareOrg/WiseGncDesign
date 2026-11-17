@@ -35,7 +35,6 @@ from fsw.codegen import fpp_types
 from fsw.codegen.deployment import (
     Contract,
     configuration_model,
-    fprime_configurations,
     framework_files,
 )
 from fsw.codegen.fpp_model import read
@@ -491,16 +490,6 @@ def test_each_lookup_that_fails_is_refused_naming_what_it_looked_for(
         Mission(VEHICLE, gnc, build, ("TST901",), contract=variants)
 
 
-def _skip_unless_fprime(configuration: str) -> None:
-    """Skips the test asking when the F´ build does not build a repository configuration.
-
-    Args:
-        configuration: the configuration.
-    """
-    if configuration not in fprime_configurations():
-        pytest.skip(f"the F´ build does not build {configuration}: a member has no F´ component")
-
-
 def _claimed(configuration: str) -> tuple[list[str], str]:
     """A repository configuration's sorted claims, and the first scenario judging a rung under them.
 
@@ -525,7 +514,7 @@ def _claimed(configuration: str) -> tuple[list[str], str]:
 
 @pytest.mark.parametrize("build", BUILDS)
 def test_each_configuration_s_mission_is_built_on_each_build_without_the_f_prime_extension(
-    configuration: str, build: str, monkeypatch: pytest.MonkeyPatch
+    configuration: str, build: str, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
 ) -> None:
     """Every lookup succeeds on the repository's contract, and none reaches the F´ extension.
 
@@ -537,9 +526,11 @@ def test_each_configuration_s_mission_is_built_on_each_build_without_the_f_prime
         configuration: the configuration.
         build: the build.
         monkeypatch: makes the configuration's extension absent.
+        request: gives the F´ build's mission `fprime_configuration`, which skips a configuration
+            the F´ build does not build.
     """
     if build == "fprime":
-        _skip_unless_fprime(configuration)
+        request.getfixturevalue("fprime_configuration")
     monkeypatch.setitem(sys.modules, f"lab._wise_fsw_{configuration}", None)
     claims, scenario = _claimed(configuration)
 
@@ -550,7 +541,7 @@ def test_each_configuration_s_mission_is_built_on_each_build_without_the_f_prime
 
 @pytest.mark.parametrize("built", [False, True], ids=["extension-absent", "extension-present"])
 def test_one_configuration_flown_on_both_builds_is_two_flights(
-    configuration: str, built: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    fprime_configuration: str, built: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """The flight's key holds the build, so the two builds of one scenario are two tests.
 
@@ -559,26 +550,25 @@ def test_one_configuration_flown_on_both_builds_is_two_flights(
     Python test is never skipped.
 
     Args:
-        configuration: the configuration.
+        fprime_configuration: the configuration, one the F´ build builds.
         built: whether the configuration's extension is present.
         monkeypatch: makes the extension absent, or present as a module with a spec.
         tmp_path: holds each test's folder, with a `flight.json` an earlier flight left.
     """
-    _skip_unless_fprime(configuration)
-    extension = f"lab._wise_fsw_{configuration}"
+    extension = f"lab._wise_fsw_{fprime_configuration}"
     module = None
     if built:
         module = ModuleType(extension)
         module.__spec__ = ModuleSpec(extension, None)
     monkeypatch.setitem(sys.modules, extension, module)
-    _, scenario = _claimed(configuration)
-    python = Mission(sorted(VEHICLES)[0], configuration, "python", (scenario,))
+    _, scenario = _claimed(fprime_configuration)
+    python = Mission(sorted(VEHICLES)[0], fprime_configuration, "python", (scenario,))
     missions = {"fprime": python.but(build="fprime"), "python": python}
 
     [vehicle_class] = mission_tests(*missions.values()).values()
 
     names = sorted(name for name in vars(vehicle_class) if name.startswith("test_"))
-    prefix = f"test_{configuration}_"
+    prefix = f"test_{fprime_configuration}_"
     assert [name.removeprefix(prefix).split("_", 1)[0] for name in names] == ["fprime", "python"]
     assert len({name.removeprefix(prefix).split("_", 1)[1] for name in names}) == 1
     for build, mission in missions.items():
@@ -634,7 +624,7 @@ def _contents(path: Path) -> dict[str, object]:
 
 
 def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
-    configuration: str, rate_groups: list[str], pytester: pytest.Pytester
+    fprime_configuration: str, rate_groups: list[str], pytester: pytest.Pytester
 ):
     """Case 1 flown alone and after case 0 in one process gives the same run file, every row.
 
@@ -646,21 +636,20 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
     run file differs from case 1's, so a comparison that cannot tell cases apart would show.
 
     Args:
-        configuration: the configuration.
+        fprime_configuration: the configuration, one the F´ build builds.
         rate_groups: the configuration's rate groups.
         pytester: the project the flights run in, each run in one process of its own, xdist off.
     """
-    _skip_unless_fprime(configuration)
-    if not built(configuration):
-        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
-    _, scenario = _claimed(configuration)
-    flight = Mission(sorted(VEHICLES)[0], configuration, "fprime", (scenario,))
+    if not built(fprime_configuration):
+        pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
+    _, scenario = _claimed(fprime_configuration)
+    flight = Mission(sorted(VEHICLES)[0], fprime_configuration, "fprime", (scenario,))
     [(cls, vehicle_class)] = mission_tests(flight).items()
     [name] = [name for name in vars(vehicle_class) if name.startswith("test_")]
     test = f"test_flights.py::{cls}::{name}"
     pytester.makepyfile(
         test_flights=FPRIME_FLIGHT.format(
-            vehicle=flight.vehicle, gnc=configuration, scenario=scenario
+            vehicle=flight.vehicle, gnc=fprime_configuration, scenario=scenario
         )
     )
     options = ("-p", "no:cacheprovider", "-p", "no:xdist")
@@ -673,7 +662,7 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
     [after] = pytester.path.rglob("run_0001.h5")
 
     alone, after, first = _contents(alone), _contents(after), _contents(first)
-    flown = members(configuration_model(configuration), configuration).values()
+    flown = members(configuration_model(fprime_configuration), fprime_configuration).values()
     gnc = {member.name.rsplit(".", 1)[-1] for group in flown for member in group}
     assert any(name.startswith(tuple(f"tlm/{m}." for m in gnc)) for name in alone)
     for group in rate_groups:
@@ -1195,7 +1184,8 @@ def test_the_mock_actuator_s_command_spins_the_wheel_through_its_writer_alike_on
     vehicle = VEHICLES["imu_wheel_spacecraft"]()
     [wheel] = vehicle.wheel.ReactionWheelData
     fpp_types.load(MOCK)
-    torque = Actuator(None).step(0.0)[0].wheelOut.motorTorque[0]
+    [command] = Actuator(None).step(0.0)[0]
+    torque = command.motorTorque[0]
     assert 0.0 < torque < wheel.u_max
     speeds = {}
     for build in ("python", "fprime") if built_fprime else ("python",):

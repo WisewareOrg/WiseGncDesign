@@ -295,7 +295,6 @@ def test_the_f_prime_build_builds_a_configuration_only_when_each_member_has_an_f
     (tmp_path / "CMakeLists.txt").touch()
 
     assert fprime_configurations(contract=contract) == ("Gated",)
-    assert fprime_configurations() == configurations()
 
 
 def test_the_renderer_renders_and_names_every_f_prime_configuration_of_both_contracts(

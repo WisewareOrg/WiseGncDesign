@@ -1,8 +1,9 @@
 """Fixtures every package's tests share: an F´ copy, its station, a drain, messages, parameters.
 
 The fixtures of a configuration's F´ build range over every configuration, one per GNC
-sub-topology. A fixture needing the F´ build, or the dictionary it generates, skips its test for a
-configuration the F´ build does not build, and without the build. Every pytest run loads this
+sub-topology. A test or fixture reaching the F´ build takes `fprime_configuration`, which skips a
+configuration the F´ build does not build; one needing the build, or the dictionary it generates,
+skips without it. Every pytest run loads this
 file, the judge's included, so the FPP model is read, and Basilisk and F´ are imported, only by the
 fixtures that need them.
 """
@@ -39,38 +40,52 @@ def configuration(request: pytest.FixtureRequest) -> str:
     return request.param
 
 
-@pytest.fixture(scope="session")
-def dictionary(configuration: str) -> Dictionary:
-    """The dictionary the configuration's build generated; skips the test without it.
+@pytest.fixture(scope="module")
+def fprime_configuration(configuration: str) -> str:
+    """The configuration, for a test reaching its F´ build; skips one the F´ build does not build.
 
     Args:
         configuration: the configuration.
+
+    Returns:
+        The configuration, one `fsw.codegen.deployment.fprime_configurations` selects.
+    """
+    if configuration not in fprime_configurations():
+        pytest.skip(f"the F´ build does not build {configuration}: a member has no F´ component")
+    return configuration
+
+
+@pytest.fixture(scope="module")
+def dictionary(fprime_configuration: str) -> Dictionary:
+    """The dictionary the configuration's build generated; skips the test without it.
+
+    Args:
+        fprime_configuration: the configuration.
 
     Returns:
         The dictionary.
     """
     from ground.dictionary import Dictionary
 
-    return Dictionary(_dictionary(configuration))
+    return Dictionary(_dictionary(fprime_configuration))
 
 
 @pytest.fixture
-def fsw(configuration: str) -> ModuleType:
+def fsw(fprime_configuration: str) -> ModuleType:
     """A fresh copy of the configuration's deployment, not yet booted; skips without its build.
 
     Args:
-        configuration: the configuration.
+        fprime_configuration: the configuration.
 
     Returns:
         The copy.
     """
     from lab.power_cycle import built, power_cycle
 
-    _skip_without_fprime(configuration)
-    if not built(configuration):
-        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
+    if not built(fprime_configuration):
+        pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
 
-    return power_cycle(configuration)
+    return power_cycle(fprime_configuration)
 
 
 @pytest.fixture
@@ -300,7 +315,7 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
     return list(bus_by_role.values())
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def case_parameters(dictionary: Dictionary, contract_model: Model) -> dict[str, Any]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
@@ -349,7 +364,7 @@ def _parameters(model: Any, component: str, elements: Callable[[int], list[float
     return fpp_types.parameters_from(fpp_types.named(f"{component}Parameters"), values)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def rate_groups(configuration: str) -> list[str]:
     """The configuration's rate groups, its GNC sub-topology's `Svc.PassiveRateGroup` instances.
 
@@ -414,22 +429,22 @@ def prm_record(case_parameters: dict[str, Any], tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def prm(prm_record: Path, configuration: str) -> str:
+def prm(prm_record: Path, fprime_configuration: str) -> str:
     """The case's `.dat`, made beside its record as `lab.Adapter` makes it.
 
     Args:
         prm_record: the case's record.
-        configuration: the configuration, whose dictionary the `.dat` is made against.
+        fprime_configuration: the configuration, whose dictionary the `.dat` is made against.
 
     Returns:
         The `.dat`'s path, as `boot` takes it.
     """
     from ground import parameters
 
-    return str(parameters.dat(prm_record, _dictionary(configuration)))
+    return str(parameters.dat(prm_record, _dictionary(fprime_configuration)))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def parameter_ids(dictionary: Dictionary) -> list[int]:
     """Every parameter's ID in the configuration's dictionary, which `boot` holds valid.
 
@@ -453,18 +468,7 @@ def _dictionary(configuration: str) -> Path:
     """
     from lab import dictionary_path
 
-    _skip_without_fprime(configuration)
     path = dictionary_path(configuration)
     if not path.exists():
         pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
     return path
-
-
-def _skip_without_fprime(configuration: str) -> None:
-    """Skips the test asking when the F´ build does not build the configuration.
-
-    Args:
-        configuration: the configuration.
-    """
-    if configuration not in fprime_configurations():
-        pytest.skip(f"the F´ build does not build {configuration}: a member has no F´ component")

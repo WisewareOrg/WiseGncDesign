@@ -25,17 +25,17 @@ NS = 1_000_000_000
 
 
 @pytest.fixture
-def adapter(configuration: str, prm_record: Path) -> Adapter:
+def adapter(fprime_configuration: str, prm_record: Path) -> Adapter:
     """The configuration's adapter on the case's record, booted.
 
     Args:
-        configuration: the configuration.
+        fprime_configuration: the configuration.
         prm_record: the case's parameter record.
 
     Returns:
         The adapter.
     """
-    adapter = Adapter(configuration, prm_record)
+    adapter = Adapter(fprime_configuration, prm_record)
     adapter.boot()
     return adapter
 
