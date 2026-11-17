@@ -8,9 +8,9 @@
 
 - **rev 2** — 2026-11-17 — a mission names a GNC configuration and a build, and each algorithm
   component claims its capabilities in its FPP (issue 65 Missions name a GNC sub-topology and a
-  build); cross-build parity's comparison is a tested harness function that each algorithm's own
-  parity notebook calls, and `analysis/` holds only the rung analyzers (issue 66 Parity is an
-  analyzer over run files).
+  build); cross-build parity's comparison is a tested harness function, every algorithm with an F´
+  build has its own parity notebook, and `analysis/` holds only the rung analyzers (issue 66 Parity
+  is an analyzer over run files).
 - **rev 1** — 2026-11-11 — first written (issue 29 missions).
 
 ## Context
@@ -122,12 +122,14 @@ everywhere, even with `--full-monte-carlo`, and the session name `scratch` is re
   `harness.<module>`, holds what knows no specific requirement, metric or scenario: the mission
   code, the judging fixtures as a pytest plugin, `judge()` and `plots()`, the tree reader, and the
   cross-build parity comparison. Content stays where it is read: `analysis/` holds only the rung
-  analyzers the judge runs, `scenarios/` holds how each TST is flown, each algorithm's folder holds
-  its parity notebook, and `algorithms/`, `missions/`, `fsw/`, `ground/` and `lab/` hold the rest.
+  analyzers the judge runs, `scenarios/` holds how each TST is flown, and `algorithms/`,
+  `missions/`, `fsw/`, `ground/` and `lab/` hold the rest.
 - **Tests sit beside the code they test**, with no central `tests/` folder. Same-named test files
   stay apart under `--import-mode=importlib`.
-- **An algorithm is a package around its notebook.** The notebook keeps the derivation and the
-  implementation readable together; the gross check and the tests live in the package.
+- **An algorithm is a package around its notebooks.** Its algorithm notebook keeps the derivation
+  and the implementation readable together. Every algorithm with an F´ build has its own parity
+  notebook, which holds the two builds to parity case by case with `harness/parity.py`. The gross
+  check and the tests live in the package.
 - **`algorithms` is a workbook, not a library.** It is installed editable so notebooks and tests
   import it, and is never shipped on its own. Its notebooks import the harness and the analyzers on
   purpose, and the F´ flight software, which is C++, never imports it.
@@ -199,6 +201,5 @@ was dirty. Run files carry no GNC attributes.
 - Folders are skipped and listed, not hidden, so a renamed notebook shows up in the report.
 - Notebooks and their algorithm packages depend on the harness and the analyzers, so an algorithm
   cannot be lifted out of this repository unchanged.
-- Cross-build parity's comparison is a tested harness function, `harness/parity.py`, over run
-  files, which each algorithm's own parity notebook calls beside its derivation notebook;
-  `analysis/` holds only the rung analyzers the judge runs.
+- Cross-build parity is a tested harness function, `harness/parity.py`, over run files; `analysis/`
+  holds only the rung analyzers the judge runs.
