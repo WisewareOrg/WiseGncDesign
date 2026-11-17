@@ -1,12 +1,17 @@
-"""The harness's first test mock, as an algorithm's notebook gives it: its class and parameters."""
+"""The harness's test mock, as an algorithm's notebook gives it: its class and its parameters."""
 
 from typing import Any
+
+import numpy as np
 
 from fsw.codegen.fpp_types import named
 
 
-class FirstMock:
-    """Steps writing nothing until commanded to fail; its next step then raises."""
+class Mock:
+    """Writes the nav role's estimate channels with a fixed state at every step.
+
+    Once commanded to fail, its next step raises.
+    """
 
     def __init__(self, parameters: Any) -> None:
         """Starts not failing.
@@ -20,21 +25,25 @@ class FirstMock:
         """Makes the next step raise."""
         self._failing = True
 
-    def step(self, t: float) -> tuple[Any, None]:
-        """Steps the mock.
+    def step(self, t: float) -> tuple[Any, Any]:
+        """Writes the fixed state.
 
         Args:
             t: s, the time.
 
         Returns:
-            No output, and no telemetry.
+            No output, and the state: m and m/s in ECI, and the identity attitude.
 
         Raises:
             ZeroDivisionError: the mock was commanded to fail.
         """
         if self._failing:
             raise ZeroDivisionError("the tick's own bug")
-        return named("HarnessMock.FirstMockOutputs")(), None
+        return named("HarnessMock.MockOutputs")(), named("HarnessMock.MockTelemetry")(
+            bodyEciPos=np.array([7.0e6, 0.0, 0.0]),
+            bodyEciVel=np.array([0.0, 7.5e3, 0.0]),
+            bodyEciAttitude=np.array([1.0, 0.0, 0.0, 0.0]),
+        )
 
 
 def parameters(scenario: Any) -> Any:
@@ -46,4 +55,4 @@ def parameters(scenario: Any) -> Any:
     Returns:
         The parameters, which the ground writes as the case's record.
     """
-    return named("HarnessMock.FirstMockParameters")(gain=scenario.mu_m3_s2["earth"])
+    return named("HarnessMock.MockParameters")(gain=scenario.mu_m3_s2["earth"])

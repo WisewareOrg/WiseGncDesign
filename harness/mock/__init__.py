@@ -1,8 +1,8 @@
-"""The harness's test mock: algorithms of its own and the GNC sub-topologies that fly them.
+"""The harness's test mock: one algorithm of its own, and one configuration flying it.
 
-Each folder but `gnc/` is laid out as an algorithm's is, its components' `.fpp` beside its
-notebook, `<folder>/<folder>.py`; `gnc/` holds a sub-topology per configuration. `MOCK` is its
-contract, which a test's `Mission` flies with `contract=MOCK`.
+`HarnessMock.fpp` and its notebook `mock.py` are laid out as an algorithm's are, and `gnc/` holds
+the configuration `MockFlight`. `MOCK` is the contract, which a test's `Mission` flies with
+`contract=MOCK`.
 """
 
 from pathlib import Path
@@ -13,7 +13,5 @@ __all__ = ["MOCK"]
 
 _HERE = Path(__file__).resolve().parent
 
-MOCK = Contract(
-    tuple(sorted(p for p in _HERE.glob("*/*.fpp") if p.parent.name != "gnc")), _HERE / "gnc"
-)
-"""The test mock's contract: every mock algorithm's `.fpp`, and the sub-topologies in `gnc/`."""
+MOCK = Contract((_HERE / "HarnessMock.fpp",), _HERE / "gnc")
+"""The test mock's contract: `HarnessMock.fpp`, and the configuration in `gnc/`."""

@@ -570,7 +570,7 @@ def test_a_flown_mission_is_judged_end_to_end(
 
     The flight's `flight.json` and run files come from the simulator's own writers, so a key or
     dataset the writer and the judge disagree on makes this fail. Four cases are the fewest that
-    show p = 0.8 at c = 0.5. The flight software is the harness's test mock `JudgedMock`, writing
+    show p = 0.8 at c = 0.5. The flight software is the harness's test mock `MockFlight`, writing
     the nav role's estimate channels with a fixed state, and each rung's x is set far above its
     error so the verdict rests on the agreement alone.
 
@@ -606,7 +606,7 @@ from harness.mock import MOCK
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", gnc="JudgedMock", build="python", scenarios=("TST901",),
+            vehicle="imu_spacecraft", gnc="MockFlight", build="python", scenarios=("TST901",),
             contract=MOCK,
         )
     )
@@ -615,7 +615,7 @@ globals().update(
     )
 
     fly_in_a_subprocess(project, "test_flights.py", "--full-monte-carlo").assert_outcomes(passed=4)
-    node = "test_flights/Test_imu_spacecraft/test_JudgedMock_python_alpha"
+    node = "test_flights/Test_imu_spacecraft/test_MockFlight_python_alpha"
     flown = session(project) / node
     assert sorted(path.name for path in flown.glob("run_*.h5")) == [
         f"run_000{case}.h5" for case in range(4)

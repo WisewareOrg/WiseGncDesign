@@ -1,4 +1,4 @@
-module BothMocks {
+module MockFlight {
 
   @ s, the base tick's period
   constant tickPeriod = 1.0
@@ -7,25 +7,19 @@ module BothMocks {
   constant mockDivider = 1
 
   instance rateGroupDriver: Svc.RateGroupDriver base id 0x6000
-
   instance mockRateGroup: Svc.PassiveRateGroup base id 0x6100
+  instance nav: HarnessMock.Mock base id 0x6200
 
-  instance first: HarnessMock.FirstMock base id 0x6200
-
-  instance second: HarnessMock.SecondMock base id 0x6300
-
-  @ Both test mocks, claiming SYS901 and SYS902
+  @ The test mock flown as the nav role, which the analyzers read
   topology Gnc {
 
     instance rateGroupDriver
     instance mockRateGroup
-    instance first
-    instance second
+    instance nav
 
     connections RateGroups {
       rateGroupDriver.CycleOut[0] -> mockRateGroup.CycleIn
-      mockRateGroup.RateGroupMemberOut[0] -> first.schedIn
-      mockRateGroup.RateGroupMemberOut[1] -> second.schedIn
+      mockRateGroup.RateGroupMemberOut[0] -> nav.schedIn
     }
 
     @ The base tick
