@@ -255,118 +255,117 @@ def test_rule(allowed_failures, n, p, c, expected):
     )
 
 
-def test_failures_within_the_allowance_pass(project: pytest.Pytester) -> None:
-    """One failure of ten is allowed and the rung passes; nothing was skipped.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), bad=(3,), flight=only("SRS901"))
-
-    judge(project).assert_outcomes(passed=1, skipped=2)
-
-    assert "| SRS901 | pass | 1/10/10 | 1 | 3 |" in cell_matrix(project)
-    assert "## Skipped folders" not in (session(project) / "report" / "matrix.md").read_text()
-
-
-def test_a_crash_counts_as_a_failed_case(project: pytest.Pytester) -> None:
-    """A crash and a bad run make two failures, over the allowance of one.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), bad=(3,), crashed=(5,), flight=only("SRS901"))
-
-    result = judge(project)
-
-    result.assert_outcomes(failed=1, skipped=2)
-    result.stdout.fnmatch_lines([f"*{NODEID}: 2 failed, 1 allowed*"])
-    assert "| SRS901 | fail | 2/10/10 | 1 | 3, 5 (crash) |" in cell_matrix(project)
-
-
-def test_failures_over_the_allowance_fail_name_the_cases_and_how_to_rerun_them(
+@pytest.mark.parametrize(
+    ("cases", "outcomes", "lines", "cell", "rollup"),
+    [
+        (
+            {"bad": (3,), "flight": only("SRS901")},
+            {"passed": 1, "skipped": 2},
+            [],
+            "| SRS901 | pass | 1/10/10 | 1 | 3 |",
+            None,
+        ),
+        (
+            {"bad": (3,), "crashed": (5,), "flight": only("SRS901")},
+            {"failed": 1, "skipped": 2},
+            [f"*{NODEID}: 2 failed, 1 allowed*"],
+            "| SRS901 | fail | 2/10/10 | 1 | 3, 5 (crash) |",
+            None,
+        ),
+        (
+            {"bad": (2, 7), "flight": only("SRS901")},
+            {"failed": 1, "skipped": 2},
+            [
+                f'*case 2: uv run --no-sync pytest "{NODEID}[[]2[]]"*--full-monte-carlo*',
+                f'*case 7: uv run --no-sync pytest "{NODEID}[[]7[]]"*--full-monte-carlo*',
+            ],
+            "| SRS901 | fail | 2/10/10 | 1 | 2, 7 |\n",
+            f"| SRS901 | [fail, 2 of 1 allowed]({NODE}/SRS901.png) | fail |",
+        ),
+        (
+            {"crashed": tuple(range(PLANNED)), "flight": only("SRS901")},
+            {"failed": 1, "skipped": 2},
+            [],
+            "| SRS901 | fail | 10/10/10 | 1 |",
+            None,
+        ),
+        (
+            {"missing": (4,), "planned": 5, "flight": only("SRS901")},
+            {"passed": 1, "skipped": 2},
+            [],
+            "| SRS901 | pass | 0/4/5 | 0 |",
+            None,
+        ),
+        (
+            {"bad": (2, 7), "kind": "velocity", "flight": only(KINDS["velocity"])},
+            {"failed": 1, "skipped": 2},
+            [f"*{NODEID}: 2 failed, 1 allowed*"],
+            None,
+            None,
+        ),
+        (
+            {"bad": (2, 7), "kind": "position", "flight": only(KINDS["position"])},
+            {"failed": 1, "skipped": 2},
+            [f"*{NODEID}: 2 failed, 1 allowed*"],
+            None,
+            None,
+        ),
+        (
+            {"bad": (2,), "nan": (5,), "kind": "velocity", "flight": only("SRS902")},
+            {"failed": 1, "skipped": 2},
+            [],
+            "| SRS902 | fail | 2/10/10 | 1 | 2, 5 |",
+            None,
+        ),
+    ],
+    ids=[
+        "within-allowance",
+        "crash",
+        "over-allowance",
+        "all-crashed",
+        "missing-case",
+        "velocity",
+        "position",
+        "nan",
+    ],
+)
+def test_a_rung_is_judged_on_the_runs_found(
     project: pytest.Pytester,
+    cases: dict,
+    outcomes: dict,
+    lines: list[str],
+    cell: str | None,
+    rollup: str | None,
 ) -> None:
-    """The rung fails with a rerun command per failing case, each carrying `--full-monte-carlo`.
+    """A rung passes within its allowance of failures, and fails over it, on the runs found.
+
+    One failure of ten is allowed. A crash, and a NaN error, count as failed cases; ten crashes
+    are ten failed cases, counted as found. A failing rung names a rerun command per failing case,
+    each carrying `--full-monte-carlo`. An interrupted campaign is judged on the runs found: n
+    counts runs and crash records only, so four of five planned cases within x show p = 0.8 at
+    c = 0.5. The velocity and position analyzers read their own datasets. Nothing is skipped.
 
     Args:
         project: the project.
+        cases: the folder's cases, as `write_cases` takes them.
+        outcomes: the judge's outcomes.
+        lines: lines the judge prints, as `fnmatch_lines` takes them.
+        cell: a row of the test's matrix, or None.
+        rollup: a row of the session's matrix, or None.
     """
-    write_cases(session(project), bad=(2, 7), flight=only("SRS901"))
+    write_cases(session(project), **cases)
 
     result = judge(project)
 
-    result.assert_outcomes(failed=1, skipped=2)
-    result.stdout.fnmatch_lines(
-        [
-            f'*case 2: uv run --no-sync pytest "{NODEID}[[]2[]]"*--full-monte-carlo*',
-            f'*case 7: uv run --no-sync pytest "{NODEID}[[]7[]]"*--full-monte-carlo*',
-        ]
-    )
-    assert "| SRS901 | fail | 2/10/10 | 1 | 2, 7 |\n" in cell_matrix(project)
-    rollup = (session(project) / "report" / "matrix.md").read_text()
-    assert f"| SRS901 | [fail, 2 of 1 allowed]({NODE}/SRS901.png) | fail |" in rollup
-
-
-def test_a_flight_whose_runs_all_crashed_fails(project: pytest.Pytester) -> None:
-    """Ten crashes are ten failed cases and are counted as ten found.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), crashed=tuple(range(PLANNED)), flight=only("SRS901"))
-
-    result = judge(project)
-
-    result.assert_outcomes(failed=1, skipped=2)
-    assert "| SRS901 | fail | 10/10/10 | 1 |" in cell_matrix(project)
-
-
-def test_a_missing_case_is_not_counted_and_the_found_cases_are_judged(
-    project: pytest.Pytester,
-) -> None:
-    """An interrupted campaign is judged on the runs found: n counts runs and crash records only.
-
-    Four of five planned cases finished, all within x, and four runs show p = 0.8 at c = 0.5.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), missing=(4,), planned=5, flight=only("SRS901"))
-
-    judge(project).assert_outcomes(passed=1, skipped=2)
-
-    assert "| SRS901 | pass | 0/4/5 | 0 |" in cell_matrix(project)
-
-
-@pytest.mark.parametrize("kind", ["velocity", "position"])
-def test_each_analyzer_judges_its_own_error(project: pytest.Pytester, kind: str) -> None:
-    """The velocity and position analyzers read their own datasets and fail runs over x.
-
-    Args:
-        project: the project.
-        kind: the analyzer, and the kind of error its runs carry.
-    """
-    write_cases(session(project), bad=(2, 7), kind=kind, flight=only(KINDS[kind]))
-
-    result = judge(project)
-
-    result.assert_outcomes(failed=1, skipped=2)
-    result.stdout.fnmatch_lines([f"*{NODEID}: 2 failed, 1 allowed*"])
-
-
-def test_a_nan_error_counts_as_a_failed_case(project: pytest.Pytester) -> None:
-    """A run whose error is NaN fails, so a diverged estimate cannot pass.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), bad=(2,), nan=(5,), kind="velocity", flight=only("SRS902"))
-
-    result = judge(project)
-
-    result.assert_outcomes(failed=1, skipped=2)
-    assert "| SRS902 | fail | 2/10/10 | 1 | 2, 5 |" in cell_matrix(project)
+    result.assert_outcomes(**outcomes)
+    if lines:
+        result.stdout.fnmatch_lines(lines)
+    if cell is not None:
+        assert cell in cell_matrix(project)
+    matrix = (session(project) / "report" / "matrix.md").read_text()
+    if rollup is not None:
+        assert rollup in matrix
+    assert "## Skipped folders" not in matrix
 
 
 def test_too_few_cases_found_leave_the_rung_not_judged(project: pytest.Pytester) -> None:
