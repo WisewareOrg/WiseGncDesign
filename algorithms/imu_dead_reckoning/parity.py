@@ -45,11 +45,9 @@ globals().update(mission_tests(*MISSIONS))
 # %% [markdown]
 # ## The two builds agree
 #
-# The cells below run in the notebook only: the judged rungs, then the builds' parity.
-# `harness/parity.py` compares them case for case: the telemetry each GNC component declares and the
-# log of commands sent to them, every value exact but floats, which agree to its `TOLERANCE`, each
-# rule stated with its reason in that module. A disagreement fails the cell, and with it the
-# notebook's test.
+# The cells below run in the notebook only: the judged rungs, then, with the F´ build, the builds'
+# parity. `harness/parity.py` compares this notebook's twins case for case, by the rules and reasons
+# its module docstring states. A disagreement fails the cell, and with it the notebook's test.
 
 
 # %% active="ipynb"
@@ -58,6 +56,10 @@ globals().update(mission_tests(*MISSIONS))
 # judge()
 
 # %% active="ipynb"
-# from harness.parity import session_parity
+# from pathlib import Path
 #
-# assert session_parity() >= len(PYTHON.scenarios)
+# from harness.parity import session_parity
+# from lab import built
+#
+# if built(PYTHON.gnc):
+#     assert session_parity(notebook=Path("parity.py")) == len(PYTHON.scenarios)

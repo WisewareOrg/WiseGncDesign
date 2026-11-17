@@ -130,10 +130,11 @@ Flier = Callable[..., Path]
 
 @pytest.fixture
 def fly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Flier:
-    """Writes flights into a session in `tmp_path`, under a tree root whose notebook exists.
+    """Writes flights into a session in `tmp_path`, under a tree root whose notebooks exist.
 
     Args:
-        tmp_path: holds the root, its notebook `notebook.py`, and the session `session/`.
+        tmp_path: holds the root, its notebooks `notebook.py` and `other.py`, and the session
+            `session/`.
         monkeypatch: points the requirements tree's root at `tmp_path`.
 
     Returns:
@@ -143,6 +144,7 @@ def fly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Flier:
     """
     monkeypatch.setattr(requirements_tree, "ROOT", tmp_path)
     (tmp_path / "notebook.py").touch()
+    (tmp_path / "other.py").touch()
 
     def flight(
         build: str,
@@ -519,20 +521,32 @@ def test_a_run_missing_a_written_channel_s_write_times_raises(twin: Twin) -> Non
         parity(GNC, twin.python, twin.fprime, contract=MOCK)
 
 
+OTHER = [{**PYTHON, "notebook": "other"}, {**FPRIME, "notebook": "other"}]
+"""A twin flown from the notebook `other`."""
+
 SESSIONS = [
-    ("twin", [PYTHON, FPRIME], False, 1, None),
-    ("twin-disagrees", [PYTHON, FPRIME], True, 1, FLOAT_TLM),
-    ("lone-python", [PYTHON], True, 0, None),
-    ("other-scenario", [PYTHON, {**FPRIME, "scenario": "TST902"}], True, 0, None),
-    ("other-vehicle", [PYTHON, {**FPRIME, "vehicle": "Test_other"}], True, 0, None),
-    ("other-configuration", [PYTHON, {**FPRIME, "gnc": "OtherFlight"}], True, 0, None),
-    ("skipped", [{**PYTHON, "notebook": "gone"}, {**FPRIME, "notebook": "gone"}], True, 0, None),
+    ("twin", [PYTHON, FPRIME], False, None, 1, None),
+    ("twin-disagrees", [PYTHON, FPRIME], True, None, 1, FLOAT_TLM),
+    ("lone-python", [PYTHON], True, None, 0, None),
+    ("other-scenario", [PYTHON, {**FPRIME, "scenario": "TST902"}], True, None, 0, None),
+    ("other-vehicle", [PYTHON, {**FPRIME, "vehicle": "Test_other"}], True, None, 0, None),
+    ("other-configuration", [PYTHON, {**FPRIME, "gnc": "OtherFlight"}], True, None, 0, None),
+    (
+        "skipped",
+        [{**PYTHON, "notebook": "gone"}, {**FPRIME, "notebook": "gone"}],
+        True,
+        None,
+        0,
+        None,
+    ),
+    ("other-notebook", [PYTHON, FPRIME, *OTHER], False, "notebook.py", 1, None),
 ]
-"""Each session's flights, whether its F´ flights disagree, the twins compared and the problem."""
+"""Each session's flights, whether its F´ flights disagree, the notebook it is scoped to, the twins
+compared and the problem."""
 
 
 @pytest.mark.parametrize(
-    ("flights", "disagree", "compared", "problem"),
+    ("flights", "disagree", "scope", "compared", "problem"),
     [s[1:] for s in SESSIONS],
     ids=[s[0] for s in SESSIONS],
 )
@@ -541,18 +555,21 @@ def test_session_parity_compares_each_twin_flight_json_pairs(
     capsys: pytest.CaptureFixture[str],
     flights: list[dict[str, str]],
     disagree: bool,
+    scope: str | None,
     compared: int,
     problem: str | None,
 ) -> None:
     """Twins are the flights of one vehicle, scenario and configuration on the two builds.
 
-    A flight with no twin, or in a folder the judge skips, is compared to nothing.
+    A flight with no twin, in a folder the judge skips, or from a notebook other than the one
+    the comparison is scoped to, is compared to nothing.
 
     Args:
         fly: writes a flight.
         capsys: captures the count printed.
         flights: each flight's arguments to `fly`; the notebook `gone` is absent from the root.
         disagree: whether each F´ flight's float channel is changed beyond tolerance.
+        scope: the notebook, under the root, the comparison is scoped to; None for the session.
         compared: the twins compared.
         problem: a fragment of the problem raised, or None when nothing is raised.
     """
@@ -561,12 +578,13 @@ def test_session_parity_compares_each_twin_flight_json_pairs(
         if disagree and flight["build"] == "fprime":
             _dataset(folder, FLOAT_TLM, _scaled(1e-11))
     session = requirements_tree.ROOT / "session"
+    notebook = None if scope is None else requirements_tree.ROOT / scope
 
     if problem is None:
-        assert session_parity(session, contract=MOCK) == compared
+        assert session_parity(session, notebook=notebook, contract=MOCK) == compared
     else:
         with pytest.raises(AssertionError) as raised:
-            session_parity(session, contract=MOCK)
+            session_parity(session, notebook=notebook, contract=MOCK)
         assert problem in str(raised.value)
         assert "Test_vehicle/test_MockFlight_python_TST901" in str(raised.value)
 

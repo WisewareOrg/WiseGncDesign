@@ -245,8 +245,13 @@ def parity(gnc: str, python: Path, fprime: Path, *, contract: Contract = CONTRAC
     return problems
 
 
-def session_parity(session: Path | None = None, *, contract: Contract = CONTRACT) -> int:
-    """Holds every twin in a session to parity, and prints how many twins it compared.
+def session_parity(
+    session: Path | None = None,
+    *,
+    notebook: Path | None = None,
+    contract: Contract = CONTRACT,
+) -> int:
+    """Holds every twin in a session, or one notebook's, to parity, and prints how many it compared.
 
     Twins are two folders under one `<notebook>/<Test_vehicle>/` whose `flight.json` agree on
     `scenario` and `fsw.gnc`, one with `fsw.build` `"python"` and one `"fprime"`. A folder the
@@ -254,6 +259,8 @@ def session_parity(session: Path | None = None, *, contract: Contract = CONTRACT
 
     Args:
         session: the session's directory; by default the active one, `current_session()`.
+        notebook: the notebook whose flights alone are compared, matched on each folder's recorded
+            test file under `requirements_tree.ROOT`; by default every notebook's.
         contract: the contract holding the flights' configurations, the repository's by default.
 
     Returns:
@@ -267,6 +274,9 @@ def session_parity(session: Path | None = None, *, contract: Contract = CONTRACT
     flights: dict[tuple[Path, str, str], dict[str, Path]] = {}
     for recorded in recorded_tests(session):
         if recorded.directory.relative_to(session).as_posix() in skipped:
+            continue
+        file = requirements_tree.ROOT / recorded.nodeid.split("::")[0]
+        if notebook is not None and file.resolve() != notebook.resolve():
             continue
         flight = json.loads((recorded.directory / "flight.json").read_text())
         key = (recorded.directory.parent, flight["scenario"], flight["fsw"]["gnc"])
