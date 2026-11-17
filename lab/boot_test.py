@@ -252,7 +252,7 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
         prm: the case's parameter file, copied to the path.
         parameter_ids: every parameter's ID, which boot holds valid.
         configuration: the copy's configuration, whose dictionary gives `FileNameStringSize`.
-        past: how many characters the path runs past the longest F´ holds.
+        past: how many bytes the path runs past the longest F´ holds.
         boots: whether the copy boots on it.
     """
     constants = json.loads(dictionary_path(configuration).read_text())["constants"]
@@ -263,7 +263,7 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
     if boots:
         fsw.boot(str(path), parameter_ids)
     else:
-        refusal = f" is {longest + past} characters, past F´'s limit of {longest} "
+        refusal = f" is {longest + past} bytes, past F´'s limit of {longest} "
         with pytest.raises(ValueError, match=refusal):
             fsw.boot(str(path), parameter_ids)
 

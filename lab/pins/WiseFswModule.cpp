@@ -57,7 +57,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
             const std::size_t longest = FileNameStringSize - 1;
             if (prm_path.size() > longest) {
                 throw py::value_error("the parameter file " + prm_path + " is " + std::to_string(prm_path.size()) +
-                                      " characters, past F´'s limit of " + std::to_string(longest) +
+                                      " bytes, past F´'s limit of " + std::to_string(longest) +
                                       " (FileNameStringSize less its terminator)");
             }
             g_booted = true;
