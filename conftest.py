@@ -223,7 +223,7 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
 
 
 @pytest.fixture(scope="session")
-def case_parameters(dictionary: Dictionary) -> tuple[Any, ...]:
+def case_parameters(dictionary: Dictionary) -> dict[str, Any]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
     The instances are those the deployment's dictionary holds, so the case skips without it. A
@@ -234,16 +234,16 @@ def case_parameters(dictionary: Dictionary) -> tuple[Any, ...]:
         dictionary: the configuration's dictionary, which names the instances.
 
     Returns:
-        Each instance's `<Name>Parameters` tuple.
+        Each instance's `<Name>Parameters` tuple, by its qualified name.
     """
     from fsw.codegen.deployment import contract_files
     from fsw.codegen.fpp_model import read
 
     model = read(contract_files())
-    return tuple(
-        _parameters(model, instance.component, lambda count: [0.0] * count)
+    return {
+        instance.name: _parameters(model, instance.component, lambda count: [0.0] * count)
         for instance in dictionary.algorithm_instances()
-    )
+    }
 
 
 def _parameters(model: Any, component: str, elements: Callable[[int], list[float]]) -> Any:
@@ -318,11 +318,11 @@ def algorithm_parameters() -> dict[str, Any]:
 
 
 @pytest.fixture
-def prm_record(case_parameters: tuple[Any, ...], tmp_path: Path) -> Path:
+def prm_record(case_parameters: dict[str, Any], tmp_path: Path) -> Path:
     """A case's parameter record, written as the ground writes it, in a case directory of its own.
 
     Args:
-        case_parameters: the case's parameters tuples.
+        case_parameters: each instance's parameters tuple, by its qualified name.
         tmp_path: the test's directory, which holds the case directory `case`.
 
     Returns:

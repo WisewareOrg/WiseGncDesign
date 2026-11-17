@@ -1,26 +1,35 @@
 """Missions: what a flight judges, what a mission refuses, and the record a flight leaves.
 
-Every test reads a requirements tree it writes in `tmp_path`, by pointing the tree root at it, so
-none depends on the repository's own tree. The tree holds two capabilities, four rungs and two
-scenarios:
+Every test but the F´ build's reads a requirements tree it writes in `tmp_path`, by pointing the
+tree root at it, so none depends on the repository's own tree; the F´ build's test flies the
+repository's configurations through the repository's tree. The tree holds two capabilities, four
+rungs and two scenarios:
 
     SYS901 <- SRS901, SRS902, SRS904      SYS902 <- SRS903
     TST901 links SRS901, SRS902, SRS903   TST902 links SRS902
+
+The missions fly the harness's test mock, `harness.mock.MOCK`, on the Python build: `FirstMockOnly`
+claims SYS901, `SecondMockOnly` SYS902 and `BothMocks` both.
 """
 
 import json
 import os
+import sys
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import h5py
 import pytest
 import yaml
+from wise_dynamics.basilisk.vehicles import VEHICLES
 
-from algorithms.imu_dead_reckoning import parameters
+from fsw.codegen.deployment import configuration_model
+from fsw.codegen.members import members
 from harness import requirements_tree
-from harness.mission import Mission, mission_tests, provides
+from harness.mission import Mission, _claims, mission_tests
+from harness.mock import MOCK
 
 VEHICLE = "imu_spacecraft"
 ALPHA = """\
@@ -91,27 +100,18 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def claiming(*capabilities: str, name: str = "build"):
-    """A fresh FSW builder claiming capabilities.
+def mission(gnc: str, scenarios: tuple[str, ...] = ("TST901",), **fields: Any) -> Mission:
+    """A mission flying a test mock configuration on the Python build.
 
     Args:
-        *capabilities: the SYS IDs it claims.
-        name: its function name.
+        gnc: the test mock's configuration.
+        scenarios: the TST IDs.
+        **fields: the mission's other fields.
 
     Returns:
-        The builder.
+        The mission.
     """
-
-    def fsw(scenario: object, prm_path: Path) -> None:
-        """Build nothing.
-
-        Args:
-            scenario: unused.
-            prm_path: unused.
-        """
-
-    fsw.__name__ = name
-    return provides(*capabilities)(fsw)
+    return Mission(VEHICLE, gnc, "python", scenarios, contract=MOCK, **fields)
 
 
 def test_the_tree_functions_read_the_default_root_when_called(tree: Path) -> None:
@@ -193,9 +193,7 @@ def test_a_mission_has_no_rung_filter_by_default(tree: Path) -> None:
     Args:
         tree: the tree.
     """
-    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901",), parameters=parameters)
-
-    assert mission.rungs is None
+    assert mission("FirstMockOnly").rungs is None
 
 
 def test_a_filter_rung_outside_the_scenarios_is_refused(tree: Path) -> None:
@@ -205,17 +203,17 @@ def test_a_filter_rung_outside_the_scenarios_is_refused(tree: Path) -> None:
         tree: the tree.
     """
     with pytest.raises(ValueError, match="SRS904"):
-        Mission(VEHICLE, claiming("SYS901"), ("TST901",), parameters=parameters, rungs=("SRS904",))
+        mission("FirstMockOnly", rungs=("SRS904",))
 
 
 def test_a_flight_with_no_rungs_is_refused(tree: Path) -> None:
-    """An FSW claiming SYS902 judges nothing in TST902, which links only SRS902 under SYS901.
+    """A configuration claiming SYS902 judges nothing in TST902, which links only SRS902.
 
     Args:
         tree: the tree.
     """
     with pytest.raises(ValueError, match="TST902"):
-        Mission(VEHICLE, claiming("SYS902"), ("TST902",), parameters=parameters)
+        mission("SecondMockOnly", ("TST902",))
 
 
 def test_a_filter_that_empties_one_scenarios_flight_is_refused_naming_it(tree: Path) -> None:
@@ -225,13 +223,7 @@ def test_a_filter_that_empties_one_scenarios_flight_is_refused_naming_it(tree: P
         tree: the tree.
     """
     with pytest.raises(ValueError, match="TST902"):
-        Mission(
-            VEHICLE,
-            claiming("SYS901"),
-            ("TST901", "TST902"),
-            parameters=parameters,
-            rungs=("SRS901",),
-        )
+        mission("FirstMockOnly", ("TST901", "TST902"), rungs=("SRS901",))
 
 
 def test_a_filter_answered_by_every_scenarios_flight_is_accepted(tree: Path) -> None:
@@ -240,21 +232,19 @@ def test_a_filter_answered_by_every_scenarios_flight_is_accepted(tree: Path) -> 
     Args:
         tree: the tree.
     """
-    mission = Mission(
-        VEHICLE, claiming("SYS901"), ("TST901", "TST902"), parameters=parameters, rungs=("SRS902",)
-    )
-
-    assert mission.rungs == ("SRS902",)
+    assert mission("FirstMockOnly", ("TST901", "TST902"), rungs=("SRS902",)).rungs == ("SRS902",)
 
 
-def test_an_fsw_claiming_nothing_one_scenario_links_is_refused_naming_it(tree: Path) -> None:
+def test_a_configuration_claiming_nothing_one_scenario_links_is_refused_naming_it(
+    tree: Path,
+) -> None:
     """SYS902 owns SRS903, which TST901 links but TST902 does not.
 
     Args:
         tree: the tree.
     """
     with pytest.raises(ValueError, match="TST902"):
-        Mission(VEHICLE, claiming("SYS902"), ("TST901", "TST902"), parameters=parameters)
+        mission("SecondMockOnly", ("TST901", "TST902"))
 
 
 @pytest.mark.parametrize(
@@ -273,26 +263,104 @@ def test_unknown_names_are_refused(tree: Path, changes: dict, unknown: str) -> N
         changes: the field replaced.
         unknown: the name it holds.
     """
-    fields = {
-        "vehicle": VEHICLE,
-        "fsw": claiming("SYS901"),
-        "scenarios": ("TST901",),
-        "parameters": parameters,
-    }
-
     with pytest.raises(ValueError, match=unknown):
-        Mission(**{**fields, **changes})
+        mission("FirstMockOnly").but(**changes)
 
 
-def test_two_missions_flying_the_same_flight_are_refused(tree: Path) -> None:
-    """The same vehicle, FSW and scenario cannot be flown twice, whatever each judges.
+@pytest.mark.parametrize(
+    ("changes", "named"),
+    [
+        ({"gnc": "NoSuchConfiguration"}, r"NoSuchConfiguration.*'BothMocks'.*'FirstMockOnly'"),
+        ({"build": "simulink"}, r"simulink.*'fprime'.*'python'"),
+        ({"build": "fprime"}, r"fprime.*harness/mock"),
+        ({"gnc": "Unclaimed"}, r"HarnessMock\.UnclaimedMock.*faulty_mock/UnclaimedMock\.fpp"),
+        ({"gnc": "Classless"}, r"harness\.mock\.faulty_mock\.faulty_mock.*ClasslessMock"),
+        ({"gnc": "Parameterless"}, r"harness\.mock\.faulty_mock\.faulty_mock\.parameters"),
+    ],
+)
+def test_each_lookup_that_fails_is_refused_naming_what_it_looked_for(
+    tree: Path, changes: dict, named: str
+) -> None:
+    """A configuration, build, claim, class or `parameters` not found is a ValueError naming it.
+
+    An unknown configuration names the contract's; an unknown build names both builds; the F´ build
+    of a contract other than the repository's names the contract; a member's component with no
+    `@ provides` names it and its file; a member's class missing from its notebook names the
+    notebook's module and the class; and a member with parameters and no `parameters` names the
+    function. A vehicle missing a role the configuration takes is refused by each build's tick,
+    naming the role, as `fsw/python/platform/frame_runner_test.py` and `lab/adapter_test.py` show.
+
+    Args:
+        tree: the tree.
+        changes: the field replaced.
+        named: what the refusal names, as a pattern.
+    """
+    with pytest.raises(ValueError, match=named):
+        mission("FirstMockOnly").but(**changes)
+
+
+def test_a_claim_the_tree_lacks_is_refused_naming_it_and_its_component(tree: Path) -> None:
+    """`FirstMock` claims SYS901, which this tree does not hold.
+
+    Args:
+        tree: the tree, SYS901 removed from it.
+    """
+    (tree / "docs" / "requirements" / "sys" / "SYS901.yml").unlink()
+
+    with pytest.raises(ValueError, match=r"SYS901.*HarnessMock\.FirstMock"):
+        mission("FirstMockOnly")
+
+
+def test_a_configuration_claims_the_union_of_its_members_claims(tree: Path) -> None:
+    """`BothMocks` judges SRS903, which only SYS902 owns, and SRS901, which only SYS901 owns.
 
     Args:
         tree: the tree.
     """
-    fsw = claiming("SYS901")
-    one = Mission(VEHICLE, fsw, ("TST901",), parameters=parameters, rungs=("SRS901",))
-    two = Mission(VEHICLE, fsw, ("TST901",), parameters=parameters, rungs=("SRS902",))
+    both = mission("BothMocks", rungs=("SRS901", "SRS903"))
+
+    assert both.rungs == ("SRS901", "SRS903")
+    with pytest.raises(ValueError, match="SRS903"):
+        mission("FirstMockOnly", rungs=("SRS901", "SRS903"))
+
+
+def test_an_fprime_mission_is_built_without_its_configuration_s_extension(
+    configuration: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No lookup of the F´ build's reaches the extension; only a case's `lab.Adapter` needs it.
+
+    Each configuration flies the repository's tree through the first scenario that judges a rung
+    under its claims, with its extension made absent.
+
+    Args:
+        configuration: the configuration.
+        monkeypatch: makes the configuration's extension absent.
+    """
+    monkeypatch.setitem(sys.modules, f"lab._wise_fsw_{configuration}", None)
+    model = configuration_model(configuration)
+    claims = {
+        uid
+        for group in members(model, configuration).values()
+        for instance in group
+        for uid in _claims(model, model.components[instance.component])
+    }
+    scenario = next(
+        uid for uid in requirements_tree.items("TST") if requirements_tree.flight_rungs(uid, claims)
+    )
+
+    flown = Mission(sorted(VEHICLES)[0], configuration, "fprime", (scenario,))
+
+    assert (flown.gnc, flown.build) == (configuration, "fprime")
+
+
+def test_two_missions_flying_the_same_flight_are_refused(tree: Path) -> None:
+    """A vehicle, configuration, build and scenario cannot be flown twice, whatever each judges.
+
+    Args:
+        tree: the tree.
+    """
+    one = mission("FirstMockOnly", rungs=("SRS901",))
+    two = mission("FirstMockOnly", rungs=("SRS902",))
 
     with pytest.raises(ValueError, match="TST901"):
         mission_tests(one, two)
@@ -322,8 +390,8 @@ def test_flight_json_survives_a_case_that_crashes_before_it_flies(
     """A case that crashes setting up `sim_scenario` still leaves its flight's facts.
 
     Two missions fly one vehicle: one judges every rung, one a filter. Each flight's folder holds
-    `flight.json` with the scenario, the FSW builder's name, the sorted capabilities and the filter
-    or null, and no `build`, since no host was built.
+    `flight.json` with the scenario, the configuration and build flown, the sorted capabilities and
+    the filter or null, and no `build`, since no host was built.
 
     Args:
         project: the project.
@@ -347,28 +415,18 @@ def test_flight_json_survives_a_case_that_crashes_before_it_flies(
     monkeypatch.setattr(SCENARIOS["leo500"], "disperse", boom)
     project.makepyfile(
         test_flights="""
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS902", "SYS901")
-def everything(scenario, prm_path):
-    raise AssertionError("never built")
-
-
-@provides("SYS901")
-def narrowed(scenario, prm_path):
-    raise AssertionError("never built")
-
+from harness.mission import Mission, mission_tests
+from harness.mock import MOCK
 
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=everything, scenarios=("TST901",), parameters=parameters
+            vehicle="imu_spacecraft", gnc="BothMocks", build="python", scenarios=("TST901",),
+            contract=MOCK,
         ),
         Mission(
-            vehicle="imu_spacecraft", fsw=narrowed, scenarios=("TST901",), rungs=("SRS902",),
-            parameters=parameters,
+            vehicle="imu_spacecraft", gnc="FirstMockOnly", build="python", scenarios=("TST901",),
+            rungs=("SRS902",), contract=MOCK,
         ),
     )
 )
@@ -381,22 +439,18 @@ globals().update(
     result.stdout.fnmatch_lines(["*dispersion failed*"])
 
     found = {path.parent.name: path for path in project.path.rglob("flight.json")}
-    assert sorted(found) == ["test_everything_alpha", "test_narrowed_alpha"]
-    assert found["test_everything_alpha"].parts[-5:-1] == (
-        "scratch",
-        "test_flights",
-        "Test_imu_spacecraft",
-        "test_everything_alpha",
-    )
-    assert json.loads(found["test_everything_alpha"].read_text()) == {
+    both, first = "test_BothMocks_python_alpha", "test_FirstMockOnly_python_alpha"
+    assert sorted(found) == [both, first]
+    assert found[both].parts[-5:-1] == ("scratch", "test_flights", "Test_imu_spacecraft", both)
+    assert json.loads(found[both].read_text()) == {
         "scenario": "TST901",
-        "fsw": "everything",
+        "fsw": {"gnc": "BothMocks", "build": "python"},
         "capabilities": ["SYS901", "SYS902"],
         "rungs": None,
     }
-    assert json.loads(found["test_narrowed_alpha"].read_text()) == {
+    assert json.loads(found[first].read_text()) == {
         "scenario": "TST901",
-        "fsw": "narrowed",
+        "fsw": {"gnc": "FirstMockOnly", "build": "python"},
         "capabilities": ["SYS901"],
         "rungs": ["SRS902"],
     }
@@ -412,15 +466,9 @@ def test_a_failing_check_fails_the_case_with_its_messages_and_the_run_file_is_pl
         fly_in_a_subprocess: runs the project in a subprocess.
     """
     project.makepyfile(
-        test_flights=STUB_BUILD
-        + """
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS901")
-def stub_fsw(scenario, prm_path):
-    return StubBuild()
+        test_flights="""
+from harness.mission import Mission, mission_tests
+from harness.mock import MOCK
 
 
 def check(path):
@@ -430,8 +478,8 @@ def check(path):
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), check=check,
-            parameters=parameters,
+            vehicle="imu_spacecraft", gnc="FirstMockOnly", build="python", scenarios=("TST901",),
+            check=check, contract=MOCK,
         )
     )
 )
@@ -459,17 +507,11 @@ def test_a_check_is_given_the_cases_run_file_and_a_passing_check_passes(
         fly_in_a_subprocess: runs the project in a subprocess.
     """
     project.makepyfile(
-        test_flights=STUB_BUILD
-        + """
+        test_flights="""
 import h5py
 
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS901")
-def stub_fsw(scenario, prm_path):
-    return StubBuild()
+from harness.mission import Mission, mission_tests
+from harness.mock import MOCK
 
 
 def check(path):
@@ -482,8 +524,8 @@ def check(path):
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), check=check,
-            parameters=parameters,
+            vehicle="imu_spacecraft", gnc="FirstMockOnly", build="python", scenarios=("TST901",),
+            check=check, contract=MOCK,
         )
     )
 )
@@ -506,8 +548,8 @@ def test_a_notebook_can_fly_a_scenario_it_defines_before_its_missions(
         test_self="""
 import pytest
 
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
+from harness.mission import Mission, mission_tests
+from harness.mock import MOCK
 
 
 @pytest.mark.sim_scenario("leo500")
@@ -517,15 +559,11 @@ def alpha():
     pass
 
 
-@provides("SYS901")
-def fsw(scenario, prm_path):
-    raise AssertionError("never built")
-
-
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=fsw, scenarios=("TST901",), parameters=parameters
+            vehicle="imu_spacecraft", gnc="FirstMockOnly", build="python", scenarios=("TST901",),
+            contract=MOCK,
         )
     )
 )
@@ -534,7 +572,7 @@ globals().update(
 
     result = project.runpytest_inprocess("--collect-only", "-q", "-p", "no:cacheprovider")
 
-    result.stdout.fnmatch_lines(["*Test_imu_spacecraft::test_fsw_alpha*"])
+    result.stdout.fnmatch_lines(["*Test_imu_spacecraft::test_FirstMockOnly_python_alpha*"])
 
 
 def test_a_scenario_file_that_raised_on_import_is_imported_afresh_once_fixed(
@@ -548,15 +586,15 @@ def test_a_scenario_file_that_raised_on_import_is_imported_afresh_once_fixed(
     scenarios = tree / "scenarios"
     scenarios.mkdir()
     (scenarios / "alpha.py").write_text('raise RuntimeError("alpha is broken")\n')
-    mission = Mission(VEHICLE, claiming("SYS901"), ("TST901",), parameters=parameters)
+    flown = mission("FirstMockOnly")
 
     with pytest.raises(RuntimeError, match="alpha is broken"):
-        mission_tests(mission)
+        mission_tests(flown)
 
     (scenarios / "alpha.py").write_text(ALPHA.format(duration=1.0, body="pass"))
-    [vehicle_class] = mission_tests(mission).values()
+    [vehicle_class] = mission_tests(flown).values()
     assert [name for name in vars(vehicle_class) if name.startswith("test_")] == [
-        "test_build_alpha"
+        "test_FirstMockOnly_python_alpha"
     ]
 
 
@@ -571,19 +609,14 @@ def test_flying_a_scenario_before_defining_it_is_an_error(project: pytest.Pytest
         test_self="""
 import pytest
 
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS901")
-def fsw(scenario, prm_path):
-    raise AssertionError("never built")
-
+from harness.mission import Mission, mission_tests
+from harness.mock import MOCK
 
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=fsw, scenarios=("TST901",), parameters=parameters
+            vehicle="imu_spacecraft", gnc="FirstMockOnly", build="python", scenarios=("TST901",),
+            contract=MOCK,
         )
     )
 )
@@ -602,67 +635,37 @@ def alpha():
     result.stdout.fnmatch_lines(["*ValueError*alpha*"])
 
 
-STUB_BUILD = """
-class StubBuild:
-    period_s = 1.0
-    build = {"host": "stub", "revision": "r1"}
-    dictionary = None
-
-    def boot(self):
-        pass
-
-    def tick(self, t_ns, messages_by_role):
-        return {}
-
-    def uplink(self, name, args, context):
-        raise AssertionError("no command is sent")
-
-    def responses(self):
-        return []
-
-    def telemetry(self):
-        return []
-
-    def values(self, name, raws):
-        raise AssertionError("nothing is written")
-"""
-
-
-STUB_FLIGHT = """
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS901")
-def stub_fsw(scenario, prm_path):
-    return StubBuild()
-
+FLIGHT = """
+from harness.mission import Mission, mission_tests
+from harness.mock import MOCK
 
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), parameters=parameters
+            vehicle="imu_spacecraft", gnc="FirstMockOnly", build="python", scenarios=("TST901",),
+            contract=MOCK,
         )
     )
 )
 """
+"""A notebook flying `FirstMockOnly` on the Python build through TST901."""
 
 
 def test_a_flight_runs_the_procedure_on_the_build_s_radio_edge_for_the_scenario_s_duration(
     project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
-    """A build that is neither built-in type, hosted by `FswHost`, flies through the ground.
+    """The configuration's build, hosted by `FswHost`, flies through the ground on its radio edge.
 
-    The stub build presents a radio edge and writes nothing. The run file holds the truth and an
-    empty command log, no telemetry, and ends at the TST definition's `sim_duration_s`, so the
-    harness bound the stopping rule. `flight.json` names the builder and the stub's `build`.
+    The test mock writes nothing. The run file holds the truth and an empty command log, no
+    telemetry, and ends at the TST definition's `sim_duration_s`, so the harness bound the stopping
+    rule. `flight.json` names the configuration and build flown, and the build's identity.
 
     Args:
         project: the project.
         fly_in_a_subprocess: runs the project in a subprocess.
     """
     (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=20.0, body="pass"))
-    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
+    project.makepyfile(test_flights=FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
@@ -678,52 +681,31 @@ def test_a_flight_runs_the_procedure_on_the_build_s_radio_edge_for_the_scenario_
         "scenario": "TST901",
         "capabilities": ["SYS901"],
         "rungs": None,
-        "fsw": "stub_fsw",
-        "build": {"host": "stub", "revision": "r1"},
+        "fsw": {"gnc": "FirstMockOnly", "build": "python"},
+        "build": {"host": "fsw.python.FrameRunner"},
     }
 
 
-RECORDED_FLIGHT = """
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
-
-
-@provides("SYS901")
-def recorded(scenario, prm_path):
-    assert prm_path.name == "run_0000.prm.json"
-    assert prm_path.is_file()
-    return StubBuild()
-
-
-globals().update(
-    mission_tests(
-        Mission(
-            vehicle="imu_spacecraft", fsw=recorded, scenarios=("TST901",), parameters=parameters
-        )
-    )
-)
-"""
-
-
-def test_a_case_s_parameter_record_is_written_beside_its_run_file_before_its_fsw_is_built(
+def test_a_case_s_parameter_record_is_written_beside_its_run_file_from_each_member(
     project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
 ) -> None:
-    """The builder is given the record's path, already written from the mission's `parameters`.
+    """Each member's tuple, from its notebook's `parameters`, under its qualified instance.
+
+    `FirstMock`'s gain is the case's scenario's Earth `mu`; `SecondMock` has no parameter and no
+    `parameters`, so its entry is empty.
 
     Args:
         project: the project.
         fly_in_a_subprocess: runs the project in a subprocess.
     """
-    project.makepyfile(test_flights=STUB_BUILD + RECORDED_FLIGHT)
+    project.makepyfile(test_flights=FLIGHT.replace("FirstMockOnly", "BothMocks"))
 
     result = fly_in_a_subprocess(project)
 
     result.assert_outcomes(passed=1)
     [run] = project.path.rglob("run_0000.h5")
     record = json.loads(run.with_suffix(".prm.json").read_text())
-    assert list(record) == ["ImuDeadReckoning.nav"]
-    assert record["ImuDeadReckoning.nav"]["mu"] == 3.986004360e14
-    assert len(record["ImuDeadReckoning.nav"]["dcm_PB"]) == 3
+    assert record == {"BothMocks.first": {"gain": 3.986004360e14}, "BothMocks.second": {}}
 
 
 def test_the_definition_s_ground_period_mark_sets_the_ground_s_period(
@@ -742,7 +724,7 @@ def test_the_definition_s_ground_period_mark_sets_the_ground_s_period(
             "@pytest.mark.sim_runs(1)\n@pytest.mark.sim_ground_period_s(10.0)",
         )
     )
-    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
+    project.makepyfile(test_flights=FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
@@ -764,7 +746,7 @@ def test_a_procedure_s_exception_fails_the_case_as_itself(
     (project.path / "scenarios" / "alpha.py").write_text(
         ALPHA.format(duration=20.0, body="await ground.until(lambda: False, timeout_s=3.0)")
     )
-    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
+    project.makepyfile(test_flights=FLIGHT)
 
     monkeypatch.setenv("COLUMNS", "200")
     result = fly_in_a_subprocess(project)
@@ -791,7 +773,7 @@ def test_a_procedure_still_waiting_when_the_flight_ends_fails_the_case_naming_it
     (project.path / "scenarios" / "alpha.py").write_text(
         ALPHA.format(duration=20.0, body="await ground.sleep(100.0)")
     )
-    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
+    project.makepyfile(test_flights=FLIGHT)
     monkeypatch.setenv("COLUMNS", "200")
 
     result = fly_in_a_subprocess(project)
@@ -817,7 +799,7 @@ def test_a_procedure_that_forgets_an_await_fails_the_case(
     (project.path / "scenarios" / "alpha.py").write_text(
         ALPHA.format(duration=3.0, body="ground.sleep(1.0)")
     )
-    project.makepyfile(test_flights=STUB_BUILD + STUB_FLIGHT)
+    project.makepyfile(test_flights=FLIGHT)
 
     result = fly_in_a_subprocess(project)
 
@@ -830,39 +812,19 @@ def test_an_exception_in_the_flight_software_fails_the_case_as_itself(
     fly_in_a_subprocess: Callable[..., pytest.RunResult],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A bug in a build's `tick` fails the case with that exception, not Basilisk's.
+    """A bug in an algorithm's step fails the case with that exception, not Basilisk's.
+
+    The procedure commands `FirstMock` to fail, and its next step raises.
 
     Args:
         project: the project.
         fly_in_a_subprocess: runs the project in a subprocess.
         monkeypatch: widens the subprocess's summary line to hold the exception.
     """
-    project.makepyfile(
-        test_flights=STUB_BUILD
-        + """
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
-
-
-class Broken(StubBuild):
-    def tick(self, t_ns, messages_by_role):
-        raise ZeroDivisionError("the tick's own bug")
-
-
-@provides("SYS901")
-def mock(scenario, prm_path):
-    return Broken()
-
-
-globals().update(
-    mission_tests(
-        Mission(
-            vehicle="imu_spacecraft", fsw=mock, scenarios=("TST901",), parameters=parameters
-        )
+    (project.path / "scenarios" / "alpha.py").write_text(
+        ALPHA.format(duration=20.0, body='await ground.send("first.fail")')
     )
-)
-"""
-    )
+    project.makepyfile(test_flights=FLIGHT)
 
     monkeypatch.setenv("COLUMNS", "200")
     result = fly_in_a_subprocess(project)
@@ -872,58 +834,56 @@ globals().update(
 
 
 def test_a_later_cases_base_write_keeps_the_build_an_earlier_case_merged(
-    project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
+    project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Case 0 builds the stub build; case 1's builder raises, and `flight.json` still has `build`.
+    """A case that crashes in setup after its base write leaves the `build` already recorded.
 
-    Case 1's fixture writes the flight's base facts before its builder raises, so the base write
-    must merge into the file rather than replace it.
+    `flight.json` holds the `build` an earlier case merged. This case's fixture writes the flight's
+    base facts, then its scenario fails to disperse, so the base write must merge into the file
+    rather than replace it.
 
     Args:
         project: the project.
-        fly_in_a_subprocess: runs the project in a subprocess.
+        monkeypatch: makes the scenario's dispersion fail.
     """
-    (project.path / "scenarios" / "alpha.py").write_text(
-        ALPHA.format(duration=1.0, body="pass").replace("sim_runs(1)", "sim_runs(2)")
+    from wise_dynamics.basilisk.scenarios import SCENARIOS
+
+    def boom(self: object, *args: object, **kwargs: object) -> None:
+        """Fail as a dispersion that cannot be drawn.
+
+        Args:
+            self: the scenario.
+            *args: unused.
+            **kwargs: unused.
+
+        Raises:
+            RuntimeError: always.
+        """
+        raise RuntimeError("dispersion failed")
+
+    monkeypatch.setattr(SCENARIOS["leo500"], "disperse", boom)
+    flight = project.path.joinpath(
+        "monte_carlo",
+        "scratch",
+        "test_flights",
+        "Test_imu_spacecraft",
+        "test_FirstMockOnly_python_alpha",
+        "flight.json",
     )
-    project.makepyfile(
-        test_flights=STUB_BUILD
-        + """
-from algorithms.imu_dead_reckoning import parameters
-from harness.mission import Mission, mission_tests, provides
+    flight.parent.mkdir(parents=True)
+    flight.write_text(json.dumps({"build": {"host": "fsw.python.FrameRunner"}}))
+    project.makepyfile(test_flights=FLIGHT)
 
-BUILT = []
+    result = project.runpytest_inprocess("-p", "no:cacheprovider")
 
-
-@provides("SYS901")
-def stub_fsw(scenario, prm_path):
-    BUILT.append(scenario)
-    if len(BUILT) > 1:
-        raise RuntimeError("the second case cannot build its host")
-    return StubBuild()
-
-
-globals().update(
-    mission_tests(
-        Mission(
-            vehicle="imu_spacecraft", fsw=stub_fsw, scenarios=("TST901",), parameters=parameters
-        )
-    )
-)
-"""
-    )
-
-    result = fly_in_a_subprocess(project)
-
-    result.assert_outcomes(passed=1, failed=1)
-    result.stdout.fnmatch_lines(["*the second case cannot build its host*"])
-    [flight] = project.path.rglob("flight.json")
+    result.assert_outcomes(errors=1)
+    result.stdout.fnmatch_lines(["*dispersion failed*"])
     assert json.loads(flight.read_text()) == {
         "scenario": "TST901",
         "capabilities": ["SYS901"],
         "rungs": None,
-        "fsw": "stub_fsw",
-        "build": {"host": "stub", "revision": "r1"},
+        "fsw": {"gnc": "FirstMockOnly", "build": "python"},
+        "build": {"host": "fsw.python.FrameRunner"},
     }
 
 

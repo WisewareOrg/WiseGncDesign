@@ -26,8 +26,6 @@ BAD = 1.5e-3
 PLANNED = 10
 KINDS = {"attitude": "SRS901", "velocity": "SRS902", "position": "SRS903"}
 
-BODY_ECI = Path(__file__).parents[1] / "fsw" / "fpp" / "interfaces" / "Nav" / "BodyEci.fppi"
-"""nav's estimate channels, which a mock flight software includes to be judged."""
 NODE = "missions/nb/Test_vehicle/test_fsw_alpha"
 NODEID = "missions/nb.py::Test_vehicle::test_fsw_alpha"
 ALL = {"scenario": "TST901", "capabilities": ["SYS901"], "rungs": None}
@@ -572,9 +570,9 @@ def test_a_flown_mission_is_judged_end_to_end(
 
     The flight's `flight.json` and run files come from the simulator's own writers, so a key or
     dataset the writer and the judge disagree on makes this fail. Four cases are the fewest that
-    show p = 0.8 at c = 0.5. The flight software is a mock writing nav's estimate channels with a
-    fixed state, and each rung's x is set far above its error so the verdict rests on the
-    agreement alone.
+    show p = 0.8 at c = 0.5. The flight software is the harness's test mock `JudgedMock`, writing
+    the nav role's estimate channels with a fixed state, and each rung's x is set far above its
+    error so the verdict rests on the agreement alone.
 
     Args:
         project: the project.
@@ -600,69 +598,16 @@ def test_a_flown_mission_is_judged_end_to_end(
         "async def alpha(ground) -> None:\n"
         "    pass\n"
     )
-    (root / "Mock.fpp").write_text(
-        "module Mock {\n"
-        "  passive component Mock {\n"
-        f'    include "{BODY_ECI}"\n'
-        "    time get port timeCaller\n"
-        "    telemetry port tlmOut\n"
-        "  }\n"
-        "}\n"
-    )
     project.makepyfile(
         test_flights="""
-from pathlib import Path
-
-from algorithms.imu_dead_reckoning import parameters
-from fsw.codegen.fpp_model import Instance
-from ground.dictionary import Dictionary
-from harness.mission import Mission, mission_tests, provides
-
-
-class Mock:
-    period_s = 1.0
-    build = {"host": "mock"}
-
-    def __init__(self, dictionary):
-        self.dictionary = dictionary
-        self._log = []
-
-    def boot(self):
-        pass
-
-    def tick(self, t_ns, messages_by_role):
-        for channel, value in (
-            ("bodyEciPos", [7.0e6, 0.0, 0.0]),
-            ("bodyEciVel", [0.0, 7.5e3, 0.0]),
-            ("bodyEciAttitude", [1.0, 0.0, 0.0, 0.0]),
-        ):
-            self._log.append((f"nav.{channel}", t_ns, value))
-        return {}
-
-    def uplink(self, name, args, context):
-        raise AssertionError("no command is sent")
-
-    def responses(self):
-        return []
-
-    def telemetry(self):
-        drained, self._log = self._log, []
-        return drained
-
-    def values(self, name, raws):
-        return self.dictionary.channel(name).pack_many(raws)
-
-
-@provides("SYS901")
-def reckoner(scenario, prm_path):
-    model = [Path(__file__).with_name("Mock.fpp")]
-    return Mock(Dictionary.from_component(model, Instance("Mock.nav", "Mock.Mock", 0x1000)))
-
+from harness.mission import Mission, mission_tests
+from harness.mock import MOCK
 
 globals().update(
     mission_tests(
         Mission(
-            vehicle="imu_spacecraft", fsw=reckoner, scenarios=("TST901",), parameters=parameters
+            vehicle="imu_spacecraft", gnc="JudgedMock", build="python", scenarios=("TST901",),
+            contract=MOCK,
         )
     )
 )
@@ -670,7 +615,7 @@ globals().update(
     )
 
     fly_in_a_subprocess(project, "test_flights.py", "--full-monte-carlo").assert_outcomes(passed=4)
-    node = "test_flights/Test_imu_spacecraft/test_reckoner_alpha"
+    node = "test_flights/Test_imu_spacecraft/test_JudgedMock_python_alpha"
     flown = session(project) / node
     assert sorted(path.name for path in flown.glob("run_*.h5")) == [
         f"run_000{case}.h5" for case in range(4)

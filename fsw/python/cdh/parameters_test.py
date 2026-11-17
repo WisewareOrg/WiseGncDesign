@@ -11,8 +11,19 @@ from typing import Any
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import gnc_instance
 from fsw.python.cdh import parameters
+
+
+def _instance(component: str) -> str:
+    """A qualified instance name for a component's tuple, of a mock configuration.
+
+    Args:
+        component: the component's qualified name.
+
+    Returns:
+        `MockConfiguration.<Name>`.
+    """
+    return f"MockConfiguration.{component.rsplit('.', 1)[-1]}"
 
 
 def _record(directory: Path, entries: dict) -> Path:
@@ -52,11 +63,11 @@ def test_each_instance_s_parameters_come_back_as_its_tuple(
         algorithm_parameters: each algorithm component's tuple.
     """
     assert algorithm_parameters
-    entries = {gnc_instance(c).name: _values(t) for c, t in algorithm_parameters.items()}
+    entries = {_instance(c): _values(t) for c, t in algorithm_parameters.items()}
     record = _record(tmp_path, entries)
 
     for component, expected in algorithm_parameters.items():
-        read = parameters.read(record, type(expected), gnc_instance(component).name)
+        read = parameters.read(record, type(expected), _instance(component))
 
         assert type(read) is type(expected)
         for name, value in expected._asdict().items():
@@ -81,10 +92,10 @@ def test_a_parameter_missing_from_the_record_raises_naming_it(
             continue
         missing = sorted(values)[0]
         del values[missing]
-        record = _record(tmp_path, {gnc_instance(component).name: values})
+        record = _record(tmp_path, {_instance(component): values})
 
         with pytest.raises(TypeError, match=re.escape(missing)):
-            parameters.read(record, type(tuple_), gnc_instance(component).name)
+            parameters.read(record, type(tuple_), _instance(component))
 
 
 def test_a_parameter_the_component_lacks_raises_naming_it(
@@ -98,10 +109,10 @@ def test_a_parameter_the_component_lacks_raises_naming_it(
     """
     for component, tuple_ in algorithm_parameters.items():
         values = {**_values(tuple_), "notAParameter": 1.0}
-        record = _record(tmp_path, {gnc_instance(component).name: values})
+        record = _record(tmp_path, {_instance(component): values})
 
         with pytest.raises(TypeError, match="notAParameter"):
-            parameters.read(record, type(tuple_), gnc_instance(component).name)
+            parameters.read(record, type(tuple_), _instance(component))
 
 
 def test_a_record_without_the_instance_raises_naming_it(
@@ -114,8 +125,8 @@ def test_a_record_without_the_instance_raises_naming_it(
         algorithm_parameters: each algorithm component's tuple.
     """
     for component, tuple_ in algorithm_parameters.items():
-        instance = gnc_instance(component).name
+        instance = _instance(component)
         record = _record(tmp_path, {f"Other.{instance}": _values(tuple_)})
 
         with pytest.raises(KeyError, match=re.escape(f"no parameters for {instance}")):
-            parameters.read(record, type(tuple_), gnc_instance(component).name)
+            parameters.read(record, type(tuple_), _instance(component))

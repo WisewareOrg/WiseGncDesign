@@ -9,43 +9,36 @@ Why is in ADR 0004 rev 2.
 import contextlib
 import io
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from fprime_gds.common.tools.params import convert_json
 
-from fsw.codegen.deployment import gnc_instance
-
 __all__ = ["dat", "write"]
 
 
-def write(parameters: Sequence[Any], path: Path) -> Path:
-    """Writes components' parameters as the case's record.
+def write(parameters: Mapping[str, Any], path: Path) -> Path:
+    """Writes the algorithm instances' parameters as the case's record.
 
-    Each tuple is keyed by the qualified name of the one instance of its component in the GNC
-    sub-topologies, and every field of it is written, an array as nested lists.
+    Every field of each tuple is written under its instance, an array as nested lists.
 
     Args:
-        parameters: each component's `<Name>Parameters` tuple.
+        parameters: each algorithm instance's `<Name>Parameters` tuple, by its qualified name,
+            `<configuration>.<instance>`.
         path: the record's path.
 
     Returns:
         `path`.
-
-    Raises:
-        ValueError: two tuples are of one component's instance, naming it.
     """
-    record = {}
-    for tuple_ in parameters:
-        instance = gnc_instance(type(tuple_).component).name
-        if instance in record:
-            raise ValueError(f"two parameters tuples are of {instance}")
-        record[instance] = {
+    record = {
+        instance: {
             name: value.tolist() if isinstance(value, np.ndarray) else value
             for name, value in tuple_._asdict().items()
         }
+        for instance, tuple_ in parameters.items()
+    }
     path.write_text(json.dumps(record))
     return path
 

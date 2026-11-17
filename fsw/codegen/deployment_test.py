@@ -12,11 +12,10 @@ from fsw.codegen.deployment import (
     configurations,
     contract_files,
     fpp_files,
-    gnc_instance,
     gnc_instances,
     tick_period,
 )
-from fsw.codegen.fpp_model import Instance, read
+from fsw.codegen.fpp_model import read
 
 _REPOSITORY = Path(__file__).resolve().parents[2]
 
@@ -69,34 +68,6 @@ def test_the_configurations_are_the_gnc_sub_topologies_sorted_by_name():
     for configuration in found:
         assert (_REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp").is_file()
     assert {instance.name.split(".")[0] for instance in gnc_instances()} == set(found)
-
-
-def test_a_component_s_gnc_instance_is_its_one_instance_in_the_gnc_sub_topologies():
-    """Nav is found qualified by its sub-topology; a deployment's own instance is in none."""
-    assert gnc_instance("Gnc.ImuDeadReckoner") == Instance(
-        "ImuDeadReckoning.nav", "Gnc.ImuDeadReckoner", 0x1000
-    )
-    with pytest.raises(ValueError, match=r"Svc\.PrmDb is instanced 0 times in fsw/fpp/gnc"):
-        gnc_instance("Svc.PrmDb")
-
-
-def test_a_component_instanced_twice_is_refused_naming_both_instances(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """Two GNC instances of one component leave no one key; both are named.
-
-    Args:
-        monkeypatch: gives the lookup a second instance of nav's component.
-    """
-    nav = gnc_instance("Gnc.ImuDeadReckoner")
-    twice = (nav, nav._replace(name="Other.nav", base_id=0x2000))
-    monkeypatch.setattr("fsw.codegen.deployment.gnc_instances", lambda: twice)
-
-    with pytest.raises(
-        ValueError,
-        match=r"instanced 2 times in fsw/fpp/gnc: \['ImuDeadReckoning\.nav', 'Other\.nav'\]",
-    ):
-        gnc_instance("Gnc.ImuDeadReckoner")
 
 
 def test_a_configuration_s_base_tick_period_is_its_fpp_constant():
