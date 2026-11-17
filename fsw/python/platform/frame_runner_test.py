@@ -1,8 +1,11 @@
-"""The Python build's frame runner, on a mock GNC sub-topology of two mock algorithms.
+"""The Python build's frame runner, on mock GNC sub-topologies of mock algorithms.
 
 The mock's FPP, in `mock/`, is a contract of its own: a source, run every tick, whose sample feeds
-a sink, run every second tick, and a command on the source. The mock algorithms are written here,
-named as their FPP components; they log what they are given and write what each test needs.
+a sink, run every second tick, and a command on the source. A second mock, rendered from the
+contract into a temporary directory, takes every sensor role the contract declares into one sink,
+so a tick's messages are read and converted on the runner's own path. The mock algorithms are
+written here, named as their FPP components; they log what they are given and write what each test
+needs.
 """
 
 import json
@@ -12,8 +15,9 @@ from typing import Any
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import Contract
+from fsw.codegen.deployment import Contract, configuration_model
 from fsw.codegen.fpp_types import named
+from fsw.codegen.roles import Role, roles
 from fsw.python import FrameRunner
 from ground.dictionary import Dictionary
 
@@ -266,3 +270,138 @@ def test_boot_drops_every_command_response_and_write_not_yet_drained(runner: Fra
     assert [name for name, _, _ in writes].count("source.level") == 1
     [raw] = [raw for name, _, raw in writes if name == "source.level"]
     assert runner.values("source.level", [raw]).tolist() == [0.0]
+
+
+class MockSink:
+    """The mock that takes every sensor role: it logs each step's inputs."""
+
+    def __init__(self, parameters: Any) -> None:
+        """Logs its parameters, which are none.
+
+        Args:
+            parameters: its instance's parameters, from the case's record.
+        """
+        LOG.append(("sink", "boot", parameters))
+
+    def step(self, t: float, **inputs: Any) -> tuple[Any, Any]:
+        """Logs the step and its inputs.
+
+        Args:
+            t: s, the time.
+            **inputs: each role's input, by the role.
+
+        Returns:
+            No output, and no telemetry.
+        """
+        LOG.append(("sink", "step", t, inputs))
+        return named("MockGnc.MockSinkOutputs")(), named("MockGnc.MockSinkTelemetry")()
+
+
+@pytest.fixture(scope="session")
+def roles_contract(tmp_path_factory: pytest.TempPathFactory) -> tuple[Contract, list[Role]]:
+    """A mock contract whose one sink takes every role the repository's contract declares.
+
+    Rendered once per session: a contract's tuples are loaded once, by each file's content and path.
+
+    Args:
+        tmp_path_factory: where the mock is rendered.
+
+    Returns:
+        The contract, whose one configuration is `MockRoles`, and the roles.
+    """
+    declared = roles(configuration_model(CONFIGURATION, contract=MOCK))
+    directory = tmp_path_factory.mktemp("roles")
+    (directory / "gnc").mkdir()
+    inputs = "".join(f"    sync input port {r.input}: {r.icd}\n" for r in declared)
+    sink = directory / "MockSink.fpp"
+    sink.write_text(
+        "module MockGnc {\n  passive component MockSink {\n"
+        f"    sync input port schedIn: Svc.Sched\n{inputs}  }}\n}}\n"
+    )
+    ports = "".join(f"    port {r.input} = sink.{r.input}\n" for r in declared)
+    (directory / "gnc" / "MockRoles.fpp").write_text(
+        "module MockRoles {\n"
+        "  constant tickPeriod = 1.0\n"
+        "  constant sinkDivider = 1\n"
+        "  instance rateGroupDriver: Svc.RateGroupDriver base id 0x6000\n"
+        "  instance sink: MockGnc.MockSink base id 0x6100\n"
+        "  instance sinkRateGroup: Svc.PassiveRateGroup base id 0x6200\n"
+        "  topology Gnc {\n"
+        "    instance rateGroupDriver\n    instance sink\n    instance sinkRateGroup\n"
+        "    connections RateGroups {\n"
+        "      rateGroupDriver.CycleOut[0] -> sinkRateGroup.CycleIn\n"
+        "      sinkRateGroup.RateGroupMemberOut[0] -> sink.schedIn\n"
+        "    }\n"
+        f"    port tickIn = rateGroupDriver.CycleIn\n{ports}"
+        "  }\n}\n"
+    )
+    return Contract((sink,), directory / "gnc"), declared
+
+
+@pytest.fixture
+def roles_runner(roles_contract: tuple[Contract, list[Role]], tmp_path: Path) -> FrameRunner:
+    """The rendered mock configuration, flown with `MockSink`, booted, the log cleared.
+
+    Args:
+        roles_contract: the rendered contract and the roles.
+        tmp_path: where the case's record is written.
+
+    Returns:
+        The frame runner.
+    """
+    record = tmp_path / "run_0000.prm.json"
+    record.write_text(json.dumps({"MockRoles.sink": {}}))
+    runner = FrameRunner("MockRoles", record, (MockSink,), contract=roles_contract[0])
+    runner.boot()
+    LOG.clear()
+    return runner
+
+
+def test_each_role_s_message_reaches_the_step_as_its_icd_struct(
+    roles_runner: FrameRunner,
+    roles_contract: tuple[Contract, list[Role]],
+    bus_messages: dict[str, Any],
+):
+    """A tick reads each role's message and converts it, so the step gets each role's ICD struct.
+
+    Each ICD field is its bus namesake's, ignoring case, by `fsw.codegen.fields`' rule.
+
+    Args:
+        roles_runner: the frame runner on the rendered mock.
+        roles_contract: the rendered contract and the roles.
+        bus_messages: a message of each bus struct, its members' values distinct.
+    """
+    declared = roles_contract[1]
+    assert declared
+
+    roles_runner.tick(NS, {role.role: bus_messages[role.bus].payload for role in declared})
+
+    [(_, _, t, inputs)] = [entry for entry in LOG if entry[1] == "step"]
+    assert t == 1.0
+    assert set(inputs) == {role.role for role in declared}
+    for role in declared:
+        value = inputs[role.role]
+        assert isinstance(value, named(role.icd)), role.role
+        bus = {m.lower(): v for m, v in bus_messages[role.bus].values.items()}
+        for field in value._fields:
+            np.testing.assert_array_equal(getattr(value, field), bus[field.lower()], role.role)
+
+
+def test_a_tick_missing_a_role_s_message_is_refused_naming_the_role(
+    roles_runner: FrameRunner,
+    roles_contract: tuple[Contract, list[Role]],
+    bus_messages: dict[str, Any],
+):
+    """A vehicle without one of the configuration's roles fails the tick, naming that role.
+
+    Args:
+        roles_runner: the frame runner on the rendered mock.
+        roles_contract: the rendered contract and the roles.
+        bus_messages: a message of each bus struct.
+    """
+    declared = roles_contract[1]
+    for missing in declared:
+        messages = {r.role: bus_messages[r.bus].payload for r in declared if r != missing}
+
+        with pytest.raises(KeyError, match=f"takes the role {missing.role},"):
+            roles_runner.tick(NS, messages)
