@@ -8,10 +8,11 @@ from typing import Any
 import numpy as np
 from Basilisk.architecture import sysModel
 
-from fsw.codegen.deployment import tick_period
+from fsw.codegen.deployment import bus_port, tick_period
 from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
+from lab.bus_emulator import serialize
 from lab.power_cycle import power_cycle, source
 
 __all__ = ["DICTIONARY", "FprimeModule"]
@@ -29,9 +30,11 @@ class FprimeModule(sysModel.SysModel):
     `Reset` power-cycles the deployment: it loads a fresh copy and boots it at t = 0 with the dead
     reckoner idle and PrmDb loading the case's `.dat`, so a case keeps nothing of an earlier one.
     Each `UpdateState` whose time lies after the last tick's sets the clock, runs the uplinked
-    commands through F´'s command dispatcher, sends the IMU reading and ticks the rate groups. The
-    radio edge is an `FprimeStation` on the copy's pins: it encodes each command into F´'s packet,
-    and the responses and every telemetry write, each with its F´ time tag, come down through it.
+    commands through F´'s command dispatcher, pushes the IMU message's bytes, as the bus emulator
+    writes them, on the LabBusDriver port the deployment wires to the CDH's IMU input, and ticks the
+    rate groups. The radio edge is an `FprimeStation` on the copy's pins: it encodes each command
+    into F´'s packet, and the responses and every telemetry write, each with its F´ time tag, come
+    down through it.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in: the base tick
@@ -51,6 +54,8 @@ class FprimeModule(sysModel.SysModel):
     """The copy of the deployment the last `Reset` loaded; unset before the first."""
     _station: FprimeStation
     """The radio edge on that copy; unset before the first `Reset`."""
+    _imu_port: int
+    """The LabBusDriver port the deployment wires to the CDH's IMU input."""
 
     def __init__(self, imu: Any, prm_path: Path) -> None:
         """Makes the case's `.dat` beside its record, once `source` has checked the build.
@@ -65,6 +70,7 @@ class FprimeModule(sysModel.SysModel):
         super().__init__()
         source()
         self._imu = imu
+        self._imu_port = bus_port("ImuDeadReckoning", "imuIn")
         self._dat = parameters.dat(prm_path, DICTIONARY)
         self.dictionary = Dictionary(DICTIONARY)
         self.failure = None
@@ -136,7 +142,7 @@ class FprimeModule(sysModel.SysModel):
             raise
 
     def UpdateState(self, CurrentSimNanos: int) -> None:
-        """Steps the deployment on the IMU's reading, when the time lies after the last tick.
+        """Steps the deployment on the IMU's message, when the time lies after the last tick.
 
         Args:
             CurrentSimNanos: ns, the current simulation time, as Basilisk passes it.
@@ -157,12 +163,7 @@ class FprimeModule(sysModel.SysModel):
             if not self._imu.isWritten():
                 t = CurrentSimNanos / _NANOSECONDS_PER_SECOND
                 raise RuntimeError(f"the IMU has not been written at t = {t} s")
-            reading = self._imu()
-            self._fsw.step(
-                t_ns=CurrentSimNanos,
-                angVelPlatform=np.array(reading.AngVelPlatform, dtype=float),
-                accelPlatform=np.array(reading.AccelPlatform, dtype=float),
-            )
+            self._fsw.step(t_ns=CurrentSimNanos, bus=[(self._imu_port, serialize(self._imu()))])
             self._t_ns = CurrentSimNanos
         except BaseException as error:
             self.failure = error

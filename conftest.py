@@ -125,6 +125,51 @@ def bus_messages() -> dict[str, BusMessage]:
     return messages
 
 
+@pytest.fixture
+def bus_by_role(bus_messages: dict[str, BusMessage]) -> dict[str, tuple[int, bytes]]:
+    """Each role's LabBusDriver port and its bus message's bytes, as the bus emulator writes them.
+
+    The roles are the contract's `Cdh.BusConverter`'s, and each port is the one the built
+    deployment's configuration wires to the role's CDH input, read from its FPP. The shared
+    deployment template, `fsw/fprime/deployment/Fsw.fpp.in`, wires every role into every
+    configuration, so a role left unwired fails the fixture with `bus_port`'s `ValueError`.
+
+    Args:
+        bus_messages: a message of each bus struct.
+
+    Returns:
+        Each role's `(port, bytes)`, by the role's name.
+    """
+    from fsw.codegen.deployment import bus_port, contract_files
+    from fsw.codegen.fpp_model import read
+    from fsw.codegen.roles import roles
+    from ground.dictionary import Dictionary
+    from lab.bus_emulator import serialize
+
+    instances = Dictionary(_dictionary()).algorithm_instances()
+    (configuration,) = {instance.name.split(".", 1)[0] for instance in instances}
+    return {
+        role.role: (
+            bus_port(configuration, role.input),
+            serialize(bus_messages[role.bus].payload),
+        )
+        for role in roles(read(contract_files()))
+    }
+
+
+@pytest.fixture
+def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
+    """The bus one step takes: every role's message bytes on its LabBusDriver port.
+
+    Args:
+        bus_by_role: each role's port and bytes.
+
+    Returns:
+        `[(port, bytes)]`, a pair per role.
+    """
+    return list(bus_by_role.values())
+
+
 @pytest.fixture(scope="session")
 def case_parameters() -> tuple[Any, ...]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.

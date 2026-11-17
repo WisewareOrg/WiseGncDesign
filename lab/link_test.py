@@ -34,16 +34,6 @@ STATE = {
 """`nav.initNavState`'s arguments: a state at t = 0."""
 
 
-def _step(fsw: ModuleType, t_ns: int) -> None:
-    """Steps a copy to `t_ns` on a zero IMU reading.
-
-    Args:
-        fsw: the copy.
-        t_ns: ns, the tick's time.
-    """
-    fsw.step(t_ns=t_ns, angVelPlatform=np.zeros(3), accelPlatform=np.zeros(3))
-
-
 def _nav(writes: list[tuple[str, int, Any]]) -> list[tuple[str, int, Any]]:
     """Nav's writes among drained ones.
 
@@ -73,6 +63,7 @@ def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
     station: FprimeStation,
     prm: str,
     parameter_ids: list[int],
+    bus: list[tuple[int, bytes]],
 ):
     """An uplinked command waits for the next step, then answers `OK` under the ground's context.
 
@@ -81,12 +72,13 @@ def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
         station: the station on it.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
+        bus: every role's bus message on its LabBusDriver port.
     """
     fsw.boot(prm, parameter_ids)
 
     station.uplink("nav.initNavState", STATE, 42)
     assert _responses(station) == []
-    _step(fsw, NS)
+    fsw.step(t_ns=NS, bus=bus)
 
     assert _responses(station) == [(42, "OK")]
 
@@ -107,6 +99,7 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     prm: str,
     parameter_ids: list[int],
+    bus: list[tuple[int, bytes]],
 ):
     """Nav's writes of two ticks come down in the order written, each tagged with its tick's time.
 
@@ -118,11 +111,12 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
         decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
+        bus: every role's bus message on its LabBusDriver port.
     """
     fsw.boot(prm, parameter_ids)
     station.uplink("nav.initNavState", STATE, 1)
-    _step(fsw, NS)
-    _step(fsw, 2 * NS)
+    fsw.step(t_ns=NS, bus=bus)
+    fsw.step(t_ns=2 * NS, bus=bus)
 
     writes = _nav(decoded(station))
 
@@ -146,6 +140,7 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     prm: str,
     parameter_ids: list[int],
+    bus: list[tuple[int, bytes]],
 ):
     """A tick at 1.500007 s tags its write with that time in ns, microseconds included.
 
@@ -155,17 +150,22 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
         decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
+        bus: every role's bus message on its LabBusDriver port.
     """
     fsw.boot(prm, parameter_ids)
     t_ns = NS + 500_000_000 + 7_000
 
-    _step(fsw, t_ns)
+    fsw.step(t_ns=t_ns, bus=bus)
 
     assert _nav(decoded(station)) == [("nav.navState", t_ns, "idle")]
 
 
 def test_the_rate_group_s_health_repeats_on_the_stub_clock(
-    fsw: ModuleType, station: FprimeStation, prm: str, parameter_ids: list[int]
+    fsw: ModuleType,
+    station: FprimeStation,
+    prm: str,
+    parameter_ids: list[int],
+    bus: list[tuple[int, bytes]],
 ):
     """With nav propagating, every cycle time the rate group writes is 0, on F´'s stub clock.
 
@@ -178,6 +178,7 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
         station: the station on it.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
+        bus: every role's bus message on its LabBusDriver port.
     """
     ticks = 500
     fsw.boot(prm, parameter_ids)
@@ -185,11 +186,7 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
     station.telemetry()
 
     for tick in range(1, ticks + 1):
-        fsw.step(
-            t_ns=tick * NS,
-            angVelPlatform=np.array([0.01, -0.02, 0.03]),
-            accelPlatform=np.array([0.1, 0.2, -0.3]),
-        )
+        fsw.step(t_ns=tick * NS, bus=bus)
 
     writes = station.telemetry()
 
@@ -217,6 +214,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     tmp_path: Path,
     prm: str,
     parameter_ids: list[int],
+    bus: list[tuple[int, bytes]],
 ):
     """Each rate group's `CycleCount` advances by one once every divider ticks, its own divider.
 
@@ -231,6 +229,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
         tmp_path: where the configuration's topology is rendered.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
+        bus: every role's bus message on its LabBusDriver port.
     """
     instances = Dictionary(DICTIONARY).algorithm_instances()
     (configuration,) = {i.name.split(".", 1)[0] for i in instances}
@@ -246,7 +245,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     station.telemetry()
 
     for tick in range(1, ticks + 1):
-        _step(fsw, tick * NS)
+        fsw.step(t_ns=tick * NS, bus=bus)
 
     writes = station.telemetry()
     for group, divider in dividers.items():

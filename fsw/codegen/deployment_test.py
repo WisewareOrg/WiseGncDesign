@@ -6,6 +6,7 @@ import pytest
 
 from fsw.codegen.deployment import (
     algorithm_files,
+    bus_port,
     configuration_model,
     contract_files,
     fpp_files,
@@ -93,3 +94,43 @@ def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
 
     with pytest.raises(KeyError, match=r"ImuDeadReckoning\.tickPeriod"):
         tick_period("ImuDeadReckoning")
+
+
+def test_a_cdh_port_s_bus_port_is_the_lab_bus_driver_port_the_deployment_wires_to_it():
+    """The IMU's `cdh.imuIn` is fed by `labBusDriver.busOut[0]` in the rendered topology."""
+    assert bus_port("ImuDeadReckoning", "imuIn") == 0
+
+
+def test_a_cdh_port_no_lab_bus_driver_port_feeds_is_refused_naming_it():
+    """A port the deployment leaves off LabBusDriver raises, naming it and the configuration."""
+    with pytest.raises(
+        ValueError, match=r"ImuDeadReckoning.*cdh\.starIn.*LabBusDriver port\(s\) \[\]"
+    ):
+        bus_port("ImuDeadReckoning", "starIn")
+
+
+def test_a_cdh_port_two_lab_bus_driver_ports_feed_is_refused_naming_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A template that wires a second LabBusDriver port to `cdh.imuIn` raises, naming both ports.
+
+    Args:
+        tmp_path: where the twice-wired template is written.
+        monkeypatch: renders the deployment from that template.
+    """
+    template = tmp_path / "Fsw.fpp.in"
+    wired = "labBusDriver.busOut[0] -> cdh.imuIn"
+    original = (_REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()
+    assert wired in original
+    template.write_text(
+        original.replace(wired, f"{wired}\n      labBusDriver.busOut[1] -> cdh.imuIn")
+    )
+    monkeypatch.setattr("fsw.codegen.deployment._TEMPLATE", template)
+    bus_port.cache_clear()
+    try:
+        with pytest.raises(
+            ValueError, match=r"cdh\.imuIn to LabBusDriver port\(s\) \[0, 1\], not one"
+        ):
+            bus_port("ImuDeadReckoning", "imuIn")
+    finally:
+        bus_port.cache_clear()

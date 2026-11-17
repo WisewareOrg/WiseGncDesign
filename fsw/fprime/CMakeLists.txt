@@ -44,7 +44,7 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     pybind11_add_module(_wise_fsw "${FPRIME_PROJECT_ROOT}/lab/pins/WiseFswModule.cpp")
     # The one configuration the extension flies.
     set(WISE_FSW_CONFIGURATION ImuDeadReckoning)
-    target_link_libraries(_wise_fsw PRIVATE fsw_fprime_deployment_${WISE_FSW_CONFIGURATION} wise_eigen)
+    target_link_libraries(_wise_fsw PRIVATE fsw_fprime_deployment_${WISE_FSW_CONFIGURATION})
     target_compile_definitions(_wise_fsw PRIVATE
         WISE_FSW_TOPOLOGY_HEADER="fsw/fprime/deployment/${WISE_FSW_CONFIGURATION}/${WISE_FSW_CONFIGURATION}FswTopology.hpp")
     # The platform implementations (Os and the like) F´ chooses at link time, as for a deployment.

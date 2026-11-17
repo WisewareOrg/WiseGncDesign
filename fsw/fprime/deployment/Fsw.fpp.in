@@ -1,4 +1,5 @@
 # Rendered for each GNC sub-topology in fsw/fpp/gnc/, which must expose the ports tickIn and imuIn.
+# It wires every Cdh.BusConverter role into every configuration: LabBusDriver to cdh, cdh to GNC.
 module WiseFsw {
 
   @ The flight software run inside the simulation: the @CONFIGURATION@ configuration's GNC, fed and
@@ -9,7 +10,8 @@ module WiseFsw {
 
     instance simTime
     instance groundLink
-    instance simBridge
+    instance labBusDriver
+    instance cdh
     instance cmdDisp
     instance prmDb
 
@@ -26,7 +28,8 @@ module WiseFsw {
     }
 
     connections Simulation {
-      simBridge.imuOut -> @CONFIGURATION@.Gnc.imuIn
+      labBusDriver.busOut[0] -> cdh.imuIn
+      cdh.imuOut -> @CONFIGURATION@.Gnc.imuIn
     }
 
     connections Ground {

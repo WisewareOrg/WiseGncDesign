@@ -7,7 +7,9 @@
 ## Revisions
 
 - **rev 1** — 2026-11-14 — first written, moved out of ADR 0003 rev 3 (issue 85 one decision
-  per ADR).
+  per ADR); the bus driver, named SimHub at `9eccec3`, is LabBusDriver, named for its job, and
+  F´'s Svc.GenericHub is a rejected alternative, from the spike in the decision comment of
+  2026-11-16 on issue 63 The lab's bus driver carries bus data into the F´ build.
 
 ## Context
 
@@ -21,12 +23,12 @@ sensor needed C++ in the bridge and the pins.
 
 ### The check
 
-The SimHub check ran on branch `spike/two_edges` against main `6f6276e`, F´ v4.4.2, fpp 3.4.0,
+The bus-driver check ran on branch `spike/two_edges` against main `6f6276e`, F´ v4.4.2, fpp 3.4.0,
 pybind11 3.1.0.
 
-**SimHub on F´ serial ports: PASS** (`9eccec3`, `spikes/fprime/`). Bytes Python's `struct.pack`
-writes for a bus struct equal F´'s serialization, and SimHub delivers them as the typed struct.
-`python spike_check.py a`:
+**A bus driver on F´ serial ports: PASS** (`9eccec3`, `spikes/fprime/`). Bytes Python's
+`struct.pack` writes for a bus struct equal F´'s serialization, and the bus driver delivers them as
+the typed struct. `python spike_check.py a`:
 
 ```
 python struct.pack: 0000001cbe991a083f847ae147ae147bbf947ae1…40239d013a92a305
@@ -40,20 +42,25 @@ The little-endian push is the failure the comparison would have shown.
 ## Decision
 
 - **If a real F´ deployment would have it, it is inside `_wise_fsw`.** Each stand-in replaces one
-  real thing: SimHub the bus driver, GroundLink the whole comm stack, SimTime the clock, its time
-  source and its timer. Anything a real deployment would not have is ground segment
+  real thing: LabBusDriver the bus driver, GroundLink the whole comm stack, SimTime the clock, its
+  time source and its timer. Anything a real deployment would not have is ground segment
   (ADR 0004 rev 2) or the lab's own; the lab's pins are compiled in as a test connector.
 - **Bus structs in FPP mirror Basilisk messages**, each held to the real message by a test.
 - **A bus emulator, generated from the bus structs, turns Basilisk messages into their bytes.**
-- **SimHub takes the bytes on F´ `serial` ports** and delivers typed bus structs.
+- **LabBusDriver takes the bytes on F´ `serial` ports** and delivers typed bus structs.
 - **No part of the lab, and no sim glue, names an algorithm.**
 
 ## Alternatives considered
 
-- **Typed ports in place of SimHub.** Named as the fallback, not taken: SimHub passed, and a real
-  bus driver takes bytes.
+- **Typed ports in place of LabBusDriver.** Named as the fallback, not taken: the bus-driver check
+  passed, and a real bus driver takes bytes.
 - **Per-algorithm sim glue, as at `6f6276e`.** Every added algorithm or sensor needs C++ in the
   bridge and the pins. Rejected.
+- **F´'s Svc.GenericHub in place of LabBusDriver.** FPP 3.4.0 writes serial-to-typed port calls
+  with unqualified serializer names, so a hub outside module Bus does not compile. It also needs a
+  buffer manager, an allocator and its own hub-to-hub framing, and its source shows it would pass
+  a long push silently and drop a wrong port silently. Rejected (the spike in the decision comment
+  of 2026-11-16 on issue 63 The lab's bus driver carries bus data into the F´ build).
 
 ## Consequences
 
