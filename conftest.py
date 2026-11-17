@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import importlib.util
 import itertools
-import operator
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -228,9 +227,8 @@ def case_parameters(dictionary: Dictionary) -> tuple[Any, ...]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
     The instances are those the deployment's dictionary holds, so the case skips without it. A
-    zero holds for a numeric parameter or an array of them; a parameter of an enum, struct or
-    string type gets none, and fails `parameters_from` or the `.dat`. A test module flying an
-    algorithm's own values overrides this fixture, swapping that algorithm's tuple in.
+    test module flying an algorithm's own values overrides this fixture, swapping that algorithm's
+    tuple in.
 
     Args:
         dictionary: the configuration's dictionary, which names the instances.
@@ -238,23 +236,42 @@ def case_parameters(dictionary: Dictionary) -> tuple[Any, ...]:
     Returns:
         Each instance's `<Name>Parameters` tuple.
     """
-    from fsw.codegen import fpp_types
     from fsw.codegen.deployment import contract_files
-    from fsw.codegen.fpp_model import Array, read
+    from fsw.codegen.fpp_model import read
 
     model = read(contract_files())
-    tuples = []
-    for instance in dictionary.algorithm_instances():
-        component = model.components[instance.component]
-        values = {}
-        for parameter in component.parameters:
-            shape, type_name = (), parameter.type
-            while isinstance(array := model.types.get(type_name), Array):
-                shape, type_name = (*shape, array.size), array.element
-            values[parameter.name] = np.zeros(shape).tolist()
-        tuple_type = operator.attrgetter(f"{component.name}Parameters")(fpp_types)
-        tuples.append(fpp_types.parameters_from(tuple_type, values))
-    return tuple(tuples)
+    return tuple(
+        _parameters(model, instance.component, lambda count: [0.0] * count)
+        for instance in dictionary.algorithm_instances()
+    )
+
+
+def _parameters(model: Any, component: str, elements: Callable[[int], list[float]]) -> Any:
+    """A component's parameters tuple, each parameter of its FPP shape and type.
+
+    Args:
+        model: the contract's model.
+        component: the component's qualified name.
+        elements: gives a parameter's elements, flattened, from how many it has.
+
+    Returns:
+        The component's `<Name>Parameters` tuple.
+
+    Raises:
+        ValueError: a parameter is not a number or an array of them, naming it.
+    """
+    from fsw.codegen import fpp_types
+    from fsw.codegen.fields import form
+    from fsw.codegen.fpp_model import Member
+
+    values = {}
+    for parameter in model.components[component].parameters:
+        shape, element = form(Member(parameter.name, parameter.type, None), model.types)
+        if not isinstance(element, np.dtype):
+            raise ValueError(f"{component}.{parameter.name} is {element}, not a number")
+        count = int(np.prod(shape, dtype=int))
+        values[parameter.name] = np.array(elements(count), element).reshape(shape).tolist()
+    return fpp_types.parameters_from(fpp_types.named(f"{component}Parameters"), values)
 
 
 @pytest.fixture(scope="session")
@@ -283,33 +300,21 @@ def algorithm_parameters() -> dict[str, Any]:
 
     The components are `fsw.codegen.deployment.algorithm_components`. Each element of each
     parameter takes the next of 0.5, 1.5, 2.5, ..., in its FPP type, so a parameter or element out
-    of place shows.
+    of place shows; a parameter that is not a number or an array of them raises `ValueError`,
+    naming it.
 
     Returns:
         Each component's `<Name>Parameters` tuple, by its qualified name.
-
-    Raises:
-        ValueError: a parameter is not a number or an array of them, naming it.
     """
-    from fsw.codegen import fpp_types
     from fsw.codegen.deployment import algorithm_components, contract_files
-    from fsw.codegen.fields import form
-    from fsw.codegen.fpp_model import Member, read
+    from fsw.codegen.fpp_model import read
 
     model = read(contract_files())
     counter = itertools.count()
-    tuples = {}
-    for name in sorted(algorithm_components()):
-        values = {}
-        for parameter in model.components[name].parameters:
-            shape, element = form(Member(parameter.name, parameter.type, None), model.types)
-            if not isinstance(element, np.dtype):
-                raise ValueError(f"{name}.{parameter.name} is {element}, not a number")
-            elements = [next(counter) + 0.5 for _ in range(int(np.prod(shape, dtype=int)))]
-            values[parameter.name] = np.array(elements, element).reshape(shape).tolist()
-        tuple_type = fpp_types.named(f"{name}Parameters")
-        tuples[name] = fpp_types.parameters_from(tuple_type, values)
-    return tuples
+    return {
+        name: _parameters(model, name, lambda count: [next(counter) + 0.5 for _ in range(count)])
+        for name in sorted(algorithm_components())
+    }
 
 
 @pytest.fixture
