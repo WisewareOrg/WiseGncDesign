@@ -10,6 +10,7 @@
 
 #include "Fw/Types/Assert.hpp"
 #include "Os/Os.hpp"
+#include "config/FppConstantsAc.hpp"
 #include "fsw/fprime/cdh/BusConverterPins.hpp"
 #include "fsw/fprime/platform/Cooperative.hpp"
 #include WISE_FSW_TOPOLOGY_HEADER
@@ -52,6 +53,13 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
                 throw py::value_error("the parameter file " + prm_path +
                                       " is not an absolute path in a directory below the root");
             }
+            // F´ resolves every file path in a buffer of FileNameStringSize bytes, its terminator included.
+            const std::size_t longest = FileNameStringSize - 1;
+            if (prm_path.size() > longest) {
+                throw py::value_error("the parameter file " + prm_path + " is " + std::to_string(prm_path.size()) +
+                                      " characters, past F´'s limit of " + std::to_string(longest) +
+                                      " (FileNameStringSize less its terminator)");
+            }
             g_booted = true;
             Os::init();
             Os::Task::registerTaskRegistry(&g_cooperative);
@@ -70,8 +78,8 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         },
         py::arg("prm_path"), py::arg("parameter_ids"),
         "Sets the topology up and boots it at t = 0 s, every component idle: PrmDb loads prm_path, an absolute "
-        "path whose directory is its sandbox. Raises ValueError for a relative path or one in the root directory, "
-        "and RuntimeError naming each of parameter_ids that is not valid once loaded. A copy boots once: a second "
+        "path whose directory is its sandbox. Raises ValueError for a relative path, one in the root directory or "
+        "one longer than FileNameStringSize less its terminator, and RuntimeError naming each of parameter_ids that is not valid once loaded. A copy boots once: a second "
         "boot raises RuntimeError.");
 
     m.def(

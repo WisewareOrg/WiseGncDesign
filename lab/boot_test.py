@@ -234,47 +234,38 @@ def _of_length(directory: Path, length: int, fill: str) -> Path:
     return path
 
 
-@pytest.mark.parametrize(("length", "boots"), [(239, True), (240, False)])
-def test_a_file_s_path_fits_f_prime_s_file_names_up_to_239_characters(
-    fsw: ModuleType, tmp_path: Path, prm: str, parameter_ids: list[int], length: int, boots: bool
+@pytest.mark.parametrize(("past", "boots"), [(0, True), (1, False)])
+def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loading(
+    fsw: ModuleType,
+    tmp_path: Path,
+    prm: str,
+    parameter_ids: list[int],
+    configuration: str,
+    past: int,
+    boots: bool,
 ):
-    """F´'s 240-character file names hold a path of 239; one of 240 cannot be read.
+    """`FileNameStringSize` holds a path one character shorter; a longer one is refused by length.
 
     Args:
         fsw: the test's copy.
         tmp_path: where the path is made.
         prm: the case's parameter file, copied to the path.
         parameter_ids: every parameter's ID, which boot holds valid.
-        length: the path's length in characters.
+        configuration: the copy's configuration, whose dictionary gives `FileNameStringSize`.
+        past: how many characters the path runs past the longest F´ holds.
         boots: whether the copy boots on it.
     """
-    path = _of_length(tmp_path, length, "x")
+    constants = json.loads(dictionary_path(configuration).read_text())["constants"]
+    longest = next(c["value"] for c in constants if c["qualifiedName"] == "FileNameStringSize") - 1
+    path = _of_length(tmp_path, longest + past, "x")
     shutil.copyfile(prm, path)
 
     if boots:
         fsw.boot(str(path), parameter_ids)
     else:
-        with pytest.raises(RuntimeError, match="are not valid"):
+        refusal = f" is {longest + past} characters, past F´'s limit of {longest} "
+        with pytest.raises(ValueError, match=refusal):
             fsw.boot(str(path), parameter_ids)
-
-
-def test_a_case_directory_of_239_characters_trips_f_prime_s_assert(
-    fsw: ModuleType, tmp_path: Path, prm: str, parameter_ids: list[int]
-):
-    """A sandbox directory of 239 characters is past what F´'s sandbox holds, and asserts.
-
-    Args:
-        fsw: the test's copy.
-        tmp_path: where the case's directory is made.
-        prm: the case's parameter file, copied into that directory.
-        parameter_ids: every parameter's ID, which boot holds valid.
-    """
-    directory = _of_length(tmp_path, 239, "d")
-    directory.mkdir()
-    shutil.copyfile(prm, directory / "a")
-
-    with pytest.raises(RuntimeError, match=r'^Assert: ".*SandboxedFile\.cpp:\d+"'):
-        fsw.boot(str(directory / "a"), parameter_ids)
 
 
 def _load_file(station: FprimeStation, dictionary: Dictionary, path: Path) -> bytes:
