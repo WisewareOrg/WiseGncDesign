@@ -1,9 +1,11 @@
 """The generic partitions name no algorithm, and the deployment reaches algorithms only through FPP.
 
-The names are read from the tree: each directory under `algorithms/`, each configuration, and the
-component and instance name of each GNC instance of a component an algorithm defines, so F´'s own
-components, such as a rate group, are not names. A name matches regardless of case; an instance
-name matches only as a whole word, so `nav` is not found in `navigate`. The files are the tracked
+The names are read from the tree and its FPP model: each directory under `algorithms/`, each
+configuration, the component and instance name of each GNC instance of a component an algorithm
+defines, so F´'s own components, such as a rate group, are not names, each such component's
+command, channel and parameter names, and the bus and GNC structs each sensor role carries. A name
+matches regardless of case; an instance's or an entry's name matches only as a whole word, so
+`nav` is not found in `navigate`. The files are the tracked
 ones, tests included, so a generated dictionary or extension beside them is not read, and each
 directory must give at least one, so a renamed directory fails rather than passing over nothing.
 The names are read from FPP, so the first grep skips without the F´ framework clone, as the F´
@@ -16,7 +18,9 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import CLONE, algorithm_components, gnc_instances
+from fsw.codegen.deployment import CLONE, algorithm_components, contract_files, gnc_instances
+from fsw.codegen.fpp_model import read
+from fsw.codegen.roles import roles
 
 _REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -75,9 +79,10 @@ def _algorithm_names() -> re.Pattern[str]:
     """Every name of an algorithm, as one case-insensitive pattern.
 
     Returns:
-        The pattern: each algorithm directory, configuration and component as a substring, and
-        each instance name as a whole word.
+        The pattern: each algorithm directory, configuration, component and sensor role's struct as
+        a substring, and each instance's and each algorithm entry's name as a whole word.
     """
+    model = read(contract_files())
     directories = {path.parts[1] for path in _tracked("algorithms") if len(path.parts) > 2}
     substrings, words = set(directories), set()
     for instance in gnc_instances():
@@ -86,6 +91,13 @@ def _algorithm_names() -> re.Pattern[str]:
         if instance.component in algorithm_components():
             substrings.add(instance.component.split(".")[-1])
             words.add(name)
+    for component in algorithm_components():
+        kinds = ("commands", "channels", "parameters")
+        words |= {
+            entry.name for kind in kinds for entry in getattr(model.components[component], kind)
+        }
+    for role in roles(model):
+        substrings |= {role.bus.split(".")[-1], role.icd.split(".")[-1]}
     alternatives = [re.escape(name) for name in sorted(substrings)]
     alternatives += [rf"\b{re.escape(name)}\b" for name in sorted(words)]
     return re.compile("|".join(alternatives), re.IGNORECASE)

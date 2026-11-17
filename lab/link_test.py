@@ -98,9 +98,8 @@ def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
 ):
     """Each rate group's writes of two ticks come down in the order written, tagged with each tick.
 
-    Every write of the first tick comes before every write of the second, each rate group's
-    `CycleCount` counts up from 1 by one per run, and a rate group runs on at least one tick, at
-    whatever divider it runs.
+    Every write of the first tick comes before every write of the second, and each rate group's
+    `CycleCount` counts up from 1 by one per run, at whatever divider it runs.
 
     Args:
         fsw: the test's copy of the deployment.
