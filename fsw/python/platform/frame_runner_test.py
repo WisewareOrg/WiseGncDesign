@@ -167,8 +167,9 @@ def test_boot_builds_each_algorithm_afresh_on_its_record_parameters(runner: Fram
 def test_the_data_connection_delivers_within_the_frame_in_rate_group_order(runner: FrameRunner):
     """The sink, run after the source on its divider's ticks, holds that frame's sample.
 
-    The source runs every tick, the sink every second: over two ticks the source steps twice, and
-    the sink once, after the source in its frame, with the sample the source just sent.
+    The source runs every tick, the sink every second from the first, as F´'s rate-group driver
+    counts: over two ticks the source steps twice, and the sink once, on the first tick, after the
+    source in its frame, with the sample the source just sent.
 
     Args:
         runner: the frame runner.
@@ -179,10 +180,11 @@ def test_the_data_connection_delivers_within_the_frame_in_rate_group_order(runne
     runner.tick(2 * NS // 2, {})
 
     steps = [entry for entry in LOG if entry[1] == "step"]
-    assert [(instance, t) for instance, _, t, *_ in steps] in (
-        [("source", 0.5), ("sink", 0.5), ("source", 1.0)],
-        [("source", 0.5), ("source", 1.0), ("sink", 1.0)],
-    )
+    assert [(instance, t) for instance, _, t, *_ in steps] == [
+        ("source", 0.5),
+        ("sink", 0.5),
+        ("source", 1.0),
+    ]
     [(_, _, t, sample)] = [entry for entry in steps if entry[0] == "sink"]
     assert sample.value == 2.5 * 4.0 + t
 
