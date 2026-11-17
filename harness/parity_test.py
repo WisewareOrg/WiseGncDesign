@@ -1,8 +1,9 @@
 """Parity: two builds' flights of one configuration, compared on what the contract declares.
 
-Twins fly the harness's test mock, `MockFlight` of `fsw.mock.MOCK`, and every name the tests
-write or change is read from its model: its member's channels, commands and parameter, and its
-rate group's channels as an extra. Each test changes one side of an identical twin.
+Twins fly `MockFlight` of `fsw.mock.MOCK`, the test mock `HarnessMock.Mock` as nav, and every
+name the tests write or change is read from its model: its member's channels, commands and
+parameter, and its rate group's channels as an extra. Each test changes one side of an identical
+twin.
 """
 
 import json

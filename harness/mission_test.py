@@ -1,16 +1,15 @@
 """Missions: what a flight judges, what a mission refuses, and the record a flight leaves.
 
-Every test but three reads a requirements tree it writes in `tmp_path`, by pointing the tree root
-at it, so none depends on the repository's own tree; two of those build missions of the
-repository's configurations against the repository's tree, flying nothing, and one flies each
-configuration's F´ build through the repository's tree. The tree holds two capabilities, four
-rungs and two scenarios:
+A test that takes the `configuration` fixture builds or flies a repository configuration against
+the repository's requirements tree. Every other test reads a tree it writes in `tmp_path`, by
+pointing the tree root at it, so none depends on the repository's own tree. That tree holds two
+capabilities, four rungs and two scenarios:
 
     SYS901 <- SRS901, SRS902, SRS904      SYS902 <- SRS903
     TST901 links SRS901, SRS902, SRS903   TST902 links SRS902
 
-The other flights fly the harness's test mock, `MockFlight` of `fsw.mock.MOCK`, which claims
-SYS901.
+Those tests' flights fly `MockFlight` of `fsw.mock.MOCK`, the test mock `HarnessMock.Mock`,
+which claims SYS901.
 The `variants` fixture renders the other configurations a test needs from two templates.
 """
 

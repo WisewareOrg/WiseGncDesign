@@ -569,7 +569,7 @@ def test_a_flown_mission_is_judged_end_to_end(
 
     The flight's `flight.json` and run files come from the simulator's own writers, so a key or
     dataset the writer and the judge disagree on makes this fail. Four cases are the fewest that
-    show p = 0.8 at c = 0.5. The flight software is the harness's test mock `MockFlight`, writing
+    show p = 0.8 at c = 0.5. The flight software is `MockFlight` of `fsw.mock.MOCK`, writing
     the nav role's estimate channels with a fixed state, and each rung's x is set far above its
     error so the verdict rests on the agreement alone.
 

@@ -13,7 +13,7 @@ from ground.dictionary import Dictionary
 
 
 class Mock:
-    """The platform mock's `Source`: `setLevel` refuses a negative level, `reset` writes nothing."""
+    """`fsw.mock`'s `MockGnc.Source`: `setLevel` refuses a negative level; `reset` writes none."""
 
     def setLevel(self, level: float) -> Any:
         """Takes the level, refusing a negative one.
@@ -37,7 +37,7 @@ class Mock:
 
 @pytest.fixture(scope="module")
 def dictionary() -> Dictionary:
-    """The dictionary of the platform mock's configuration, `MockFrame`, whose `source` is mocked.
+    """The dictionary of `MockFrame` of `fsw.mock.MOCK`, whose `source` is mocked.
 
     Returns:
         The dictionary.

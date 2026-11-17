@@ -1,9 +1,10 @@
-"""Every committed test mock, as one contract, and the plumbing tests render mocks with.
+"""The committed test mocks, and the plumbing tests render mocks with.
 
-`MockGnc.fpp` is two mock algorithms, a source feeding a sink, flown by `gnc/MockFrame.fpp`.
-`HarnessMock.fpp` and its notebook `mock.py` are laid out as an algorithm's are, and
-`gnc/MockFlight.fpp` flies it as the nav role. `MOCK` is the contract, which a test flies with
-`contract=MOCK`.
+`MOCK` is a contract a test flies with `contract=MOCK`: `MockGnc.fpp`, two mock algorithms, a
+source feeding a sink, flown by `gnc/MockFrame.fpp`; and `HarnessMock.fpp`, laid out as an
+algorithm's is with its notebook `mock.py`, flown as the nav role by `gnc/MockFlight.fpp`.
+Beside the contract, not in it, `Mock.fpp` and the `Extra.fppi` it includes are one component the
+ground's tests generate a dictionary from, and `ARGS` are its `setMock` command's arguments.
 """
 
 from collections.abc import Sequence
@@ -65,7 +66,6 @@ _SUB_TOPOLOGY = """module {name} {{
 {ports}  }}
 }}
 """
-"""A test mock configuration: one rate group running its members in order."""
 
 
 def sub_topology(name: str, members: Sequence[tuple[str, str]], ports: Sequence[str] = ()) -> str:

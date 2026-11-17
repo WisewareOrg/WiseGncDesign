@@ -8,7 +8,7 @@ import pytest
 from fsw.codegen.fpp_model import Model, read
 from fsw.mock import edited
 
-MOCK = """\
+CONVERTER_FPP = """\
 module Bus {
   struct A { extra: [2] F64, v: [3] F64 }
   port A(msg: A)
@@ -64,7 +64,7 @@ def converter_mock(tmp_path: Path) -> Callable[..., Model]:
             The model.
         """
         path = tmp_path / "Mock.fpp"
-        path.write_text(edited(MOCK, *edits))
+        path.write_text(edited(CONVERTER_FPP, *edits))
         return read([path])
 
     return model
