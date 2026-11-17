@@ -303,7 +303,7 @@ def _usings(component: Component, found: list[Role]) -> str:
     ]
     if not lines:
         return ""
-    comment = "// FPP's autocoder names a connected port's serializer unqualified, here."
+    comment = "// FPP 3.4.0 names a connected port's serializer unqualified, in this namespace."
     return "\n".join([comment, *lines]) + "\n"
 
 
