@@ -241,7 +241,7 @@ def _entry(log: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _scaled(relative: float) -> Callable[[np.ndarray], np.ndarray]:
-    """A change adding `relative` times the values' largest magnitude to their first element.
+    """A change adding `relative` times the values' largest finite magnitude to their first element.
 
     Args:
         relative: the change, relative to the largest magnitude.
@@ -260,24 +260,37 @@ def _scaled(relative: float) -> Callable[[np.ndarray], np.ndarray]:
             The values changed.
         """
         new = values.copy()
-        new.flat[0] += relative * np.max(np.abs(values))
+        new.flat[0] += relative * np.max(np.abs(values), where=np.isfinite(values), initial=0.0)
         return new
 
     return change
 
 
-def _nan(values: np.ndarray) -> np.ndarray:
-    """The values with their first element NaN.
+def _set(value: float, element: int = 0) -> Callable[[np.ndarray], np.ndarray]:
+    """A change setting one element of the values.
 
     Args:
-        values: the values.
+        value: its new value.
+        element: its flat index.
 
     Returns:
-        The values changed.
+        The change.
     """
-    new = values.copy()
-    new.flat[0] = np.nan
-    return new
+
+    def change(values: np.ndarray) -> np.ndarray:
+        """Set the element.
+
+        Args:
+            values: the values.
+
+        Returns:
+            The values changed.
+        """
+        new = values.copy()
+        new.flat[element] = value
+        return new
+
+    return change
 
 
 def _argument(relative: float) -> Callable[[list[dict[str, Any]]], None]:
@@ -414,11 +427,33 @@ CHANGES = [
     ),
     ("channel-python-only", lambda t: _dataset(t.fprime, FLOAT_TLM, lambda v: None), FLOAT_TLM),
     ("channel-fprime-only", lambda t: _dataset(t.python, FLOAT_TLM, lambda v: None), FLOAT_TLM),
-    ("nan-one-side", lambda t: _dataset(t.fprime, FLOAT_TLM, _nan), FLOAT_TLM),
+    ("nan-one-side", lambda t: _dataset(t.fprime, FLOAT_TLM, _set(np.nan)), FLOAT_TLM),
     (
         "nan-both-sides",
-        lambda t: [_dataset(side, FLOAT_TLM, _nan) for side in t],
+        lambda t: [_dataset(side, FLOAT_TLM, _set(np.nan)) for side in t],
         None,
+    ),
+    ("inf-one-side", lambda t: _dataset(t.fprime, FLOAT_TLM, _set(np.inf)), FLOAT_TLM),
+    (
+        "inf-opposite",
+        lambda t: [
+            _dataset(t.python, FLOAT_TLM, _set(np.inf)),
+            _dataset(t.fprime, FLOAT_TLM, _set(-np.inf)),
+        ],
+        FLOAT_TLM,
+    ),
+    (
+        "inf-both-sides",
+        lambda t: [_dataset(side, FLOAT_TLM, _set(np.inf)) for side in t],
+        None,
+    ),
+    (
+        "inf-hides-nothing",
+        lambda t: [
+            *(_dataset(side, FLOAT_TLM, _set(np.inf, element=-1)) for side in t),
+            _dataset(t.fprime, FLOAT_TLM, _scaled(1e-11)),
+        ],
+        FLOAT_TLM,
     ),
     (
         "missing-command",

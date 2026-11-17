@@ -16,13 +16,15 @@ member does not declare.
 
 Each tolerance has its reason:
 
-- A float value of a channel agrees within `TOLERANCE` times the channel's largest magnitude in
-  the Python build's case, and NaN only with NaN in the same place. Both builds evaluate the same
-  double-precision math in different languages, so they may differ in the last bits; one scale per
-  channel is unit-free and makes a row of zeros no stricter than the rest.
-- A command's float argument agrees by the same rule, scaled by that argument's largest magnitude
-  over the command's entries in the Python log: a procedure may compute arguments from truth, which
-  carries the builds' last-bit differences once a flight actuates.
+- A finite float value of a channel agrees within `TOLERANCE` times the channel's largest finite
+  magnitude in the Python build's case. Both builds evaluate the same double-precision math in
+  different languages, so they may differ in the last bits; one scale per channel is unit-free and
+  makes a row of zeros no stricter than the rest. A non-finite value agrees only with the same
+  non-finite value in the same place, NaN with NaN and each infinity with itself, and never widens
+  the scale.
+- A command's float argument agrees by the same rules, scaled by that argument's largest finite
+  magnitude over the command's entries in the Python log: a procedure may compute arguments from
+  truth, which carries the builds' last-bit differences once a flight actuates.
 - Every other value is exact: non-float telemetry, each write's time, every value's dtype and
   shape, and a command's time, name, response and response time. Both builds run the same FPP
   rates on the same tick, so times and responses have no source of last-bit difference.
@@ -76,7 +78,7 @@ def _roles(gnc: str, contract: Contract) -> list[tuple[str, Component]]:
 
 
 def _magnitude(values: np.ndarray) -> float:
-    """The largest magnitude among float values, NaN aside.
+    """The largest magnitude among float values' finite elements.
 
     Args:
         values: the values.
@@ -84,7 +86,7 @@ def _magnitude(values: np.ndarray) -> float:
     Returns:
         The magnitude, 0 for values with none.
     """
-    return float(np.max(np.abs(values), where=~np.isnan(values), initial=0.0))
+    return float(np.max(np.abs(values), where=np.isfinite(values), initial=0.0))
 
 
 def _differ(python: Any, fprime: Any, scale: float) -> str | None:
@@ -103,10 +105,11 @@ def _differ(python: Any, fprime: Any, scale: float) -> str | None:
         return f"is {p.dtype} {p.shape} on python and {f.dtype} {f.shape} on fprime"
     if p.dtype.kind != "f":
         return None if np.array_equal(p, f) else "differs"
-    nan = np.isnan(p)
-    if np.any(nan != np.isnan(f)):
-        return "is NaN in different places"
-    worst = _magnitude(np.where(nan, 0.0, f - p))
+    finite = np.isfinite(p)
+    same = np.isnan(p) & np.isnan(f) | (p == f)
+    if np.any(finite != np.isfinite(f)) or np.any(~finite & ~same):
+        return "is non-finite in different places or values"
+    worst = _magnitude(np.subtract(f, p, out=np.zeros_like(p), where=finite))
     if worst > TOLERANCE * scale:
         return f"differs by {worst:.3e}, beyond {TOLERANCE:g} x {scale:.3e}"
     return None
