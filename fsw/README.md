@@ -230,8 +230,8 @@ consume exactly trip F´'s assert. `Fsw.fpp.in` wires each role by hand:
 `labBusDriver.busOut[i] -> cdh.<role>In`, and `cdh.<role>Out` to the sub-topology's `<role>In`,
 where `cdh` is the generated `Cdh.BusConverter`; an added sensor is wired there.
 `fsw.codegen.deployment.bus_port(configuration, "<role>In")` reads `i` back from the rendered
-deployment, and `FprimeModule` pushes the bytes of the message it reads, as `lab.bus_emulator`
-writes them, on that port.
+deployment, and `FprimeModule` pushes the IMU message's bytes, as `lab.bus_emulator` writes them, on
+that port.
 
 The rate group's health telemetry is recorded with every other channel; the deployment links F´'s
 stub `Os::RawTime`, so its cycle times read 0. Each case flies a fresh copy of the deployment, so
