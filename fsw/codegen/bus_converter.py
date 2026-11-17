@@ -1,15 +1,17 @@
 """The F´ build's CDH component, `Cdh.BusConverter`, generated from its FPP declaration.
 
 For each role `fsw.codegen.roles` reads, `render` emits a conversion `convert_<role>`, inline in
-the header, building the GNC struct from the bus struct by `fsw.codegen.fields.plan`, and a handler
-sending its result on `<role>Out`. A field outside `fsw.codegen.fields.STRUCT_CODES` raises when
-the code is generated.
+the header, building the struct the role's `<role>Out` sends from the one its `<role>In` takes by
+`fsw.codegen.fields.plan`: a sensor's GNC struct from its bus struct, an actuator's bus struct from
+its GNC struct. It also emits a handler sending the conversion's result on `<role>Out`. A field
+outside `fsw.codegen.fields.STRUCT_CODES` raises when the code is generated.
 
 It also emits the lab's test pins, `BusConverterPins.hpp`, which each configuration's extension,
 `_wise_fsw_<configuration>`, includes once: `bus_<Struct>(<member>=...)` returns F´'s
 serialization of a bus struct built from its members' values, one pin per bus struct a role takes;
-and `cdh_<role>(bus_bytes)` returns F´'s serialization of `convert_<role>`'s result for the bus
-struct F´ deserializes from the bytes.
+and `cdh_<role>(data)` returns F´'s serialization of `convert_<role>`'s result for the struct its
+`<role>In` takes, which F´ deserializes from the bytes: the bus struct for a sensor, the GNC struct
+for an actuator.
 
 `python -m fsw.codegen.bus_converter <directory>` writes the three files into the directory from
 the contract, `fsw.codegen.deployment.contract_files()`; CMake runs it during `just fsw`, into the
@@ -48,8 +50,22 @@ def _cpp(name: str) -> str:
     return name.replace(".", "::")
 
 
+def _ends(role: Role) -> tuple[tuple[str, str], tuple[str, str]]:
+    """The struct a role's conversion takes, and the one it gives, each with its variable's name.
+
+    Args:
+        role: the role.
+
+    Returns:
+        `(source, variable)` then `(target, variable)`: for a sensor, its bus struct `bus` to its
+        GNC struct `icd`; for an actuator, the reverse.
+    """
+    bus, icd = (role.bus, "bus"), (role.icd, "icd")
+    return (bus, icd) if role.sensor else (icd, bus)
+
+
 def _copies(model: Model, role: Role) -> list[str]:
-    """The statements filling the role's GNC struct `icd` from its bus struct `bus`.
+    """The statements filling the struct a role's conversion gives from the struct it takes.
 
     Args:
         model: the model.
@@ -62,18 +78,19 @@ def _copies(model: Model, role: Role) -> list[str]:
         ValueError: a field breaks `fsw.codegen.fields.plan`'s rule, or is not a one-dimensional
             array of one of `fsw.codegen.fields.STRUCT_CODES`, naming it.
     """
-    bus, icd = model.types[role.bus], model.types[role.icd]
-    sources = {m.name.lower(): (m.name, form(m, model.types)) for m in bus.members}
+    (source, taken), (target, given) = _ends(role)
+    members = model.types[source].members
+    sources = {m.name.lower(): (m.name, form(m, model.types)) for m in members}
     statements = []
-    for member, name, (shape, element) in plan(icd, model.types, sources, role.bus):
+    for member, name, (shape, element) in plan(model.types[target], model.types, sources, source):
         if len(shape) != 1 or not isinstance(element, np.dtype) or element not in _NUMBERS:
             raise ValueError(
-                f"{role.icd}.{member.name} is {shape} {element}, which the F´ CDH does not copy:"
+                f"{target}.{member.name} is {shape} {element}, which the F´ CDH does not copy:"
                 " it copies one-dimensional arrays of fsw.codegen.fields.STRUCT_CODES' primitives"
             )
         statements.append(
             f"        for (FwSizeType i = 0; i < {shape[0]}; i++) {{\n"
-            f"            icd.get_{member.name}()[i] = bus.get_{name}()[i];\n"
+            f"            {given}.get_{member.name}()[i] = {taken}.get_{name}()[i];\n"
             "        }"
         )
     return statements
@@ -87,7 +104,7 @@ _HEADER = """\
 #include "{base}"
 
 namespace Cdh {{
-
+{usings}
 class BusConverter final : public BusConverterComponentBase {{
   public:
     explicit BusConverter(const char* compName);
@@ -113,11 +130,11 @@ BusConverter::BusConverter(const char* compName) : BusConverterComponentBase(com
 """
 
 _CONVERSION = """
-    //! Role {role}'s GNC struct from its bus struct.
-    static {icd} convert_{role}(const {bus}& bus) {{
-        {icd} icd;
+    //! Role {role}'s {gives} from its {takes}.
+    static {target} convert_{role}(const {source}& {taken}) {{
+        {target} {given};
 {copies}
-        return icd;
+        return {given};
     }}
 """
 
@@ -181,12 +198,12 @@ _BUS_PIN = """\
 _ROLE_PIN = """\
     m.def(
         "cdh_{role}",
-        [](const pybind11::bytes& bus_bytes) {{
-            const std::string text = bus_bytes;
+        [](const pybind11::bytes& {argument}) {{
+            const std::string text = {argument};
             std::vector<U8> data(text.begin(), text.end());
             Fw::ExternalSerializeBuffer buffer(data.data(), static_cast<FwSizeType>(data.size()));
             buffer.setBuffLen(static_cast<FwSizeType>(data.size()));
-            {bus} msg;
+            {source} msg;
             const Fw::SerializeStatus status = msg.deserializeFrom(buffer);
             if (status != Fw::FW_SERIALIZE_OK) {{
                 throw std::runtime_error("cdh_{role}: deserializing {qualified} failed with F´ "
@@ -194,9 +211,9 @@ _ROLE_PIN = """\
             }}
             return busConverterSerialized(Cdh::BusConverter::convert_{role}(msg), "cdh_{role}");
         }},
-        pybind11::arg("bus_bytes"),
-        "Role {role}'s bus bytes, deserialized by F´ and converted by Cdh.BusConverter's "
-        "generated conversion: F´'s serialization of the {icd} it gives.");
+        pybind11::arg("{argument}"),
+        "Role {role}'s {taken} bytes, deserialized by F´ and converted by Cdh.BusConverter's "
+        "generated conversion: F´'s serialization of the {target} it gives.");
 """
 
 
@@ -252,10 +269,18 @@ def _pins(model: Model, found: list[Role]) -> str:
     """
     buses = dict.fromkeys(role.bus for role in found)
     pins = [_bus_pin(model, bus) for bus in buses]
-    pins += [
-        _ROLE_PIN.format(role=role.role, bus=_cpp(role.bus), qualified=role.bus, icd=role.icd)
-        for role in found
-    ]
+    for role in found:
+        (source, taken), (target, _) = _ends(role)
+        pins.append(
+            _ROLE_PIN.format(
+                role=role.role,
+                argument=f"{taken}_bytes",
+                source=_cpp(source),
+                qualified=source,
+                taken=taken,
+                target=target,
+            )
+        )
     return _PINS.format(component=CONVERTER, pins="\n".join(pins))
 
 
@@ -276,19 +301,29 @@ def render(model: Model) -> dict[str, str]:
     found = roles(model)
     conversions, declarations, definitions = [], [], []
     for role in found:
+        (source, taken), (target, given) = _ends(role)
         conversions.append(
             _CONVERSION.format(
                 role=role.role,
-                icd=_cpp(role.icd),
-                bus=_cpp(role.bus),
+                gives="GNC struct" if role.sensor else "bus struct",
+                takes="bus struct" if role.sensor else "GNC struct",
+                target=_cpp(target),
+                source=_cpp(source),
+                taken=taken,
+                given=given,
                 copies="\n".join(_copies(model, role)),
             )
         )
-        signature = f"{role.input}_handler(FwIndexType, const {_cpp(role.bus)}& msg)"
+        signature = f"{role.input}_handler(FwIndexType, const {_cpp(source)}& msg)"
         declarations.append(f"    void {signature} override;")
         definitions.append(_HANDLER.format(signature=signature, output=role.output, role=role.role))
     return {
         "BusConverter.hpp": _HEADER.format(
+            usings="".join(
+                f"using {_cpp(r.bus)}PortBuffer;\nusing {_cpp(r.bus)}PortSerializer;\n"
+                for r in found
+                if not r.sensor
+            ),
             component=CONVERTER,
             base=base.as_posix(),
             conversions="".join(conversions),
