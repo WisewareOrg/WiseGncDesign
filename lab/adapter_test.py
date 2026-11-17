@@ -1,6 +1,7 @@
-"""The lab adapter: each configuration's F´ build as a WiseDynamics FSW build, on its sensor bytes.
+"""The lab adapter: each configuration's F´ build as a WiseDynamics FSW build, on its bus bytes.
 
-Skipped without every deployment `just fsw` builds.
+Each configuration's sensor bytes go in; the test mock `MockActuation`'s actuator bytes come back
+as commands. Skipped without every deployment `just fsw` builds.
 """
 
 import re
@@ -11,7 +12,13 @@ from typing import Any
 
 import pytest
 
-from fsw.codegen.deployment import fprime_configurations, tick_period
+from fsw.codegen import fpp_types
+from fsw.codegen.deployment import configuration_model, fprime_configurations, tick_period
+from fsw.codegen.roles import taken
+from fsw.mock import MOCK
+from fsw.mock.actuator.actuator import Actuator
+from fsw.python.cdh import outputs
+from fsw.python.rio.messages import commands
 from ground.fprime_station import FprimeStation
 from lab import Adapter, built
 
@@ -242,3 +249,33 @@ def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(
     adapter.boot()
 
     assert adapter.telemetry() == []
+
+
+def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(tmp_path: Path):
+    """MockActuation's adapter returns, each tick, the role's payload the Python build makes.
+
+    The test mock sends its command each tick; the adapter reads the bytes back into a fresh
+    `messaging.<Name>Payload` of the role's message, field for field the Python build's.
+
+    Args:
+        tmp_path: where the case's record is written.
+    """
+    configuration = "MockActuation"
+    if not built(configuration):
+        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
+    fpp_types.load(MOCK)
+    [role] = taken(configuration_model(configuration, contract=MOCK), configuration)
+    pairs = outputs.pairings([role])
+    sent = Actuator(None).step(0.0)[0]
+    python = commands(pairs, outputs.convert(pairs, {role.output: sent[0]}))[role.role]
+    record = tmp_path / "run_0000.prm.json"
+    record.write_text('{"MockActuation.actuator": {}}')
+    adapter = Adapter(configuration, record, contract=MOCK)
+    adapter.boot()
+
+    for k in (1, 2):
+        tick = adapter.tick(k * NS, {})
+        assert list(tick) == [role.role]
+        assert type(tick[role.role]) is type(python)
+        for field in type(python).__dtype__.names:
+            assert list(getattr(tick[role.role], field)) == list(getattr(python, field)), field
