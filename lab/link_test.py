@@ -72,7 +72,7 @@ def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
         station: the station on it.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     fsw.boot(prm, parameter_ids)
 
@@ -111,7 +111,7 @@ def test_nav_s_writes_come_down_once_in_order_with_their_f_prime_time(
         decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     fsw.boot(prm, parameter_ids)
     station.uplink("nav.initNavState", STATE, 1)
@@ -150,7 +150,7 @@ def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
         decoded: drains the station's telemetry as values.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     fsw.boot(prm, parameter_ids)
     t_ns = NS + 500_000_000 + 7_000
@@ -178,7 +178,7 @@ def test_the_rate_group_s_health_repeats_on_the_stub_clock(
         station: the station on it.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     ticks = 500
     fsw.boot(prm, parameter_ids)
@@ -229,7 +229,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
         tmp_path: where the configuration's topology is rendered.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     instances = Dictionary(DICTIONARY).algorithm_instances()
     (configuration,) = {i.name.split(".", 1)[0] for i in instances}

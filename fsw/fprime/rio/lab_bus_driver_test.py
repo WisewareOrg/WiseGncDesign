@@ -1,9 +1,9 @@
-"""SimHub forwards each role's bus bytes to its typed bus port, and a push it cannot deliver raises.
+"""LabBusDriver forwards each role's bus bytes to its typed bus port; an undeliverable push raises.
 
 On a booted copy of the deployment, for every role of the contract's `Cdh.BusConverter`: the
-role's message steps without an assert on its SimHub port, and bytes of the wrong length, a port
-nothing is wired to, a port past SimHub's `busOut` and an empty push each trip F´'s own assert,
-which raises in Python. Skipped without the deployment `just fsw` builds, as the `fsw` and
+role's message steps without an assert on its LabBusDriver port, and bytes of the wrong length, a
+port nothing is wired to, a port past LabBusDriver's `busOut` and an empty push each trip F´'s own
+assert, which raises in Python. Skipped without the deployment `just fsw` builds, as the `fsw` and
 `bus_by_role` fixtures skip.
 """
 
@@ -19,8 +19,8 @@ from lab.power_cycle import power_cycle
 NS = 1_000_000_000
 """ns per s."""
 
-_SIMHUB = r'^Assert: "[^"]*fsw/fprime/rio/SimHub\.cpp:\d+"'
-"""The assert SimHub's own leftover-bytes check raises."""
+_DRIVER = r'^Assert: "[^"]*fsw/fprime/rio/LabBusDriver\.cpp:\d+"'
+"""The assert LabBusDriver's own leftover-bytes check raises."""
 
 _TOPOLOGY = r'^Assert: "[^"]*FswTopologyAc\.cpp:\d+"'
 """An assert the deployment's generated port calls raise: an unknown port, or bytes too short."""
@@ -28,12 +28,12 @@ _TOPOLOGY = r'^Assert: "[^"]*FswTopologyAc\.cpp:\d+"'
 
 @functools.cache
 def _hub_ports() -> int:
-    """The size of SimHub's `busOut`, read from its FPP.
+    """The size of LabBusDriver's `busOut`, read from its FPP.
 
     Returns:
         The number of ports.
     """
-    outputs = read(contract_files()).components["Bus.SimHub"].outputs
+    outputs = read(contract_files()).components["Bus.LabBusDriver"].outputs
     [bus_out] = [port for port in outputs if port.name == "busOut"]
     return bus_out.size
 
@@ -47,7 +47,7 @@ def _stepped(prm: str, parameter_ids: list[int], port: int, data: bytes) -> Modu
     Args:
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        port: the role's SimHub port.
+        port: the role's LabBusDriver port.
         data: the role's message bytes.
 
     Returns:
@@ -71,7 +71,7 @@ def test_every_role_s_bus_message_steps_without_an_assert(
         fsw: a copy of the deployment.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     assert bus
     fsw.boot(prm, parameter_ids)
@@ -80,7 +80,7 @@ def test_every_role_s_bus_message_steps_without_an_assert(
 
 
 @pytest.mark.parametrize(
-    ("change", "source"), [(-1, _TOPOLOGY), (1, _SIMHUB)], ids=["one-short", "one-over"]
+    ("change", "source"), [(-1, _TOPOLOGY), (1, _DRIVER)], ids=["one-short", "one-over"]
 )
 def test_a_role_s_push_of_the_wrong_length_raises(
     prm: str,
@@ -91,13 +91,13 @@ def test_a_role_s_push_of_the_wrong_length_raises(
 ) -> None:
     """Each role's bytes one short of its message, or one over, trip F´'s assert in Python.
 
-    One short fails the connected port's deserialization; one over fails SimHub's check that the
-    port consumed every byte.
+    One short fails the connected port's deserialization; one over fails LabBusDriver's check that
+    the port consumed every byte.
 
     Args:
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus_by_role: each role's SimHub port and message bytes.
+        bus_by_role: each role's LabBusDriver port and message bytes.
         change: the bytes added to the message, or removed from it.
         source: the assert expected, by its file.
     """
@@ -111,7 +111,7 @@ def test_a_role_s_push_of_the_wrong_length_raises(
 
 
 @pytest.mark.parametrize("push", ["unwired-port", "port-past-busOut", "empty"])
-def test_a_push_simhub_cannot_deliver_raises(
+def test_a_push_lab_bus_driver_cannot_deliver_raises(
     prm: str, parameter_ids: list[int], bus_by_role: dict[str, tuple[int, bytes]], push: str
 ) -> None:
     """A role's message on a port nothing is wired to, or past `busOut`, or no bytes, raise.
@@ -119,12 +119,12 @@ def test_a_push_simhub_cannot_deliver_raises(
     Args:
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus_by_role: each role's SimHub port and message bytes.
+        bus_by_role: each role's LabBusDriver port and message bytes.
         push: the push refused.
     """
     assert bus_by_role
     unwired = sorted(set(range(_hub_ports())) - {port for port, _ in bus_by_role.values()})
-    assert unwired, "every SimHub port is wired"
+    assert unwired, "every LabBusDriver port is wired"
     for port, data in bus_by_role.values():
         fsw = _stepped(prm, parameter_ids, port, data)
         refused = {

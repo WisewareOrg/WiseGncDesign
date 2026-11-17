@@ -96,15 +96,15 @@ PYBIND11_MODULE(_wise_fsw, m) {
             g_cooperative.pump();
             for (const auto& message : bus) {
                 const std::string data = message.second;
-                WiseFsw::simHub.push(message.first, reinterpret_cast<const U8*>(data.data()),
+                WiseFsw::labBusDriver.push(message.first, reinterpret_cast<const U8*>(data.data()),
                                      static_cast<FwSizeType>(data.size()));
             }
             WiseFsw::simTime.tick();
         },
         py::arg("t_ns"), py::arg("bus"),
         "Sets the clock to t_ns (ns), runs the queued commands, pushes each (port, bytes) of bus out on "
-        "SimHub.busOut[port] in order and ticks the rate groups once. Bytes the connected port does not deserialize "
-        "exactly trip F´'s assert.");
+        "LabBusDriver.busOut[port] in order and ticks the rate groups once. Bytes the connected port does not "
+        "deserialize exactly trip F´'s assert.");
 
     m.def(
         "pump", [](int rounds) { g_cooperative.pump(rounds); }, py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},

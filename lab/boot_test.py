@@ -56,7 +56,7 @@ def test_a_case_s_file_boots_every_parameter_valid(
         prm_record: the case's parameter record.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     recorded = {
         f"{instance.rsplit('.', 1)[1]}.{name}"
@@ -175,7 +175,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
         tmp_path: where PrmDb's image is decoded.
         prm_record: the case's parameter record, edited here.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     entries = json.loads(prm_record.read_text())
     counter = itertools.count(1)
@@ -314,7 +314,7 @@ def test_the_sandbox_is_the_case_s_directory(
         prm: the case's parameter file, in `case`.
         parameter_ids: every parameter's ID, which boot holds valid.
         monkeypatch: sets the working directory, which the loaded paths are relative to.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     monkeypatch.chdir(tmp_path)
     dat = Path(prm)

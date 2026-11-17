@@ -13,7 +13,8 @@
   telemetry in Basilisk message structs and the boot(prm_path) check; the lab is ADR 0006 rev 1;
   fetching by tag and the flight's record become consequences, their rejected alternatives standing
   in rev 2, and a flight's end belonging to the scenario moves to the README (issue 85 one decision
-  per ADR).
+  per ADR); the spike's bus driver is named by its job (issue 63 The lab's bus driver carries bus
+  data into the F´ build).
 - **rev 2** — 2026-11-13 — stated timelessly and without naming an algorithm; the command and
   telemetry decisions are ADR 0004 rev 1 (issue 38 commands into the F´ build).
 - **rev 1** — 2026-11-12 — first written (issue 31 F´ in Basilisk).
@@ -50,9 +51,9 @@ reports (every case flown with a ground stays in memory), so that growth was nei
 excluded. Not covered: the copies ran setup at import, so a fresh copy, `boot(prm_path)` and PrmDb's
 load were never run together.
 
-**An assert in a Release build** (`9eccec3`). A 55-byte push through SimHub asserted, printed,
-and delivered a partly filled struct: F´'s default assert handler prints and returns. Not covered:
-an assert thrown through F´ into pybind11.
+**An assert in a Release build** (`9eccec3`). A 55-byte push through the spike's bus driver
+asserted, printed, and delivered a partly filled struct: F´'s default assert handler prints and
+returns. Not covered: an assert thrown through F´ into pybind11.
 
 ## Decision
 

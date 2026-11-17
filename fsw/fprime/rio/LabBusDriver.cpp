@@ -1,12 +1,12 @@
-#include "fsw/fprime/rio/SimHub.hpp"
+#include "fsw/fprime/rio/LabBusDriver.hpp"
 
 #include "Fw/Types/Assert.hpp"
 
 namespace Bus {
 
-SimHub::SimHub(const char* compName) : SimHubComponentBase(compName) {}
+LabBusDriver::LabBusDriver(const char* compName) : LabBusDriverComponentBase(compName) {}
 
-void SimHub::push(FwIndexType port, const U8* data, FwSizeType size) {
+void LabBusDriver::push(FwIndexType port, const U8* data, FwSizeType size) {
     Fw::ExternalSerializeBuffer wrapper(const_cast<U8*>(data), size);
     const Fw::SerializeStatus status = wrapper.setBuffLen(size);
     FW_ASSERT(status == Fw::FW_SERIALIZE_OK, static_cast<FwAssertArgType>(status));

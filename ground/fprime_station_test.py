@@ -277,7 +277,7 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_nav_stays_idle(
         decoded: drains the station's telemetry as values.
         change: makes the bad packet from a good `nav.initNavState`.
         response: the response F´ gives it.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     fsw.uplink(change(_init()), 7)
     fsw.step(t_ns=NS, bus=bus)

@@ -126,7 +126,7 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
     Args:
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     raised = power_cycle()
 
@@ -152,7 +152,7 @@ def test_two_copies_in_one_process_share_no_state(
     Args:
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
-        bus: every role's bus message on its SimHub port.
+        bus: every role's bus message on its LabBusDriver port.
     """
     earlier, later = power_cycle(), power_cycle()
     earlier_station = FprimeStation(earlier, DICTIONARY)

@@ -222,15 +222,16 @@ compiles its GNC sub-topology with it; the shared instances are in
 `fsw/fprime/deployment/instances.fpp`. The F´ build takes every directory under `algorithms/` with
 a `CMakeLists.txt`, and F´ finds which algorithms a configuration links from its FPP. Each
 `_wise_fsw.step(t_ns, bus)` sets SimTime to the simulation's time, runs the queued commands, pushes
-each `(port, bytes)` of `bus` out on SimHub's serial port `busOut[port]`, and then SimTime ticks the
-driver once, so nav runs on every `navDivider`-th step. SimHub stands in for the bus driver: the
-typed port each `busOut` connects to deserializes the bytes as F´ serializes the bus struct, and
-bytes it does not consume exactly trip F´'s assert. `Fsw.fpp.in` wires each role by hand:
-`simHub.busOut[i] -> cdh.<role>In`, and `cdh.<role>Out` to the sub-topology's `<role>In`, where
-`cdh` is the generated `Cdh.BusConverter`; an added sensor is wired there.
+each `(port, bytes)` of `bus` out on LabBusDriver's serial port `busOut[port]`, and then SimTime
+ticks the driver once, so nav runs on every `navDivider`-th step. LabBusDriver is the RIO bus
+driver the lab uses, receiving raw bus bytes from the bus emulator: the typed port each `busOut`
+connects to deserializes the bytes as F´ serializes the bus struct, and bytes it does not consume
+exactly trip F´'s assert. `Fsw.fpp.in` wires each role by hand:
+`labBusDriver.busOut[i] -> cdh.<role>In`, and `cdh.<role>Out` to the sub-topology's `<role>In`,
+where `cdh` is the generated `Cdh.BusConverter`; an added sensor is wired there.
 `fsw.codegen.deployment.bus_port(configuration, "<role>In")` reads `i` back from the rendered
-deployment, and `FprimeModule` pushes the IMU message's bytes, as `lab.bus_emulator` writes them, on
-that port.
+deployment, and `FprimeModule` pushes the bytes of the message it reads, as `lab.bus_emulator`
+writes them, on that port.
 
 The rate group's health telemetry is recorded with every other channel; the deployment links F´'s
 stub `Os::RawTime`, so its cycle times read 0. Each case flies a fresh copy of the deployment, so
@@ -248,7 +249,7 @@ The F´ build's CDH component, `Cdh.BusConverter`, is generated from its declara
 directory: for each role `fsw.codegen.roles` reads, an inline conversion `convert_<role>` that
 builds the GNC struct from the bus struct by the field rule the Python build's converter follows,
 `fsw.codegen.fields`, and a handler that sends the result on `<role>Out`. Each deployment
-instances it as `cdh`, between SimHub and the GNC. The generator emits two test pins into
+instances it as `cdh`, between LabBusDriver and the GNC. The generator emits two test pins into
 `_wise_fsw`: `bus_<Struct>(<member>=...)` returns F´'s serialization of a bus struct built from
 its members' values, and `cdh_<role>(bus_bytes)` returns F´'s serialization of the GNC struct the
 conversion makes from the bus struct F´ deserializes from the bytes.

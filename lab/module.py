@@ -31,10 +31,10 @@ class FprimeModule(sysModel.SysModel):
     reckoner idle and PrmDb loading the case's `.dat`, so a case keeps nothing of an earlier one.
     Each `UpdateState` whose time lies after the last tick's sets the clock, runs the uplinked
     commands through F´'s command dispatcher, pushes the IMU message's bytes, as the bus emulator
-    writes them, on the SimHub port the deployment wires to the CDH's IMU input, and ticks the rate
-    groups. The radio edge is an `FprimeStation` on the copy's pins: it encodes each command into
-    F´'s packet, and the responses and every telemetry write, each with its F´ time tag, come down
-    through it.
+    writes them, on the LabBusDriver port the deployment wires to the CDH's IMU input, and ticks the
+    rate groups. The radio edge is an `FprimeStation` on the copy's pins: it encodes each command
+    into F´'s packet, and the responses and every telemetry write, each with its F´ time tag, come
+    down through it.
 
     Attributes:
         period_s: the period, in s, of the task the simulation runs this module in: the base tick
@@ -55,7 +55,7 @@ class FprimeModule(sysModel.SysModel):
     _station: FprimeStation
     """The radio edge on that copy; unset before the first `Reset`."""
     _imu_port: int
-    """The SimHub port the deployment wires to the CDH's IMU input."""
+    """The LabBusDriver port the deployment wires to the CDH's IMU input."""
 
     def __init__(self, imu: Any, prm_path: Path) -> None:
         """Makes the case's `.dat` beside its record, once `source` has checked the build.

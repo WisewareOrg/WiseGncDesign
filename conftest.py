@@ -127,7 +127,7 @@ def bus_messages() -> dict[str, BusMessage]:
 
 @pytest.fixture
 def bus_by_role(bus_messages: dict[str, BusMessage]) -> dict[str, tuple[int, bytes]]:
-    """Each role's SimHub port and its bus message's bytes, as the bus emulator writes them.
+    """Each role's LabBusDriver port and its bus message's bytes, as the bus emulator writes them.
 
     The roles are the contract's `Cdh.BusConverter`'s, and each port is the one the built
     deployment's configuration wires to the role's CDH input, read from its FPP. The shared
@@ -159,7 +159,7 @@ def bus_by_role(bus_messages: dict[str, BusMessage]) -> dict[str, tuple[int, byt
 
 @pytest.fixture
 def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
-    """The bus one step takes: every role's message bytes on its SimHub port.
+    """The bus one step takes: every role's message bytes on its LabBusDriver port.
 
     Args:
         bus_by_role: each role's port and bytes.
