@@ -7,12 +7,13 @@ Everything it compares is read from the contract, so an algorithm adds nothing h
 - the telemetry of every channel each algorithm member's component declares, where the members are
   the instances the configuration's rate groups run (`fsw.codegen.members`);
 - the command log's entries for every command those components declare: time sent, name,
-  arguments, response and response time;
-- the case's parameter record, `run_<NNNN>.prm.json`, which holds only the members' parameters.
+  arguments, response and response time.
 
 The spec is a minimum, and nothing else is read: a command's free-text reason and context, F´'s
-parameter set and save commands, any other component's command or channel, and a channel the
-member does not declare.
+parameter set and save commands, any other component's command or channel, a channel the member
+does not declare, and the case's parameter record. Both builds' records come from the same ground
+code, so comparing them would prove nothing about what a build holds; each build's boot tests
+check what it loads from the record.
 
 Each tolerance has its reason:
 
@@ -28,8 +29,6 @@ Each tolerance has its reason:
 - Every other value is exact: non-float telemetry, each write's time, every value's dtype and
   shape, and a command's time, name, response and response time. Both builds run the same FPP
   rates on the same tick, so times and responses have no source of last-bit difference.
-- The parameter records are exact: the ground writes both from the same dispersed scenario before
-  either build runs, so a difference means the twins did not fly the same case.
 - Units are not compared: both builds take them from the same FPP format string.
 """
 
@@ -54,9 +53,6 @@ TOLERANCE = 1e-12
 
 _COMMAND_FIELDS = ("t_s", "name", "response", "response_t_s")
 """A command entry's fields compared exactly; its arguments are compared by `_differ`."""
-
-_ABSENT = object()
-"""A parameter one record lacks."""
 
 
 def _roles(gnc: str, contract: Contract) -> list[tuple[str, Component]]:
@@ -206,44 +202,12 @@ def _commands(
     return problems
 
 
-def _record(path: Path) -> dict[str, Any]:
-    """A case's parameter record, each value by `<instance>.<parameter>`.
-
-    Args:
-        path: the record.
-
-    Returns:
-        The values.
-    """
-    return {
-        f"{instance}.{name}": value
-        for instance, values in json.loads(path.read_text()).items()
-        for name, value in values.items()
-    }
-
-
-def _parameters(python: Path, fprime: Path) -> list[str]:
-    """How one case's parameter records disagree.
-
-    Args:
-        python: the Python build's record.
-        fprime: the F´ build's record.
-
-    Returns:
-        The problem, naming each parameter that differs, or none.
-    """
-    p, f = _record(python), _record(fprime)
-    differing = sorted(n for n in p.keys() | f.keys() if p.get(n, _ABSENT) != f.get(n, _ABSENT))
-    return [f"parameter record differs in {differing}"] if differing else []
-
-
 def parity(gnc: str, python: Path, fprime: Path, *, contract: Contract = CONTRACT) -> list[str]:
     """Every way two flights of a configuration, one on each build, disagree.
 
     A differing planned count, a case with a run file on one side only and a case that crashed on
     either side are each a problem, and every case with a run file on both sides is compared. A
-    case missing what the harness always writes with its run file, its parameter record or a
-    written channel's write times, is malformed and raises as reading it does.
+    run missing the write times of a channel it wrote is malformed and raises as reading it does.
 
     Args:
         gnc: the configuration both flew.
@@ -276,10 +240,6 @@ def parity(gnc: str, python: Path, fprime: Path, *, contract: Contract = CONTRAC
         found = [
             *_telemetry(roles, p, f),
             *_commands(roles, json.loads(str(p["commands"])), json.loads(str(f["commands"]))),
-            *_parameters(
-                run_path(python, case).with_suffix(".prm.json"),
-                run_path(fprime, case).with_suffix(".prm.json"),
-            ),
         ]
         problems.extend(f"case {case}: {problem}" for problem in found)
     return problems

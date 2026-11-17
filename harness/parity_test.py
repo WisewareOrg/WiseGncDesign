@@ -1,7 +1,7 @@
 """Parity: two builds' flights of one configuration, compared on what the contract declares.
 
 Twins fly the harness's test mock, `MockFlight` of `harness.mock.MOCK`, and every name the tests
-write or change is read from its model: its member's channels, commands and parameters, and its
+write or change is read from its model: its member's channels, commands and parameter, and its
 rate group's channels as an extra. Each test changes one side of an identical twin.
 """
 
@@ -115,9 +115,7 @@ def _write_flight(folder: Path, build: str, scenario: str, gnc: str, nodeid: str
     )
     for case in range(CASES):
         rng = np.random.default_rng(case)
-        record = {MEMBER.name: {p.name: float(rng.uniform(1.0, 2.0)) for p in COMPONENT.parameters}}
         run = run_path(folder, case)
-        run.with_suffix(".prm.json").write_text(json.dumps(record))
         t_s = np.arange(WRITES, dtype=float)
         with h5py.File(run, "w") as f:
             f["t_s"] = t_s
@@ -344,28 +342,6 @@ def _extras(folder: Path) -> None:
         _dataset(folder, f"tlm_t/{name}", lambda _: np.arange(WRITES, dtype=float))
 
 
-def _record(folder: Path, change: Callable[[dict[str, Any]], Any]) -> None:
-    """Change the member's parameters in case 0's record in place.
-
-    Args:
-        folder: the flight's folder.
-        change: takes the member's parameters by name and changes them.
-    """
-    path = run_path(folder, 0).with_suffix(".prm.json")
-    record = json.loads(path.read_text())
-    change(record[MEMBER.name])
-    path.write_text(json.dumps(record))
-
-
-def _bump(parameters: dict[str, Any]) -> None:
-    """Change the parameter's value.
-
-    Args:
-        parameters: the member's parameters by name.
-    """
-    parameters[PARAMETER] += 1.0
-
-
 def _response(field: str, value: Any) -> Callable[[list[dict[str, Any]]], None]:
     """A change of one field of the float-argument command's entry.
 
@@ -492,12 +468,6 @@ CHANGES = [
         lambda t: _dataset(t.fprime, FLOAT_TLM, lambda v: v[:, :-1]),
         f"{FLOAT_TLM} is float64",
     ),
-    ("parameter", lambda t: _record(t.fprime, _bump), f"differs in ['{MEMBER.name}.{PARAMETER}']"),
-    (
-        "parameter-one-side",
-        lambda t: _record(t.fprime, lambda parameters: parameters.pop(PARAMETER)),
-        f"differs in ['{MEMBER.name}.{PARAMETER}']",
-    ),
     ("case-one-side", lambda t: run_path(t.fprime, 1).unlink(), "case 1"),
     ("crash-fprime", lambda t: _crash(t.fprime), "case 1: crashed on fprime"),
     ("crash-python", lambda t: _crash(t.python), "case 1: crashed on python"),
@@ -507,20 +477,6 @@ CHANGES = [
     ("extras-python", lambda t: _extras(t.python), None),
 ]
 """Each change of an identical twin, with a fragment of the one problem it makes, or None."""
-
-MALFORMED = [
-    (
-        "write-times-missing",
-        lambda t: _dataset(t.fprime, f"tlm_t/{INSTANCE}.{FLOAT}", lambda v: None),
-        KeyError,
-    ),
-    (
-        "record-missing",
-        lambda t: run_path(t.fprime, 0).with_suffix(".prm.json").unlink(),
-        FileNotFoundError,
-    ),
-]
-"""Each change leaving a case's run without a file or dataset the harness always writes with it."""
 
 
 @pytest.mark.parametrize(
@@ -551,22 +507,15 @@ PYTHON = {"build": "python"}
 FPRIME = {"build": "fprime"}
 
 
-@pytest.mark.parametrize(
-    ("change", "error"), [m[1:] for m in MALFORMED], ids=[m[0] for m in MALFORMED]
-)
-def test_a_case_missing_what_the_harness_writes_with_its_run_raises(
-    twin: Twin, change: Callable[[Twin], None], error: type[Exception]
-) -> None:
-    """A malformed case is not a disagreement: parity raises rather than reporting it.
+def test_a_run_missing_a_written_channel_s_write_times_raises(twin: Twin) -> None:
+    """A malformed run is not a disagreement: parity raises rather than reporting it.
 
     Args:
-        twin: an identical twin.
-        change: removes a channel's write times or the case's parameter record on one side.
-        error: the exception reading the missing item raises.
+        twin: an identical twin, whose F´ run then loses a channel's write times.
     """
-    change(twin)
+    _dataset(twin.fprime, f"tlm_t/{INSTANCE}.{FLOAT}", lambda v: None)
 
-    with pytest.raises(error):
+    with pytest.raises(KeyError):
         parity(GNC, twin.python, twin.fprime, contract=MOCK)
 
 
