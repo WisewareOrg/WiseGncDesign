@@ -29,9 +29,9 @@ class Adapter:
     every component idle and PrmDb loading the case's `.dat`, so a case keeps nothing of an earlier
     one. `tick` sets the clock, runs the uplinked commands, pushes each role's message, as the bus
     emulator writes it, on the LabBusDriver port the deployment wires to the CDH's `<role>In`,
-    ticks the rate groups and drains the copy's telemetry writes. The radio link is the copy's pins, in
-    bytes: `uplink` and `responses` reach the current copy, and `telemetry` returns what the ticks
-    drained. `ground.fprime_station.FprimeStation` is the ground's codec for them.
+    ticks the rate groups and drains the copy's telemetry writes. The radio link is the copy's
+    pins, in bytes: `uplink` and `responses` reach the current copy, and `telemetry` returns what
+    the ticks drained. `ground.fprime_station.FprimeStation` is the ground's codec for them.
 
     Attributes:
         period_s: s, the base tick's period, the configuration's FPP constant `tickPeriod`.
