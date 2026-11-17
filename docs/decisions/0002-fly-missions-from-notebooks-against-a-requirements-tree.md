@@ -8,7 +8,8 @@
 
 - **rev 2** — 2026-11-17 — a mission names a GNC configuration and a build, and each algorithm
   component claims its capabilities in its FPP (issue 65 Missions name a GNC sub-topology and a
-  build).
+  build); cross-build parity is a tested harness function, and `analysis/` holds only the rung
+  analyzers (issue 66 Parity is an analyzer over run files).
 - **rev 1** — 2026-11-11 — first written (issue 29 missions).
 
 ## Context
@@ -196,3 +197,5 @@ was dirty. Run files carry no GNC attributes.
 - Folders are skipped and listed, not hidden, so a renamed notebook shows up in the report.
 - Notebooks and their algorithm packages depend on the harness and the analyzers, so an algorithm
   cannot be lifted out of this repository unchanged.
+- Cross-build parity is a tested harness function, `harness/parity.py`, over run files; `analysis/`
+  holds only the rung analyzers the judge runs.
