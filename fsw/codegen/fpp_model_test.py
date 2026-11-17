@@ -240,10 +240,10 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(t
         Connection("WiseFsw.cmdDisp", "compCmdSend", 3, "WiseFsw.prmDb", "CmdDisp", 0),
         Connection("WiseFsw.cmdDisp", "seqCmdStatus", 0, "WiseFsw.groundLink", "cmdResponseIn", 0),
         Connection("WiseFsw.groundLink", "cmdOut", 0, "WiseFsw.cmdDisp", "seqCmdBuff", 0),
+        Connection("WiseFsw.labBusDriver", "busOut", 0, "WiseFsw.cdh", "imuIn", 0),
         Connection("WiseFsw.prmDb", "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 3),
         Connection("WiseFsw.prmDb", "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
         Connection("WiseFsw.prmDb", "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
-        Connection("WiseFsw.labBusDriver", "busOut", 0, "WiseFsw.cdh", "imuIn", 0),
         Connection("WiseFsw.simTime", "CycleOut", 0, driver, "CycleIn", 0),
     )
     assert model.constants["ImuDeadReckoning.navDivider"] == 1
