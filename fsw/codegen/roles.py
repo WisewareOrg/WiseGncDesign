@@ -73,15 +73,15 @@ def roles(model: Model) -> list[Role]:
         output = outputs.get(f"{role}Out")
         if output is None:
             raise ValueError(f"{CONVERTER}'s role {role} has {port.name} but no {role}Out")
-        taken, sent = _carried(port), _carried(output)
-        if taken.startswith("Bus.") == sent.startswith("Bus."):
-            carried = "both carry" if taken.startswith("Bus.") else "neither carries"
+        carried_in, carried_out = _carried(port), _carried(output)
+        if carried_in.startswith("Bus.") == carried_out.startswith("Bus."):
+            carried = "both carry" if carried_in.startswith("Bus.") else "neither carries"
             raise ValueError(
                 f"{CONVERTER}'s role {role}'s {port.name} and {output.name} {carried} a bus"
                 " struct, so the role has no direction"
             )
-        sensor = taken.startswith("Bus.")
-        bus, icd = (taken, sent) if sensor else (sent, taken)
+        sensor = carried_in.startswith("Bus.")
+        bus, icd = (carried_in, carried_out) if sensor else (carried_out, carried_in)
         found.append(Role(role, bus, icd, port.name, output.name, sensor))
     return found
 

@@ -78,7 +78,7 @@ def _copies(model: Model, role: Role) -> list[str]:
         ValueError: a field breaks `fsw.codegen.fields.plan`'s rule, or is not a one-dimensional
             array of one of `fsw.codegen.fields.STRUCT_CODES`, naming it.
     """
-    (source, taken), (target, given) = _ends(role)
+    (source, source_var), (target, target_var) = _ends(role)
     members = model.types[source].members
     sources = {m.name.lower(): (m.name, form(m, model.types)) for m in members}
     statements = []
@@ -90,7 +90,7 @@ def _copies(model: Model, role: Role) -> list[str]:
             )
         statements.append(
             f"        for (FwSizeType i = 0; i < {shape[0]}; i++) {{\n"
-            f"            {given}.get_{member.name}()[i] = {taken}.get_{name}()[i];\n"
+            f"            {target_var}.get_{member.name}()[i] = {source_var}.get_{name}()[i];\n"
             "        }"
         )
     return statements
@@ -131,10 +131,10 @@ BusConverter::BusConverter(const char* compName) : BusConverterComponentBase(com
 
 _CONVERSION = """
     //! Role {role}'s {gives} from its {takes}.
-    static {target} convert_{role}(const {source}& {taken}) {{
-        {target} {given};
+    static {target} convert_{role}(const {source}& {source_var}) {{
+        {target} {target_var};
 {copies}
-        return {given};
+        return {target_var};
     }}
 """
 
@@ -212,7 +212,7 @@ _ROLE_PIN = """\
             return busConverterSerialized(Cdh::BusConverter::convert_{role}(msg), "cdh_{role}");
         }},
         pybind11::arg("{argument}"),
-        "Role {role}'s {taken} bytes, deserialized by F´ and converted by Cdh.BusConverter's "
+        "Role {role}'s {source_var} bytes, deserialized by F´ and converted by Cdh.BusConverter's "
         "generated conversion: F´'s serialization of the {target} it gives.");
 """
 
@@ -270,14 +270,14 @@ def _pins(model: Model, found: list[Role]) -> str:
     buses = dict.fromkeys(role.bus for role in found)
     pins = [_bus_pin(model, bus) for bus in buses]
     for role in found:
-        (source, taken), (target, _) = _ends(role)
+        (source, source_var), (target, _) = _ends(role)
         pins.append(
             _ROLE_PIN.format(
                 role=role.role,
-                argument=f"{taken}_bytes",
+                argument=f"{source_var}_bytes",
                 source=_cpp(source),
                 qualified=source,
-                taken=taken,
+                source_var=source_var,
                 target=target,
             )
         )
@@ -324,7 +324,7 @@ def render(model: Model) -> dict[str, str]:
     found = roles(model)
     conversions, declarations, definitions = [], [], []
     for role in found:
-        (source, taken), (target, given) = _ends(role)
+        (source, source_var), (target, target_var) = _ends(role)
         conversions.append(
             _CONVERSION.format(
                 role=role.role,
@@ -332,8 +332,8 @@ def render(model: Model) -> dict[str, str]:
                 takes="bus struct" if role.sensor else "GNC struct",
                 target=_cpp(target),
                 source=_cpp(source),
-                taken=taken,
-                given=given,
+                source_var=source_var,
+                target_var=target_var,
                 copies="\n".join(_copies(model, role)),
             )
         )

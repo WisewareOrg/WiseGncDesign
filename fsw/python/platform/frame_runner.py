@@ -69,8 +69,8 @@ class FrameRunner:
         self._configuration = configuration
         self._gnc = GncPartition(model, configuration, components)
         roles = taken(model, configuration)
-        self._pairs = inputs.pairings([role for role in roles if role.sensor])
-        self._commands = outputs.pairings([role for role in roles if not role.sensor])
+        self._sensors = inputs.pairings([role for role in roles if role.sensor])
+        self._actuators = outputs.pairings([role for role in roles if not role.sensor])
         self._dividers = dividers(model, self._gnc.rate_groups)
         self._prm_path = Path(prm_path)
         self.period_s = tick_period(configuration, contract=contract)
@@ -109,14 +109,14 @@ class FrameRunner:
             the role's bus struct mirrors, for each actuator output GNC wrote this frame.
         """
         self._link.run_commands(t_ns)
-        read = messages.read(self._pairs, messages_by_role)
-        for port, value in inputs.convert(self._pairs, read).items():
+        read = messages.read(self._sensors, messages_by_role)
+        for port, value in inputs.convert(self._sensors, read).items():
             self._gnc.write(port, value)
         t = t_ns / _NANOSECONDS_PER_SECOND
         frame = self._gnc.run(t, self._driver.tick())
         for member in frame.telemetry:
             self._link.log(member.instance, member.telemetry, t_ns)
-        return messages.commands(self._commands, outputs.convert(self._commands, frame.outputs))
+        return messages.commands(self._actuators, outputs.convert(self._actuators, frame.outputs))
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command at the ground link, which runs it at the next tick.

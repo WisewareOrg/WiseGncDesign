@@ -259,27 +259,26 @@ def fprime_configurations(*, contract: Contract = CONTRACT) -> tuple[str, ...]:
     return tuple(
         configuration
         for configuration in configurations(contract=contract)
-        if not _without_fprime(configuration, contract)
+        if _fprime_built(configuration, contract)
     )
 
 
-def _without_fprime(configuration: str, contract: Contract) -> list[str]:
-    """A configuration's members whose component has no F´ component.
+def _fprime_built(configuration: str, contract: Contract) -> bool:
+    """Whether each member of a configuration has an F´ component.
 
     Args:
         configuration: the configuration.
         contract: the contract holding it.
 
     Returns:
-        The members' qualified names, in the order they run.
+        Whether the `.fpp` defining each member's component has a `CMakeLists.txt` beside it.
     """
     model = configuration_model(configuration, contract=contract)
-    return [
-        member.name
+    return all(
+        (model.components[member.component].file.parent / "CMakeLists.txt").is_file()
         for group in members(model, configuration).values()
         for member in group
-        if not (model.components[member.component].file.parent / "CMakeLists.txt").is_file()
-    ]
+    )
 
 
 @functools.cache
