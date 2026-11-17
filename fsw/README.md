@@ -235,6 +235,22 @@ and lists its deployment's FPP files, the algorithms the F´ build takes among t
 [ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
 and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
 
+The F´ build's CDH component, `Cdh.BusConverter`, is generated from its declaration in
+`fsw/fpp/interfaces/Cdh.fpp` by `fsw.codegen.bus_converter` while `just fsw` builds, into the build
+directory: for each role `fsw.codegen.roles` reads, an inline conversion `convert_<role>` that
+builds the GNC struct from the bus struct by the field rule the Python build's converter follows,
+`fsw.codegen.fields`, and a handler that sends the result on `<role>Out`. No topology instances
+`cdh`; the conversion runs through the `cdh_<role>` pins. The generator emits two test pins into
+`_wise_fsw`: `bus_<Struct>(<member>=...)` returns F´'s serialization of a bus struct built from
+its members' values, and `cdh_<role>(bus_bytes)` returns F´'s serialization of the GNC struct the
+conversion makes from the bus struct F´ deserializes from the bytes.
+`lab.bus_emulator.serialize(message)` writes a Basilisk message as the bytes F´ serializes its bus
+struct to, built from `fsw/fpp/interfaces/Bus.fpp` at import, and its bytes are held equal to
+`bus_<Struct>`'s. A bus or GNC field must be an array of one of `fsw.codegen.fields.STRUCT_CODES`'
+primitives; the generator and the emulator refuse anything else, naming it. The reasoning is in
+[ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
+and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
+
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
 thread: `_wise_fsw.uplink(packet, context)` queues an F´ command packet, the next `step` runs it,
 and `_wise_fsw.responses()` returns each response under its context. `_wise_fsw.telemetry()`

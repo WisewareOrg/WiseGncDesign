@@ -28,24 +28,10 @@ from typing import Any
 import numpy as np
 
 from fsw.codegen.deployment import algorithm_files, contract_files
+from fsw.codegen.fields import Form, form, plan
 from fsw.codegen.fpp_model import Array, Component, Enum, Member, Model, Struct, read
 
 __all__ = ["converter", "named", "parameters_from"]
-
-_DTYPES = {
-    "F32": np.dtype("float32"),
-    "F64": np.dtype("float64"),
-    "I8": np.dtype("int8"),
-    "I16": np.dtype("int16"),
-    "I32": np.dtype("int32"),
-    "I64": np.dtype("int64"),
-    "U8": np.dtype("uint8"),
-    "U16": np.dtype("uint16"),
-    "U32": np.dtype("uint32"),
-    "U64": np.dtype("uint64"),
-    "bool": np.dtype("bool"),
-}
-"""Each numeric FPP primitive as its native-endian numpy type."""
 
 _STRUCTS: dict[type, tuple[Struct, dict[str, Struct | Enum | Array]]] = {}
 """Each struct's tuple, to its struct and the model's types, for `converter`."""
@@ -58,9 +44,8 @@ _COMPONENTS: dict[str, tuple[Component, dict[str, Struct | Enum | Array]]] = {}
 def converter(source: type, target: type) -> Callable[[Any], Any]:
     """A function converting a `source` value to a `target` tuple, each field taken by name.
 
-    Every field of `target` is taken from the `source` field of its name, ignoring case, which must
-    have its shape and element type; fields of `source` that `target` lacks are dropped. An array
-    field becomes a fresh array of the FPP type; a scalar or an enum name passes as it is.
+    Fields are taken by `fsw.codegen.fields.plan`'s rule. An array field becomes a fresh array of
+    the FPP type; a scalar or an enum name passes as it is.
 
     Args:
         source: a struct's tuple, or a Basilisk message payload's type.
@@ -70,28 +55,15 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
         The converter.
 
     Raises:
-        ValueError: `target` is not a struct's tuple, or a field of it is a struct, is missing from
-            `source`, or differs from it in shape or element type, naming it.
+        ValueError: `target` is not a struct's tuple, or a field breaks the rule, naming it.
     """
     if target not in _STRUCTS:
         raise ValueError(f"{target.__name__} is not a struct's tuple")
     struct, types = _STRUCTS[target]
-    sources = _source_forms(source)
-    plan = []
-    for member in struct.members:
-        if isinstance(types.get(member.type), Struct):
-            raise ValueError(f"{struct.name}.{member.name} is a struct, which is not converted")
-        if member.name.lower() not in sources:
-            raise ValueError(f"{source.__name__} has no field {member.name} for {struct.name}")
-        name, source_form = sources[member.name.lower()]
-        shape, element = _form(member, types)
-        if source_form != (shape, element):
-            raise ValueError(
-                f"{struct.name}.{member.name} is {shape} {element}, but {source.__name__}.{name}"
-                f" is {source_form[0]} {source_form[1]}"
-            )
-        to = functools.partial(np.array, dtype=element) if shape else _same
-        plan.append((name, to))
+    steps = [
+        (name, functools.partial(np.array, dtype=element) if shape else _same)
+        for _, name, (shape, element) in plan(struct, types, _source_forms(source), source.__name__)
+    ]
 
     def convert(value: Any) -> Any:
         """The `target` tuple of a `source` value.
@@ -102,7 +74,7 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
         Returns:
             The tuple.
         """
-        return target._make([to(getattr(value, field)) for field, to in plan])
+        return target._make([to(getattr(value, field)) for field, to in steps])
 
     return convert
 
@@ -142,7 +114,7 @@ def parameters_from(tuple_type: type, values: Mapping[str, Any]) -> Any:
     component, types = _COMPONENTS[tuple_type.component]
     converted = dict(values)
     for parameter in component.parameters:
-        shape, element = _form(Member(parameter.name, parameter.type, None), types)
+        shape, element = form(Member(parameter.name, parameter.type, None), types)
         if shape and parameter.name in converted:
             value = np.array(converted[parameter.name], dtype=element)
             if value.shape != shape:
@@ -165,30 +137,7 @@ def _same(value: Any) -> Any:
     return value
 
 
-_Form = tuple[tuple[int, ...], np.dtype | str]
-"""A field's shape, and its element's numpy type, or the name of its element's FPP type when that
-is not a number."""
-
-
-def _form(member: Member, types: dict[str, Struct | Enum | Array]) -> _Form:
-    """A struct member's shape and element type, through any arrays of arrays.
-
-    Args:
-        member: the member.
-        types: the model's types.
-
-    Returns:
-        Its form.
-    """
-    shape = () if member.size is None else (member.size,)
-    type_name = member.type
-    while isinstance(array := types.get(type_name), Array):
-        shape += (array.size,)
-        type_name = array.element
-    return shape, _DTYPES.get(type_name, type_name)
-
-
-def _source_forms(source: type) -> dict[str, tuple[str, _Form]]:
+def _source_forms(source: type) -> dict[str, tuple[str, Form]]:
     """Each field of a converter's source, by its name in lower case.
 
     Args:
@@ -199,7 +148,7 @@ def _source_forms(source: type) -> dict[str, tuple[str, _Form]]:
     """
     if source in _STRUCTS:
         struct, types = _STRUCTS[source]
-        return {m.name.lower(): (m.name, _form(m, types)) for m in struct.members}
+        return {m.name.lower(): (m.name, form(m, types)) for m in struct.members}
     fields = source.__dtype__.fields
     return {
         name.lower(): (name, (fields[name][0].shape, fields[name][0].base))

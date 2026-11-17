@@ -1,4 +1,4 @@
-"""Fixtures every package's tests share: an F´ copy, its station, a drain, a case's parameters.
+"""Fixtures every package's tests share: an F´ copy, its station, a drain, messages, parameters.
 
 A fixture needing the F´ build, or the dictionary it generates, skips its test without it. Every
 pytest run loads this file, the judge's included, so the FPP model, Basilisk and F´ are imported
@@ -8,11 +8,12 @@ only by the fixtures that need them.
 from __future__ import annotations
 
 import importlib.util
+import itertools
 import operator
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 import pytest
@@ -74,6 +75,54 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
         return [(name, t_ns, edge.values(name, [raw])[0]) for name, t_ns, raw in edge.telemetry()]
 
     return drain
+
+
+class BusMessage(NamedTuple):
+    """A bus struct and a Basilisk message of it.
+
+    Attributes:
+        struct: the bus struct, as `fsw.codegen.fpp_model` reads it.
+        payload: the Basilisk payload the struct mirrors, its values set.
+        values: each member's values by its FPP name, in the struct's order.
+    """
+
+    struct: Any
+    payload: Any
+    values: dict[str, list[Any]]
+
+
+@pytest.fixture
+def bus_messages() -> dict[str, BusMessage]:
+    """A message of every bus struct in `lab.bus_emulator.BUS`, every value distinct.
+
+    Each element of each member of each struct takes the next of 0.5, 1.5, 2.5, ..., in its FPP
+    type, so a field or element out of place changes the result. Each struct's payload is the
+    `messaging.<Name>Payload` it mirrors, matched ignoring case as `bus_test.py` holds them.
+
+    Returns:
+        Each struct's message, by its qualified name.
+    """
+    from Basilisk.architecture import messaging
+
+    from fsw.codegen.fields import DTYPES
+    from fsw.codegen.fpp_model import Struct, read
+    from lab.bus_emulator import BUS
+
+    payloads = {n.lower(): getattr(messaging, n) for n in dir(messaging) if n.endswith("Payload")}
+    counter = itertools.count()
+    messages = {}
+    for name, struct in read([BUS]).types.items():
+        if not (name.startswith("Bus.") and isinstance(struct, Struct)):
+            continue
+        payload = payloads[name.removeprefix("Bus.").lower() + "payload"]()
+        fields = {field.lower(): field for field in type(payload).__dtype__.names}
+        values = {}
+        for member in struct.members:
+            elements = [next(counter) + 0.5 for _ in range(member.size)]
+            values[member.name] = np.array(elements, DTYPES[member.type]).tolist()
+            setattr(payload, fields[member.name.lower()], values[member.name])
+        messages[name] = BusMessage(struct, payload, values)
+    return messages
 
 
 @pytest.fixture(scope="session")
