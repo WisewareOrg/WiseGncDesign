@@ -114,7 +114,7 @@ def _component(
     parameter: bool = False,
     notebook: str | None = None,
 ) -> Path:
-    """Renders a test mock component in a folder of its own, with its notebook if it has one.
+    """Renders a test mock component in a package of its own, with its notebook if it has one.
 
     Args:
         root: where its folder goes.
@@ -136,6 +136,7 @@ def _component(
             parameter=PARAMETER if parameter else "",
         )
     )
+    (folder / "__init__.py").touch()
     if notebook is not None:
         (folder / f"{folder.name}.py").write_text(notebook)
     return fpp
@@ -149,8 +150,8 @@ def variants(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Contract]:
     definition. The `HarnessVariant` components are `Second` (SYS902, with its notebook),
     `Unclaimed` (no claim, no notebook), `Classless` (a notebook without its class) and
     `Parameterless` (a parameter, and a notebook with its class and no `parameters`). Each is in
-    `<root>/harness_variants/<folder>/`, and `<root>` is on `sys.path` for the session, so each
-    notebook imports as `harness_variants.<folder>.<folder>`.
+    the package `<root>/harness_variants/<folder>/`, and `<root>` is on `sys.path` for the session,
+    so each notebook imports as `harness_variants.<folder>.<folder>`.
 
     Args:
         tmp_path_factory: where the contract is rendered.
@@ -161,6 +162,7 @@ def variants(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Contract]:
     root = tmp_path_factory.mktemp("variants")
     package = root / "harness_variants"
     package.mkdir()
+    (package / "__init__.py").touch()
     components = (
         _component(package, "Second", ["provides: SYS902"], notebook=SECOND),
         _component(package, "Unclaimed"),

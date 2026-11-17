@@ -116,15 +116,16 @@ True
 
 ## Adding an algorithm
 
-Write the algorithm in `algorithms/<folder>/`, with its component model, `<Name>.fpp`, beside its
-notebook, `<folder>.py`: the ports its GNC sub-topology wires, the commands and telemetry it
-implements, its parameters, and an `@ provides: SYS...` line per capability it claims. Its class,
-in the notebook, is named as the component and takes its `<Name>Parameters`; its `step` and
-command methods are as [the Python build](#the-python-build) says. Its notebook's
-`parameters(scenario)` gives its `<Name>Parameters` tuple for a case, which the ground writes as
-the case's record, keyed by the algorithm's instance in its GNC sub-topology; a component without
-parameters needs none. A mission flies a configuration by name, `Mission(gnc=…, build=…)`, and
-finds the class and `parameters` in the notebook by the component's name.
+Write the algorithm as the package `algorithms/<folder>/`, with its `__init__.py` and its component
+model, `<Name>.fpp`, beside its notebook, `<folder>.py`: the ports its GNC sub-topology wires, the
+commands and telemetry it implements, its parameters, and an `@ provides: SYS...` line per
+capability it claims. Its class, in the notebook, is named as the component and takes its
+`<Name>Parameters`; its `step` and command methods are as [the Python build](#the-python-build)
+says. Its notebook's `parameters(scenario)` gives its `<Name>Parameters` tuple for a case, which
+the ground writes as the case's record, keyed by the algorithm's instance in its GNC sub-topology;
+a component without parameters needs none. A mission flies a configuration by name,
+`Mission(gnc=…, build=…)`, and finds the class and `parameters` in the notebook by the
+component's name, importing the notebook as `algorithms.<folder>.<folder>`.
 
 ## The dictionary
 

@@ -109,27 +109,25 @@ def _claims(model: Model, component: Component) -> list[str]:
 
 
 def _notebook(component: Component) -> ModuleType:
-    """The notebook of a component's algorithm, `<folder>/<folder>.py` beside its `.fpp`.
+    """The notebook of a component's algorithm, `<package>/<package>.py` beside its `.fpp`.
 
-    It is imported by its dotted name relative to the first `sys.path` entry holding it, so a
-    module already imported under that name is the notebook. A notebook missing, or one raising
-    while it imports, raises as Python's import does.
+    It is imported by its dotted name from its package root, the folder above the topmost of the
+    folders, walking up from the notebook's, that hold an `__init__.py`, as pytest names a test
+    module. The name is the same in a kernel, a worker and the suite, and a module already
+    imported under it is the notebook. A notebook missing, a root not on `sys.path`, or a notebook
+    raising while it imports, raises as Python's import does.
 
     Args:
         component: the component.
 
     Returns:
         The notebook's module.
-
-    Raises:
-        ValueError: no `sys.path` entry holds the notebook's file, naming it.
     """
     path = (component.file.parent / f"{component.file.parent.name}.py").resolve()
-    for entry in sys.path:
-        root = Path(entry or ".").resolve()
-        if path.is_relative_to(root):
-            return importlib.import_module(".".join(path.relative_to(root).with_suffix("").parts))
-    raise ValueError(f"no sys.path entry holds {path}, the notebook of {component.name}")
+    root = path.parent
+    while (root / "__init__.py").is_file():
+        root = root.parent
+    return importlib.import_module(".".join(path.relative_to(root).with_suffix("").parts))
 
 
 def _configuration(gnc: str, build: str, contract: Contract) -> _Configuration:
