@@ -108,11 +108,19 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
                                            static_cast<FwSizeType>(data.size()));
             }
             WiseFsw::simTime.tick();
+            py::list taken;
+            for (const auto& message : WiseFsw::labBusDriver.take()) {
+                taken.append(py::make_tuple(
+                    message.first,
+                    py::bytes(reinterpret_cast<const char*>(message.second.data()), message.second.size())));
+            }
+            return taken;
         },
         py::arg("t_ns"), py::arg("bus"),
         "Sets the clock to t_ns (ns), runs the queued commands, pushes each (port, bytes) of bus out on "
         "LabBusDriver.busOut[port] in order and ticks the rate groups once. Bytes the connected port does not "
-        "deserialize exactly trip F´'s assert.");
+        "deserialize exactly trip F´'s assert. Returns each (port, bytes) the step's GNC sent to "
+        "LabBusDriver.busIn[port], in arrival order.");
 
     m.def(
         "pump", [](int rounds) { g_cooperative.pump(rounds); }, py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},
