@@ -161,7 +161,8 @@ def test_a_booted_reckoner_reports_idle_and_no_state(
 ):
     """Booted and ticked once, nav writes `navState` idle, once, and nothing else.
 
-    `navDivider` is 1, so the tick is one run of nav, and its one write is `navState`.
+    Nav's divider is 1. That a rate group runs its members once every divider ticks is
+    `lab/link_test.py`'s `test_each_rate_group_runs_once_every_divider_ticks`.
 
     Args:
         booted: the test's copy of the deployment, booted idle on the case's parameters.
