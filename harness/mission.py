@@ -381,7 +381,8 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
     sides, or the F´ build's `lab.Adapter`, with an `FprimeStation` on its pins as the radio edge.
     WiseDynamics' `FswHost` hosts the build. A `Ground` flies the procedure against the radio edge
     and records the run file. An exception the procedure raised is re-raised whole, and a procedure
-    still waiting when the flight ends fails the case.
+    still waiting when the flight ends fails the case. An F´ build's test is skipped when its
+    configuration's extension is absent.
 
     Args:
         mission: the mission.
@@ -465,6 +466,13 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             pytest.fail("\n".join(problems), pytrace=False)
 
     test.pytestmark = [*test.pytestmark, *definition.pytestmark]
+    if mission.build == "fprime":
+        test.pytestmark.append(
+            pytest.mark.skipif(
+                importlib.util.find_spec(f"lab._wise_fsw_{mission.gnc}") is None,
+                reason=f"the F´ build of {mission.gnc} is absent; run `just fsw`",
+            )
+        )
     test.__name__ = f"test_{mission.gnc}_{mission.build}_{definition.__name__}"
     test.mission = mission
     test.scenario_id = scenario_id

@@ -19,7 +19,9 @@ import shutil
 import sys
 import tomllib
 from collections.abc import Callable, Iterator, Sequence
+from importlib.machinery import ModuleSpec
 from pathlib import Path
+from types import ModuleType
 
 import h5py
 import pytest
@@ -555,12 +557,25 @@ def test_each_configuration_s_mission_is_built_on_each_build_without_the_f_prime
     assert list(flown._found.capabilities) == claims
 
 
-def test_one_configuration_flown_on_both_builds_is_two_flights(configuration: str) -> None:
+@pytest.mark.parametrize("built", [False, True], ids=["extension-absent", "extension-present"])
+def test_one_configuration_flown_on_both_builds_is_two_flights(
+    configuration: str, built: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The flight's key holds the build, so the two builds of one scenario are two tests.
+
+    The F´ test skips when the configuration's extension is absent; the Python test never does.
 
     Args:
         configuration: the configuration.
+        built: whether the configuration's extension is present.
+        monkeypatch: makes the extension absent, or present as a module with a spec.
     """
+    extension = f"lab._wise_fsw_{configuration}"
+    module = None
+    if built:
+        module = ModuleType(extension)
+        module.__spec__ = ModuleSpec(extension, None)
+    monkeypatch.setitem(sys.modules, extension, module)
     _, scenario = _claimed(configuration)
     python = Mission(sorted(VEHICLES)[0], configuration, "python", (scenario,))
 
@@ -570,6 +585,14 @@ def test_one_configuration_flown_on_both_builds_is_two_flights(configuration: st
     prefix = f"test_{configuration}_"
     assert [name.removeprefix(prefix).split("_", 1)[0] for name in names] == ["fprime", "python"]
     assert len({name.removeprefix(prefix).split("_", 1)[1] for name in names}) == 1
+    skipped = {
+        name: mark.kwargs["reason"]
+        for name in names
+        for mark in vars(vehicle_class)[name].pytestmark
+        if mark.name == "skipif" and mark.args[0]
+    }
+    reason = f"the F´ build of {configuration} is absent; run `just fsw`"
+    assert skipped == ({} if built else {names[0]: reason})
 
 
 def test_the_class_a_mission_flies_is_its_notebook_module_s_own(tree: Path) -> None:
