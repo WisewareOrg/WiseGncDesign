@@ -13,11 +13,14 @@ tick's period, and `bus_port` the LabBusDriver port its deployment wires to a CD
 import functools
 import tempfile
 from pathlib import Path
+from typing import NamedTuple
 
 from fsw.codegen.fpp_model import Instance, Model, read
 
 __all__ = [
     "CLONE",
+    "CONTRACT",
+    "Contract",
     "algorithm_components",
     "algorithm_files",
     "bus_port",
@@ -107,6 +110,25 @@ def algorithm_files() -> tuple[Path, ...]:
     return tuple(fpp for build in algorithms for fpp in sorted(build.parent.glob("*.fpp")))
 
 
+class Contract(NamedTuple):
+    """The parts of a contract that vary: its algorithms and its GNC sub-topologies.
+
+    The F´ framework's files and the repository's own, the interfaces and the deployment's
+    stand-ins, are the spine every contract shares.
+
+    Attributes:
+        algorithms: the algorithms' `.fpp` files.
+        gnc: the directory of the GNC sub-topologies, one `<configuration>.fpp` per configuration.
+    """
+
+    algorithms: tuple[Path, ...]
+    gnc: Path
+
+
+CONTRACT = Contract(algorithm_files(), _GNC)
+"""The repository's contract: every algorithm, and the GNC sub-topologies in `fsw/fpp/gnc/`."""
+
+
 @functools.cache
 def algorithm_components() -> frozenset[str]:
     """The components an algorithm's `.fpp` defines, read once per process.
@@ -120,16 +142,19 @@ def algorithm_components() -> frozenset[str]:
     )
 
 
-def contract_files() -> tuple[Path, ...]:
+def contract_files(*, contract: Contract = CONTRACT) -> tuple[Path, ...]:
     """The files of the model every configuration shares, its GNC sub-topology and deployment aside.
 
+    Args:
+        contract: the contract, the repository's by default.
+
     Returns:
-        The files, absolute: the framework's, the repository's, then every algorithm's.
+        The files, absolute: the framework's, the repository's, then the contract's algorithms'.
     """
     return (
         *framework_files(),
         *(_REPOSITORY / path for path in _PROJECT),
-        *algorithm_files(),
+        *contract.algorithms,
     )
 
 
@@ -154,13 +179,16 @@ def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
     )
 
 
-def configurations() -> tuple[str, ...]:
-    """Every configuration: the name of each GNC sub-topology in `fsw/fpp/gnc/`.
+def configurations(*, contract: Contract = CONTRACT) -> tuple[str, ...]:
+    """Every configuration: the name of each GNC sub-topology in the contract's directory of them.
+
+    Args:
+        contract: the contract, the repository's by default, whose are `fsw/fpp/gnc/`'s.
 
     Returns:
         The names, sorted, such as `ImuDeadReckoning`.
     """
-    return tuple(sorted(path.stem for path in _GNC.glob("*.fpp")))
+    return tuple(sorted(path.stem for path in contract.gnc.glob("*.fpp")))
 
 
 @functools.cache
@@ -201,24 +229,26 @@ def gnc_instance(component: str) -> Instance:
 
 
 @functools.cache
-def configuration_model(configuration: str) -> Model:
+def configuration_model(configuration: str, *, contract: Contract = CONTRACT) -> Model:
     """A configuration's model: the contract and its GNC sub-topology, read once per process.
 
     Args:
-        configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`, such
-            as `ImuDeadReckoning`.
+        configuration: the configuration, the name of its GNC sub-topology in the contract's
+            directory of them, such as `ImuDeadReckoning`.
+        contract: the contract, the repository's by default.
 
     Returns:
         The model.
     """
-    return read((*contract_files(), _GNC / f"{configuration}.fpp"))
+    return read((*contract_files(contract=contract), contract.gnc / f"{configuration}.fpp"))
 
 
-def tick_period(configuration: str) -> float:
+def tick_period(configuration: str, *, contract: Contract = CONTRACT) -> float:
     """A configuration's base tick's period: the constant `tickPeriod` of its GNC sub-topology.
 
     Args:
         configuration: the configuration, such as `ImuDeadReckoning`.
+        contract: the contract, the repository's by default.
 
     Returns:
         s, the period.
@@ -227,9 +257,9 @@ def tick_period(configuration: str) -> float:
         KeyError: the sub-topology declares no `tickPeriod`, naming it.
     """
     constant = f"{configuration}.tickPeriod"
-    constants = configuration_model(configuration).constants
+    constants = configuration_model(configuration, contract=contract).constants
     if constant not in constants:
-        raise KeyError(f"{constant} is not declared in fsw/fpp/gnc/{configuration}.fpp")
+        raise KeyError(f"{constant} is not declared in {contract.gnc / configuration}.fpp")
     return float(constants[constant])
 
 

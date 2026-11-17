@@ -117,7 +117,8 @@ def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
     model = configuration_model("ImuDeadReckoning")
     constants = {k: v for k, v in model.constants.items() if k != "ImuDeadReckoning.tickPeriod"}
     monkeypatch.setattr(
-        "fsw.codegen.deployment.configuration_model", lambda _: model._replace(constants=constants)
+        "fsw.codegen.deployment.configuration_model",
+        lambda _, **__: model._replace(constants=constants),
     )
 
     with pytest.raises(KeyError, match=r"ImuDeadReckoning\.tickPeriod"):

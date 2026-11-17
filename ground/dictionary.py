@@ -21,8 +21,9 @@ import numpy as np
 
 from fsw.codegen.deployment import (
     CLONE,
+    CONTRACT,
+    Contract,
     algorithm_components,
-    algorithm_files,
     contract_files,
     framework_files,
     gnc_instances,
@@ -326,20 +327,25 @@ class Dictionary:
         return cls._generate(name, deployment, files, includes, component)
 
     @classmethod
-    def from_sub_topology(cls, configuration: str) -> "Dictionary":
+    def from_sub_topology(
+        cls, configuration: str, *, contract: Contract = CONTRACT
+    ) -> "Dictionary":
         """A configuration's GNC sub-topology's dictionary, generated from FPP with `fpp-to-dict`.
 
-        The deployment, `Py<configuration>`, imports the sub-topology `<configuration>.Gnc` of
-        `fsw/fpp/gnc/<configuration>.fpp` and is written only into the temporary directory
-        `fpp-to-dict` runs in. The model is the contract, `fsw.codegen.deployment.contract_files()`,
-        and the sub-topology. Its rate groups' entries are in it beside the algorithms'. As with
-        `from_component`, a dictionary is generated once per process for each content of its
-        inputs: the deployment, every file of the model, every `.fppi` under
-        `fsw/fpp/interfaces` and beside an algorithm, and the clone's tag; a model `fpp-to-dict`
-        rejects raises `RuntimeError` with the tool's stderr.
+        The deployment, `Py<configuration>`, imports the sub-topology `<configuration>.Gnc` of the
+        contract's `<configuration>.fpp`, `fsw/fpp/gnc/<configuration>.fpp` for the repository's,
+        and is written only into the temporary directory `fpp-to-dict` runs in. The model is the
+        contract's files, `fsw.codegen.deployment.contract_files`, and the sub-topology. Its rate
+        groups' entries are in it beside the algorithms'. As with `from_component`, a dictionary is
+        generated once per process for each content of its inputs: the deployment, every file of the
+        model, every `.fppi` under `fsw/fpp/interfaces` and beside an algorithm, and the clone's
+        tag; a model `fpp-to-dict` rejects raises `RuntimeError` with the tool's stderr.
 
         Args:
-            configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`.
+            configuration: the configuration, the name of its GNC sub-topology in the contract's
+                directory of them.
+            contract: the contract, the repository's by default, whose algorithms' `.fppi` are
+                the includes beside the interfaces'.
 
         Returns:
             The dictionary, as `_generate` gives it.
@@ -350,10 +356,10 @@ class Dictionary:
             f"  deployment topology {name} {{\n    import {configuration}.Gnc\n  }}\n}}\n"
         )
         framework = set(framework_files())
-        files = [p for p in contract_files() if p not in framework]
-        files.append(_REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp")
+        files = [p for p in contract_files(contract=contract) if p not in framework]
+        files.append(contract.gnc / f"{configuration}.fpp")
         includes = sorted(_INTERFACES.rglob("*.fppi"))
-        includes += sorted({f for p in algorithm_files() for f in p.parent.glob("*.fppi")})
+        includes += sorted({f for p in contract.algorithms for f in p.parent.glob("*.fppi")})
         return cls._generate(name, deployment, files, includes, configuration)
 
     @classmethod

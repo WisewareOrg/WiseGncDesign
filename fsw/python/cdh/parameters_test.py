@@ -56,7 +56,7 @@ def test_each_instance_s_parameters_come_back_as_its_tuple(
     record = _record(tmp_path, entries)
 
     for component, expected in algorithm_parameters.items():
-        read = parameters.read(record, type(expected))
+        read = parameters.read(record, type(expected), gnc_instance(component).name)
 
         assert type(read) is type(expected)
         for name, value in expected._asdict().items():
@@ -84,7 +84,7 @@ def test_a_parameter_missing_from_the_record_raises_naming_it(
         record = _record(tmp_path, {gnc_instance(component).name: values})
 
         with pytest.raises(TypeError, match=re.escape(missing)):
-            parameters.read(record, type(tuple_))
+            parameters.read(record, type(tuple_), gnc_instance(component).name)
 
 
 def test_a_parameter_the_component_lacks_raises_naming_it(
@@ -101,7 +101,7 @@ def test_a_parameter_the_component_lacks_raises_naming_it(
         record = _record(tmp_path, {gnc_instance(component).name: values})
 
         with pytest.raises(TypeError, match="notAParameter"):
-            parameters.read(record, type(tuple_))
+            parameters.read(record, type(tuple_), gnc_instance(component).name)
 
 
 def test_a_record_without_the_instance_raises_naming_it(
@@ -118,4 +118,4 @@ def test_a_record_without_the_instance_raises_naming_it(
         record = _record(tmp_path, {f"Other.{instance}": _values(tuple_)})
 
         with pytest.raises(KeyError, match=re.escape(f"no parameters for {instance}")):
-            parameters.read(record, type(tuple_))
+            parameters.read(record, type(tuple_), gnc_instance(component).name)

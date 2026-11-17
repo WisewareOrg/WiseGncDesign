@@ -3,6 +3,7 @@
 Needs the F´ framework clone `just _sync` fetches, not an F´ build.
 """
 
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,10 +12,11 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
-from fsw.codegen.deployment import CLONE
+from fsw.codegen import fpp_types
+from fsw.codegen.deployment import CLONE, Contract, algorithm_components
 from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_model_test import _MOCK_FRAMEWORK
-from fsw.codegen.fpp_types import Bus, Gnc, Svc, _build, converter, parameters_from
+from fsw.codegen.fpp_types import Bus, Gnc, Svc, _build, converter, named, parameters_from
 
 MOCK = """\
 module Mock {
@@ -440,3 +442,82 @@ def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_an
             assert sorted(tuple_of("Telemetry")._fields) == sorted(channels), instance.name
             assert sorted(tuple_of("Parameters")._fields) == sorted(parameters), instance.name
             assert list(tuple_of("Outputs")._fields) == ports, instance.name
+
+
+LOADED = """\
+module MockLoaded {
+
+  struct Sample {
+    value: F64
+  }
+
+  passive component Probe {
+    command recv port cmdIn
+    command reg port cmdRegOut
+    command resp port cmdResponseOut
+    telemetry port tlmOut
+    time get port timeCaller
+    param get port prmGetOut
+    param set port prmSetOut
+
+    telemetry level: F64
+
+    param gain: F64
+  }
+
+}
+"""
+"""A mock contract's algorithm: a module of its own, sharing no name with the repository's."""
+
+
+def _contract(directory: Path, algorithm: str) -> Contract:
+    """A contract of one algorithm file, with no GNC sub-topology.
+
+    Args:
+        directory: where the algorithm's `.fpp` and the empty GNC directory are written.
+        algorithm: the algorithm's FPP.
+
+    Returns:
+        The contract.
+    """
+    path = directory / "Algorithm.fpp"
+    path.write_text(algorithm)
+    (directory / "gnc").mkdir()
+    return Contract((path,), directory / "gnc")
+
+
+def test_a_loaded_contract_s_tuples_resolve_and_the_repository_s_stay_as_they_are(
+    tmp_path: Path,
+):
+    """After `load`, the contract's names resolve; the repository's namespaces and exports do not.
+
+    Args:
+        tmp_path: where the contract is written.
+    """
+    gnc, exports = dict(vars(Gnc)), list(fpp_types.__all__)
+
+    fpp_types.load(_contract(tmp_path, LOADED))
+
+    parameters = named("MockLoaded.ProbeParameters")
+    assert parameters._fields == ("gain",)
+    assert parameters.component == "MockLoaded.Probe"
+    assert named("MockLoaded.ProbeTelemetry")._fields == ("level",)
+    assert named("MockLoaded.Sample")._fields == ("value",)
+    assert parameters_from(parameters, {"gain": 2.5}) == parameters(gain=2.5)
+    assert dict(vars(Gnc)) == gnc
+    assert fpp_types.__all__ == exports
+    assert not hasattr(fpp_types, "MockLoaded")
+
+
+def test_a_contract_redefining_a_generated_name_is_refused_naming_it(tmp_path: Path):
+    """An algorithm component of the repository, defined again otherwise, raises naming it.
+
+    Args:
+        tmp_path: where the contract is written.
+    """
+    name = sorted(algorithm_components())[0]
+    module, component = name.rsplit(".", 1)
+    redefined = f"module {module} {{\n  passive component {component} {{\n  }}\n}}\n"
+
+    with pytest.raises(ValueError, match=re.escape(name)):
+        fpp_types.load(_contract(tmp_path, redefined))

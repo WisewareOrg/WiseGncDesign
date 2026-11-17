@@ -11,7 +11,11 @@ radio edge and records the flight; [RadioEdge](#radioedge) says which build pres
 `fsw.python.FrameRunner(configuration, prm_path, components)` is a configuration's Python build,
 the build WiseDynamics' `FswHost` hosts: the harness flies `FswHost(build, vehicle)`, which boots
 it at reset and ticks it every `period_s` with each role's Basilisk message. `components` are the
-algorithms' classes, each named as its FPP component. Each tick is one frame through the partitions
+algorithms' classes, each named as its FPP component. A keyword-only `contract`, a
+`fsw.codegen.deployment.Contract` of algorithm `.fpp` files and a directory of GNC sub-topologies,
+defaults to the repository's, `CONTRACT`; a test flies a mock contract through it, and
+`fsw.codegen.fpp_types.load(contract)` generates that contract's tuples beside the repository's.
+Each tick is one frame through the partitions
 of [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md),
 in `fsw/python/<partition>/`, and FPP gives each its structure:
 
