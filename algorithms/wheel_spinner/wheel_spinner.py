@@ -107,9 +107,9 @@ class WheelSpinner:
 # `parameters` gives the spinner's parameter for a case, the same whatever the scenario, and the
 # ground writes it as the case's record. The `WheelSpinning` configuration's GNC sub-topology flies
 # the spinner alone as `spinner`, every base tick, and a mission finds `WheelSpinner` and
-# `parameters` here by the component's name. The component has no F´ implementation, no
-# `CMakeLists.txt` beside its `.fpp`, so the F´ build leaves the configuration out and it flies on
-# the Python build only.
+# `parameters` here by the component's name. The F´ build flies the C++ component beside this
+# notebook, `WheelSpinner.cpp`, on the same record; `parity.py` flies both builds and holds them to
+# parity.
 
 
 # %%
@@ -128,10 +128,10 @@ def parameters(scenario: object) -> Gnc.WheelSpinnerParameters:
 # %% [markdown]
 # ## The mission
 #
-# The spinner on the wheel spacecraft, flown on the Python build through the scenario the
-# requirements tree names, which sets its duration and case count, and judged by `just judge` on
-# the wheel momentum rung: the wheel's spin-axis momentum in truth against the integral of the
-# torque the spinner wrote.
+# The spinner on the wheel spacecraft, flown on the Python build, which needs no F´ build, through
+# the scenario the requirements tree names, which sets its duration and case count, and judged by
+# `just judge` on the wheel momentum rung: the wheel's spin-axis momentum in truth against the
+# integral of the torque the spinner wrote.
 
 
 # %%
