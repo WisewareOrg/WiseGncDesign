@@ -5,7 +5,6 @@ the dead reckoner's mission twice, in processes of their own, to hold that no ca
 the next. Skipped without the deployment `just fsw` builds.
 """
 
-import importlib.util
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -24,10 +23,10 @@ from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_types import Gnc
 from fsw.codegen.roles import roles
 from ground.fprime_station import FprimeStation
-from lab import Adapter
+from lab import Adapter, built
 from lab.bus_emulator import serialize
 
-if importlib.util.find_spec("lab._wise_fsw_ImuDeadReckoning") is None:
+if not built("ImuDeadReckoning"):
     pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
 
 MU = 3.986004360e14

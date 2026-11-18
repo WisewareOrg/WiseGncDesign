@@ -3,7 +3,6 @@
 Skipped without the deployment `just fsw` builds.
 """
 
-import importlib.util
 import itertools
 import json
 import shutil
@@ -19,9 +18,9 @@ from fsw.codegen.deployment import configurations
 from ground import parameters
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab import dictionary_path
+from lab import built, dictionary_path
 
-if not all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations()):
+if not all(built(c) for c in configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000

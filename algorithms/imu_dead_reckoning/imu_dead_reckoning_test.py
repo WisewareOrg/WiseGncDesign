@@ -3,7 +3,6 @@
 Flight conditions with closed forms check the algorithm alone, with no simulator.
 """
 
-import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,6 +21,7 @@ from algorithms.imu_dead_reckoning.imu_dead_reckoning import (
 )
 from fsw.codegen.fpp_types import Gnc
 from harness.notebook import run_notebook
+from lab import built
 
 _IDENTITY = np.eye(3)
 # The tests' IMU mounting [PB]: the platform frame is the body frame.
@@ -282,7 +282,7 @@ def test_the_notebook_runs_end_to_end() -> None:
 
 @pytest.mark.xdist_group("notebooks")
 def test_the_parity_notebook_runs_end_to_end() -> None:
-    """Every cell of the parity notebook runs, so the two builds agree case by case."""
-    if importlib.util.find_spec("lab._wise_fsw_ImuDeadReckoning") is None:
+    """Every cell of the parity notebook runs, so the two builds agree on a twin per scenario."""
+    if not built("ImuDeadReckoning"):
         pytest.skip("the F´ build is absent; run `just fsw`")
     run_notebook(Path(__file__).with_name("parity.py"))

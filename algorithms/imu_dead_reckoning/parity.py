@@ -45,12 +45,9 @@ globals().update(mission_tests(*MISSIONS))
 # %% [markdown]
 # ## The two builds agree
 #
-# The cells below run in the notebook only: the judged rungs, then the builds' parity. Case for
-# case, the builds write the same datasets, with the same dtypes, units and write times, and the
-# same command log; the F´ build also records its rate group's health, which is its own and not
-# compared. Every value is equal but the estimate's, which agrees to `TOLERANCE`: position
-# and velocity relative to the vector's norm, attitude as the principal angle between the two. A
-# disagreement fails the cell, and with it the notebook's test.
+# The cells below run in the notebook only: the judged rungs, then, with the F´ build, the builds'
+# parity. `harness/parity.py` compares this notebook's twins case for case, by the rules and reasons
+# its module docstring states. A disagreement fails the cell, and with it the notebook's test.
 
 
 # %% active="ipynb"
@@ -59,34 +56,10 @@ globals().update(mission_tests(*MISSIONS))
 # judge()
 
 # %% active="ipynb"
-# import numpy as np
-# from test_attitude_knowledge import attitude_error_rad
-# from wise_dynamics.notebook import load_runs
+# from pathlib import Path
 #
-# TOLERANCE = 1e-12
-# vectors = ("tlm/nav.bodyEciPos", "tlm/nav.bodyEciVel")
-# attitude = "tlm/nav.bodyEciAttitude"
-# for scenario in ("leo500", "leo400"):
-#     python = load_runs(f"Test_imu_spacecraft::test_ImuDeadReckoning_python_{scenario}")
-#     fprime = load_runs(f"Test_imu_spacecraft::test_ImuDeadReckoning_fprime_{scenario}")
-#     assert python, scenario
-#     for p, f in zip(python, fprime, strict=True):
-#         case = f"{scenario} case {p['attrs']['case']}"
-#         assert p["attrs"]["case"] == f["attrs"]["case"], case
-#         assert p["attrs"]["commands"] == f["attrs"]["commands"], case
-#         p, f = p["datasets"], f["datasets"]
-#         assert set(p) <= set(f), case
-#         fprime_only = {name.split("/", 1)[1] for name in set(f) - set(p)}
-#         assert not any(name.startswith("nav.") for name in fprime_only), case
-#         assert {*vectors, attitude} <= set(p), case
-#         for name, (values, units) in p.items():
-#             assert values.dtype == f[name][0].dtype, f"{case} {name}"
-#             assert units == f[name][1], f"{case} {name}"
-#             if name not in (*vectors, attitude):
-#                 np.testing.assert_array_equal(values, f[name][0], err_msg=f"{case} {name}")
-#         for name in vectors:
-#             error = np.linalg.norm(p[name][0] - f[name][0], axis=1)
-#             worst = np.max(error / np.linalg.norm(p[name][0], axis=1))
-#             assert worst <= TOLERANCE, f"{case} {name}: {worst:.1e} relative"
-#         worst = np.max(attitude_error_rad(p[attitude][0], f[attitude][0]))
-#         assert worst <= TOLERANCE, f"{case} {attitude}: {worst:.1e} rad"
+# from harness.parity import session_parity
+# from lab import built
+#
+# if built(PYTHON.gnc):
+#     assert session_parity(notebook=Path("parity.py")) == len(PYTHON.scenarios)

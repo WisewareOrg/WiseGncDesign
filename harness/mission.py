@@ -40,7 +40,7 @@ from ground import parameters
 from ground.fprime_station import FprimeStation
 from ground.procedures import Ground
 from harness import requirements_tree
-from lab import Adapter
+from lab import Adapter, built
 
 BUILDS = ("fprime", "python")
 """The builds a configuration flies on: the F´ build in the lab, and the Python build."""
@@ -327,17 +327,33 @@ def _write_flight_json(self: object, request: pytest.FixtureRequest, sim_test_di
     """Record the facts of the flight this test flies, where the judge reads them.
 
     Autouse, so it runs before `sim_scenario` and a case that crashes in setup still leaves it.
-    The write merges, so a `build` that an earlier case of the flight recorded survives it.
 
     Args:
         self: the vehicle's test class.
         request: the fixture request, whose function carries the mission and scenario.
         sim_test_directory: the test's directory in the session.
     """
-    mission, scenario_id = request.function.mission, request.function.scenario_id
-    sim_test_directory.mkdir(parents=True, exist_ok=True)
+    _record_flight(request.function.mission, request.function.scenario_id, sim_test_directory)
+
+
+def _record_flight(mission: Mission, scenario_id: str, directory: Path) -> None:
+    """Record a flight's facts in its folder's `flight.json`, or skip an F´ flight not built.
+
+    The write merges, so a `build` that an earlier case of the flight recorded survives it. An F´
+    flight whose configuration's extension is absent removes the `flight.json` an earlier flight
+    left, so the folder, left with no run of this flight, is judged and compared by nothing.
+
+    Args:
+        mission: the mission.
+        scenario_id: the TST ID it flies.
+        directory: the test's directory in the session.
+    """
+    if mission.build == "fprime" and not built(mission.gnc):
+        (directory / "flight.json").unlink(missing_ok=True)
+        pytest.skip(f"the F´ build of {mission.gnc} is absent; run `just fsw`")
+    directory.mkdir(parents=True, exist_ok=True)
     _merge_json(
-        sim_test_directory / "flight.json",
+        directory / "flight.json",
         {
             "scenario": scenario_id,
             "fsw": {"gnc": mission.gnc, "build": mission.build},

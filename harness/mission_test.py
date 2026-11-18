@@ -19,7 +19,9 @@ import shutil
 import sys
 import tomllib
 from collections.abc import Callable, Iterator, Sequence
+from importlib.machinery import ModuleSpec
 from pathlib import Path
+from types import ModuleType
 
 import h5py
 import pytest
@@ -30,7 +32,7 @@ from fsw.codegen.deployment import Contract, configuration_model, framework_file
 from fsw.codegen.fpp_model import read
 from fsw.codegen.members import members
 from harness import requirements_tree
-from harness.mission import BUILDS, Mission, _claims, mission_tests
+from harness.mission import BUILDS, Mission, _claims, _record_flight, mission_tests
 from harness.mock import MOCK
 
 VEHICLE = "imu_spacecraft"
@@ -555,21 +557,49 @@ def test_each_configuration_s_mission_is_built_on_each_build_without_the_f_prime
     assert list(flown._found.capabilities) == claims
 
 
-def test_one_configuration_flown_on_both_builds_is_two_flights(configuration: str) -> None:
+@pytest.mark.parametrize("built", [False, True], ids=["extension-absent", "extension-present"])
+def test_one_configuration_flown_on_both_builds_is_two_flights(
+    configuration: str, built: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """The flight's key holds the build, so the two builds of one scenario are two tests.
+
+    Recording a flight skips the F´ test when the configuration's extension is absent, and removes
+    the `flight.json` an earlier flight of it left, so nothing judges or compares the folder; the
+    Python test is never skipped.
 
     Args:
         configuration: the configuration.
+        built: whether the configuration's extension is present.
+        monkeypatch: makes the extension absent, or present as a module with a spec.
+        tmp_path: holds each test's folder, with a `flight.json` an earlier flight left.
     """
+    extension = f"lab._wise_fsw_{configuration}"
+    module = None
+    if built:
+        module = ModuleType(extension)
+        module.__spec__ = ModuleSpec(extension, None)
+    monkeypatch.setitem(sys.modules, extension, module)
     _, scenario = _claimed(configuration)
     python = Mission(sorted(VEHICLES)[0], configuration, "python", (scenario,))
+    missions = {"fprime": python.but(build="fprime"), "python": python}
 
-    [vehicle_class] = mission_tests(python, python.but(build="fprime")).values()
+    [vehicle_class] = mission_tests(*missions.values()).values()
 
     names = sorted(name for name in vars(vehicle_class) if name.startswith("test_"))
     prefix = f"test_{configuration}_"
     assert [name.removeprefix(prefix).split("_", 1)[0] for name in names] == ["fprime", "python"]
     assert len({name.removeprefix(prefix).split("_", 1)[1] for name in names}) == 1
+    for build, mission in missions.items():
+        folder = tmp_path / build
+        folder.mkdir()
+        (folder / "flight.json").write_text(json.dumps({"fsw": {"build": "stale"}}))
+        if build == "fprime" and not built:
+            with pytest.raises(pytest.skip.Exception, match="run `just fsw`"):
+                _record_flight(mission, scenario, folder)
+            assert not (folder / "flight.json").exists()
+        else:
+            _record_flight(mission, scenario, folder)
+            assert json.loads((folder / "flight.json").read_text())["fsw"]["build"] == build
 
 
 def test_the_class_a_mission_flies_is_its_notebook_module_s_own(tree: Path) -> None:

@@ -25,6 +25,16 @@ class Mock:
         """Makes the next step raise."""
         self._failing = True
 
+    def initNavState(self, epoch: float, attitude: Any, position: Any, velocity: Any) -> None:
+        """Takes the commanded state and does nothing with it.
+
+        Args:
+            epoch: s, the FSW time the state applies at.
+            attitude: body to ECI, W X Y Z.
+            position: m, body position in ECI.
+            velocity: m/s, body velocity in ECI.
+        """
+
     def step(self, t: float) -> tuple[Any, Any]:
         """Writes the fixed state.
 

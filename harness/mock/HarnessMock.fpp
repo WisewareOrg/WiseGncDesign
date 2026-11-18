@@ -28,6 +28,8 @@ module HarnessMock {
     sync command fail
 
     include "../../fsw/fpp/interfaces/Nav/BodyEci.fppi"
+    include "../../fsw/fpp/interfaces/Nav/NavState.fppi"
+    include "../../fsw/fpp/interfaces/Nav/InitNavState.fppi"
 
   }
 

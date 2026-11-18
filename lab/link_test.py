@@ -4,7 +4,6 @@ The command is F´'s own `cmdDisp.CMD_NO_OP`, and the writes are each `Svc.Passi
 health channels, which every deployment has. Skipped without the deployment `just fsw` builds.
 """
 
-import importlib.util
 import math
 from collections.abc import Callable
 from pathlib import Path
@@ -17,8 +16,9 @@ import pytest
 from fsw.codegen.deployment import configurations, fpp_files
 from fsw.codegen.fpp_model import read
 from ground.fprime_station import FprimeStation
+from lab import built
 
-if not all(importlib.util.find_spec(f"lab._wise_fsw_{c}") for c in configurations()):
+if not all(built(c) for c in configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000

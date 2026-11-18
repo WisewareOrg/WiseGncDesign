@@ -15,7 +15,9 @@
   from ADR 0003 rev 3; role groups and named-tuple defaults stated as consequences, and mechanics
   their tickets record left to them (issue 85 one decision per ADR); the extension named
   `_wise_fsw_<configuration>` (issue 64 The F´ build on WiseDynamics' host module, one extension
-  per configuration).
+  per configuration); parity compares GNC telemetry and the GNC command log, and a build's
+  parameter values are checked by its own boot tests (issue 66 Parity is an analyzer over run
+  files).
 - **rev 1** — 2026-11-13 — first written (issue 37 the dictionary; issue 38 commands into the F´
   build).
 
@@ -119,8 +121,9 @@ would have shown as equal values.
 ### Parity is an analyzer whose spec is a minimum
 
 - **Parity is an analyzer over run files**, with a stated reason for each tolerance.
-- **It compares GNC telemetry, parameter values, and the command log of every command sent to a GNC
-  component.** A build may add anything beyond that, and extras are never compared.
+- **It compares GNC telemetry and the GNC command log: every command sent to a GNC component.**
+  The parameter values a build holds are checked by its own boot tests. A build may add anything
+  beyond that, and extras are never compared.
 
 ## Alternatives considered
 
