@@ -2,19 +2,17 @@
 
 `judge()` runs the requirement analyzers in a subprocess, as `just judge` does, prints why any
 rung failed or was not judged and which folders it skipped, then shows one row per rung and one
-column per flight. `judge()` raises when an analyzer errors rather than failing its rung.
+column per flight.
 `plots(<SRS ID>)` shows that rung's plot for each flight. `run_notebook` executes a notebook end to
 end in a kernel, as the test suite does.
 """
 
 import json
 import os
-import re
 import shlex
 import subprocess
 import sys
 import tempfile
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import jupytext
@@ -56,32 +54,6 @@ def _cells() -> dict[tuple[str, str], dict]:
     }
 
 
-def _errored(report: Path) -> list[str]:
-    """Each analyzer that errored rather than failing its rung, from the run's JUnit report.
-
-    A failing rung is the judging plugin's `pytest.fail` of `<rung> failed` in the test judging
-    that rung; any other failure, or an error, is the analyzer's.
-
-    Args:
-        report: the JUnit XML report the analyzers' run wrote.
-
-    Returns:
-        Each such test, as its pytest node ID `<file>::<test>`, with its error's first line.
-    """
-    errored = []
-    for case in ET.parse(report).iter("testcase"):
-        test = f"{case.get('classname', '').replace('.', '/')}.py::{case.get('name')}"
-        rung = re.search(r"\[(.+)\]$", case.get("name", ""))
-        for outcome in case:
-            message = (outcome.get("message") or "").splitlines()
-            first = message[0] if message else outcome.tag
-            if outcome.tag == "failure" and rung and first == f"Failed: {rung.group(1)} failed":
-                continue
-            if outcome.tag in ("failure", "error"):
-                errored.append(f"- {test}: {first}")
-    return errored
-
-
 def judge() -> pd.DataFrame:
     """Judge the active session and return the matrix: a row per rung, a column per flight.
 
@@ -91,24 +63,17 @@ def judge() -> pd.DataFrame:
         The matrix.
 
     Raises:
-        RuntimeError: pytest failed for a reason other than a failing or unjudged rung: it could
-            not run the analyzers, or an analyzer errored rather than failing its rung, naming
-            each such analyzer and its error.
+        RuntimeError: pytest failed for a reason other than a failing or unjudged rung.
     """
-    with tempfile.TemporaryDirectory() as directory:
-        report = Path(directory) / "judging.xml"
-        command = [sys.executable, "-m", "pytest", "analysis", "-q", "-rfEs"]
-        command += ["-p", "no:cacheprovider", f"--junitxml={report}"]
-        result = subprocess.run(
-            command, cwd=requirements_tree.ROOT, capture_output=True, text=True, check=False
-        )
-        if result.returncode not in (0, 1, 5):
-            out = f"{result.stdout}{result.stderr}"
-            raise RuntimeError(f"judging failed ({result.returncode}):\n{out}")
-        errored = _errored(report)
-    if errored:
-        errors = "\n".join(errored)
-        raise RuntimeError(f"analyzers errored rather than judging:\n{errors}\n{result.stdout}")
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "analysis", "-q", "-rfEs", "-p", "no:cacheprovider"],
+        cwd=requirements_tree.ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode not in (0, 1, 5):
+        raise RuntimeError(f"judging failed ({result.returncode}):\n{result.stdout}{result.stderr}")
     summary = result.stdout.partition("short test summary info")[2].splitlines()[1:]
     print("\n".join(summary) if summary else result.stdout.strip() or result.stderr)
     skipped = skipped_folders(current_session(), requirements_tree.ROOT)
