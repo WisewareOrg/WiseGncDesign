@@ -76,8 +76,9 @@ class Adapter:
     def boot(self) -> None:
         """Power-cycles the deployment: a fresh copy, booted with every component idle.
 
-        An extension rebuilt after this process loaded it raises as `source` does, and a parameter
-        the `.dat` leaves invalid raises `RuntimeError` from the copy's `boot`, naming each.
+        An extension rebuilt after this process loaded it raises as `source` does. From the copy's
+        `boot`, a `.dat` path longer than F´'s file names hold raises `ValueError`, and a parameter
+        the `.dat` leaves invalid raises `RuntimeError`, naming each.
         """
         self._writes = []
         self._fsw = power_cycle(self._configuration)
