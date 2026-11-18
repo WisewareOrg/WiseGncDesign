@@ -18,7 +18,6 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import jupytext
-import nbformat
 import pandas as pd
 from IPython.display import Image, display
 from jupyter_client.kernelspec import KernelSpecManager
@@ -146,9 +145,9 @@ def run_notebook(path: Path) -> None:
     flights land in. Its sessions are kept in a temporary directory of the run's own, the `sim_out`
     every pytest the run starts takes through `PYTEST_ADDOPTS`, so two runs at once, or one run
     and the project's own sessions, never fly or judge in one session. The kernel listens on IPC
-    sockets in that directory, not TCP ports, which kernels started at once can race to bind. The
-    executed copy goes to that directory too, never beside the notebook. Cells that only the
-    notebook runs, such as those that judge and plot, run too.
+    sockets in that directory, not TCP ports, which kernels started at once can race to bind.
+    Nothing is written beside the notebook. Cells that only the notebook runs, such as those that
+    judge and plot, run too.
 
     Args:
         path: the notebook's percent-format file.
@@ -179,4 +178,3 @@ def run_notebook(path: Path) -> None:
             client.execute(env=env)
         except CellExecutionError as error:
             raise RuntimeError(f"{path.name} failed:\n{error}") from error
-        nbformat.write(client.nb, f"{tmp}/run.ipynb")

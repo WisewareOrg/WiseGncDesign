@@ -74,7 +74,7 @@ def test_the_run_is_capped_and_names_the_notebook_as_its_session(tmp_path: Path)
     """The kernel sees the cap and the notebook's path, so a run cannot fly the full campaign.
 
     It runs in the notebook's folder, as in Lab, so it finds the session the notebook's flights
-    land in; the executed copy is written elsewhere. Its notebook-only cell holds, so it is also
+    land in, and writes nothing beside the notebook. Its notebook-only cell holds, so it is also
     the control for the seeded error: a notebook whose cells all run passes.
 
     Args:
