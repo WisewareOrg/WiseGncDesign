@@ -8,13 +8,13 @@
 # %% [markdown]
 # # The wheel spinner's two builds, held to parity
 #
-# The wheel spinner's configuration, `WheelSpinning`, flown twice through the wheel scenario on the
-# wheel spacecraft: on the Python build, the algorithm notebook's spinner hosted by `fsw.python`,
-# and on the F´ build, the WiseFsw deployment, run inside the simulation by `lab`. The F´ build
-# boots the deployment on the `.dat` F´'s tool makes from the case's record, so both builds command
-# the record's torque. Both builds fly the one configuration, so both claim its capability, and
-# case `k` flies the same dispersions in both, so the two builds are held to parity case by case.
-# Build the deployment with `just fsw` first.
+# The wheel spinner's configuration, `WheelSpinning`, flown twice through the `wheel_leo500`
+# scenario on the wheel spacecraft: on the Python build, the algorithm notebook's spinner hosted by
+# `fsw.python`, and on the F´ build, the WiseFsw deployment, run inside the simulation by `lab`. The
+# F´ build boots the deployment on the `.dat` F´'s tool makes from the case's record, so both builds
+# command the record's torque. Both builds fly the one configuration, so both claim its capability,
+# and case `k` flies the same dispersions in both, so the two builds are held to parity case by
+# case. Build the deployment with `just fsw` first.
 
 # %%
 """The wheel spinner's two builds, held to parity."""

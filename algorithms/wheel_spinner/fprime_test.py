@@ -26,8 +26,7 @@ NS = 1_000_000_000
 """ns per s."""
 
 SPINNER = Gnc.WheelSpinnerParameters(motorTorque=2.5e-3)
-"""The spinner's parameter: a torque other than the notebook's case value, so a build flying any
-other value than the record's fails."""
+"""The spinner's parameter: a torque other than the notebook's case value."""
 
 
 @pytest.fixture(scope="session")
