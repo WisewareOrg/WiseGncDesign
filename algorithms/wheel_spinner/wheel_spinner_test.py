@@ -7,6 +7,7 @@ import pytest
 from algorithms.wheel_spinner.wheel_spinner import WHEELS, WheelSpinner, parameters
 from fsw.codegen.fpp_types import Gnc
 from harness.notebook import run_notebook
+from lab import built
 
 
 def test_the_spinner_has_the_wheel_output_one_channel_and_one_required_parameter():
@@ -47,3 +48,10 @@ def test_a_case_s_parameters_command_one_millinewton_metre() -> None:
 def test_the_notebook_runs_end_to_end() -> None:
     """Every cell of the algorithm notebook runs, the notebook-only cells included."""
     run_notebook(Path(__file__).with_name("wheel_spinner.py"))
+
+
+def test_the_parity_notebook_runs_end_to_end() -> None:
+    """Every cell of the parity notebook runs, so the two builds agree on a twin per scenario."""
+    if not built("WheelSpinning"):
+        pytest.skip("the F´ build is absent; run `just fsw`")
+    run_notebook(Path(__file__).with_name("parity.py"))
