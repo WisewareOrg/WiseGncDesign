@@ -44,6 +44,9 @@ module MockGnc {
     @ Sets the level each later sample carries
     sync command setLevel(level: F64)
 
+    @ Writes nothing
+    sync command reset
+
     @ The level each sample carries
     telemetry level: F64
 

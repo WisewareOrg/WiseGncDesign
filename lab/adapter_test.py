@@ -24,49 +24,89 @@ NS = 1_000_000_000
 """ns per s."""
 
 
+@pytest.fixture
+def adapter(configuration: str, prm_record: Path) -> Adapter:
+    """The configuration's adapter on the case's record, booted.
+
+    Args:
+        configuration: the configuration.
+        prm_record: the case's parameter record.
+
+    Returns:
+        The adapter.
+    """
+    adapter = Adapter(configuration, prm_record)
+    adapter.boot()
+    return adapter
+
+
 def test_the_adapter_ticks_at_its_configuration_s_base_tick_and_commands_nothing(
-    configuration: str, messages_by_role: dict[str, Any], prm_record: Path
+    configuration: str, messages_by_role: dict[str, Any], adapter: Adapter
 ):
     """Booted, each tick on every role's message returns no command.
 
     Args:
         configuration: the configuration.
         messages_by_role: a message for each role the CDH converts.
-        prm_record: the case's parameter record.
+        adapter: the configuration's adapter, booted.
     """
-    adapter = Adapter(configuration, prm_record)
-
-    adapter.boot()
-
     assert adapter.period_s == tick_period(configuration)
     assert adapter.tick(NS, messages_by_role) == {}
     assert adapter.tick(2 * NS, messages_by_role) == {}
 
 
-def test_the_adapter_makes_the_case_s_dat_beside_its_record(configuration: str, prm_record: Path):
+def test_the_adapter_delivers_each_role_s_message_on_its_lab_bus_driver_port(
+    adapter: Adapter,
+    messages_by_role: dict[str, Any],
+    bus: list[tuple[int, bytes]],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A tick steps the copy with each role's message, as the bus emulator writes it, on its port.
+
+    Args:
+        adapter: the configuration's adapter, booted.
+        messages_by_role: a message for each role the CDH converts.
+        bus: every role's bus message on its LabBusDriver port.
+        monkeypatch: records the bus each step of the copy takes.
+    """
+    stepped = []
+    step = adapter._fsw.step
+
+    def recorded(t_ns: int, bus: list[tuple[int, bytes]]) -> None:
+        """Records the step's bus, then steps the copy.
+
+        Args:
+            t_ns: ns, the step's time.
+            bus: the step's `(port, bytes)` pairs.
+        """
+        stepped.append(list(bus))
+        step(t_ns=t_ns, bus=bus)
+
+    monkeypatch.setattr(adapter._fsw, "step", recorded)
+
+    adapter.tick(NS, messages_by_role)
+
+    assert len(stepped) == 1
+    assert sorted(stepped[0]) == sorted(bus)
+
+
+def test_the_adapter_makes_the_case_s_dat_beside_its_record(adapter: Adapter, prm_record: Path):
     """The `.dat` PrmDb boots on is made beside the record when the adapter is built.
 
     Args:
-        configuration: the configuration.
+        adapter: the configuration's adapter, booted.
         prm_record: the case's parameter record.
     """
-    Adapter(configuration, prm_record)
-
     assert prm_record.with_suffix("").with_suffix(".prm.dat").is_file()
 
 
-def test_each_boot_power_cycles_a_fresh_copy(
-    configuration: str, messages_by_role: dict[str, Any], prm_record: Path
-):
+def test_each_boot_power_cycles_a_fresh_copy(messages_by_role: dict[str, Any], adapter: Adapter):
     """A second boot powers on another copy, where one copy refuses a second boot.
 
     Args:
-        configuration: the configuration.
         messages_by_role: a message for each role the CDH converts.
-        prm_record: the case's parameter record.
+        adapter: the configuration's adapter, booted.
     """
-    adapter = Adapter(configuration, prm_record)
-    adapter.boot()
     adapter.tick(NS, messages_by_role)
 
     adapter.boot()
@@ -75,17 +115,14 @@ def test_each_boot_power_cycles_a_fresh_copy(
 
 
 def test_a_tick_missing_a_role_the_cdh_converts_is_refused_naming_it(
-    configuration: str, messages_by_role: dict[str, Any], prm_record: Path
+    messages_by_role: dict[str, Any], adapter: Adapter
 ):
     """A tick without a converted role's message names the role and the messages it was given.
 
     Args:
-        configuration: the configuration.
         messages_by_role: a message for each role the CDH converts.
-        prm_record: the case's parameter record.
+        adapter: the configuration's adapter, booted.
     """
-    adapter = Adapter(configuration, prm_record)
-    adapter.boot()
     role = sorted(messages_by_role)[0]
     messages = {other: m for other, m in messages_by_role.items() if other != role}
 
@@ -97,18 +134,15 @@ def test_a_tick_missing_a_role_the_cdh_converts_is_refused_naming_it(
 
 @pytest.mark.parametrize("excess_ns", [1, 500, 999])
 def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(
-    configuration: str, messages_by_role: dict[str, Any], prm_record: Path, excess_ns: int
+    messages_by_role: dict[str, Any], adapter: Adapter, excess_ns: int
 ):
     """A tick at a whole microsecond steps; one nanoseconds past it raises, naming its time.
 
     Args:
-        configuration: the configuration.
         messages_by_role: a message for each role the CDH converts.
-        prm_record: the case's parameter record.
+        adapter: the configuration's adapter, booted.
         excess_ns: ns past a whole microsecond.
     """
-    adapter = Adapter(configuration, prm_record)
-    adapter.boot()
     whole = NS + 1_000
     adapter.tick(whole, messages_by_role)
 
@@ -133,16 +167,13 @@ def test_an_adapter_checks_its_f_prime_build_before_it_makes_the_case_s_dat(
     assert not prm_record.with_suffix("").with_suffix(".prm.dat").exists()
 
 
-def test_the_build_names_the_pinned_framework_tag_and_the_project_version(
-    configuration: str, prm_record: Path
-):
+def test_the_build_names_the_pinned_framework_tag_and_the_project_version(adapter: Adapter):
     """`build` is the adapter, the F´ tag the justfile pins and the dictionary's project version.
 
     Args:
-        configuration: the configuration.
-        prm_record: the case's parameter record.
+        adapter: the configuration's adapter, booted.
     """
-    build = Adapter(configuration, prm_record).build
+    build = adapter.build
 
     tag = subprocess.run(
         ["just", "--evaluate", "fprime_tag"], cwd=REPOSITORY, capture_output=True, text=True
@@ -156,18 +187,15 @@ def test_the_build_names_the_pinned_framework_tag_and_the_project_version(
 
 
 def test_a_command_goes_up_to_the_current_copy_and_its_response_comes_back(
-    configuration: str, messages_by_role: dict[str, Any], prm_record: Path
+    messages_by_role: dict[str, Any], adapter: Adapter
 ):
     """Through the station on the adapter, a command runs at the next tick, answered by context.
 
     Args:
-        configuration: the configuration.
         messages_by_role: a message for each role the CDH converts.
-        prm_record: the case's parameter record.
+        adapter: the configuration's adapter, booted.
     """
-    adapter = Adapter(configuration, prm_record)
     station = FprimeStation(adapter, adapter.dictionary)
-    adapter.boot()
 
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 4)
     assert station.responses() == []
@@ -178,18 +206,14 @@ def test_a_command_goes_up_to_the_current_copy_and_its_response_comes_back(
 
 
 def test_the_telemetry_is_every_write_the_ticks_drained_since_the_last_call(
-    configuration: str, messages_by_role: dict[str, Any], prm_record: Path
+    messages_by_role: dict[str, Any], adapter: Adapter
 ):
     """Two ticks' writes come down together, each tagged with its tick, then none until the next.
 
     Args:
-        configuration: the configuration.
         messages_by_role: a message for each role the CDH converts.
-        prm_record: the case's parameter record.
+        adapter: the configuration's adapter, booted.
     """
-    adapter = Adapter(configuration, prm_record)
-    adapter.boot()
-
     adapter.tick(NS, messages_by_role)
     adapter.tick(2 * NS, messages_by_role)
     writes = adapter.telemetry()
@@ -201,17 +225,14 @@ def test_the_telemetry_is_every_write_the_ticks_drained_since_the_last_call(
 
 
 def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(
-    configuration: str, messages_by_role: dict[str, Any], prm_record: Path
+    messages_by_role: dict[str, Any], adapter: Adapter
 ):
     """A power cycle keeps no write of the copy before it.
 
     Args:
-        configuration: the configuration.
         messages_by_role: a message for each role the CDH converts.
-        prm_record: the case's parameter record.
+        adapter: the configuration's adapter, booted.
     """
-    adapter = Adapter(configuration, prm_record)
-    adapter.boot()
     adapter.tick(NS, messages_by_role)
     assert adapter._writes
 

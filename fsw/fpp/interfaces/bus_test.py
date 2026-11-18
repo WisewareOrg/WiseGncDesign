@@ -15,12 +15,10 @@ import numpy as np
 import pytest
 from Basilisk.architecture import messaging
 
+from fsw.codegen.fields import DTYPES
 from fsw.codegen.fpp_model import Struct, read
 
 BUS = Path(__file__).with_name("Bus.fpp")
-
-_DTYPES = {"F64": np.dtype("float64")}
-"""Each FPP element type a bus struct uses, as Basilisk's numpy type."""
 
 Field = tuple[str, np.dtype]
 """A field's name in lower case, and its numpy type: element type and shape."""
@@ -49,14 +47,15 @@ def _struct_fields(struct: Struct) -> list[Field]:
         Its members, in FPP's order.
 
     Raises:
-        KeyError: a member's element type has no numpy type in `_DTYPES`, naming the type.
+        KeyError: a member's element type has no numpy type in `fsw.codegen.fields.DTYPES`,
+            naming the type.
     """
     fields = []
     for member in struct.members:
-        if member.type not in _DTYPES:
+        if member.type not in DTYPES:
             raise KeyError(f"{struct.name}.{member.name}: no numpy type for {member.type}")
         shape = () if member.size is None else (member.size,)
-        fields.append((member.name.lower(), np.dtype((_DTYPES[member.type], shape))))
+        fields.append((member.name.lower(), np.dtype((DTYPES[member.type], shape))))
     return fields
 
 

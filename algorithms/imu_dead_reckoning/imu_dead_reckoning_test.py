@@ -274,6 +274,15 @@ def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() 
     np.testing.assert_array_equal(nav.dcm_PB, mounting)
 
 
+def test_the_dead_reckoner_has_no_outputs_and_two_required_parameters():
+    """Its FPP declares no output port, and `mu` and `dcm_PB` with no default."""
+    assert Gnc.ImuDeadReckonerOutputs() == ()
+    assert Gnc.ImuDeadReckonerParameters._fields == ("mu", "dcm_PB")
+    assert Gnc.ImuDeadReckonerParameters.component == "Gnc.ImuDeadReckoner"
+    with pytest.raises(TypeError, match="dcm_PB"):
+        Gnc.ImuDeadReckonerParameters(mu=1.0)
+
+
 @pytest.mark.xdist_group("notebooks")
 def test_the_notebook_runs_end_to_end() -> None:
     """Every cell of the algorithm notebook runs, the notebook-only cells included."""

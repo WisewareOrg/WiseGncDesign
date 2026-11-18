@@ -8,6 +8,7 @@ assert, which raises in Python. Skipped without the deployment `just fsw` builds
 """
 
 import functools
+from collections.abc import Callable
 from types import ModuleType
 
 import pytest
@@ -63,7 +64,7 @@ def _stepped(
 
 
 def test_every_role_s_bus_message_steps_without_an_assert(
-    fsw: ModuleType, prm: str, parameter_ids: list[int], bus: list[tuple[int, bytes]]
+    booted: ModuleType, bus: list[tuple[int, bytes]]
 ) -> None:
     """Every role's message, as the bus emulator writes it, steps the deployment on its port.
 
@@ -72,77 +73,52 @@ def test_every_role_s_bus_message_steps_without_an_assert(
     reading.
 
     Args:
-        fsw: a copy of the deployment.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
+        booted: the test's copy of the deployment, booted idle on the case's parameters.
         bus: every role's bus message on its LabBusDriver port.
     """
     assert bus
-    fsw.boot(prm, parameter_ids)
 
-    fsw.step(t_ns=NS, bus=bus)
+    booted.step(t_ns=NS, bus=bus)
 
 
 @pytest.mark.parametrize(
-    ("change", "source"), [(-1, _TOPOLOGY), (1, _DRIVER)], ids=["one-short", "one-over"]
+    ("push", "source"),
+    [
+        (lambda port, data, unwired: (port, data[:-1]), _TOPOLOGY),
+        (lambda port, data, unwired: (port, data + bytes(1)), _DRIVER),
+        (lambda port, data, unwired: (unwired[0], data), _TOPOLOGY),
+        (lambda port, data, unwired: (_bus_out_ports(), data), _TOPOLOGY),
+        (lambda port, data, unwired: (port, b""), _TOPOLOGY),
+    ],
+    ids=["one-short", "one-over", "unwired-port", "port-past-busOut", "empty"],
 )
-def test_a_role_s_push_of_the_wrong_length_raises(
-    configuration: str,
-    prm: str,
-    parameter_ids: list[int],
-    bus_by_role: dict[str, tuple[int, bytes]],
-    change: int,
-    source: str,
-) -> None:
-    """Each role's bytes one short of its message, or one over, trip F´'s assert in Python.
-
-    One short fails the connected port's deserialization; one over fails LabBusDriver's check that
-    the port consumed every byte.
-
-    Args:
-        configuration: the configuration.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
-        bus_by_role: each role's LabBusDriver port and message bytes.
-        change: the bytes added to the message, or removed from it.
-        source: the assert expected, by its file.
-    """
-    assert bus_by_role
-    for port, data in bus_by_role.values():
-        fsw = _stepped(configuration, prm, parameter_ids, port, data)
-        wrong = data[:change] if change < 0 else data + bytes(change)
-
-        with pytest.raises(RuntimeError, match=source):
-            fsw.step(t_ns=2 * NS, bus=[(port, wrong)])
-
-
-@pytest.mark.parametrize("push", ["unwired-port", "port-past-busOut", "empty"])
 def test_a_push_lab_bus_driver_cannot_deliver_raises(
     configuration: str,
     prm: str,
     parameter_ids: list[int],
     bus_by_role: dict[str, tuple[int, bytes]],
-    push: str,
+    push: Callable[[int, bytes, list[int]], tuple[int, bytes]],
+    source: str,
 ) -> None:
-    """A role's message on a port nothing is wired to, or past `busOut`, or no bytes, raise.
+    """Each role's push that LabBusDriver cannot deliver trips F´'s assert in Python.
+
+    One short of the role's message fails the connected port's deserialization, and one over
+    fails LabBusDriver's check that the port consumed every byte. The message on a port nothing is
+    wired to, or past `busOut`, or no bytes, fail the deployment's generated port call.
 
     Args:
         configuration: the configuration.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus_by_role: each role's LabBusDriver port and message bytes.
-        push: the push refused.
+        push: the push refused, from the role's port and bytes and the unwired ports.
+        source: the assert expected, by its file.
     """
     assert bus_by_role
     unwired = sorted(set(range(_bus_out_ports())) - {port for port, _ in bus_by_role.values()})
     assert unwired, "every LabBusDriver port is wired"
     for port, data in bus_by_role.values():
         fsw = _stepped(configuration, prm, parameter_ids, port, data)
-        refused = {
-            "unwired-port": (unwired[0], data),
-            "port-past-busOut": (_bus_out_ports(), data),
-            "empty": (port, b""),
-        }[push]
 
-        with pytest.raises(RuntimeError, match=_TOPOLOGY):
-            fsw.step(t_ns=2 * NS, bus=[refused])
+        with pytest.raises(RuntimeError, match=source):
+            fsw.step(t_ns=2 * NS, bus=[push(port, data, unwired)])

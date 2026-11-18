@@ -20,6 +20,7 @@ from fsw.codegen.deployment import (
 )
 from fsw.codegen.fpp_model import Model, read
 from fsw.codegen.roles import roles
+from fsw.mock import edited
 from fsw.python.cdh.inputs import Pair, convert, pairings
 from fsw.python.gnc.partition import GncPartition
 
@@ -116,40 +117,48 @@ def test_a_role_the_sub_topology_does_not_take_is_skipped(tmp_path: Path):
     assert pairings(_model(tmp_path), ()) == []
 
 
-def test_a_role_without_its_output_is_refused_naming_it(tmp_path: Path):
-    """Each bus-typed `<role>In` needs `<role>Out`, which the GNC's type is carried on.
+@pytest.mark.parametrize(
+    ("cdh_edits", "inputs", "match"),
+    [
+        pytest.param(
+            ((f"output port {ROLE.output}:", "output port notAnOut:"),),
+            (ROLE.input,),
+            f"role {ROLE.role}",
+            id="no-output",
+        ),
+        pytest.param(
+            (
+                (
+                    f"output port {ROLE.output}: {ROLE.icd}",
+                    f"output port {ROLE.output}: {ROLE.bus}",
+                ),
+            ),
+            (ROLE.input,),
+            f"role {ROLE.role}",
+            id="output-a-bus-struct",
+        ),
+        pytest.param((), (ROLE.input, "notARoleIn"), r"\['notARoleIn'\]", id="input-no-role-feeds"),
+    ],
+)
+def test_a_converter_or_input_pairings_cannot_take_is_refused_naming_it(
+    tmp_path: Path,
+    cdh_edits: tuple[tuple[str, str], ...],
+    inputs: tuple[str, ...],
+    match: str,
+):
+    """A role or a sub-topology input that cannot be paired raises, naming it.
+
+    Each bus-typed `<role>In` needs `<role>Out`, which carries the GNC's type, never another bus
+    struct. A data input of the sub-topology with no converter pair would never be written.
 
     Args:
         tmp_path: where the mock is written.
+        cdh_edits: the mock converter's edits, as `fsw.mock.edited` applies them.
+        inputs: the sub-topology's data inputs.
+        match: what the error names.
     """
-    cdh = CDH.replace(f"output port {ROLE.output}:", "output port notAnOut:")
-
-    with pytest.raises(ValueError, match=f"role {ROLE.role}"):
-        pairings(_model(tmp_path, cdh=cdh), (ROLE.input,))
-
-
-def test_a_role_whose_output_is_a_bus_struct_is_refused_naming_it(tmp_path: Path):
-    """A bus-typed input converts to the GNC's type, never to another bus struct.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    cdh = CDH.replace(
-        f"output port {ROLE.output}: {ROLE.icd}", f"output port {ROLE.output}: {ROLE.bus}"
-    )
-
-    with pytest.raises(ValueError, match=f"role {ROLE.role}"):
-        pairings(_model(tmp_path, cdh=cdh), (ROLE.input,))
-
-
-def test_a_sub_topology_input_no_role_feeds_is_refused_naming_it(tmp_path: Path):
-    """A data input of the sub-topology with no converter pair would never be written.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    with pytest.raises(ValueError, match=r"\['notARoleIn'\]"):
-        pairings(_model(tmp_path), (ROLE.input, "notARoleIn"))
+    with pytest.raises(ValueError, match=match):
+        pairings(_model(tmp_path, cdh=edited(CDH, *cdh_edits)), inputs)
 
 
 def test_each_role_s_bus_struct_is_converted_to_its_icd_struct_at_its_gnc_port(

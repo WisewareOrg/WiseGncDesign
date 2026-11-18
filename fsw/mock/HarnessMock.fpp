@@ -1,7 +1,7 @@
 module HarnessMock {
 
-  @ The harness's test mock: it writes a fixed nav state each step, and once commanded to fail its
-  @ next step raises
+  @ A test mock the harness flies as nav: it writes a fixed nav state each step, and once commanded
+  @ to fail its next step raises
   @ provides: SYS901
   passive component Mock {
 
@@ -27,9 +27,9 @@ module HarnessMock {
     @ Makes the next step raise
     sync command fail
 
-    include "../../fsw/fpp/interfaces/Nav/BodyEci.fppi"
-    include "../../fsw/fpp/interfaces/Nav/NavState.fppi"
-    include "../../fsw/fpp/interfaces/Nav/InitNavState.fppi"
+    include "../fpp/interfaces/Nav/BodyEci.fppi"
+    include "../fpp/interfaces/Nav/NavState.fppi"
+    include "../fpp/interfaces/Nav/InitNavState.fppi"
 
   }
 

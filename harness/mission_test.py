@@ -1,14 +1,15 @@
 """Missions: what a flight judges, what a mission refuses, and the record a flight leaves.
 
-Every test but two reads a requirements tree it writes in `tmp_path`, by pointing the tree root
-at it, so none depends on the repository's own tree; those two build missions of the repository's
-configurations against the repository's tree, flying nothing. The tree holds two capabilities, four
-rungs and two scenarios:
+A test that takes the `configuration` fixture builds or flies a repository configuration against
+the repository's requirements tree. Every other test reads a tree it writes in `tmp_path`, by
+pointing the tree root at it, so none depends on the repository's own tree. That tree holds two
+capabilities, four rungs and two scenarios:
 
     SYS901 <- SRS901, SRS902, SRS904      SYS902 <- SRS903
     TST901 links SRS901, SRS902, SRS903   TST902 links SRS902
 
-Flights fly the harness's test mock, `MockFlight` of `harness.mock.MOCK`, which claims SYS901.
+Those tests' flights fly `MockFlight` of `fsw.mock.MOCK`, the test mock `HarnessMock.Mock`,
+which claims SYS901.
 The `variants` fixture renders the other configurations a test needs from two templates.
 """
 
@@ -24,6 +25,7 @@ from pathlib import Path
 from types import ModuleType
 
 import h5py
+import numpy as np
 import pytest
 import yaml
 from wise_dynamics.basilisk.vehicles import VEHICLES
@@ -31,9 +33,10 @@ from wise_dynamics.basilisk.vehicles import VEHICLES
 from fsw.codegen.deployment import Contract, configuration_model, framework_files
 from fsw.codegen.fpp_model import read
 from fsw.codegen.members import members
+from fsw.mock import MOCK, sub_topology
 from harness import requirements_tree
 from harness.mission import BUILDS, Mission, _claims, _record_flight, mission_tests
-from harness.mock import MOCK
+from lab import built
 
 VEHICLE = "imu_spacecraft"
 ALPHA = """\
@@ -65,26 +68,6 @@ PARAMETER = """    command reg port cmdRegOut
     param gain: F64
 """
 """A test mock component's one parameter, with the ports a parameter needs."""
-
-SUB_TOPOLOGY = """module {name} {{
-  constant tickPeriod = 1.0
-  constant mockDivider = 1
-  instance rateGroupDriver: Svc.RateGroupDriver base id 0x6000
-  instance mockRateGroup: Svc.PassiveRateGroup base id 0x6100
-{instances}
-  topology Gnc {{
-    instance rateGroupDriver
-    instance mockRateGroup
-{uses}
-    connections RateGroups {{
-      rateGroupDriver.CycleOut[0] -> mockRateGroup.CycleIn
-{wires}
-    }}
-    port tickIn = rateGroupDriver.CycleIn
-  }}
-}}
-"""
-"""A test mock configuration: one rate group running its members in order."""
 
 SECOND = """from fsw.codegen.fpp_types import named
 
@@ -177,20 +160,7 @@ def variants(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Contract]:
     gnc.mkdir()
     shutil.copy(MOCK.gnc / "MockFlight.fpp", gnc)
     for name, flown in VARIANTS.items():
-        (gnc / f"{name}.fpp").write_text(
-            SUB_TOPOLOGY.format(
-                name=name,
-                instances="".join(
-                    f"  instance {i}: {c} base id {0x6200 + 0x100 * n:#x}\n"
-                    for n, (i, c) in enumerate(flown)
-                ),
-                uses="".join(f"    instance {i}\n" for i, _ in flown),
-                wires="\n".join(
-                    f"      mockRateGroup.RateGroupMemberOut[{n}] -> {i}.schedIn"
-                    for n, (i, _) in enumerate(flown)
-                ),
-            )
-        )
+        (gnc / f"{name}.fpp").write_text(sub_topology(name, flown))
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.syspath_prepend(str(root))
         yield Contract((*MOCK.algorithms, *components), gnc)
@@ -211,8 +181,8 @@ def flying(*missions: str, check: str = "") -> str:
 from pathlib import Path
 
 from fsw.codegen.deployment import Contract
+from fsw.mock import MOCK
 from harness.mission import Mission, mission_tests
-from harness.mock import MOCK
 
 {check}
 
@@ -602,6 +572,96 @@ def test_one_configuration_flown_on_both_builds_is_two_flights(
             assert json.loads((folder / "flight.json").read_text())["fsw"]["build"] == build
 
 
+FPRIME_FLIGHT = """
+from harness.mission import Mission, mission_tests
+
+globals().update(
+    mission_tests(
+        Mission(vehicle="{vehicle}", gnc="{gnc}", build="fprime", scenarios=("{scenario}",))
+    )
+)
+"""
+"""A notebook flying a repository configuration's F´ build through one scenario."""
+
+
+def _contents(path: Path) -> dict[str, object]:
+    """Every dataset of a run file, and every root attribute but its creation time.
+
+    Args:
+        path: the run file.
+
+    Returns:
+        Each dataset's values and attributes by its path, and each root attribute by `@<name>`.
+    """
+    contents: dict[str, object] = {}
+
+    def visit(name: str, node: object) -> None:
+        """Keep a dataset's values and attributes.
+
+        Args:
+            name: the node's path in the file.
+            node: the group or dataset.
+        """
+        if isinstance(node, h5py.Dataset):
+            contents[name] = (node[()], dict(node.attrs))
+
+    with h5py.File(path, "r") as f:
+        f.visititems(visit)
+        contents |= {f"@{k}": v for k, v in f.attrs.items() if k != "created_utc"}
+    return contents
+
+
+def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
+    configuration: str, rate_groups: list[str], pytester: pytest.Pytester
+):
+    """Case 1 flown alone and after case 0 in one process gives the same run file, every row.
+
+    Each configuration's F´ build flies the first scenario that judges a rung under its claims.
+    The rate groups' health datasets are compared with the GNC members': their `CycleCount` and the
+    channels they write only on change are what a deployment kept across cases would carry over.
+    It also holds the rate groups' health to F´'s stub clock, under the members' real load: their
+    cycle times read 0, where a wall clock would make them differ between the two runs. Case 0's
+    run file differs from case 1's, so a comparison that cannot tell cases apart would show.
+
+    Args:
+        configuration: the configuration.
+        rate_groups: the configuration's rate groups.
+        pytester: the project the flights run in, each run in one process of its own, xdist off.
+    """
+    if not built(configuration):
+        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
+    _, scenario = _claimed(configuration)
+    flight = Mission(sorted(VEHICLES)[0], configuration, "fprime", (scenario,))
+    [(cls, vehicle_class)] = mission_tests(flight).items()
+    [name] = [name for name in vars(vehicle_class) if name.startswith("test_")]
+    test = f"test_flights.py::{cls}::{name}"
+    pytester.makepyfile(
+        test_flights=FPRIME_FLIGHT.format(
+            vehicle=flight.vehicle, gnc=configuration, scenario=scenario
+        )
+    )
+    options = ("-p", "no:cacheprovider", "-p", "no:xdist")
+
+    pytester.runpytest_subprocess(*options, f"{test}[1]").assert_outcomes(passed=1)
+    [alone] = pytester.path.rglob("run_0001.h5")
+    alone = shutil.move(alone, pytester.path / "alone.h5")
+    pytester.runpytest_subprocess(*options, f"{test}[0]", f"{test}[1]").assert_outcomes(passed=2)
+    [first] = pytester.path.rglob("run_0000.h5")
+    [after] = pytester.path.rglob("run_0001.h5")
+
+    alone, after, first = _contents(alone), _contents(after), _contents(first)
+    flown = members(configuration_model(configuration), configuration).values()
+    gnc = {member.name.rsplit(".", 1)[-1] for group in flown for member in group}
+    assert any(name.startswith(tuple(f"tlm/{m}." for m in gnc)) for name in alone)
+    for group in rate_groups:
+        assert not alone[f"tlm/{group}.CycleTime"][0].any(), group
+    assert sorted(alone) == sorted(after)
+    for name, value in alone.items():
+        np.testing.assert_equal(after[name], value, err_msg=name)
+    with pytest.raises(AssertionError):
+        np.testing.assert_equal(first, alone)
+
+
 def test_the_class_a_mission_flies_is_its_notebook_module_s_own(tree: Path) -> None:
     """The class is the one importing the notebook by its dotted name gives, from that module.
 
@@ -610,7 +670,7 @@ def test_the_class_a_mission_flies_is_its_notebook_module_s_own(tree: Path) -> N
     """
     [cls] = mission()._found.classes
 
-    notebook = importlib.import_module("harness.mock.mock")
+    notebook = importlib.import_module("fsw.mock.mock")
     assert cls is notebook.Mock
     assert sys.modules[cls.__module__] is notebook
 
@@ -771,8 +831,8 @@ def test_a_check_is_given_the_case_s_run_file_and_its_messages_fail_the_case(
 SELF = """
 import pytest
 
+from fsw.mock import MOCK
 from harness.mission import Mission, mission_tests
-from harness.mock import MOCK
 {before}
 globals().update(mission_tests(Mission(
     vehicle="imu_spacecraft", gnc="MockFlight", build="python", scenarios=("TST901",), contract=MOCK

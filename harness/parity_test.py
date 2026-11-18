@@ -1,8 +1,9 @@
 """Parity: two builds' flights of one configuration, compared on what the contract declares.
 
-Twins fly the harness's test mock, `MockFlight` of `harness.mock.MOCK`, and every name the tests
-write or change is read from its model: its member's channels, commands and parameter, and its
-rate group's channels as an extra. Each test changes one side of an identical twin.
+Twins fly `MockFlight` of `fsw.mock.MOCK`, the test mock `HarnessMock.Mock` as nav, and every
+name the tests write or change is read from its model: its member's channels, commands and
+parameter, and its rate group's channels as an extra. Each test changes one side of an identical
+twin.
 """
 
 import json
@@ -18,8 +19,8 @@ from wise_dynamics.sessions import crash_path, run_path
 from fsw.codegen.deployment import configuration_model
 from fsw.codegen.fpp_model import Array, Enum
 from fsw.codegen.members import members
+from fsw.mock import MOCK
 from harness import requirements_tree
-from harness.mock import MOCK
 from harness.parity import parity, session_parity
 
 GNC = "MockFlight"

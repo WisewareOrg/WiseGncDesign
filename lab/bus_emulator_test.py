@@ -60,21 +60,14 @@ def test_each_message_is_its_members_big_endian_and_packed_in_declaration_order(
 ) -> None:
     """Each struct's bytes are its members' values, big-endian, in `Bus.fpp`'s order.
 
+    The comparison tells byte orders apart: each struct's members little-endian differ.
+
     Args:
         bus_messages: a message of each bus struct.
     """
     assert bus_messages
     for name, message in bus_messages.items():
         assert serialize(message.payload) == _packed(message), name
-
-
-def test_the_same_members_little_endian_are_other_bytes(bus_messages: dict[str, Any]) -> None:
-    """The comparison above tells byte orders apart: each struct's members little-endian differ.
-
-    Args:
-        bus_messages: a message of each bus struct.
-    """
-    for name, message in bus_messages.items():
         assert serialize(message.payload) != _packed(message, "<"), name
 
 

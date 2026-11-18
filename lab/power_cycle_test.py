@@ -1,7 +1,8 @@
 """Each case flies a fresh copy of the deployment: what one copy did never reaches the next.
 
-That a whole flight carries nothing to the next case is a mission's, so it is tested under the
-algorithm a mission flies. Skipped without the deployment `just fsw` builds.
+That a whole flight carries nothing to the next case is a mission's, so it is tested in
+`harness/mission_test.py`, `test_a_case_flown_after_another_writes_the_run_file_it_writes_alone`.
+Skipped without the deployment `just fsw` builds.
 """
 
 import sys

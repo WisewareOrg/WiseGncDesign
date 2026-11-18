@@ -1,4 +1,4 @@
-"""The harness's test mock, as an algorithm's notebook gives it: its class and its parameters."""
+"""The test mock `HarnessMock.Mock`, as an algorithm's notebook gives it: class and parameters."""
 
 from typing import Any
 

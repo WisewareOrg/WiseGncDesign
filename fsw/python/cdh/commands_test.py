@@ -1,75 +1,51 @@
 """The Python build's CDH dispatches each command by name to its instance's method of that name."""
 
-from collections import namedtuple
-from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 
-from fsw.codegen.fpp_model import Instance
+from fsw.codegen import fpp_types
+from fsw.codegen.fpp_types import named
+from fsw.mock import MOCK
 from fsw.python.cdh import commands
 from ground.dictionary import Dictionary
 
-MOCK = """\
-module Mock {
 
-  passive component Mock {
-    sync command setGain(gain: F64)
-    sync command reset
-    telemetry gain: F64
-    param offset: F64
-    time get port timeCaller
-    telemetry port tlmOut
-    command reg port cmdRegOut
-    command recv port cmdIn
-    command resp port cmdResponseOut
-    param get port prmGetOut
-    param set port prmSetOut
-  }
+class Source:
+    """`fsw.mock`'s `MockGnc.Source`: `setLevel` refuses a negative level; `reset` writes none."""
 
-}
-"""
-
-MockTelemetry = namedtuple("MockTelemetry", ["gain"], defaults=[None])
-"""The mock's telemetry tuple."""
-
-
-class Mock:
-    """A mock algorithm: `setGain` refuses a negative gain, `reset` writes nothing."""
-
-    def setGain(self, gain: float) -> MockTelemetry:
-        """Takes the gain, refusing a negative one.
+    def setLevel(self, level: float) -> Any:
+        """Takes the level, refusing a negative one.
 
         Args:
-            gain: the gain.
+            level: the level.
 
         Returns:
-            `gain`.
+            `level`, written.
 
         Raises:
-            ValueError: the gain is negative.
+            ValueError: the level is negative.
         """
-        if gain < 0.0:
-            raise ValueError(f"gain {gain} is negative")
-        return MockTelemetry(gain=gain)
+        if level < 0.0:
+            raise ValueError(f"level {level} is negative")
+        return named("MockGnc.SourceTelemetry")(level=level)
 
     def reset(self) -> None:
         """Writes nothing."""
 
 
 @pytest.fixture(scope="module")
-def dictionary(tmp_path_factory: pytest.TempPathFactory) -> Dictionary:
-    """The mock's dictionary, instanced as `mock`.
+def dictionary() -> Dictionary:
+    """The dictionary of `MockFrame` of `fsw.mock.MOCK`, whose `source` is mocked.
 
-    Args:
-        tmp_path_factory: where the mock's model is written.
+    It loads `MOCK`'s tuples, which `Source.setLevel`'s `named` resolves.
 
     Returns:
         The dictionary.
     """
-    model = tmp_path_factory.mktemp("mock") / "Mock.fpp"
-    model.write_text(MOCK)
-    return Dictionary.from_component([Path(model)], Instance("Mock.mock", "Mock.Mock", 0x1000))
+    fpp_types.load(MOCK)
+    return Dictionary.from_sub_topology("MockFrame", contract=MOCK)
 
 
 def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
@@ -82,21 +58,21 @@ def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
     Args:
         dictionary: the mock's dictionary.
     """
-    handlers = commands.handlers(dictionary, {"mock": Mock()})
+    handlers = commands.handlers(dictionary, {"source": Source()})
 
-    assert commands.dispatch(handlers, "mock.setGain", {"gain": 2.0}) == (
+    assert commands.dispatch(handlers, "source.setLevel", {"level": 2.0}) == (
         "OK",
         None,
-        [("mock.gain", 2.0)],
+        [("source.level", 2.0)],
     )
-    assert commands.dispatch(handlers, "mock.reset", {}) == ("OK", None, [])
-    assert type(commands.dispatch(handlers, "mock.reset", {})) is commands.Dispatched
-    assert commands.dispatch(handlers, "mock.setGain", {"gain": -1.0}) == (
+    assert commands.dispatch(handlers, "source.reset", {}) == ("OK", None, [])
+    assert type(commands.dispatch(handlers, "source.reset", {})) is commands.Dispatched
+    assert commands.dispatch(handlers, "source.setLevel", {"level": -1.0}) == (
         "VALIDATION_ERROR",
-        "gain -1.0 is negative",
+        "level -1.0 is negative",
         [],
     )
-    for name in ("mock.setGian", "mock.OFFSET_PRM_SET", "mock.OFFSET_PRM_SAVE", "other.reset"):
+    for name in ("source.setLevle", "source.GAIN_PRM_SET", "source.GAIN_PRM_SAVE", "other.reset"):
         assert commands.dispatch(handlers, name, {}) == ("INVALID_OPCODE", None, [])
 
 
@@ -107,7 +83,7 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
         dictionary: the mock's dictionary.
     """
 
-    class Broken(Mock):
+    class Broken(Source):
         """A mock whose `reset` fails."""
 
         def reset(self) -> None:
@@ -118,18 +94,18 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
             """
             raise ZeroDivisionError("broken")
 
-    handlers = commands.handlers(dictionary, {"mock": Broken()})
+    handlers = commands.handlers(dictionary, {"source": Broken()})
 
     with pytest.raises(ZeroDivisionError, match="broken"):
-        commands.dispatch(handlers, "mock.reset", {})
+        commands.dispatch(handlers, "source.reset", {})
 
 
 @pytest.mark.parametrize(
     "algorithm",
     [
         object(),
-        type("Renamed", (Mock,), {"setGain": lambda self, value: None})(),
-        type("Extra", (Mock,), {"setGain": lambda self, gain, scale: None})(),
+        type("Renamed", (Source,), {"setLevel": lambda self, value: None})(),
+        type("Extra", (Source,), {"setLevel": lambda self, level, scale: None})(),
     ],
     ids=["no method", "other parameter", "extra parameter"],
 )
@@ -140,10 +116,10 @@ def test_a_command_the_algorithm_lacks_or_declares_otherwise_is_refused_naming_i
 
     Args:
         dictionary: the mock's dictionary.
-        algorithm: an algorithm lacking `setGain`, or declaring it with another parameter.
+        algorithm: an algorithm lacking `setLevel`, or declaring it with another parameter.
     """
-    with pytest.raises(ValueError, match=r"mock\.setGain takes \['gain'\]"):
-        commands.handlers(dictionary, {"mock": algorithm})
+    with pytest.raises(ValueError, match=r"source\.setLevel takes \['level'\]"):
+        commands.handlers(dictionary, {"source": algorithm})
 
 
 def test_arguments_reach_the_handler_as_given(dictionary: Dictionary):
@@ -154,21 +130,21 @@ def test_arguments_reach_the_handler_as_given(dictionary: Dictionary):
     """
     received = []
 
-    class Recording(Mock):
-        """A mock keeping what `setGain` receives."""
+    class Recording(Source):
+        """A mock keeping what `setLevel` receives."""
 
-        def setGain(self, gain: float) -> None:
-            """Keeps the gain.
+        def setLevel(self, level: float) -> None:
+            """Keeps the level.
 
             Args:
-                gain: the gain.
+                level: the level.
             """
-            received.append(gain)
+            received.append(level)
 
-    gain = np.float64(0.5)
+    level = np.float64(0.5)
     commands.dispatch(
-        commands.handlers(dictionary, {"mock": Recording()}), "mock.setGain", {"gain": gain}
+        commands.handlers(dictionary, {"source": Recording()}), "source.setLevel", {"level": level}
     )
 
-    assert received == [gain]
-    assert received[0] is gain
+    assert received == [level]
+    assert received[0] is level

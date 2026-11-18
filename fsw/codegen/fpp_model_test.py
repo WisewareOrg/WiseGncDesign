@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import CLONE, fpp_files
+from fsw.codegen.deployment import algorithm_components, fpp_files, framework_files
 from fsw.codegen.fpp_model import (
     _FPP,
     Argument,
@@ -29,19 +29,9 @@ from fsw.codegen.fpp_model import (
     parse,
     read,
 )
-
-_MOCK_FRAMEWORK = (
-    "Fw/Cmd/Cmd.fpp",
-    "Fw/Prm/Prm.fpp",
-    "Fw/Time/Time.fpp",
-    "Fw/Tlm/Tlm.fpp",
-    "Fw/Types/Types.fpp",
-    "cmake/platform/unix/Platform/PlatformTypes.fpp",
-    "default/config/ComCfg.fpp",
-    "default/config/FpConfig.fpp",
-    "default/config/FpConstants.fpp",
-)
-"""The F´ framework files, in the clone, that the mock model imports."""
+from fsw.codegen.members import members
+from fsw.codegen.roles import roles
+from fsw.mock import edited
 
 GNC = """\
 module Gnc {
@@ -66,6 +56,8 @@ module Gnc {
   }
 
   array Vector3 = [3] F64
+
+  array Matrix = [3] Vector3
 
   type Seconds = F64
 
@@ -160,7 +152,7 @@ module Top {
 
 
 def _mock_files(directory: Path, gnc: str = GNC) -> list[Path]:
-    """The mock model's files, its two modules written into `directory`.
+    """The mock model's files, its two modules written into `directory`, with the framework's.
 
     Args:
         directory: where `Gnc.fpp` and `Top.fpp` are written.
@@ -172,7 +164,7 @@ def _mock_files(directory: Path, gnc: str = GNC) -> list[Path]:
     (directory / "Gnc.fpp").write_text(gnc)
     (directory / "Top.fpp").write_text(TOP)
     return [
-        *(CLONE / path for path in _MOCK_FRAMEWORK),
+        *framework_files(),
         directory / "Gnc.fpp",
         directory / "Top.fpp",
     ]
@@ -191,86 +183,65 @@ def mock(tmp_path_factory: pytest.TempPathFactory) -> Model:
     return read(_mock_files(tmp_path_factory.mktemp("mock")))
 
 
-def test_the_deployment_reads_back_with_every_connection_its_topology_declares(tmp_path: Path):
-    """The dead reckoner's deployment: its instances and every connection, patterns included, read.
+def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
+    configuration: str, tmp_path: Path
+):
+    """A configuration's deployment: every connection read, the pattern graphs' included.
+
+    Every connection end is an instance of the model, of a component it defines. Each GNC member's
+    connections show F´'s pattern graphs were read: a member with commands registers with the
+    dispatcher and is sent commands by it, one with channels reaches the ground link and the clock,
+    and one with parameters reads PrmDb. Each role the sub-topology takes comes from the CDH's
+    output into a member, every algorithm instance is a member its rate groups run, and the
+    sub-topology's tick comes in at its rate group driver.
 
     Args:
+        configuration: the configuration.
         tmp_path: where the deployment's topology is rendered.
     """
-    model = read(fpp_files("ImuDeadReckoning", tmp_path))
+    model = read(fpp_files(configuration, tmp_path))
+    connections = model.topologies[f"WiseFsw.{configuration}Fsw"]
 
-    assert model.instances == {
-        "WiseFsw.simTime": Instance("WiseFsw.simTime", "Sim.SimTime", 0x100),
-        "WiseFsw.groundLink": Instance("WiseFsw.groundLink", "Sim.GroundLink", 0x200),
-        "WiseFsw.labBusDriver": Instance("WiseFsw.labBusDriver", "Bus.LabBusDriver", 0x300),
-        "WiseFsw.cmdDisp": Instance("WiseFsw.cmdDisp", "Svc.CommandDispatcher", 0x500),
-        "WiseFsw.prmDb": Instance("WiseFsw.prmDb", "Svc.PrmDb", 0x600),
-        "WiseFsw.cdh": Instance("WiseFsw.cdh", "Cdh.BusConverter", 0x700),
-        "ImuDeadReckoning.rateGroupDriver": Instance(
-            "ImuDeadReckoning.rateGroupDriver", "Svc.RateGroupDriver", 0x400
-        ),
-        "ImuDeadReckoning.nav": Instance("ImuDeadReckoning.nav", "Gnc.ImuDeadReckoner", 0x1000),
-        "ImuDeadReckoning.navRateGroup": Instance(
-            "ImuDeadReckoning.navRateGroup", "Svc.PassiveRateGroup", 0x1100
-        ),
+    assert connections
+    for c in connections:
+        assert c.from_instance in model.instances, c
+        assert c.to_instance in model.instances, c
+    for instance in model.instances.values():
+        assert instance.component in model.components, instance.name
+    flown = [member for group in members(model, configuration).values() for member in group]
+    assert flown
+    for member in flown:
+        component = model.components[member.component]
+        targets = {
+            (c.to_instance, c.to_port) for c in connections if c.from_instance == member.name
+        }
+        sent = {(c.from_instance, c.from_port) for c in connections if c.to_instance == member.name}
+        if component.commands:
+            assert ("WiseFsw.cmdDisp", "compCmdReg") in targets, member.name
+            assert ("WiseFsw.cmdDisp", "compCmdSend") in sent, member.name
+        if component.channels:
+            assert ("WiseFsw.groundLink", "tlmIn") in targets, member.name
+            assert ("WiseFsw.simTime", "timeGetPort") in targets, member.name
+        if component.parameters:
+            assert ("WiseFsw.prmDb", "getPrm") in targets, member.name
+    names = {member.name for member in flown}
+    for role in roles(model):
+        port = model.ports.get(f"{configuration}.Gnc.{role.input}")
+        if port is None:
+            continue
+        cdh = ("WiseFsw.cdh", role.output, port.instance, port.port)
+        ends = {(c.from_instance, c.from_port, c.to_instance, c.to_port) for c in connections}
+        assert cdh in ends, role.role
+        assert port.instance in names, role.role
+    algorithms = {
+        name
+        for name, instance in model.instances.items()
+        if name.startswith(f"{configuration}.") and instance.component in algorithm_components()
     }
-    dead_reckoner, rate_group = "ImuDeadReckoning.nav", "ImuDeadReckoning.navRateGroup"
-    driver = "ImuDeadReckoning.rateGroupDriver"
-    assert model.topologies["WiseFsw.ImuDeadReckoningFsw"] == (
-        Connection(dead_reckoner, "cmdRegOut", 0, "WiseFsw.cmdDisp", "compCmdReg", 0),
-        Connection(dead_reckoner, "cmdResponseOut", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
-        Connection(dead_reckoner, "prmGetOut", 0, "WiseFsw.prmDb", "getPrm", 0),
-        Connection(dead_reckoner, "prmSetOut", 0, "WiseFsw.prmDb", "setPrm", 0),
-        Connection(dead_reckoner, "timeCaller", 0, "WiseFsw.simTime", "timeGetPort", 0),
-        Connection(dead_reckoner, "tlmOut", 0, "WiseFsw.groundLink", "tlmIn", 0),
-        Connection(rate_group, "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 1),
-        Connection(rate_group, "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
-        Connection(rate_group, "RateGroupMemberOut", 0, dead_reckoner, "schedIn", 0),
-        Connection(rate_group, "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
-        Connection(rate_group, "Tlm", 0, "WiseFsw.groundLink", "tlmIn", 0),
-        Connection(driver, "CycleOut", 0, rate_group, "CycleIn", 0),
-        Connection("WiseFsw.cdh", "imuOut", 0, dead_reckoner, "imuIn", 0),
-        Connection("WiseFsw.cmdDisp", "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 2),
-        Connection("WiseFsw.cmdDisp", "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
-        Connection("WiseFsw.cmdDisp", "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
-        Connection("WiseFsw.cmdDisp", "Tlm", 0, "WiseFsw.groundLink", "tlmIn", 0),
-        Connection("WiseFsw.cmdDisp", "compCmdSend", 0, dead_reckoner, "cmdIn", 0),
-        Connection("WiseFsw.cmdDisp", "compCmdSend", 1, rate_group, "CmdDisp", 0),
-        Connection("WiseFsw.cmdDisp", "compCmdSend", 2, "WiseFsw.cmdDisp", "CmdDisp", 0),
-        Connection("WiseFsw.cmdDisp", "compCmdSend", 3, "WiseFsw.prmDb", "CmdDisp", 0),
-        Connection("WiseFsw.cmdDisp", "seqCmdStatus", 0, "WiseFsw.groundLink", "cmdResponseIn", 0),
-        Connection("WiseFsw.groundLink", "cmdOut", 0, "WiseFsw.cmdDisp", "seqCmdBuff", 0),
-        Connection("WiseFsw.labBusDriver", "busOut", 0, "WiseFsw.cdh", "imuIn", 0),
-        Connection("WiseFsw.prmDb", "CmdReg", 0, "WiseFsw.cmdDisp", "compCmdReg", 3),
-        Connection("WiseFsw.prmDb", "CmdStatus", 0, "WiseFsw.cmdDisp", "compCmdStat", 0),
-        Connection("WiseFsw.prmDb", "Time", 0, "WiseFsw.simTime", "timeGetPort", 0),
-        Connection("WiseFsw.simTime", "CycleOut", 0, driver, "CycleIn", 0),
-    )
-    assert model.constants["ImuDeadReckoning.navDivider"] == 1
-    nav = model.components["Gnc.ImuDeadReckoner"]
-    assert nav.commands == (
-        Command(
-            "initNavState",
-            (
-                Argument("epoch", "F64"),
-                Argument("attitude", "Gnc.Quaternion"),
-                Argument("position", "Gnc.Vector3"),
-                Argument("velocity", "Gnc.Vector3"),
-            ),
-        ),
-    )
-    assert nav.channels == (
-        Channel("navState", "Gnc.NavState"),
-        Channel("bodyEciPos", "Gnc.Vector3"),
-        Channel("bodyEciVel", "Gnc.Vector3"),
-        Channel("bodyEciAttitude", "Gnc.Quaternion"),
-    )
-    assert model.types["Gnc.Matrix3"] == Array("Gnc.Matrix3", 3, "Gnc.Vector3")
-    assert model.annotations["WiseFsw.ImuDeadReckoningFsw"] == (
-        "The flight software run inside the simulation: the ImuDeadReckoning configuration's GNC,"
-        " fed and",
-        "ticked by the simulation, commanded and read by the ground",
-    )
+    assert algorithms <= names
+    tick = model.ports[f"{configuration}.Gnc.tickIn"]
+    assert model.instances[tick.instance].component == "Svc.RateGroupDriver"
+    assert tick.port == "CycleIn"
 
 
 def test_an_imported_sub_topology_s_connections_are_the_deployment_s_in_port_order(mock: Model):
@@ -290,20 +261,13 @@ def test_an_imported_sub_topology_s_connections_are_the_deployment_s_in_port_ord
     assert mock.instances["Top.drv"] == Instance("Top.drv", "Top.Driver", 0x100)
 
 
-def test_a_topology_s_ports_are_read_as_the_instance_port_each_exposes(tmp_path: Path):
-    """Keyed `<topology>.<port>`: the mock's, and the dead reckoner's GNC sub-topology's.
+def test_a_topology_s_ports_are_read_as_the_instance_port_each_exposes(mock: Model):
+    """Keyed `<topology>.<port>`.
 
     Args:
-        tmp_path: where the mock's model and the deployment's topology are written.
+        mock: the mock model.
     """
-    mock = read(_mock_files(tmp_path))
-    model = read(fpp_files("ImuDeadReckoning", tmp_path))
-
     assert mock.ports == {"Gnc.Gnc.tickIn": TopologyPort("Gnc.rg", "CycleIn")}
-    assert model.ports == {
-        "ImuDeadReckoning.Gnc.tickIn": TopologyPort("ImuDeadReckoning.rateGroupDriver", "CycleIn"),
-        "ImuDeadReckoning.Gnc.imuIn": TopologyPort("ImuDeadReckoning.nav", "imuIn"),
-    }
 
 
 def test_numeric_constants_are_read_by_qualified_name_and_others_are_not(mock: Model):
@@ -342,7 +306,7 @@ def test_annotations_are_read_pre_lines_then_post_lines(mock: Model):
 
 
 def test_types_are_read_with_struct_members_in_declaration_order(mock: Model):
-    """Structs keep FPP's member order; enums carry their constants and arrays their size.
+    """Structs keep FPP's member order; enums carry their constants, arrays their size and element.
 
     Args:
         mock: the mock model.
@@ -358,6 +322,7 @@ def test_types_are_read_with_struct_members_in_declaration_order(mock: Model):
     )
     assert mock.types["Gnc.Mode"] == Enum("Gnc.Mode", "U8", {"idle": 0, "running": 3})
     assert mock.types["Gnc.Vector3"] == Array("Gnc.Vector3", 3, "F64")
+    assert mock.types["Gnc.Matrix"] == Array("Gnc.Matrix", 3, "Gnc.Vector3")
     assert mock.types["Fw.CmdResponse"] == Enum(
         "Fw.CmdResponse",
         "U8",
@@ -405,8 +370,10 @@ def test_a_component_s_commands_channels_and_parameters_are_read(mock: Model):
     assert [type(p.default) for p in nav.parameters] == [float, str, type(None), int, bool, str]
 
 
-def test_a_component_s_general_output_ports_and_its_file_are_read(mock: Model):
-    """Each output port that is not a special port, with its size and arguments, and the file.
+def test_a_component_s_general_ports_and_its_file_are_read(mock: Model):
+    """Each general port, in FPP's order with its size and arguments, and the component's file.
+
+    A general port is one that is not a special port.
 
     Args:
         mock: the mock model.
@@ -416,22 +383,14 @@ def test_a_component_s_general_output_ports_and_its_file_are_read(mock: Model):
     )
     assert mock.components["Top.Driver"].outputs == (Port("tickOut", 1, (Argument("ctx", "U32"),)),)
     assert mock.components["Gnc.Nav"].outputs == ()
-    assert mock.components["Gnc.Nav"].file.name == "Gnc.fpp"
-    assert mock.components["Top.Driver"].file.name == "Top.fpp"
-    assert mock.components["Gnc.Nav"].file.is_absolute()
-
-
-def test_a_component_s_general_input_ports_are_read_in_fpp_s_order(mock: Model):
-    """Each input port that is not a special port, with its size and arguments.
-
-    Args:
-        mock: the mock model.
-    """
     assert mock.components["Gnc.RateGroup"].inputs == (
         Port("CycleIn", 1, (Argument("ctx", "U32"),)),
     )
     assert mock.components["Gnc.Nav"].inputs == (Port("schedIn", 1, (Argument("ctx", "U32"),)),)
     assert mock.components["Top.Driver"].inputs == ()
+    assert mock.components["Gnc.Nav"].file.name == "Gnc.fpp"
+    assert mock.components["Top.Driver"].file.name == "Top.fpp"
+    assert mock.components["Gnc.Nav"].file.is_absolute()
 
 
 def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
@@ -440,11 +399,13 @@ def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
     Args:
         tmp_path: where the mock's model is written.
     """
-    gnc = GNC.replace(
-        "    command recv port cmdIn\n",
-        "    output port anyOut: serial\n    command recv port cmdIn\n",
+    gnc = edited(
+        GNC,
+        (
+            "    command recv port cmdIn\n",
+            "    output port anyOut: serial\n    command recv port cmdIn\n",
+        ),
     )
-    assert gnc != GNC
 
     nav = read(_mock_files(tmp_path, gnc)).components["Gnc.Nav"]
 
@@ -457,7 +418,9 @@ def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):
     Args:
         tmp_path: where the mock's model is written.
     """
-    gnc = GNC.replace("param mounting: Vector3", "param mounting: Vector3 default [1.0, 0.0, 0.0]")
+    gnc = edited(
+        GNC, ("param mounting: Vector3", "param mounting: Vector3 default [1.0, 0.0, 0.0]")
+    )
 
     with pytest.raises(ValueError, match="mounting"):
         read(_mock_files(tmp_path, gnc))
@@ -469,7 +432,7 @@ def test_a_model_fpp_rejects_fails_with_its_stderr(tmp_path: Path):
     Args:
         tmp_path: where the mock's model is written.
     """
-    gnc = GNC.replace("instance nav: Nav", "instance nav: Navigator")
+    gnc = edited(GNC, ("instance nav: Nav", "instance nav: Navigator"))
 
     with pytest.raises(RuntimeError, match="Navigator"):
         read(_mock_files(tmp_path, gnc))

@@ -11,6 +11,7 @@ import pytest
 
 from fsw.codegen.deployment import contract_files
 from fsw.codegen.fpp_model import Model, read
+from fsw.mock import edited
 from fsw.python.gnc.partition import GncPartition
 from fsw.python.platform.rates import RateGroupDriver, dividers
 
@@ -320,10 +321,14 @@ def test_a_data_input_not_named_in_ends_is_refused_naming_it(tmp_path: Path):
     Args:
         tmp_path: where the mock is written.
     """
-    mock = MOCK.replace(
-        "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
-        "    sync input port value: Value\n  }\n\n  passive component Slow",
-    ).replace("source.valueOut -> sink.valueIn", "source.valueOut -> sink.value")
+    mock = edited(
+        MOCK,
+        (
+            "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
+            "    sync input port value: Value\n  }\n\n  passive component Slow",
+        ),
+        ("source.valueOut -> sink.valueIn", "source.valueOut -> sink.value"),
+    )
 
     with pytest.raises(ValueError, match=r"sink\.value\b"):
         GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
@@ -337,20 +342,21 @@ def test_a_backward_edge_is_refused_naming_it(tmp_path: Path):
     Args:
         tmp_path: where the mock is written.
     """
-    mock = (
-        MOCK.replace(
+    mock = edited(
+        MOCK,
+        (
             "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
             "    sync input port valueIn: Value\n    sync input port backIn: Value\n  }\n\n"
             "  passive component Slow",
-        )
-        .replace(
+        ),
+        (
             "    sync input port valueIn: Value\n  }\n\n  instance",
             "    sync input port valueIn: Value\n    output port backOut: Value\n  }\n\n  instance",
-        )
-        .replace(
+        ),
+        (
             "      source.echoOut -> slow.valueIn\n",
             "      source.echoOut -> slow.valueIn\n      slow.backOut -> sink.backIn\n",
-        )
+        ),
     )
 
     with pytest.raises(ValueError, match=r"slow\.backOut -> sink\.backIn is a backward edge"):
@@ -363,13 +369,17 @@ def test_a_self_loop_is_refused_as_a_backward_edge(tmp_path: Path):
     Args:
         tmp_path: where the mock is written.
     """
-    mock = MOCK.replace(
-        "    output port echoOut: Value\n",
-        "    output port echoOut: Value\n    output port loopOut: Value\n"
-        "    sync input port loopIn: Value\n",
-    ).replace(
-        "      source.echoOut -> slow.valueIn\n",
-        "      source.echoOut -> slow.valueIn\n      source.loopOut -> source.loopIn\n",
+    mock = edited(
+        MOCK,
+        (
+            "    output port echoOut: Value\n",
+            "    output port echoOut: Value\n    output port loopOut: Value\n"
+            "    sync input port loopIn: Value\n",
+        ),
+        (
+            "      source.echoOut -> slow.valueIn\n",
+            "      source.echoOut -> slow.valueIn\n      source.loopOut -> source.loopIn\n",
+        ),
     )
 
     with pytest.raises(ValueError, match=r"source\.loopOut -> source\.loopIn is a backward edge"):
@@ -382,17 +392,18 @@ def test_an_output_feeding_more_than_one_input_is_refused_naming_it(tmp_path: Pa
     Args:
         tmp_path: where the mock is written.
     """
-    mock = (
-        MOCK.replace("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n")
-        .replace(
+    mock = edited(
+        MOCK,
+        ("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n"),
+        (
             "      source.valueOut -> sink.valueIn\n",
             "      source.valueOut[0] -> sink.valueIn\n      source.valueOut[1] -> slow.doubleIn\n",
-        )
-        .replace(
+        ),
+        (
             "    sync input port valueIn: Value\n  }\n\n  instance",
             "    sync input port valueIn: Value\n    sync input port doubleIn: Value\n  }\n\n"
             "  instance",
-        )
+        ),
     )
 
     with pytest.raises(ValueError, match=r"source\.valueOut routes to more than one input"):
