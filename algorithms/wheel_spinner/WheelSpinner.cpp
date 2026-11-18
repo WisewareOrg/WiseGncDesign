@@ -10,11 +10,7 @@ void WheelSpinner::schedIn_handler(FwIndexType portNum, U32 context) {
     const F64 torque = this->paramGet_motorTorque(valid);
     FW_ASSERT(valid == Fw::ParamValid::VALID, valid.e);
     Gnc::WheelCommand command;
-    Gnc::WheelCommand::Type_of_motorTorque& motorTorque = command.get_motorTorque();
-    for (FwSizeType i = 0; i < sizeof motorTorque / sizeof motorTorque[0]; i++) {
-        motorTorque[i] = 0.0;
-    }
-    motorTorque[0] = torque;
+    command.get_motorTorque()[0] = torque;
     this->wheelOut_out(0, command);
     this->tlmWrite_wheelTorque(torque);
 }

@@ -75,7 +75,7 @@ def test_each_step_sends_the_notebook_s_command_and_writes_its_torque(
     """
     [role] = taken(configuration_model(configuration), configuration)
     pairs = outputs.pairings([role])
-    sent = WheelSpinner(SPINNER).step(0.0)[0]
+    sent, _ = WheelSpinner(SPINNER).step(0.0)
     command = commands(pairs, outputs.convert(pairs, {role.output: sent.wheelOut}))[role.role]
     expected = [(bus_port(configuration, role.output), serialize(command))]
 
