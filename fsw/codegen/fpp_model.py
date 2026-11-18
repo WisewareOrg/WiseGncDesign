@@ -207,11 +207,14 @@ class Port(NamedTuple):
         name: the port's name.
         size: its number of ports, 1 for a port that is not an array.
         args: its port type's arguments, in order; none for a `serial` port.
+        type: its port type's qualified name, such as `Bus.ImuSensorMsg`; `None` for a `serial`
+            port.
     """
 
     name: str
     size: int
     args: tuple[Argument, ...]
+    type: str | None
 
 
 class Component(NamedTuple):
@@ -549,11 +552,14 @@ def _component(
             node_id = general["aNode"]["astNodeId"]
             position = (0, specs[str(node_id)][0]) if str(node_id) in specs else (1, node_id)
             args: tuple[Argument, ...] = ()
+            port_name = None
             if "DefPort" in general["ty"]:
                 port_type = nodes[str(general["ty"]["DefPort"]["symbol"]["Port"]["nodeId"])]
                 args = arguments(port_type.data["params"])
+                port_name = port_type.name
             ports = outputs if general["kind"] == "Output" else inputs
-            ports.append((position, Port(general["specifier"]["name"], general["size"], args)))
+            port = Port(general["specifier"]["name"], general["size"], args, port_name)
+            ports.append((position, port))
     return Component(
         node.name,
         tuple(c for _, c in sorted(commands)),

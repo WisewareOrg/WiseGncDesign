@@ -12,7 +12,6 @@ NOTEBOOKS = sorted(
 assert NOTEBOOKS, "no mission notebooks found beside this file"
 
 
-@pytest.mark.xdist_group("notebooks")
 @pytest.mark.parametrize("notebook", NOTEBOOKS, ids=lambda path: path.stem)
 def test_a_mission_notebook_runs_end_to_end(notebook: Path) -> None:
     """Every cell runs, the notebook-only cells that judge and plot included.

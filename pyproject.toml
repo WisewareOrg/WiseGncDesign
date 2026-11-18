@@ -34,7 +34,7 @@ fprime = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-gds==4.4.0", "fprime-too
 
 [tool.uv.sources]
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "984b4780621ca0083d7e85c2dee48f90dc88f5cb" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "eb72b1fa0d87584159873a3e5597d1141897a01f" }
 
 [build-system]
 requires = ["hatchling"]
@@ -58,7 +58,7 @@ filterwarnings = [
 ]
 # The F´ framework clone and the F´ build cache carry F´'s own tests, which are not this project's.
 addopts = [
-    "--import-mode=importlib", "-n", "auto", "--dist", "loadgroup", "-p", "pytester",
+    "--import-mode=importlib", "-n", "auto", "-p", "pytester",
     "--ignore=fsw/fprime/lib", "--ignore-glob=fsw/fprime/build-fprime-*",
 ]
 

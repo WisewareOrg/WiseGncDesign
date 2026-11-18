@@ -16,6 +16,7 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     file(GLOB WISE_CDH_INPUTS CONFIGURE_DEPENDS
         "${FPRIME_PROJECT_ROOT}/fsw/fpp/interfaces/*.fpp"
         "${FPRIME_PROJECT_ROOT}/fsw/codegen/*.py")
+    list(FILTER WISE_CDH_INPUTS EXCLUDE REGEX "_test\\.py$")
     add_custom_command(
         OUTPUT
             "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.hpp"

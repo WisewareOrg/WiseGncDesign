@@ -15,4 +15,15 @@ void LabBusDriver::push(FwIndexType port, const U8* data, FwSizeType size) {
               static_cast<FwAssertArgType>(wrapper.getDeserializeSizeLeft()));
 }
 
+std::vector<std::pair<FwIndexType, std::vector<U8>>> LabBusDriver::take() {
+    std::vector<std::pair<FwIndexType, std::vector<U8>>> taken;
+    taken.swap(this->m_taken);
+    return taken;
+}
+
+void LabBusDriver::busIn_handler(FwIndexType portNum, Fw::LinearBufferBase& buffer) {
+    const U8* data = buffer.getBuffAddr();
+    this->m_taken.emplace_back(portNum, std::vector<U8>(data, data + buffer.getSize()));
+}
+
 }  // namespace Bus

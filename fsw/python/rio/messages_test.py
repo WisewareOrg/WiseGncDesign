@@ -1,7 +1,7 @@
-"""The Python build's RIO-in reads each paired role's Basilisk message as its bus struct.
+"""The Python build's RIO: each sensor's message read as its bus struct, each actuator's written.
 
 The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's message from
-`bus_messages`.
+`bus_messages`: RIO-in reads the sensor roles', and RIO-out builds the actuator roles' payloads.
 """
 
 import re
@@ -16,17 +16,23 @@ from fsw.codegen.deployment import contract_files
 from fsw.codegen.fields import DTYPES
 from fsw.codegen.fpp_model import read as read_model
 from fsw.codegen.roles import roles
-from fsw.python.cdh.inputs import Pair
-from fsw.python.rio.messages import read
+from fsw.python.cdh import inputs, outputs
+from fsw.python.rio.messages import commands, read
 
-ROLES = roles(read_model(contract_files()))
+DECLARED = roles(read_model(contract_files()))
 """Every role of the contract's `Cdh.BusConverter`."""
 
-PAIRS = [
-    Pair(role.role, fpp_types.named(role.bus), fpp_types.named(role.icd), role.input)
-    for role in ROLES
-]
-"""A pair per role: its message, through its bus struct, to the GNC's struct."""
+ROLES = [role for role in DECLARED if role.sensor]
+"""Every sensor role."""
+
+PAIRS = inputs.pairings(ROLES)
+"""A pair per sensor role: its message, through its bus struct, to the GNC's struct."""
+
+ACTUATORS = [role for role in DECLARED if not role.sensor]
+"""Every actuator role."""
+
+COMMANDS = outputs.pairings(ACTUATORS)
+"""A pair per actuator role: the GNC's struct, through its bus struct, to its message."""
 
 
 def _written(payload: Any) -> tuple[Any, Any]:
@@ -131,3 +137,42 @@ def test_a_paired_role_the_vehicle_does_not_have_is_refused_naming_it():
     """A vehicle without a paired role's message fails the tick, naming the role."""
     with pytest.raises(KeyError, match=re.escape(f"the role {PAIRS[0].role}")):
         read(PAIRS, {"notARole": object()})
+
+
+def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_message(
+    bus_messages: dict[str, Any],
+):
+    """Each commanded role's bus struct becomes a new `messaging.<Name>Payload`, field by field.
+
+    Each payload field is the bus member of its name, ignoring case; the bus struct changed
+    afterwards leaves the payload as it was.
+
+    Args:
+        bus_messages: a message of each bus struct, its members' values distinct.
+    """
+    assert COMMANDS
+    buses = {
+        pair.role: pair.bus(**{m: np.array(v) for m, v in bus_messages[role.bus].values.items()})
+        for pair, role in zip(COMMANDS, ACTUATORS, strict=True)
+    }
+
+    written = commands(COMMANDS, buses)
+    for bus in buses.values():
+        for value in bus:
+            value[...] = 0
+
+    assert list(written) == [role.role for role in ACTUATORS]
+    for role in ACTUATORS:
+        payload = written[role.role]
+        name = role.bus.removeprefix("Bus.")
+        assert type(payload) is getattr(messaging, f"{name}Payload"), role.role
+        message = bus_messages[role.bus]
+        fields = {f.lower(): f for f in type(payload).__dtype__.names}
+        for member in message.struct.members:
+            got = getattr(payload, fields[member.name.lower()])
+            np.testing.assert_array_equal(got, message.values[member.name], err_msg=role.role)
+
+
+def test_a_role_not_commanded_this_tick_is_not_written():
+    """Only the roles whose bus structs CDH-out gave are written: none gives none."""
+    assert commands(COMMANDS, {}) == {}

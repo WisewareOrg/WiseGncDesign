@@ -1,10 +1,12 @@
 """The bus emulator's bytes for each bus struct's message are F´'s serialization of the struct.
 
-Each test ranges over every bus struct in `Bus.fpp`, through the `bus_messages` fixture. The pin
-test is skipped without the deployment `just fsw` builds, as the `fsw` fixture skips.
+Each test ranges over every bus struct in `Bus.fpp`, through the `bus_messages` fixture, both ways:
+a message to its bytes, and bytes back to a message. The pin tests are skipped without the
+deployment `just fsw` builds, as the `fsw` fixture skips.
 """
 
 import re
+import struct
 from types import ModuleType
 from typing import Any
 
@@ -15,7 +17,7 @@ from Basilisk.architecture import messaging
 from fsw.codegen.fields import DTYPES
 from fsw.codegen.fpp_model import Member, Struct
 from lab import bus_emulator
-from lab.bus_emulator import serialize
+from lab.bus_emulator import deserialize, serialize
 
 
 def _packed(message: Any, order: str = ">", swap: tuple[str, str] | None = None) -> bytes:
@@ -69,6 +71,49 @@ def test_each_message_is_its_members_big_endian_and_packed_in_declaration_order(
     for name, message in bus_messages.items():
         assert serialize(message.payload) == _packed(message), name
         assert serialize(message.payload) != _packed(message, "<"), name
+
+
+def _assert_holds(payload: Any, message: Any, name: str) -> None:
+    """A payload is a fresh `messaging.<Name>Payload` holding a bus message's values.
+
+    Args:
+        payload: the payload.
+        message: the `BusMessage`.
+        name: the bus struct, named on failure.
+    """
+    assert type(payload) is type(message.payload), name
+    assert payload is not message.payload, name
+    fields = {field.lower(): field for field in type(payload).__dtype__.names}
+    for member in message.struct.members:
+        got = getattr(payload, fields[member.name.lower()])
+        np.testing.assert_array_equal(got, message.values[member.name], err_msg=name)
+
+
+def test_each_struct_s_bytes_are_read_back_as_a_payload_of_the_message_it_mirrors(
+    bus_messages: dict[str, Any],
+) -> None:
+    """Each struct's big-endian packed bytes give back its values; its little-endian bytes do not.
+
+    Args:
+        bus_messages: a message of each bus struct.
+    """
+    for name, message in bus_messages.items():
+        _assert_holds(deserialize(name, _packed(message)), message, name)
+        with pytest.raises(AssertionError):
+            _assert_holds(deserialize(name, _packed(message, "<")), message, name)
+
+
+def test_bytes_of_another_length_than_the_struct_s_are_refused(
+    bus_messages: dict[str, Any],
+) -> None:
+    """Bytes one short of a struct's raise `struct.error`.
+
+    Args:
+        bus_messages: a message of each bus struct.
+    """
+    for name, message in bus_messages.items():
+        with pytest.raises(struct.error):
+            deserialize(name, _packed(message)[:-1])
 
 
 def test_a_message_with_no_bus_struct_is_refused_by_name() -> None:
@@ -134,3 +179,17 @@ def test_the_emulator_writes_the_bytes_f_prime_serializes(
             assert _packed(message, swap=pair) != serialized, name
             swapped += 1
     assert swapped
+
+
+def test_the_emulator_reads_back_the_bytes_f_prime_serializes(
+    fsw: ModuleType, bus_messages: dict[str, Any]
+) -> None:
+    """F´'s serialization of each bus struct, read back by the emulator, gives its values.
+
+    Args:
+        fsw: a copy of the deployment.
+        bus_messages: a message of each bus struct.
+    """
+    for name, message in bus_messages.items():
+        pin = getattr(fsw, re.sub(r"^Bus\.", "bus_", name))
+        _assert_holds(deserialize(name, pin(**message.values)), message, name)

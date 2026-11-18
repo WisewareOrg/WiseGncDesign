@@ -1,8 +1,9 @@
 """The lab adapter: a configuration's F´ deployment as a WiseDynamics FSW build, on bus bytes.
 
 Lab equipment, as a hardware-in-the-loop rig is: it powers the deployment on, pushes each sensor's
-reading onto the bus as the bytes the vehicle's bus would carry, and carries the bytes of the
-deployment's radio link, which the ground decodes.
+reading onto the bus as the bytes the vehicle's bus would carry, turns the bytes the deployment
+sends each actuator back into its Basilisk message, and carries the bytes of the deployment's radio
+link, which the ground decodes.
 """
 
 from collections.abc import Mapping
@@ -10,11 +11,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from fsw.codegen.deployment import bus_port, configuration_model, tick_period
-from fsw.codegen.roles import roles
+from fsw.codegen.deployment import CONTRACT, Contract, bus_port, configuration_model, tick_period
+from fsw.codegen.roles import Role, taken
 from ground import parameters
 from ground.dictionary import Dictionary
-from lab.bus_emulator import serialize
+from lab.bus_emulator import deserialize, serialize
 from lab.power_cycle import dictionary_path, power_cycle, source
 
 __all__ = ["Adapter"]
@@ -27,11 +28,13 @@ class Adapter:
 
     `boot` power-cycles it: a fresh copy of the configuration's extension, booted at t = 0 with
     every component idle and PrmDb loading the case's `.dat`, so a case keeps nothing of an earlier
-    one. `tick` sets the clock, runs the uplinked commands, pushes each role's message, as the bus
-    emulator writes it, on the LabBusDriver port the deployment wires to the CDH's `<role>In`,
-    ticks the rate groups and drains the copy's telemetry writes. The radio link is the copy's
-    pins, in bytes: `uplink` and `responses` reach the current copy, and `telemetry` returns what
-    the ticks drained. `ground.fprime_station.FprimeStation` is the ground's codec for them.
+    one. `tick` sets the clock, runs the uplinked commands, pushes each sensor role's message, as
+    the bus emulator writes it, on the LabBusDriver port the deployment wires to the CDH's
+    `<role>In`, ticks the rate groups, drains the copy's telemetry writes, and returns the bytes the
+    CDH's `<role>Out` sent each actuator role's LabBusDriver port, as the bus emulator reads them
+    back. The radio link is the copy's pins, in bytes: `uplink` and `responses` reach the current
+    copy, and `telemetry` returns what the ticks drained. `ground.fprime_station.FprimeStation` is
+    the ground's codec for them.
 
     Attributes:
         period_s: s, the base tick's period, the configuration's FPP constant `tickPeriod`.
@@ -48,24 +51,34 @@ class Adapter:
     _writes: list[tuple[int, int, bytes]]
     """What `telemetry` returns next."""
 
-    def __init__(self, configuration: str, prm_path: Path) -> None:
+    def __init__(
+        self, configuration: str, prm_path: Path, *, contract: Contract = CONTRACT
+    ) -> None:
         """Makes the case's `.dat` beside its record, once `source` has checked the build.
 
         A deployment not built, or rebuilt since this process first checked it, raises as `source`
         does, and a record F´'s tool refuses raises as `ground.parameters.dat` does.
 
         Args:
-            configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`.
+            configuration: the configuration, the name of its GNC sub-topology in the contract.
             prm_path: the case's parameter record, JSON, which `boot` boots the deployment with.
+            contract: the contract holding the configuration, the repository's by default.
         """
         source(configuration)
         self._configuration = configuration
+        roles = taken(configuration_model(configuration, contract=contract), configuration)
         self._ports = {
-            role.role: bus_port(configuration, role.input)
-            for role in roles(configuration_model(configuration))
+            role.role: bus_port(configuration, role.input, contract=contract)
+            for role in roles
+            if role.sensor
+        }
+        self._actuators: dict[int, Role] = {
+            bus_port(configuration, role.output, contract=contract): role
+            for role in roles
+            if not role.sensor
         }
         self._dat = parameters.dat(prm_path, dictionary_path(configuration))
-        self.period_s = tick_period(configuration)
+        self.period_s = tick_period(configuration, contract=contract)
         self.dictionary = Dictionary(dictionary_path(configuration))
         self.build = {
             "host": "lab.Adapter",
@@ -92,11 +105,12 @@ class Adapter:
             messages_by_role: each role's Basilisk message payload, valid during this call only.
 
         Returns:
-            The actuator commands, by role: none.
+            The actuator commands, by role: for each actuator role whose bytes the step's GNC sent,
+            a fresh `messaging.<Name>Payload`, the last sent when sent more than once.
 
         Raises:
             RuntimeError: the tick is not at a whole microsecond, which F´'s clock cannot hold.
-            KeyError: a role the CDH converts has no message, naming it.
+            KeyError: a sensor role the configuration takes has no message, naming it.
         """
         if t_ns % _NANOSECONDS_PER_MICROSECOND:
             raise RuntimeError(
@@ -111,9 +125,13 @@ class Adapter:
                     f" {sorted(messages_by_role)} lack"
                 )
             bus.append((port, serialize(messages_by_role[role])))
-        self._fsw.step(t_ns=t_ns, bus=bus)
+        sent = self._fsw.step(t_ns=t_ns, bus=bus)
         self._writes += self._fsw.telemetry()
-        return {}
+        commands = {}
+        for port, data in sent:
+            role = self._actuators[port]
+            commands[role.role] = deserialize(role.bus, data)
+        return commands
 
     def uplink(self, packet: bytes, context: int) -> None:
         """Queues an F´ command packet at the current copy's dispatcher; the next tick runs it.

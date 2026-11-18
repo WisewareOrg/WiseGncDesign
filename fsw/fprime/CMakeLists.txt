@@ -32,6 +32,22 @@ foreach (WISE_ALGORITHM IN LISTS WISE_ALGORITHMS)
     get_filename_component(WISE_ALGORITHM_DIR "${WISE_ALGORITHM}" DIRECTORY)
     add_fprime_subdirectory("${WISE_ALGORITHM_DIR}")
 endforeach ()
+# Everything the deployment's render reads, so an edit to one reruns it: every algorithm's FPP, an
+# F´ component or not, the contracts' FPP and lists, the template and the renderer, its tests aside.
+# The render rewrites a deployment topology only when its text changes.
+file(GLOB WISE_RENDER_INPUTS CONFIGURE_DEPENDS
+    "${FPRIME_PROJECT_ROOT}/algorithms/*/*.fpp"
+    "${FPRIME_PROJECT_ROOT}/fsw/fpp/gnc/*.fpp"
+    "${FPRIME_PROJECT_ROOT}/fsw/fpp/interfaces/*.fpp"
+    "${FPRIME_PROJECT_ROOT}/fsw/mock/*.fpp"
+    "${FPRIME_PROJECT_ROOT}/fsw/mock/*/*.fpp"
+    "${FPRIME_PROJECT_ROOT}/fsw/mock/__init__.py"
+    "${FPRIME_PROJECT_ROOT}/fsw/codegen/*.py"
+    "${CMAKE_CURRENT_LIST_DIR}/deployment/Fsw.fpp.in")
+list(FILTER WISE_RENDER_INPUTS EXCLUDE REGEX "_test\\.py$")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${WISE_RENDER_INPUTS})
+# The test mock's F´ component, MockGnc.Actuator, which the test mock configuration MockActuation flies.
+add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/fsw/mock/actuator")
 # pybind11, for the hand-written module that hosts each configuration's deployment in the
 # simulation's process, and `_wise_fsw`, the target building every configuration's extension and
 # dictionary. The F´ sub-builds only gather model information and compile nothing.

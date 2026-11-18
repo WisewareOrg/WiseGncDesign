@@ -30,7 +30,7 @@ from fsw.codegen.fpp_model import (
     read,
 )
 from fsw.codegen.members import members
-from fsw.codegen.roles import roles
+from fsw.codegen.roles import taken
 from fsw.mock import edited
 
 GNC = """\
@@ -191,9 +191,10 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
     Every connection end is an instance of the model, of a component it defines. Each GNC member's
     connections show F´'s pattern graphs were read: a member with commands registers with the
     dispatcher and is sent commands by it, one with channels reaches the ground link and the clock,
-    and one with parameters reads PrmDb. Each role the sub-topology takes comes from the CDH's
-    output into a member, every algorithm instance is a member its rate groups run, and the
-    sub-topology's tick comes in at its rate group driver.
+    and one with parameters reads PrmDb. Each sensor role the sub-topology takes comes from the
+    CDH's output into a member, and each actuator role from a member into the CDH's input, every
+    algorithm instance is a member its rate groups run, and the sub-topology's tick comes in at its
+    rate group driver.
 
     Args:
         configuration: the configuration.
@@ -225,13 +226,15 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
         if component.parameters:
             assert ("WiseFsw.prmDb", "getPrm") in targets, member.name
     names = {member.name for member in flown}
-    for role in roles(model):
-        port = model.ports.get(f"{configuration}.Gnc.{role.input}")
-        if port is None:
-            continue
-        cdh = ("WiseFsw.cdh", role.output, port.instance, port.port)
-        ends = {(c.from_instance, c.from_port, c.to_instance, c.to_port) for c in connections}
-        assert cdh in ends, role.role
+    ends = {(c.from_instance, c.from_port, c.to_instance, c.to_port) for c in connections}
+    for role in taken(model, configuration):
+        if role.sensor:
+            port = model.ports[f"{configuration}.Gnc.{role.input}"]
+            wired = ("WiseFsw.cdh", role.output, port.instance, port.port)
+        else:
+            port = model.ports[f"{configuration}.Gnc.{role.output}"]
+            wired = (port.instance, port.port, "WiseFsw.cdh", role.input)
+        assert wired in ends, role.role
         assert port.instance in names, role.role
     algorithms = {
         name
@@ -371,22 +374,26 @@ def test_a_component_s_commands_channels_and_parameters_are_read(mock: Model):
 
 
 def test_a_component_s_general_ports_and_its_file_are_read(mock: Model):
-    """Each general port, in FPP's order with its size and arguments, and the component's file.
+    """Each general port in FPP's order, with its size, arguments and type, and the defining file.
 
-    A general port is one that is not a special port.
+    A general port is one that is not a special port; its type is its port type's qualified name.
 
     Args:
         mock: the mock model.
     """
     assert mock.components["Gnc.RateGroup"].outputs == (
-        Port("RateGroupMemberOut", 3, (Argument("ctx", "U32"),)),
+        Port("RateGroupMemberOut", 3, (Argument("ctx", "U32"),), "Gnc.Sched"),
     )
-    assert mock.components["Top.Driver"].outputs == (Port("tickOut", 1, (Argument("ctx", "U32"),)),)
+    assert mock.components["Top.Driver"].outputs == (
+        Port("tickOut", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
+    )
     assert mock.components["Gnc.Nav"].outputs == ()
     assert mock.components["Gnc.RateGroup"].inputs == (
-        Port("CycleIn", 1, (Argument("ctx", "U32"),)),
+        Port("CycleIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
     )
-    assert mock.components["Gnc.Nav"].inputs == (Port("schedIn", 1, (Argument("ctx", "U32"),)),)
+    assert mock.components["Gnc.Nav"].inputs == (
+        Port("schedIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
+    )
     assert mock.components["Top.Driver"].inputs == ()
     assert mock.components["Gnc.Nav"].file.name == "Gnc.fpp"
     assert mock.components["Top.Driver"].file.name == "Top.fpp"
@@ -394,7 +401,7 @@ def test_a_component_s_general_ports_and_its_file_are_read(mock: Model):
 
 
 def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
-    """A `serial` output port, which has no port type, is an output with no arguments.
+    """A `serial` output port, which has no port type, is an output with no arguments or type.
 
     Args:
         tmp_path: where the mock's model is written.
@@ -409,7 +416,7 @@ def test_a_serial_output_port_reads_with_no_arguments(tmp_path: Path):
 
     nav = read(_mock_files(tmp_path, gnc)).components["Gnc.Nav"]
 
-    assert nav.outputs == (Port("anyOut", 1, ()),)
+    assert nav.outputs == (Port("anyOut", 1, (), None),)
 
 
 def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):

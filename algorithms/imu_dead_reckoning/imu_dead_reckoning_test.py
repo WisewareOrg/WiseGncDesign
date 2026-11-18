@@ -283,13 +283,11 @@ def test_the_dead_reckoner_has_no_outputs_and_two_required_parameters():
         Gnc.ImuDeadReckonerParameters(mu=1.0)
 
 
-@pytest.mark.xdist_group("notebooks")
 def test_the_notebook_runs_end_to_end() -> None:
     """Every cell of the algorithm notebook runs, the notebook-only cells included."""
     run_notebook(Path(__file__).with_name("imu_dead_reckoning.py"))
 
 
-@pytest.mark.xdist_group("notebooks")
 def test_the_parity_notebook_runs_end_to_end() -> None:
     """Every cell of the parity notebook runs, so the two builds agree on a twin per scenario."""
     if not built("ImuDeadReckoning"):

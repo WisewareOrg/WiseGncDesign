@@ -13,12 +13,12 @@ from typing import Any
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import configurations, fpp_files
+from fsw.codegen.deployment import fpp_files, fprime_configurations
 from fsw.codegen.fpp_model import read
 from ground.fprime_station import FprimeStation
 from lab import built
 
-if not all(built(c) for c in configurations()):
+if not all(built(c) for c in fprime_configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000

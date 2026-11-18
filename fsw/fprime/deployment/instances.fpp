@@ -17,8 +17,8 @@ module WiseFsw {
     """
   }
 
-  @ The CDH: each bus struct converted to the GNC's struct; its implementation is generated into
-  @ the build directory
+  @ The CDH: each sensor's bus struct converted to the GNC's struct, and each actuator's GNC struct
+  @ to its bus struct; its implementation is generated into the build directory
   instance cdh: Cdh.BusConverter base id 0x700 at "../cdh/BusConverter.hpp"
 
 }

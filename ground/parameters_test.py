@@ -72,7 +72,7 @@ def test_the_record_holds_every_field_under_the_instance_it_is_keyed_by(
 def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    configuration: str,
+    fprime_configuration: str,
     dictionary: Dictionary,
     algorithm_parameters: dict[str, Any],
 ):
@@ -83,7 +83,7 @@ def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(
     Args:
         tmp_path: where the case's files are written.
         capsys: captures what making the `.dat` prints.
-        configuration: the configuration, whose dictionary the `.dat` is made against.
+        fprime_configuration: the configuration, whose dictionary the `.dat` is made against.
         dictionary: that dictionary.
         algorithm_parameters: each algorithm component's tuple.
     """
@@ -91,13 +91,13 @@ def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(
     record = parameters.write(tuples, tmp_path / "run_0000.prm.json")
     written = record.read_text()
 
-    dat = parameters.dat(record, dictionary_path(configuration))
+    dat = parameters.dat(record, dictionary_path(fprime_configuration))
 
     assert capsys.readouterr().out == ""
     assert dat == tmp_path / "run_0000.prm.dat"
     decoded = tmp_path / "decoded.json"
     tool = Path(sys.executable).parent / "fprime-prm-decode"
-    command = [tool, dat, "-d", dictionary_path(configuration), "-o", decoded]
+    command = [tool, dat, "-d", dictionary_path(fprime_configuration), "-o", decoded]
     subprocess.run(command, check=True, capture_output=True)
     assert json.loads(decoded.read_text()) == json.loads(written)
     assert record.read_text() == written
@@ -105,7 +105,7 @@ def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(
 
 def test_a_record_naming_a_parameter_the_dictionary_lacks_makes_no_dat(
     tmp_path: Path,
-    configuration: str,
+    fprime_configuration: str,
     dictionary: Dictionary,
     algorithm_parameters: dict[str, Any],
 ):
@@ -113,7 +113,7 @@ def test_a_record_naming_a_parameter_the_dictionary_lacks_makes_no_dat(
 
     Args:
         tmp_path: where the case's files are written.
-        configuration: the configuration, whose dictionary the `.dat` is made against.
+        fprime_configuration: the configuration, whose dictionary the `.dat` is made against.
         dictionary: that dictionary.
         algorithm_parameters: each algorithm component's tuple.
     """
@@ -126,6 +126,6 @@ def test_a_record_naming_a_parameter_the_dictionary_lacks_makes_no_dat(
     record.write_text(json.dumps(entries))
 
     with pytest.raises(RuntimeError, match=re.escape(f"{instance}.notAParameter")):
-        parameters.dat(record, dictionary_path(configuration))
+        parameters.dat(record, dictionary_path(fprime_configuration))
 
     assert not (tmp_path / "run_0000.prm.dat").exists()

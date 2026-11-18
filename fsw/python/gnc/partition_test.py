@@ -1,7 +1,8 @@
 """The Python build's GNC partition runs a sub-topology's algorithms as its FPP wires them.
 
 A mock sub-topology of three components on two rate groups, read from a temporary `.fpp` with the
-contract, flown with stub classes that log each step.
+contract, flown with stub classes that log each step. The CDH writes its input `seedIn`, and reads
+its output `slowOut`.
 """
 
 from collections import namedtuple
@@ -12,7 +13,7 @@ import pytest
 from fsw.codegen.deployment import contract_files
 from fsw.codegen.fpp_model import Model, read
 from fsw.mock import edited
-from fsw.python.gnc.partition import GncPartition
+from fsw.python.gnc.partition import Frame, GncPartition
 from fsw.python.platform.rates import RateGroupDriver, dividers
 
 MOCK = """\
@@ -42,6 +43,7 @@ module Mock {
   passive component Slow {
     sync input port schedIn: Svc.Sched
     sync input port valueIn: Value
+    output port slowOut: Value
   }
 
   instance rateGroupDriver: Svc.RateGroupDriver base id 0x400
@@ -75,6 +77,7 @@ module Mock {
 
     port tickIn = rateGroupDriver.CycleIn
     port seedIn = source.seedIn
+    port slowOut = slow.slowOut
 
   }
 
@@ -89,6 +92,9 @@ SourceOutputs = namedtuple("SourceOutputs", ["valueOut", "echoOut"], defaults=[N
 
 SourceTelemetry = namedtuple("SourceTelemetry", ["count"], defaults=[None])
 """The source's telemetry."""
+
+SlowOutputs = namedtuple("SlowOutputs", ["slowOut"], defaults=[None])
+"""Slow's outputs; `slowOut` is written for an echo above 2 only."""
 
 Nothing = namedtuple("Nothing", [])
 """A component's empty outputs or telemetry."""
@@ -148,9 +154,9 @@ class Sink:
 
 
 class Slow(Sink):
-    """Takes the source's echo, at half the rate."""
+    """Takes the source's echo, at half the rate, and sends an echo above 2 out of the GNC."""
 
-    def step(self, t: float, value: Value) -> tuple[Nothing, Nothing]:
+    def step(self, t: float, value: Value) -> tuple[SlowOutputs, Nothing]:
         """Logs the step.
 
         Args:
@@ -158,10 +164,10 @@ class Slow(Sink):
             value: the source's latest echo.
 
         Returns:
-            Nothing written.
+            The echo on `slowOut` when above 2, else nothing, and no telemetry.
         """
         LOG.append(("slow", t, value))
-        return Nothing(), Nothing()
+        return SlowOutputs(slowOut=value if value.x > 2 else None), Nothing()
 
 
 def _model(directory: Path, mock: str = MOCK) -> Model:
@@ -213,21 +219,57 @@ def test_members_run_in_rate_group_order_and_an_output_reaches_a_later_member_in
     """Source runs before sink, as `RateGroupMemberOut` numbers them, and sink gets its value.
 
     Declared and sorted by name, sink would come first; the wiring, not the name, orders them. The
-    CDH writes every sub-topology port but the driver's `tickIn`.
+    CDH writes every sub-topology input port but the driver's `tickIn`, and reads every output port.
 
     Args:
         gnc: the mock's partition.
     """
     gnc.write("seedIn", Value(3.0))
 
-    telemetry = gnc.run(1.0, [0])
+    telemetry = gnc.run(1.0, [0]).telemetry
 
     assert [("source", 1.0, Value(3.0)), ("sink", 1.0, Value(6.0))] == LOG
     assert telemetry == [("source", SourceTelemetry(count=1)), ("sink", Nothing())]
     assert telemetry[0].instance == "source"
     assert gnc.algorithms["source"].parameters == "p"
     assert sorted(gnc.algorithms) == ["sink", "slow", "source"]
-    assert gnc.inputs == ("seedIn",)
+
+
+def test_a_frame_returns_each_output_port_its_members_wrote_and_none_it_did_not(
+    gnc: GncPartition, model: Model
+):
+    """`slowOut` is in a frame's outputs only when slow ran and wrote it.
+
+    Slow runs at the first tick and every second one after; it writes an echo above 2 only, so the
+    first tick's echo of 1 writes nothing.
+
+    Args:
+        gnc: the mock's partition.
+        model: the mock's model.
+    """
+    driver = RateGroupDriver(dividers(model, gnc.rate_groups))
+    outputs = []
+    for t, seed in ((1.0, 1.0), (2.0, 3.0), (3.0, 3.0), (4.0, 5.0), (5.0, 5.0)):
+        gnc.write("seedIn", Value(seed))
+        frame = gnc.run(t, driver.tick())
+        assert isinstance(frame, Frame)
+        outputs.append(frame.outputs)
+
+    assert outputs == [{}, {}, {"slowOut": Value(3.0)}, {}, {"slowOut": Value(5.0)}]
+
+
+def test_a_member_output_both_routed_and_exposed_is_refused_naming_it(tmp_path: Path):
+    """An output feeds one input or one sub-topology port, never both.
+
+    Args:
+        tmp_path: where the mock is written.
+    """
+    mock = edited(
+        MOCK, ("    port slowOut = slow.slowOut\n", "    port echoOut = source.echoOut\n")
+    )
+
+    with pytest.raises(ValueError, match=r"source\.echoOut .*port echoOut"):
+        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
 
 
 def test_frames_follow_the_fpp_rate_constants_and_an_input_keeps_its_latest_value(
@@ -350,8 +392,8 @@ def test_a_backward_edge_is_refused_naming_it(tmp_path: Path):
             "  passive component Slow",
         ),
         (
-            "    sync input port valueIn: Value\n  }\n\n  instance",
-            "    sync input port valueIn: Value\n    output port backOut: Value\n  }\n\n  instance",
+            "    output port slowOut: Value\n  }\n\n  instance",
+            "    output port slowOut: Value\n    output port backOut: Value\n  }\n\n  instance",
         ),
         (
             "      source.echoOut -> slow.valueIn\n",
@@ -400,8 +442,8 @@ def test_an_output_feeding_more_than_one_input_is_refused_naming_it(tmp_path: Pa
             "      source.valueOut[0] -> sink.valueIn\n      source.valueOut[1] -> slow.doubleIn\n",
         ),
         (
-            "    sync input port valueIn: Value\n  }\n\n  instance",
-            "    sync input port valueIn: Value\n    sync input port doubleIn: Value\n  }\n\n"
+            "    output port slowOut: Value\n  }\n\n  instance",
+            "    output port slowOut: Value\n    sync input port doubleIn: Value\n  }\n\n"
             "  instance",
         ),
     )

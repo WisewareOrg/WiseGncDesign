@@ -11,4 +11,12 @@ module Bus {
   @ Carries one IMU message
   port ImuSensorMsg(msg: ImuSensorMsg)
 
+  @ Basilisk's ArrayMotorTorqueMsgPayload, field for field; bus_test.py holds it to the real message
+  struct ArrayMotorTorqueMsg {
+    motorTorque: [36] F64 @< N*m, each wheel's motor torque
+  }
+
+  @ Carries one wheel torque message
+  port ArrayMotorTorqueMsg(msg: ArrayMotorTorqueMsg)
+
 }

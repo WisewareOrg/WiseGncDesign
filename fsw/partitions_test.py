@@ -3,7 +3,7 @@
 The names are read from the tree and its FPP model: each directory under `algorithms/`, each
 configuration, the component and instance name of each GNC instance of a component an algorithm
 defines, so F´'s own components, such as a rate group, are not names, and the bus and GNC structs
-each sensor role carries. A name matches regardless of case; an instance name matches only as a
+each role carries. A name matches regardless of case; an instance name matches only as a
 whole word, so `nav` is not found in `navigate`. The files are the tracked ones, tests included, so
 a generated dictionary or extension beside them is not read, and each directory must give at least
 one, so a renamed directory fails rather than passing over nothing. The names are read from FPP,
@@ -78,7 +78,7 @@ def _algorithm_names() -> re.Pattern[str]:
     """Every name of an algorithm, as one case-insensitive pattern.
 
     Returns:
-        The pattern: each algorithm directory, configuration, component and sensor role's struct as
+        The pattern: each algorithm directory, configuration, component and role's struct as
         a substring, and each instance name as a whole word.
     """
     model = read(contract_files())

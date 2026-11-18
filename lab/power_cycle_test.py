@@ -9,12 +9,12 @@ import sys
 
 import pytest
 
-from fsw.codegen.deployment import configurations
+from fsw.codegen.deployment import fprime_configurations
 from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab.power_cycle import _loaded_stamps, built, dictionary_path, power_cycle, source
 
-if not all(built(c) for c in configurations()):
+if not all(built(c) for c in fprime_configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
 NS = 1_000_000_000
@@ -133,30 +133,33 @@ def test_a_configuration_not_built_is_refused_naming_it():
 
 
 def test_a_rebuilt_extension_is_refused_by_its_own_configuration_alone(
-    configuration: str, monkeypatch: pytest.MonkeyPatch
+    fprime_configuration: str, monkeypatch: pytest.MonkeyPatch
 ):
     """Each configuration's extension is stamped apart: another's rebuild leaves it flying.
 
     Args:
-        configuration: the configuration checked.
+        fprime_configuration: the configuration checked.
         monkeypatch: records a different file as the one this process loaded.
     """
-    monkeypatch.setitem(_loaded_stamps, f"Other{configuration}", (-1, -1))
-    assert power_cycle(configuration)
+    monkeypatch.setitem(_loaded_stamps, f"Other{fprime_configuration}", (-1, -1))
+    assert power_cycle(fprime_configuration)
 
-    monkeypatch.setitem(_loaded_stamps, configuration, (-1, -1))
+    monkeypatch.setitem(_loaded_stamps, fprime_configuration, (-1, -1))
     with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
-        power_cycle(configuration)
+        power_cycle(fprime_configuration)
 
 
 def test_a_configuration_s_dictionary_is_the_one_its_deployment_generated(
-    configuration: str, dictionary: Dictionary
+    fprime_configuration: str, dictionary: Dictionary
 ):
     """`dictionary_path` names the dictionary of the configuration's own deployment.
 
     Args:
-        configuration: the configuration.
+        fprime_configuration: the configuration.
         dictionary: the dictionary at its path.
     """
-    assert dictionary_path(configuration).name == f"{configuration}FswTopologyDictionary.json"
-    assert dictionary.metadata["deploymentName"] == f"WiseFsw.{configuration}Fsw"
+    assert (
+        dictionary_path(fprime_configuration).name
+        == f"{fprime_configuration}FswTopologyDictionary.json"
+    )
+    assert dictionary.metadata["deploymentName"] == f"WiseFsw.{fprime_configuration}Fsw"

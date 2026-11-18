@@ -18,6 +18,14 @@ module Gnc {
   @ Carries one IMU reading
   port ImuReading(reading: ImuReading)
 
+  @ One wheel command: each wheel's motor torque
+  struct WheelCommand {
+    motorTorque: [36] F64 @< N*m, each wheel's motor torque, about its spin axis
+  }
+
+  @ Carries one wheel command
+  port WheelCommand($command: WheelCommand)
+
   @ A command's response: F´'s own enumeration, put in every dictionary
   dictionary type CommandResponse = Fw.CmdResponse
 

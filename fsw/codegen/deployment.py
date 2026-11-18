@@ -1,21 +1,27 @@
 """The FPP files `fsw.codegen.fpp_model.read` is given: the contract's, and a WiseFsw deployment's.
 
-A configuration's deployment topology is rendered from `fsw/fprime/deployment/Fsw.fpp.in`, the
-template CMake's `configure_file` renders for the F´ build, by the same `@CONFIGURATION@` token. The
-algorithms are those the F´ build takes: every directory under `algorithms/` with a
-`CMakeLists.txt`, and `algorithm_components` the components their `.fpp` files define.
-`configurations` names one configuration per GNC sub-topology, and `gnc_instances` lists the GNC
-sub-topologies' instances.
+A configuration's deployment topology is rendered by `render` from
+`fsw/fprime/deployment/Fsw.fpp.in`: its `@CONFIGURATION@` token, and its `@SIMULATION@` token as the
+role wiring generated from the roles the configuration's GNC sub-topology exposes
+(`fsw.codegen.roles.taken`). The F´ build renders it with `python -m fsw.codegen.deployment`, so
+the build and `fpp_files` read one rendering. The algorithms are every `.fpp` file in a directory
+under `algorithms/`, and `algorithm_components` the components they define.
+`configurations` names one configuration per GNC sub-topology, `fprime_configurations` those the
+F´ build builds, and `gnc_instances` lists the GNC sub-topologies' instances.
 `configuration_model` reads a configuration's contract and GNC sub-topology, `tick_period` its base
-tick's period, and `bus_port` the LabBusDriver port its deployment wires to a CDH input port.
+tick's period, and `bus_port` the LabBusDriver port its deployment wires to a CDH port.
 """
 
 import functools
+import sys
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import NamedTuple
 
 from fsw.codegen.fpp_model import Instance, Model, read
+from fsw.codegen.members import members
+from fsw.codegen.roles import taken
 
 __all__ = [
     "CLONE",
@@ -28,8 +34,11 @@ __all__ = [
     "configurations",
     "contract_files",
     "fpp_files",
+    "fprime_configurations",
     "framework_files",
     "gnc_instances",
+    "main",
+    "render",
     "tick_period",
 ]
 
@@ -100,13 +109,12 @@ def framework_files() -> tuple[Path, ...]:
 
 
 def algorithm_files() -> tuple[Path, ...]:
-    """Every algorithm's FPP files: the `.fpp` files beside each `algorithms/*/CMakeLists.txt`.
+    """Every algorithm's FPP files: each `algorithms/*/*.fpp`, with or without an F´ component.
 
     Returns:
         The files, absolute, sorted.
     """
-    algorithms = sorted(_REPOSITORY.glob("algorithms/*/CMakeLists.txt"))
-    return tuple(fpp for build in algorithms for fpp in sorted(build.parent.glob("*.fpp")))
+    return tuple(sorted(_REPOSITORY.glob("algorithms/*/*.fpp")))
 
 
 class Contract(NamedTuple):
@@ -157,24 +165,70 @@ def contract_files(*, contract: Contract = CONTRACT) -> tuple[Path, ...]:
     )
 
 
-def fpp_files(configuration: str, directory: Path) -> tuple[Path, ...]:
+def render(configuration: str, directory: Path, *, contract: Contract = CONTRACT) -> Path:
+    """Renders a configuration's deployment topology into `directory`, its role wiring generated.
+
+    The template's `@SIMULATION@` line becomes, for the k-th sensor role the configuration takes,
+    `labBusDriver.busOut[k] -> cdh.<role>In` and `cdh.<role>Out -> <configuration>.Gnc.<role>In`,
+    and for the k-th actuator role `<configuration>.Gnc.<role>Out -> cdh.<role>In` and
+    `cdh.<role>Out -> labBusDriver.busIn[k]`, in `Cdh.BusConverter`'s order. A topology whose text
+    is unchanged is not rewritten, so the F´ build does not autocode and compile it again.
+
+    Args:
+        configuration: the configuration, the name of its GNC sub-topology in the contract's
+            directory of them, such as `ImuDeadReckoning`.
+        directory: where the rendered `<configuration>Fsw.fpp` is written.
+        contract: the contract, the repository's by default.
+
+    Returns:
+        The rendered topology's path.
+    """
+    gnc = f"{configuration}.Gnc"
+    roles = taken(configuration_model(configuration, contract=contract), configuration)
+    sensors = [role for role in roles if role.sensor]
+    actuators = [role for role in roles if not role.sensor]
+    wiring = [
+        line
+        for k, role in enumerate(sensors)
+        for line in (
+            f"labBusDriver.busOut[{k}] -> cdh.{role.input}",
+            f"cdh.{role.output} -> {gnc}.{role.input}",
+        )
+    ] + [
+        line
+        for k, role in enumerate(actuators)
+        for line in (
+            f"{gnc}.{role.output} -> cdh.{role.input}",
+            f"cdh.{role.output} -> labBusDriver.busIn[{k}]",
+        )
+    ]
+    text = _TEMPLATE.read_text().replace("@CONFIGURATION@", configuration)
+    text = text.replace("@SIMULATION@\n", "".join(f"      {line}\n" for line in wiring))
+    topology = directory / f"{configuration}Fsw.fpp"
+    if not topology.is_file() or topology.read_text() != text:
+        topology.write_text(text)
+    return topology
+
+
+def fpp_files(
+    configuration: str, directory: Path, *, contract: Contract = CONTRACT
+) -> tuple[Path, ...]:
     """Renders a configuration's deployment topology into `directory`, and lists its model's files.
 
     Args:
-        configuration: the configuration, the name of its GNC sub-topology in `fsw/fpp/gnc/`, such
-            as `ImuDeadReckoning`.
-        directory: where the rendered `<configuration>Fsw.fpp` is written.
+        configuration: the configuration, the name of its GNC sub-topology in the contract's
+            directory of them, such as `ImuDeadReckoning`.
+        directory: where `render` writes the deployment topology.
+        contract: the contract, the repository's by default.
 
     Returns:
-        The files, absolute: the framework's, the repository's, every algorithm's, the
+        The files, absolute: the framework's, the repository's, the contract's algorithms', the
         configuration's GNC sub-topology, then its rendered deployment topology.
     """
-    topology = directory / f"{configuration}Fsw.fpp"
-    topology.write_text(_TEMPLATE.read_text().replace("@CONFIGURATION@", configuration))
     return (
-        *contract_files(),
-        _GNC / f"{configuration}.fpp",
-        topology,
+        *contract_files(contract=contract),
+        contract.gnc / f"{configuration}.fpp",
+        render(configuration, directory, contract=contract),
     )
 
 
@@ -188,6 +242,43 @@ def configurations(*, contract: Contract = CONTRACT) -> tuple[str, ...]:
         The names, sorted, such as `ImuDeadReckoning`.
     """
     return tuple(sorted(path.stem for path in contract.gnc.glob("*.fpp")))
+
+
+def fprime_configurations(*, contract: Contract = CONTRACT) -> tuple[str, ...]:
+    """The configurations the F´ build builds: those whose every member has an F´ component.
+
+    A member's component has an F´ component when the `.fpp` defining it sits in a directory
+    holding a `CMakeLists.txt`, as an algorithm with an F´ component does.
+
+    Args:
+        contract: the contract, the repository's by default.
+
+    Returns:
+        The names, sorted, a subset of `configurations`.
+    """
+    return tuple(
+        configuration
+        for configuration in configurations(contract=contract)
+        if _fprime_built(configuration, contract)
+    )
+
+
+def _fprime_built(configuration: str, contract: Contract) -> bool:
+    """Whether each member of a configuration has an F´ component.
+
+    Args:
+        configuration: the configuration.
+        contract: the contract holding it.
+
+    Returns:
+        Whether the `.fpp` defining each member's component has a `CMakeLists.txt` beside it.
+    """
+    model = configuration_model(configuration, contract=contract)
+    return all(
+        (model.components[member.component].file.parent / "CMakeLists.txt").is_file()
+        for group in members(model, configuration).values()
+        for member in group
+    )
 
 
 @functools.cache
@@ -244,30 +335,39 @@ def tick_period(configuration: str, *, contract: Contract = CONTRACT) -> float:
 
 
 @functools.cache
-def bus_port(configuration: str, port: str) -> int:
-    """The LabBusDriver port a configuration's deployment wires to a CDH input port.
+def bus_port(configuration: str, port: str, *, contract: Contract = CONTRACT) -> int:
+    """The LabBusDriver port a configuration's deployment wires to a CDH port, in either direction.
 
     The deployment's topology is rendered and read once per process, and the port is the index `i`
-    of its one connection `WiseFsw.labBusDriver.busOut[i] -> WiseFsw.cdh.<port>`.
+    of its one connection between LabBusDriver and `WiseFsw.cdh.<port>`: a sensor's
+    `WiseFsw.labBusDriver.busOut[i] -> WiseFsw.cdh.<role>In`, or an actuator's
+    `WiseFsw.cdh.<role>Out -> WiseFsw.labBusDriver.busIn[i]`.
 
     Args:
         configuration: the configuration, such as `ImuDeadReckoning`.
-        port: the CDH input port, such as `imuIn`.
+        port: the CDH port, such as `imuIn`.
+        contract: the contract, the repository's by default.
 
     Returns:
-        The index of LabBusDriver's `busOut`.
+        The index of LabBusDriver's `busOut` or `busIn`.
 
     Raises:
         ValueError: the topology wires LabBusDriver to the port other than once, naming the
             configuration, the port and the indices found.
     """
     with tempfile.TemporaryDirectory() as directory:
-        model = read(fpp_files(configuration, Path(directory)))
+        model = read(fpp_files(configuration, Path(directory), contract=contract))
+    driver, cdh = ("WiseFsw.labBusDriver", "busOut"), ("WiseFsw.cdh", port)
     found = [
         connection.from_index
         for connection in model.topologies[f"WiseFsw.{configuration}Fsw"]
-        if (connection.from_instance, connection.from_port) == ("WiseFsw.labBusDriver", "busOut")
-        and (connection.to_instance, connection.to_port) == ("WiseFsw.cdh", port)
+        if (connection.from_instance, connection.from_port) == driver
+        and (connection.to_instance, connection.to_port) == cdh
+    ] + [
+        connection.to_index
+        for connection in model.topologies[f"WiseFsw.{configuration}Fsw"]
+        if (connection.from_instance, connection.from_port) == cdh
+        and (connection.to_instance, connection.to_port) == ("WiseFsw.labBusDriver", "busIn")
     ]
     if len(found) != 1:
         raise ValueError(
@@ -275,3 +375,29 @@ def bus_port(configuration: str, port: str) -> int:
             " not one"
         )
     return found[0]
+
+
+def main(argv: Sequence[str]) -> None:
+    """Renders the deployment of every configuration the F´ build builds, and names each.
+
+    The configurations are those of the repository's contract and of the test mocks',
+    `fsw.mock.MOCK`, that `fprime_configurations` selects. Each is rendered into
+    `<directory>/<configuration>/`, and printed on a line of its own as `<configuration>`, a tab,
+    and its GNC sub-topology's absolute path; nothing else is printed.
+
+    Args:
+        argv: the directory, alone.
+    """
+    from fsw.mock import MOCK
+
+    [directory] = argv
+    for contract in (CONTRACT, MOCK):
+        for configuration in fprime_configurations(contract=contract):
+            out = Path(directory) / configuration
+            out.mkdir(parents=True, exist_ok=True)
+            render(configuration, out, contract=contract)
+            print(f"{configuration}\t{contract.gnc / f'{configuration}.fpp'}")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

@@ -1,9 +1,10 @@
 """Fixtures every package's tests share: an F´ copy, its station, a drain, messages, parameters.
 
 The fixtures of a configuration's F´ build range over every configuration, one per GNC
-sub-topology. A fixture needing the F´ build, or the dictionary it generates, skips its test
-without it. Every pytest run loads this file, the judge's included, so the FPP model is read, and
-Basilisk and F´ are imported, only by the fixtures that need them.
+sub-topology. A test or fixture reaching the F´ build takes `fprime_configuration`, which skips a
+configuration the F´ build does not build; one needing the build, or the dictionary it generates,
+skips without it. Every pytest run loads this file, the judge's included, so the FPP model is
+read, and Basilisk and F´ are imported, only by the fixtures that need them.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import configurations
+from fsw.codegen.deployment import configurations, fprime_configurations
 
 if TYPE_CHECKING:
     from fsw.codegen.fpp_model import Model
@@ -38,37 +39,52 @@ def configuration(request: pytest.FixtureRequest) -> str:
     return request.param
 
 
-@pytest.fixture(scope="session")
-def dictionary(configuration: str) -> Dictionary:
-    """The dictionary the configuration's build generated; skips the test without it.
+@pytest.fixture(scope="module")
+def fprime_configuration(configuration: str) -> str:
+    """The configuration, for a test reaching its F´ build; skips one the F´ build does not build.
 
     Args:
         configuration: the configuration.
+
+    Returns:
+        The configuration, one `fsw.codegen.deployment.fprime_configurations` selects.
+    """
+    if configuration not in fprime_configurations():
+        pytest.skip(f"the F´ build does not build {configuration}: a member has no F´ component")
+    return configuration
+
+
+@pytest.fixture(scope="module")
+def dictionary(fprime_configuration: str) -> Dictionary:
+    """The dictionary the configuration's build generated; skips the test without it.
+
+    Args:
+        fprime_configuration: the configuration.
 
     Returns:
         The dictionary.
     """
     from ground.dictionary import Dictionary
 
-    return Dictionary(_dictionary(configuration))
+    return Dictionary(_dictionary(fprime_configuration))
 
 
 @pytest.fixture
-def fsw(configuration: str) -> ModuleType:
+def fsw(fprime_configuration: str) -> ModuleType:
     """A fresh copy of the configuration's deployment, not yet booted; skips without its build.
 
     Args:
-        configuration: the configuration.
+        fprime_configuration: the configuration.
 
     Returns:
         The copy.
     """
     from lab.power_cycle import built, power_cycle
 
-    if not built(configuration):
-        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
+    if not built(fprime_configuration):
+        pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
 
-    return power_cycle(configuration)
+    return power_cycle(fprime_configuration)
 
 
 @pytest.fixture
@@ -188,27 +204,70 @@ def bus_messages() -> dict[str, BusMessage]:
     return messages
 
 
+class IcdMessage(NamedTuple):
+    """A GNC struct's value.
+
+    Attributes:
+        value: the struct's `fsw.codegen.fpp_types` tuple, its members' values set.
+        values: each member's values by its FPP name, in the struct's order.
+    """
+
+    value: Any
+    values: dict[str, Any]
+
+
+@pytest.fixture
+def icd_messages(contract_model: Model) -> dict[str, IcdMessage]:
+    """A value of every GNC struct a role the contract declares carries, every value distinct.
+
+    Each element of each member of each struct takes the next of 0.5, 1.5, 2.5, ..., in its FPP
+    type and shape, so a field or element out of place changes the result.
+
+    Args:
+        contract_model: the contract's model, which declares the roles and shapes the structs.
+
+    Returns:
+        Each struct's value, by its qualified name.
+    """
+    from fsw.codegen import fpp_types
+    from fsw.codegen.deployment import CONTRACT
+    from fsw.codegen.fields import form
+    from fsw.codegen.roles import roles
+
+    fpp_types.load(CONTRACT)
+    counter = itertools.count()
+    messages = {}
+    for name in dict.fromkeys(role.icd for role in roles(contract_model)):
+        values = {}
+        for member in contract_model.types[name].members:
+            shape, element = form(member, contract_model.types)
+            count = int(np.prod(shape, dtype=int))
+            elements = [next(counter) + 0.5 for _ in range(count)]
+            values[member.name] = np.array(elements, element).reshape(shape)
+        value = fpp_types.named(name)(**{m: v.copy() for m, v in values.items()})
+        messages[name] = IcdMessage(value, values)
+    return messages
+
+
 @pytest.fixture
 def bus_by_role(
-    configuration: str, bus_messages: dict[str, BusMessage], contract_model: Model
+    configuration: str, bus_messages: dict[str, BusMessage]
 ) -> dict[str, tuple[int, bytes]]:
-    """Each role's LabBusDriver port and its bus message's bytes, as the bus emulator writes them.
+    """Each sensor role's LabBusDriver port and its message's bytes, as the emulator writes them.
 
-    The roles are the contract's `Cdh.BusConverter`'s, and each port is the one the
-    configuration's deployment wires to the role's CDH input, read from its FPP. The shared
-    deployment template, `fsw/fprime/deployment/Fsw.fpp.in`, wires every role into every
-    configuration, so a role left unwired fails the fixture with `bus_port`'s `ValueError`.
+    The roles are the sensor roles the configuration takes, those its GNC sub-topology exposes
+    (`fsw.codegen.roles.taken`), and each port is the one its deployment wires to the role's CDH
+    input, read from its FPP.
 
     Args:
         configuration: the configuration.
         bus_messages: a message of each bus struct.
-        contract_model: the contract's model, which declares the roles.
 
     Returns:
         Each role's `(port, bytes)`, by the role's name.
     """
-    from fsw.codegen.deployment import bus_port
-    from fsw.codegen.roles import roles
+    from fsw.codegen.deployment import bus_port, configuration_model
+    from fsw.codegen.roles import taken
     from lab.bus_emulator import serialize
 
     return {
@@ -216,42 +275,49 @@ def bus_by_role(
             bus_port(configuration, role.input),
             serialize(bus_messages[role.bus].payload),
         )
-        for role in roles(contract_model)
+        for role in taken(configuration_model(configuration), configuration)
+        if role.sensor
     }
 
 
 @pytest.fixture
-def messages_by_role(bus_messages: dict[str, BusMessage], contract_model: Model) -> dict[str, Any]:
-    """Each role's bus message as a Basilisk payload, as WiseDynamics' host gives a build them.
+def messages_by_role(configuration: str, bus_messages: dict[str, BusMessage]) -> dict[str, Any]:
+    """Each sensor role's bus message as a Basilisk payload, as WiseDynamics' host gives a build.
 
-    The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's message.
+    The roles are the sensor roles the configuration takes (`fsw.codegen.roles.taken`), each with
+    its bus struct's message.
 
     Args:
+        configuration: the configuration.
         bus_messages: a message of each bus struct.
-        contract_model: the contract's model, which declares the roles.
 
     Returns:
         Each role's payload, by the role's name.
     """
-    from fsw.codegen.roles import roles
+    from fsw.codegen.deployment import configuration_model
+    from fsw.codegen.roles import taken
 
-    return {role.role: bus_messages[role.bus].payload for role in roles(contract_model)}
+    return {
+        role.role: bus_messages[role.bus].payload
+        for role in taken(configuration_model(configuration), configuration)
+        if role.sensor
+    }
 
 
 @pytest.fixture
 def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
-    """The bus one step takes: every role's message bytes on its LabBusDriver port.
+    """The bus one step takes: every sensor role's message bytes on its LabBusDriver port.
 
     Args:
-        bus_by_role: each role's port and bytes.
+        bus_by_role: each sensor role's port and bytes.
 
     Returns:
-        `[(port, bytes)]`, a pair per role.
+        `[(port, bytes)]`, a pair per sensor role the configuration takes.
     """
     return list(bus_by_role.values())
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def case_parameters(dictionary: Dictionary, contract_model: Model) -> dict[str, Any]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
@@ -300,7 +366,7 @@ def _parameters(model: Any, component: str, elements: Callable[[int], list[float
     return fpp_types.parameters_from(fpp_types.named(f"{component}Parameters"), values)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def rate_groups(configuration: str) -> list[str]:
     """The configuration's rate groups, its GNC sub-topology's `Svc.PassiveRateGroup` instances.
 
@@ -365,22 +431,22 @@ def prm_record(case_parameters: dict[str, Any], tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def prm(prm_record: Path, configuration: str) -> str:
+def prm(prm_record: Path, fprime_configuration: str) -> str:
     """The case's `.dat`, made beside its record as `lab.Adapter` makes it.
 
     Args:
         prm_record: the case's record.
-        configuration: the configuration, whose dictionary the `.dat` is made against.
+        fprime_configuration: the configuration, whose dictionary the `.dat` is made against.
 
     Returns:
         The `.dat`'s path, as `boot` takes it.
     """
     from ground import parameters
 
-    return str(parameters.dat(prm_record, _dictionary(configuration)))
+    return str(parameters.dat(prm_record, _dictionary(fprime_configuration)))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def parameter_ids(dictionary: Dictionary) -> list[int]:
     """Every parameter's ID in the configuration's dictionary, which `boot` holds valid.
 

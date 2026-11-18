@@ -11,7 +11,7 @@ import pytest
 from fsw.codegen.bus_converter import main, render
 from fsw.codegen.deployment import contract_files
 from fsw.codegen.fpp_model import Model, read
-from fsw.codegen.roles import roles
+from fsw.codegen.roles import CONVERTER, roles
 
 
 def test_two_roles_emit_two_handlers_and_two_conversions(
@@ -170,3 +170,22 @@ def test_the_tool_writes_the_component_and_its_pins_for_every_role(tmp_path: Pat
         assert f"void BusConverter::{role.input}_handler(" in source
         assert f'"cdh_{role.role}"' in pins
         assert f'"bus_{role.bus.removeprefix("Bus.")}"' in pins
+
+
+def test_each_actuator_role_s_bus_port_serializer_is_named_into_namespace_cdh() -> None:
+    """For each actuator role, the header brings its bus port's buffer and serializer into `Cdh`.
+
+    FPP 3.4.0 writes the deployment's call from `Cdh.BusConverter`'s typed `<role>Out` into
+    LabBusDriver's serial input with the port's `<Port>PortBuffer` and `<Port>PortSerializer`
+    unqualified, inside namespace `Cdh`; `<Port>` is the output port's type, read from FPP.
+    """
+    model = read(contract_files())
+    actuators = [role for role in roles(model) if not role.sensor]
+    assert actuators
+    outputs = {port.name: port for port in model.components[CONVERTER].outputs}
+    header = render(model)["BusConverter.hpp"]
+    namespace = header[header.index("namespace Cdh {") : header.index("class BusConverter")]
+    for role in actuators:
+        port = outputs[role.output].type.replace(".", "::")
+        assert f"using {port}PortBuffer;" in namespace, role.role
+        assert f"using {port}PortSerializer;" in namespace, role.role

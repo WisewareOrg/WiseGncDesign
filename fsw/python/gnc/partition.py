@@ -11,7 +11,9 @@ returned output in place, since the member it is routed to holds it as written. 
 a later member in the same frame, and a `None` output writes nothing, so an input holds the latest
 value written to it. A backward edge, into a member that runs no later than `A` in the frame, `A`
 itself included, is refused, as is an output feeding more than one input.
-A sub-topology `port` other than the driver's is an input the CDH writes.
+A sub-topology `port` other than the driver's exposes an instance's port: an input the CDH writes,
+or an output the CDH reads, which a frame returns when a member wrote it. An output exposed and
+also routed to an input is refused.
 """
 
 from collections.abc import Mapping, Sequence
@@ -21,7 +23,7 @@ from fsw.codegen.fpp_model import Model
 from fsw.codegen.members import DRIVER
 from fsw.codegen.members import members as rate_group_members
 
-__all__ = ["GncPartition", "MemberTelemetry"]
+__all__ = ["Frame", "GncPartition", "MemberTelemetry"]
 
 _RATE_GROUP = "Svc.PassiveRateGroup"
 """The component type of its rate groups."""
@@ -72,6 +74,19 @@ class MemberTelemetry(NamedTuple):
     telemetry: Any
 
 
+class Frame(NamedTuple):
+    """What one frame's members wrote.
+
+    Attributes:
+        telemetry: each member's telemetry, in the order run.
+        outputs: the value written to each sub-topology output port, by the port; a port no member
+            wrote in the frame is absent.
+    """
+
+    telemetry: list[MemberTelemetry]
+    outputs: dict[str, Any]
+
+
 class GncPartition:
     """A configuration's GNC sub-topology's algorithms, wired and ordered as its FPP says.
 
@@ -79,13 +94,11 @@ class GncPartition:
         rate_groups: each rate group's qualified name, in its driver's `CycleOut` order; a frame's
             rate groups are named by their position here.
         components: each member's FPP component's qualified name, by its instance's name.
-        inputs: the sub-topology's input ports the CDH writes, every `port` but its driver's.
         algorithms: each algorithm `boot` built, by its instance's unqualified name.
     """
 
     rate_groups: tuple[str, ...]
     components: dict[str, str]
-    inputs: tuple[str, ...]
     algorithms: dict[str, Any]
 
     def __init__(self, model: Model, configuration: str, classes: Sequence[type]) -> None:
@@ -99,7 +112,8 @@ class GncPartition:
         Raises:
             ValueError: the sub-topology has other than one rate group driver; a member's component
                 has no class, or a class no member; a data input is not named `<keyword>In`; a data
-                connection is a backward edge; or an output feeds more than one input, naming it.
+                connection is a backward edge; or an output feeds more than one input, or both an
+                input and a sub-topology port, naming it.
         """
         topology = f"{configuration}.Gnc"
         connections = model.topologies[topology]
@@ -146,12 +160,23 @@ class GncPartition:
                 self._keywords[c.to_instance].add(keyword)
                 self._routes[c.from_instance, c.from_port] = c.to_instance, keyword
         self._ports: dict[str, tuple[str, str]] = {}
+        self._exposed: dict[tuple[str, str], str] = {}
         for name, port in model.ports.items():
-            if name.startswith(f"{topology}.") and port.instance != driver:
-                keyword = _keyword(port.instance, port.port)
-                self._ports[name.removeprefix(f"{topology}.")] = port.instance, keyword
-                self._keywords[port.instance].add(keyword)
-        self.inputs = tuple(self._ports)
+            if not name.startswith(f"{topology}.") or port.instance == driver:
+                continue
+            short = name.removeprefix(f"{topology}.")
+            instance = model.instances[port.instance]
+            if port.port in {p.name for p in model.components[instance.component].outputs}:
+                if (port.instance, port.port) in self._routes:
+                    raise ValueError(
+                        f"{_name(port.instance)}.{port.port} routes to an input and is the"
+                        f" sub-topology's port {short}; an output feeds one or the other"
+                    )
+                self._exposed[port.instance, port.port] = short
+                continue
+            keyword = _keyword(port.instance, port.port)
+            self._ports[short] = port.instance, keyword
+            self._keywords[port.instance].add(keyword)
         self.algorithms = {}
         self._held: dict[str, dict[str, Any]] = {}
 
@@ -174,7 +199,7 @@ class GncPartition:
         instance, keyword = self._ports[port]
         self._held[instance][keyword] = value
 
-    def run(self, t: float, fired: Sequence[int]) -> list[MemberTelemetry]:
+    def run(self, t: float, fired: Sequence[int]) -> Frame:
         """Runs each member of each fired rate group, in order, routing its outputs.
 
         Args:
@@ -182,12 +207,14 @@ class GncPartition:
             fired: the position in `rate_groups` of each rate group that runs, in order.
 
         Returns:
-            Each member's telemetry tuple, with its instance's name, in the order run.
+            Each member's telemetry tuple, with its instance's name, in the order run, and the
+            latest value written to each sub-topology output port.
 
         Raises:
             RuntimeError: a member's input has never been written, naming its port.
         """
         telemetry = []
+        exposed = {}
         for group in fired:
             for member in self._members[group]:
                 name, inputs = _name(member), self._held[member]
@@ -197,8 +224,12 @@ class GncPartition:
                     raise RuntimeError(f"inputs {names} have not been written at t = {t} s")
                 outputs, tlm = self.algorithms[name].step(t, **inputs)
                 for port, value in zip(outputs._fields, outputs, strict=True):
-                    if value is not None and (member, port) in self._routes:
+                    if value is None:
+                        continue
+                    if (member, port) in self._routes:
                         target, keyword = self._routes[member, port]
                         self._held[target][keyword] = value
+                    elif (member, port) in self._exposed:
+                        exposed[self._exposed[member, port]] = value
                 telemetry.append(MemberTelemetry(name, tlm))
-        return telemetry
+        return Frame(telemetry, exposed)

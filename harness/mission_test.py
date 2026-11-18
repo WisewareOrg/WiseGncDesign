@@ -9,7 +9,8 @@ capabilities, four rungs and two scenarios:
     TST901 links SRS901, SRS902, SRS903   TST902 links SRS902
 
 Those tests' flights fly `MockFlight` of `fsw.mock.MOCK`, the test mock `HarnessMock.Mock`,
-which claims SYS901.
+which claims SYS901, and `MockActuation`, the test mock `MockGnc.Actuator` on the wheel role, which
+claims SYS901 too and flies on both builds.
 The `variants` fixture renders the other configurations a test needs from two templates.
 """
 
@@ -30,9 +31,15 @@ import pytest
 import yaml
 from wise_dynamics.basilisk.vehicles import VEHICLES
 
-from fsw.codegen.deployment import Contract, configuration_model, framework_files
+from fsw.codegen import fpp_types
+from fsw.codegen.deployment import (
+    Contract,
+    configuration_model,
+    framework_files,
+)
 from fsw.codegen.fpp_model import read
 from fsw.codegen.members import members
+from fsw.codegen.roles import taken
 from fsw.mock import MOCK, sub_topology
 from harness import requirements_tree
 from harness.mission import BUILDS, Mission, _claims, _record_flight, mission_tests
@@ -166,17 +173,18 @@ def variants(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Contract]:
         yield Contract((*MOCK.algorithms, *components), gnc)
 
 
-def flying(*missions: str, check: str = "") -> str:
+def flying(*missions: str, check: str = "", vehicle: str = VEHICLE) -> str:
     """A notebook flying missions, each `Mission` given as its fields after `vehicle`.
 
     Args:
         *missions: each mission's fields, such as `gnc="MockFlight", ...`, with `contract`.
         check: source defining `check`, placed before the missions.
+        vehicle: the vehicle every mission flies.
 
     Returns:
         The notebook's source, with `MOCK`, `Contract` and `Path` in its namespace.
     """
-    calls = ",\n".join(f'    Mission(vehicle="imu_spacecraft", {m})' for m in missions)
+    calls = ",\n".join(f'    Mission(vehicle="{vehicle}", {m})' for m in missions)
     return f"""
 from pathlib import Path
 
@@ -445,7 +453,7 @@ def test_unknown_names_are_refused(tree: Path, changes: dict, unknown: str) -> N
     [
         ("NoSuchConfiguration", "python", None, r"NoSuchConfiguration.*'Both'.*'MockFlight'"),
         ("MockFlight", "simulink", None, r"simulink.*'fprime'.*'python'"),
-        ("MockFlight", "fprime", None, r"fprime.*variants"),
+        ("MockFlight", "fprime", None, r"fprime build does not build 'MockFlight'"),
         ("SecondTwice", "python", None, r"Second.*'SecondTwice\.second', 'SecondTwice\.other'"),
         ("Unclaimed", "python", None, r"HarnessVariant\.Unclaimed.*unclaimed/Unclaimed\.fpp"),
         ("MockFlight", "python", "SYS901", r"SYS901.*HarnessMock\.Mock"),
@@ -459,7 +467,8 @@ def test_each_lookup_that_fails_is_refused_naming_what_it_looked_for(
     """A configuration, build, claim, class or `parameters` not found is a ValueError naming it.
 
     An unknown configuration names the contract's; an unknown build names both builds; the F´ build
-    of a contract other than the repository's names the contract; a component instanced more than
+    of a configuration it does not build, one whose member has no F´ component, names the
+    configuration; a component instanced more than
     once names it and its instances, since `parameters(scenario)` gives one tuple per component; a
     component with no `@ provides` names it and its file; a claim the tree lacks names the claim and
     the component; a class missing from its notebook names the notebook and the class; and a
@@ -480,6 +489,30 @@ def test_each_lookup_that_fails_is_refused_naming_what_it_looked_for(
 
     with pytest.raises(ValueError, match=named):
         Mission(VEHICLE, gnc, build, ("TST901",), contract=variants)
+
+
+def _vehicle_for(configuration: str) -> str:
+    """The first vehicle, by name, that reads each sensor role and writes each actuator role taken.
+
+    Args:
+        configuration: a repository configuration.
+
+    Returns:
+        The vehicle's name in `VEHICLES`.
+
+    Raises:
+        AssertionError: no vehicle carries the configuration's roles, naming them.
+    """
+    found = taken(configuration_model(configuration), configuration)
+    sensors = {role.role for role in found if role.sensor}
+    actuators = {role.role for role in found if not role.sensor}
+    for name in sorted(VEHICLES):
+        vehicle = VEHICLES[name]()
+        if sensors <= set(vehicle.readers()) and actuators <= set(vehicle.writers()):
+            return name
+    raise AssertionError(
+        f"no vehicle reads {sorted(sensors)} and writes {sorted(actuators)} for {configuration}"
+    )
 
 
 def _claimed(configuration: str) -> tuple[list[str], str]:
@@ -506,7 +539,7 @@ def _claimed(configuration: str) -> tuple[list[str], str]:
 
 @pytest.mark.parametrize("build", BUILDS)
 def test_each_configuration_s_mission_is_built_on_each_build_without_the_f_prime_extension(
-    configuration: str, build: str, monkeypatch: pytest.MonkeyPatch
+    configuration: str, build: str, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
 ) -> None:
     """Every lookup succeeds on the repository's contract, and none reaches the F´ extension.
 
@@ -518,7 +551,11 @@ def test_each_configuration_s_mission_is_built_on_each_build_without_the_f_prime
         configuration: the configuration.
         build: the build.
         monkeypatch: makes the configuration's extension absent.
+        request: gives the F´ build's mission `fprime_configuration`, which skips a configuration
+            the F´ build does not build.
     """
+    if build == "fprime":
+        request.getfixturevalue("fprime_configuration")
     monkeypatch.setitem(sys.modules, f"lab._wise_fsw_{configuration}", None)
     claims, scenario = _claimed(configuration)
 
@@ -529,7 +566,7 @@ def test_each_configuration_s_mission_is_built_on_each_build_without_the_f_prime
 
 @pytest.mark.parametrize("built", [False, True], ids=["extension-absent", "extension-present"])
 def test_one_configuration_flown_on_both_builds_is_two_flights(
-    configuration: str, built: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    fprime_configuration: str, built: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """The flight's key holds the build, so the two builds of one scenario are two tests.
 
@@ -538,25 +575,25 @@ def test_one_configuration_flown_on_both_builds_is_two_flights(
     Python test is never skipped.
 
     Args:
-        configuration: the configuration.
+        fprime_configuration: the configuration, one the F´ build builds.
         built: whether the configuration's extension is present.
         monkeypatch: makes the extension absent, or present as a module with a spec.
         tmp_path: holds each test's folder, with a `flight.json` an earlier flight left.
     """
-    extension = f"lab._wise_fsw_{configuration}"
+    extension = f"lab._wise_fsw_{fprime_configuration}"
     module = None
     if built:
         module = ModuleType(extension)
         module.__spec__ = ModuleSpec(extension, None)
     monkeypatch.setitem(sys.modules, extension, module)
-    _, scenario = _claimed(configuration)
-    python = Mission(sorted(VEHICLES)[0], configuration, "python", (scenario,))
+    _, scenario = _claimed(fprime_configuration)
+    python = Mission(sorted(VEHICLES)[0], fprime_configuration, "python", (scenario,))
     missions = {"fprime": python.but(build="fprime"), "python": python}
 
     [vehicle_class] = mission_tests(*missions.values()).values()
 
     names = sorted(name for name in vars(vehicle_class) if name.startswith("test_"))
-    prefix = f"test_{configuration}_"
+    prefix = f"test_{fprime_configuration}_"
     assert [name.removeprefix(prefix).split("_", 1)[0] for name in names] == ["fprime", "python"]
     assert len({name.removeprefix(prefix).split("_", 1)[1] for name in names}) == 1
     for build, mission in missions.items():
@@ -612,7 +649,7 @@ def _contents(path: Path) -> dict[str, object]:
 
 
 def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
-    configuration: str, rate_groups: list[str], pytester: pytest.Pytester
+    fprime_configuration: str, rate_groups: list[str], pytester: pytest.Pytester
 ):
     """Case 1 flown alone and after case 0 in one process gives the same run file, every row.
 
@@ -624,20 +661,22 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
     run file differs from case 1's, so a comparison that cannot tell cases apart would show.
 
     Args:
-        configuration: the configuration.
+        fprime_configuration: the configuration, one the F´ build builds.
         rate_groups: the configuration's rate groups.
         pytester: the project the flights run in, each run in one process of its own, xdist off.
     """
-    if not built(configuration):
-        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
-    _, scenario = _claimed(configuration)
-    flight = Mission(sorted(VEHICLES)[0], configuration, "fprime", (scenario,))
+    if not built(fprime_configuration):
+        pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
+    _, scenario = _claimed(fprime_configuration)
+    flight = Mission(
+        _vehicle_for(fprime_configuration), fprime_configuration, "fprime", (scenario,)
+    )
     [(cls, vehicle_class)] = mission_tests(flight).items()
     [name] = [name for name in vars(vehicle_class) if name.startswith("test_")]
     test = f"test_flights.py::{cls}::{name}"
     pytester.makepyfile(
         test_flights=FPRIME_FLIGHT.format(
-            vehicle=flight.vehicle, gnc=configuration, scenario=scenario
+            vehicle=flight.vehicle, gnc=fprime_configuration, scenario=scenario
         )
     )
     options = ("-p", "no:cacheprovider", "-p", "no:xdist")
@@ -650,7 +689,7 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
     [after] = pytester.path.rglob("run_0001.h5")
 
     alone, after, first = _contents(alone), _contents(after), _contents(first)
-    flown = members(configuration_model(configuration), configuration).values()
+    flown = members(configuration_model(fprime_configuration), fprime_configuration).values()
     gnc = {member.name.rsplit(".", 1)[-1] for group in flown for member in group}
     assert any(name.startswith(tuple(f"tlm/{m}." for m in gnc)) for name in alone)
     for group in rate_groups:
@@ -1139,3 +1178,57 @@ def test_an_interrupted_flight_json_write_leaves_the_old_file_intact(
     assert source.parent == tmp_path
     assert source != target
     assert list(tmp_path.iterdir()) == [target]
+
+
+def test_the_mock_actuator_s_command_spins_the_wheel_through_its_writer_alike_on_both_builds(
+    project: pytest.Pytester, fly_in_a_subprocess: Callable[..., pytest.RunResult]
+) -> None:
+    """MockActuation's wheel command reaches the wheel vehicle's writer from each build.
+
+    The test mock sends one constant command each 1 s tick from the first, so the wheel's spin
+    momentum, Js (Omega + gsHat . omega_BN_B), gains the command's torque on the wheel times the
+    time since then, as Basilisk's balanced-wheel model says, from the vehicle's own wheel. The two
+    builds' recorded wheel speeds are bit-identical, so the F´ build's bytes carry the same
+    command. The F´ flight is skipped without the F´ build of MockActuation, as every F´ flight is.
+
+    Args:
+        project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
+    """
+    from fsw.mock.actuator.actuator import Actuator
+
+    built_fprime = built("MockActuation")
+    (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=10.0, body="pass"))
+    missions = [
+        f'gnc="MockActuation", build="{build}", scenarios=("TST901",), contract=MOCK'
+        for build in BUILDS
+    ]
+    project.makepyfile(test_flights=flying(*missions, vehicle="imu_wheel_spacecraft"))
+
+    result = fly_in_a_subprocess(project)
+
+    result.assert_outcomes(passed=2 if built_fprime else 1, skipped=0 if built_fprime else 1)
+    vehicle = VEHICLES["imu_wheel_spacecraft"]()
+    [wheel] = vehicle.wheel.ReactionWheelData
+    fpp_types.load(MOCK)
+    [command] = Actuator(None).step(0.0)[0]
+    torque = command.motorTorque[0]
+    assert 0.0 < torque < wheel.u_max
+    speeds = {}
+    for build in ("python", "fprime") if built_fprime else ("python",):
+        [path] = project.path.rglob(f"test_MockActuation_{build}_*/run_0000.h5")
+        with h5py.File(path, "r") as f:
+            t_s, speed = f["t_s"][()], f["truth/wheel_speed"][()]
+            rate = f["truth/omega_BN_B"][()]
+        momentum = wheel.Js * (speed + rate @ np.array(wheel.gsHat_B).flatten())
+        assert speed[-1] != 0.0, build
+        np.testing.assert_allclose(
+            momentum - momentum[0],
+            torque * np.clip(t_s - 1.0, 0.0, None),
+            rtol=1e-9,
+            atol=1e-12,
+            err_msg=build,
+        )
+        speeds[build] = speed
+    if built_fprime:
+        assert speeds["fprime"].tobytes() == speeds["python"].tobytes()

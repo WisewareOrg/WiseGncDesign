@@ -1,8 +1,10 @@
 """The committed test mocks, and the plumbing tests render mocks with.
 
 `MOCK` is a contract a test flies with `contract=MOCK`: `MockGnc.fpp`, two mock algorithms, a
-source feeding a sink, flown by `gnc/MockFrame.fpp`; and `HarnessMock.fpp`, laid out as an
-algorithm's is with its notebook `mock.py`, flown as the nav role by `gnc/MockFlight.fpp`.
+source feeding a sink, flown by `gnc/MockFrame.fpp`; `HarnessMock.fpp`, laid out as an
+algorithm's is with its notebook `mock.py`, flown as the nav role by `gnc/MockFlight.fpp`; and
+`actuator/`, the one mock with an F´ component, laid out as an algorithm with one is, its notebook
+`actuator.py`, flown on the wheel role by `gnc/MockActuation.fpp` in both builds.
 Beside the contract, not in it, `Mock.fpp` and the `Extra.fppi` it includes are one component the
 ground's tests generate a dictionary from, and `ARGS` are its `setMock` command's arguments.
 """
@@ -13,13 +15,18 @@ from pathlib import Path
 import numpy as np
 
 from fsw.codegen.deployment import Contract
+from fsw.codegen.roles import Role
 
-__all__ = ["ARGS", "MOCK", "edited", "sub_topology"]
+__all__ = ["ARGS", "MOCK", "device", "edited", "sub_topology"]
 
 _HERE = Path(__file__).resolve().parent
 
-MOCK = Contract((_HERE / "MockGnc.fpp", _HERE / "HarnessMock.fpp"), _HERE / "gnc")
-"""The test mocks' contract: `MockGnc.fpp`, `HarnessMock.fpp`, and the configurations in `gnc/`."""
+MOCK = Contract(
+    (_HERE / "MockGnc.fpp", _HERE / "HarnessMock.fpp", _HERE / "actuator" / "Actuator.fpp"),
+    _HERE / "gnc",
+)
+"""The test mocks' contract: `MockGnc.fpp`, `HarnessMock.fpp`, `actuator/Actuator.fpp`, and the
+configurations in `gnc/`."""
 
 ARGS = {
     "gain": 0.1,
@@ -91,4 +98,27 @@ def sub_topology(name: str, members: Sequence[tuple[str, str]], ports: Sequence[
             for n, (i, _) in enumerate(members)
         ),
         ports="".join(f"    {port}\n" for port in ports),
+    )
+
+
+def device(name: str, roles: Sequence[Role]) -> str:
+    """A test mock component taking each sensor role's GNC input and sending each actuator role's.
+
+    Args:
+        name: the component's name, in module `MockGnc`.
+        roles: the roles: a sensor's as `sync input port <role>In`, an actuator's as `output port
+            <role>Out`, each typed by the role's GNC struct.
+
+    Returns:
+        The component's FPP, stepped by `schedIn`.
+    """
+    ports = "".join(
+        f"    sync input port {role.input}: {role.icd}\n"
+        if role.sensor
+        else f"    output port {role.output}: {role.icd}\n"
+        for role in roles
+    )
+    return (
+        f"module MockGnc {{\n  passive component {name} {{\n"
+        f"    sync input port schedIn: Svc.Sched\n{ports}  }}\n}}\n"
     )

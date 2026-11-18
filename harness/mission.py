@@ -32,7 +32,13 @@ from wise_dynamics.basilisk.vehicles import VEHICLES
 from wise_dynamics.sessions import run_path
 
 from fsw.codegen import fpp_types
-from fsw.codegen.deployment import CONTRACT, Contract, configuration_model, configurations
+from fsw.codegen.deployment import (
+    CONTRACT,
+    Contract,
+    configuration_model,
+    configurations,
+    fprime_configurations,
+)
 from fsw.codegen.fpp_model import Component, Model
 from fsw.codegen.members import members
 from fsw.python import FrameRunner
@@ -205,7 +211,7 @@ class Mission:
         check: optionally, every way one case's run file fails the FSW's own per-case check,
             empty when it passes; each case's test asserts it is empty once the file is written.
         contract: the contract holding the configuration, the repository's by default; the F´
-            build flies the repository's only.
+            build flies the configurations `fsw.codegen.deployment.fprime_configurations` selects.
     """
 
     vehicle: str
@@ -222,7 +228,7 @@ class Mission:
 
         Raises:
             ValueError: the vehicle, configuration or build is unknown; the F´ build is given a
-                contract other than the repository's; a lookup of `_configuration` fails; a rung or
+                configuration it does not build; a lookup of `_configuration` fails; a rung or
                 scenario is not in the tree; a scenario leaves the configuration no rung to judge;
                 a rung is reached by none of the scenarios; or the rungs leave a scenario nothing
                 to judge.
@@ -236,10 +242,10 @@ class Mission:
             )
         if self.build not in BUILDS:
             raise ValueError(f"no build {self.build!r}; known: {list(BUILDS)}")
-        if self.build == "fprime" and self.contract != CONTRACT:
+        if self.build == "fprime" and self.gnc not in fprime_configurations(contract=self.contract):
             raise ValueError(
-                f"the fprime build flies the repository's contract only, not the configurations in"
-                f" {self.contract.gnc}"
+                f"the fprime build does not build {self.gnc!r}: a member's component has no F´"
+                " component, no CMakeLists.txt beside its .fpp"
             )
         object.__setattr__(self, "_found", _configuration(self.gnc, self.build, self.contract))
         capabilities = self._found.capabilities
@@ -452,7 +458,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
                 mission.gnc, record, mission._found.classes, contract=mission.contract
             )
         else:
-            fsw = Adapter(mission.gnc, record)
+            fsw = Adapter(mission.gnc, record, contract=mission.contract)
             radio = FprimeStation(fsw, fsw.dictionary)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
         host = FswHost(fsw, sim_scenario.vehicle)
