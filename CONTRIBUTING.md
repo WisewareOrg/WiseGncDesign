@@ -33,3 +33,10 @@ import time into a build or temp directory and stays untracked. A Python build's
 case, generated into a temp dir as
 [ADR 0004 rev 2](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md)
 records.
+
+## Running tests beside other sessions
+
+Several Claude Code sessions and agents may share a checkout. `.claude/settings.json` registers
+[`.claude/hooks/guard-tests.sh`](.claude/hooks/guard-tests.sh), which lets one test run through at
+a time on the machine; its header says what counts as a test run and when one is denied. A denied
+run is retried once the other finishes, never worked around.
