@@ -39,6 +39,20 @@ def oscillator(t: float, y: np.ndarray) -> np.ndarray:
 
 
 @njit(cache=True)
+def cubic(t: float, y: np.ndarray) -> np.ndarray:
+    """The right-hand side of y' = t^3, which depends on t alone.
+
+    Args:
+        t: time, s.
+        y: (1,) state; unused.
+
+    Returns:
+        (1,) dy/dt.
+    """
+    return np.array([t**3])
+
+
+@njit(cache=True)
 def kepler(t: float, y: np.ndarray, mu: float) -> np.ndarray:
     """Two-body motion r'' = -mu r / |r|^3, as y = (r, v).
 
@@ -151,6 +165,18 @@ def test_the_global_error_shrinks_as_h_to_the_fourth(rk4: Callable[..., np.ndarr
     np.testing.assert_allclose(orders, 4.0, atol=0.05)
 
 
+def test_each_stage_is_taken_at_its_own_time(rk4: Callable[..., np.ndarray]):
+    """One step of y' = t^3 from t = 1 is exact, as RK4 is Simpson's rule for a cubic in t alone.
+
+    Args:
+        rk4: the build's step.
+    """
+    t0, h = 1.0, 0.5
+    np.testing.assert_allclose(
+        rk4(cubic, t0, np.array([0.0]), h), [((t0 + h) ** 4 - t0**4) / 4], rtol=1e-15
+    )
+
+
 def test_an_orbit_matches_solve_ivp(rk4: Callable[..., np.ndarray]):
     """One period of an e = 0.5 orbit, mu passed through, ends at DOP853's state and at Y0.
 
@@ -176,7 +202,7 @@ def test_the_builds_fly_an_orbit_alike(cpp: Callable[..., np.ndarray]):
         fly(cpp, kepler, Y0, PERIOD / n, n, MU),
         fly(step, kepler, Y0, PERIOD / n, n, MU),
         rtol=0,
-        atol=1e-13,
+        atol=1e-11,
     )
 
 

@@ -62,10 +62,12 @@ jobs:
       - run: just _sync
       # The F´ tests skip when an extension or its dictionary is absent, so this step imports every
       # configuration's extension the F´ build builds, of the repository's contract and the test
-      # mocks', and checks its dictionary exists; a build that leaves either out fails here.
+      # mocks', and checks its dictionary exists, and imports `_<name>` of every algorithm utility
+      # with a CMakeLists.txt; a build that leaves any out fails here.
       - run: |
           uv run --no-sync python - <<'PY'
           import importlib
+          from pathlib import Path
 
           import lab
           from fsw.codegen.deployment import CONTRACT, fprime_configurations
@@ -75,6 +77,9 @@ jobs:
               for c in fprime_configurations(contract=contract):
                   importlib.import_module(f"lab._wise_fsw_{c}")
                   assert lab.dictionary_path(c).exists(), c
+          for cmake in Path("algorithms/utils").glob("*/CMakeLists.txt"):
+              name = cmake.parent.name
+              importlib.import_module(f"algorithms.utils.{name}._{name}")
           PY
       - run: uv run --no-sync pytest
       # Everything the build and the suite write must be ignored; the log names what is not.
