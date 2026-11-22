@@ -45,3 +45,5 @@ def members(model: Model, configuration: str) -> dict[str, tuple[Instance, ...]]
         )
         for group in groups
     }
+
+_SEED: int = "seeded type error"
