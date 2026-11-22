@@ -122,5 +122,6 @@ at `report/matrix.md`. How a verdict is reached is in
 
 `just --list` shows every recipe with its description. `.github/workflows/checks.yml` is the
 authority on what CI runs: `just reqs`, the suite, wise-ci's `check-python` (ruff, docstring
-coverage and ty; `just python` runs it locally, building the F´ stubs ty reads first) and `check-adrs` over `docs/decisions/`. `process-gates.yml` also runs
-`check-python-floor` on pull requests.
+coverage and ty; `just python` runs it locally, building the F´ stubs ty reads first) and
+`check-adrs` over `docs/decisions/`. `process-gates.yml` also runs `check-python-floor` on pull
+requests.
