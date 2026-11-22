@@ -65,6 +65,25 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
         get_filename_component(WISE_UTILITY_NAME "${WISE_UTILITY_DIR}" NAME)
         add_subdirectory("${WISE_UTILITY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/utils/${WISE_UTILITY_NAME}")
         add_dependencies(_wise_fsw "_${WISE_UTILITY_NAME}")
+        # Its type stub, written beside it; stubgen's exit code fails the build, which it does not by default.
+        add_custom_command(
+            OUTPUT "${WISE_UTILITY_DIR}/_${WISE_UTILITY_NAME}.pyi"
+            COMMAND "${CMAKE_COMMAND}" -E env "PYTHONPATH=${WISE_UTILITY_DIR}"
+                "${Python_EXECUTABLE}" -m pybind11_stubgen "_${WISE_UTILITY_NAME}"
+                --exit-code -o "${WISE_UTILITY_DIR}"
+            DEPENDS "$<TARGET_FILE:_${WISE_UTILITY_NAME}>"
+            COMMENT "Stubbing _${WISE_UTILITY_NAME}")
+        add_custom_target("_${WISE_UTILITY_NAME}_stub" DEPENDS "${WISE_UTILITY_DIR}/_${WISE_UTILITY_NAME}.pyi")
+        add_dependencies(_wise_fsw "_${WISE_UTILITY_NAME}_stub")
     endforeach ()
+    # The stub of `fsw.codegen.fpp_types`, which a type checker cannot read from the module's imports.
+    add_custom_command(
+        OUTPUT "${FPRIME_PROJECT_ROOT}/fsw/codegen/fpp_types.pyi"
+        COMMAND "${Python_EXECUTABLE}" -m fsw.codegen.fpp_types_stub
+        WORKING_DIRECTORY "${FPRIME_PROJECT_ROOT}"
+        DEPENDS ${WISE_RENDER_INPUTS}
+        COMMENT "Stubbing fsw.codegen.fpp_types")
+    add_custom_target(wise_fpp_types_stub DEPENDS "${FPRIME_PROJECT_ROOT}/fsw/codegen/fpp_types.pyi")
+    add_dependencies(_wise_fsw wise_fpp_types_stub)
 endif()
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/deployment")
