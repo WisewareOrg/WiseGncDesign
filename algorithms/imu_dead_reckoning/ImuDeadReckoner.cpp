@@ -1,6 +1,8 @@
 // The math is imu_dead_reckoning.py's; parity.py holds the two builds to parity case by case.
 #include "algorithms/imu_dead_reckoning/ImuDeadReckoner.hpp"
 
+#include "algorithms/utils/rk4/Rk4.hpp"
+
 namespace Gnc {
 
 namespace {
@@ -9,11 +11,8 @@ using Eigen::Quaterniond;
 using Eigen::Vector3d;
 using Eigen::Vector4d;
 
-struct Derivative {
-    Vector4d q;  // W X Y Z
-    Vector3d r;
-    Vector3d v;
-};
+//! The state x = (q, r, v), q W X Y Z.
+using State = Eigen::Matrix<F64, 10, 1>;
 
 Quaterniond quaternion(const Vector4d& wxyz) {
     return Quaterniond(wxyz[0], wxyz[1], wxyz[2], wxyz[3]);
@@ -23,13 +22,16 @@ Vector4d wxyz(const Quaterniond& q) {
     return Vector4d(q.w(), q.x(), q.y(), q.z());
 }
 
-//! dq/dt = 1/2 q (x) (0, omega), dr/dt = v, dv/dt = [NB](q) accel - mu r / |r|^3, [NB] of q as it stands.
-Derivative derivative(const Vector4d& q, const Vector3d& r, const Vector3d& v, const Vector3d& omega,
-                      const Vector3d& accel, F64 mu) {
-    const Quaterniond rotation = quaternion(q);
+//! dx/dt: dq/dt = 1/2 q (x) (0, omega), dr/dt = v, dv/dt = [NB](q) accel - mu r / |r|^3, [NB] of q as it
+//! stands.
+State derivative(F64 t, const State& x, const Vector3d& omega, const Vector3d& accel, F64 mu) {
+    const Quaterniond rotation = quaternion(x.head<4>());
+    const Vector3d r = x.segment<3>(4);
     const Quaterniond qdot = rotation * Quaterniond(0.0, omega.x(), omega.y(), omega.z());
     const F64 rNorm = r.norm();
-    return {0.5 * wxyz(qdot), v, rotation.toRotationMatrix() * accel - mu * r / (rNorm * rNorm * rNorm)};
+    State xDot;
+    xDot << 0.5 * wxyz(qdot), x.tail<3>(), rotation.toRotationMatrix() * accel - mu * r / (rNorm * rNorm * rNorm);
+    return xDot;
 }
 
 Vector3d vector(const Gnc::Vector3& v) {
@@ -86,25 +88,18 @@ void ImuDeadReckoner::schedIn_handler(FwIndexType portNum, U32 context) {
     const F64 dt = t - this->m_t;
     const Vector3d omega = dcm_BP * this->m_omega_P;
     const Vector3d accel = dcm_BP * this->m_accel_P;
-    const Vector4d q = wxyz(this->m_q);
-    const Vector3d& r = this->m_r;
-    const Vector3d& v = this->m_v;
+    State x;
+    x << wxyz(this->m_q), this->m_r, this->m_v;
+    x = Rk4::step(derivative, 0.0, x, dt, omega, accel, mu);
 
-    const Derivative k1 = derivative(q, r, v, omega, accel, mu);
-    const Derivative k2 =
-        derivative(q + 0.5 * dt * k1.q, r + 0.5 * dt * k1.r, v + 0.5 * dt * k1.v, omega, accel, mu);
-    const Derivative k3 =
-        derivative(q + 0.5 * dt * k2.q, r + 0.5 * dt * k2.r, v + 0.5 * dt * k2.v, omega, accel, mu);
-    const Derivative k4 = derivative(q + dt * k3.q, r + dt * k3.r, v + dt * k3.v, omega, accel, mu);
-
-    Vector4d qNew = q + (dt / 6.0) * (k1.q + 2.0 * k2.q + 2.0 * k3.q + k4.q);
+    Vector4d qNew = x.head<4>();
     qNew /= qNew.norm();
     if (qNew[0] < 0.0) {
         qNew = -qNew;
     }
     this->m_q = quaternion(qNew);
-    this->m_r = r + (dt / 6.0) * (k1.r + 2.0 * k2.r + 2.0 * k3.r + k4.r);
-    this->m_v = v + (dt / 6.0) * (k1.v + 2.0 * k2.v + 2.0 * k3.v + k4.v);
+    this->m_r = x.segment<3>(4);
+    this->m_v = x.tail<3>();
     this->m_t = t;
     this->m_navState = NavState::propagated;
     this->writeTelemetry();

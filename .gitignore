@@ -8,6 +8,7 @@ __pycache__/
 build-fprime-*/
 /lab/_wise_fsw*.so
 /lab/*FswTopologyDictionary.json
+/algorithms/utils/*/*.so
 # Fetched sources: the F´ clone and Eigen's checkout
 /fsw/fprime/lib/fprime/
 /fsw/fprime/lib/fetchcontent/
