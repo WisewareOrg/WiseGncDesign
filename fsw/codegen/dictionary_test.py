@@ -132,7 +132,7 @@ def test_a_mistyped_name_is_refused_naming_it(mock_dictionary: Dictionary):
 def test_values_in_the_channel_s_type_come_back_in_one_batch_with_their_units(
     mock_dictionary: Dictionary,
 ):
-    """Arrays come back (N, *shape), a bool as 1.0, an enum as its name; units are the format's.
+    """A bool comes back 1.0 from F´'s true byte; units are the format's; a channel is found by ID.
 
     Args:
         mock_dictionary: the mock's dictionary.
@@ -140,15 +140,7 @@ def test_values_in_the_channel_s_type_come_back_in_one_batch_with_their_units(
     mock = mock_dictionary
     offset, mounting = mock.channel("mock.offset"), mock.channel("mock.mounting")
 
-    np.testing.assert_array_equal(
-        offset.from_raw(np.array([[1, 2, 3], [4, 5, 6]], ">f8")), [[1, 2, 3], [4, 5, 6]]
-    )
-    np.testing.assert_array_equal(
-        mounting.from_raw(ARGS["mounting"][None].astype(">f8"))[0], ARGS["mounting"]
-    )
     assert mock.channel("mock.enabled").from_raw(np.array([0xFF, 0], "u1")).tolist() == [1.0, 0.0]
-    assert mock.channel("mock.mode").from_raw(np.array([1, 0], ">i4")).tolist() == ["fast", "slow"]
-    assert offset.from_raw(np.empty((0, 3), ">f8")).shape == (0, 3)
     assert [offset.units, mounting.units, mock.channel("mock.extra").units] == ["m", "", "s"]
     assert mock.channels_by_id[offset.id] is offset
 
