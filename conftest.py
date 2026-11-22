@@ -12,7 +12,6 @@ from __future__ import annotations
 import itertools
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
-from types import ModuleType
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
@@ -28,6 +27,7 @@ if TYPE_CHECKING:
     from fsw.codegen.fpp_model import Model
     from fsw.codegen.roles import Role
     from ground.fprime_station import FprimeStation
+    from lab.fsw_extension import FswExtension
 
 
 _MOCK = Path(fsw.mock.__file__).with_name("Mock.fpp")
@@ -131,7 +131,7 @@ def render_mock() -> Callable[..., Dictionary]:
 
 
 @pytest.fixture
-def fsw(fprime_configuration: str) -> ModuleType:
+def fsw(fprime_configuration: str) -> FswExtension:
     """A fresh copy of the configuration's deployment, not yet booted; skips without its build.
 
     Args:
@@ -144,7 +144,7 @@ def fsw(fprime_configuration: str) -> ModuleType:
 
 
 @pytest.fixture
-def booted(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> ModuleType:
+def booted(fsw: FswExtension, prm: str, parameter_ids: list[int]) -> FswExtension:
     """The test's copy of the deployment, booted idle on the case's parameters.
 
     Args:
@@ -160,7 +160,7 @@ def booted(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> ModuleType:
 
 
 @pytest.fixture
-def station(fsw: ModuleType, dictionary: Dictionary) -> FprimeStation:
+def station(fsw: FswExtension, dictionary: Dictionary) -> FprimeStation:
     """The ground station on the test's copy, on the dictionary the build generated.
 
     Args:
@@ -183,7 +183,7 @@ class Booted(NamedTuple):
         station: the station on it, on the dictionary the build generated.
     """
 
-    fsw: ModuleType
+    fsw: FswExtension
     station: FprimeStation
 
 
@@ -235,7 +235,7 @@ def _dat(record: Path, configuration: str) -> str:
     return str(ground_parameters.dat(record, _dictionary(configuration)))
 
 
-def _copy(configuration: str) -> ModuleType:
+def _copy(configuration: str) -> FswExtension:
     """A fresh copy of a configuration's deployment, not yet booted; skips without its build.
 
     Args:

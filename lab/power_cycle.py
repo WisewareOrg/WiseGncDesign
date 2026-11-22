@@ -19,7 +19,10 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from types import ModuleType
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from lab.fsw_extension import FswExtension
 
 __all__ = ["built", "dictionary_path", "power_cycle", "source"]
 
@@ -102,7 +105,7 @@ def source(configuration: str) -> Path:
     return path
 
 
-def power_cycle(configuration: str) -> ModuleType:
+def power_cycle(configuration: str) -> "FswExtension":
     """A fresh copy of a configuration's extension, loaded and not booted: a new module per call.
 
     The source is checked first, so an extension not built or rebuilt raises as `source` does.
@@ -127,4 +130,4 @@ def power_cycle(configuration: str) -> ModuleType:
     assert spec is not None, f"{name} is loaded by its own loader"
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)
-    return module
+    return cast("FswExtension", module)

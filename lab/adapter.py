@@ -8,8 +8,7 @@ link, which the ground decodes.
 
 from collections.abc import Mapping
 from pathlib import Path
-from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fsw.codegen.deployment import CONTRACT, Contract, bus_port, configuration_model, tick_period
 from fsw.codegen.dictionary import Dictionary
@@ -17,6 +16,9 @@ from fsw.codegen.roles import Role, taken
 from ground import parameters
 from lab.bus_emulator import deserialize, serialize
 from lab.power_cycle import dictionary_path, power_cycle, source
+
+if TYPE_CHECKING:
+    from lab.fsw_extension import FswExtension
 
 __all__ = ["Adapter"]
 
@@ -45,7 +47,7 @@ class Adapter:
     period_s: float
     dictionary: Dictionary
     build: dict[str, str]
-    _fsw: ModuleType
+    _fsw: "FswExtension"
     """The copy the last `boot` powered on; unset before the first."""
 
     def __init__(self, configuration: str, prm_path: Path, *, contract: Contract = CONTRACT) -> None:
