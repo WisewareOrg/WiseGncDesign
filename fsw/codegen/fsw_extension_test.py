@@ -20,7 +20,10 @@ if TYPE_CHECKING:
     from lab.fsw_extension import FswExtension
 
 FIXED = {"boot", "pump", "responses", "step", "telemetry", "uplink"}
-"""The six functions every `_wise_fsw_<configuration>` extension has; the plan's decision 9 names them."""
+"""The six functions `lab/adapter.py` and `ground/fprime_station.py` call by name.
+
+The `bus_*` and `cdh_*` pins are reached only by computed name.
+"""
 
 
 class Built(NamedTuple):
@@ -103,14 +106,14 @@ def test_the_protocol_s_methods_are_the_extension_s_functions(built: Built):
 
 
 def test_the_extension_has_exactly_the_six_fixed_functions(built: Built):
-    """The extension's functions that are not `bus_*` or `cdh_*` are the six the plan names.
+    """The extension's functions that are not `bus_*` or `cdh_*` are the six the lab and ground call by name.
 
     Args:
         built: the configuration's extension and rendered stub.
     """
     functions = _functions(built.copy)
 
-    assert functions == FIXED, f"the extension has {sorted(functions)}, the plan names {sorted(FIXED)}"
+    assert functions == FIXED, f"the extension has {sorted(functions)}, the lab and ground call {sorted(FIXED)}"
 
 
 def test_the_protocol_derives_from_protocol(built: Built):
