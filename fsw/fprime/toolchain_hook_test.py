@@ -110,7 +110,7 @@ class TestToolchainHook:
             assert tool in message, f"the message {message!r} does not name the missing {tool}"
 
     def test_a_pin_spelled_otherwise_is_the_same_clean_requirement(self):
-        """A comment, name case, `_` or `.` for `-`, and spaces around `==` do not change the pin."""
+        """A comment, name case, `_` or `.` for `-`, and spaces around `==` leave the pin as is."""
         self.write_requirements(
             pin_lines(
                 cmake="CMake == 9.8.7",
@@ -128,6 +128,19 @@ class TestToolchainHook:
         }
         assert parsed == {tool: f"=={ver}" for tool, ver in PINNED.items()}, (
             f"dependencies {dependencies} are not the five tools at the file's versions"
+        )
+
+    def test_a_pin_with_an_environment_marker_is_still_that_pin(self):
+        """A tool line carrying a `; marker` is declared at the version it pins."""
+        self.write_requirements(pin_lines(fprime_fpp='fprime.fpp==1.2.3; sys_platform == "linux"'))
+
+        dependencies = self.update()["dependencies"]
+
+        parsed = {
+            canonicalize_name(r.name): str(r.specifier) for r in map(Requirement, dependencies)
+        }
+        assert parsed["fprime-fpp"] == "==1.2.3", (
+            f"dependencies {dependencies} do not pin fprime-fpp at the marked line's version"
         )
 
     @pytest.mark.parametrize("unpinned", ["cmake>=9.8.7", "cmake~=9.8", "cmake"])
