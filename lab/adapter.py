@@ -129,7 +129,7 @@ class Adapter:
         return commands
 
     def uplink(self, packet: bytes, context: int) -> None:
-        """Queues an F´ command packet at the current copy's dispatcher; the next tick runs it.
+        """Queues an F´ command packet at the loaded copy's dispatcher; the next tick runs it.
 
         Args:
             packet: the command packet, as F´ frames it.
@@ -138,7 +138,7 @@ class Adapter:
         self._fsw.uplink(packet, context)
 
     def responses(self) -> list[tuple[int, int]]:
-        """The current copy's command responses since the last call, oldest first.
+        """The loaded copy's command responses since the last call, oldest first.
 
         Returns:
             `(context, Fw.CmdResponse value)`.

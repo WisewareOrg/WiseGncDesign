@@ -32,6 +32,7 @@ from wise_dynamics.basilisk.vehicles import VEHICLES
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import (
+    REPOSITORY,
     Contract,
     configuration_model,
     framework_files,
@@ -666,7 +667,7 @@ def test_a_component_claims_one_id_per_provides_line(
 @pytest.mark.parametrize(
     ("missions", "match"),
     [
-        ([{"rungs": ("SRS901",)}, {"rungs": ("SRS902",)}], "TST901"),
+        ([{"rungs": ("SRS901",)}, {"rungs": ("SRS902",)}], "two missions fly"),
         ([{"scenarios": ("TST901", "TST903")}], "the test name"),
     ],
     ids=["same-flight-twice", "same-definition-twice"],
@@ -1028,7 +1029,7 @@ def test_a_procedure_that_forgets_an_await_fails_the_case(
         project: the project.
         fly_in_a_subprocess: runs the project in a subprocess.
     """
-    pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    pyproject = tomllib.loads((REPOSITORY / "pyproject.toml").read_text())
     filters = pyproject["tool"]["pytest"]["ini_options"]["filterwarnings"]
     project.makeini("[pytest]\nfilterwarnings =\n" + "".join(f"    {f}\n" for f in filters))
     (project.path / "scenarios" / "alpha.py").write_text(

@@ -187,7 +187,7 @@ def test_an_enum_value_that_is_no_constant_fails_naming_the_channel(mock_diction
 
 
 def test_written_values_are_held_to_the_channel_s_type(mock_dictionary: Dictionary):
-    """Values a Python algorithm writes come back as the serialized ones do, an F32 truncated.
+    """Values a Python algorithm writes come back as the serialized ones do, an F32 rounded.
 
     Args:
         mock_dictionary: the mock's dictionary.

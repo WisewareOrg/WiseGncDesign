@@ -4,7 +4,8 @@
 source feeding a sink, flown by `gnc/MockFrame.fpp`; `HarnessMock.fpp`, laid out as an
 algorithm's is with its notebook `mock.py`, flown as the nav role by `gnc/MockFlight.fpp`; and
 `actuator/`, the one mock with an F´ component, laid out as an algorithm with one is, its notebook
-`actuator.py`, flown on the wheel role by `gnc/MockActuation.fpp` in both builds.
+`actuator.py`, flown on the wheel role by `gnc/MockActuation.fpp` in both builds. The Python
+twins of `MockGnc.fpp`'s source and sink are in `mock_gnc.py`.
 Beside the contract, not in it, `Mock.fpp` and the `Extra.fppi` it includes are one component the
 ground's tests generate a dictionary from, and `ARGS` are its `setMock` command's arguments.
 """

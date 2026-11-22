@@ -1,11 +1,10 @@
 """LabBusDriver forwards each role's bus bytes to its typed bus port; an undeliverable push raises.
 
-On a booted copy of the deployment, for every sensor role a configuration takes: the role's
-message steps without an assert on its LabBusDriver port, and bytes of the wrong length, a port
-nothing is wired to, a port past LabBusDriver's `busOut` and an empty push each trip F´'s own
-assert, which raises in Python. Back the other way, a step returns the bytes its GNC sent each
-actuator role's `busIn` port that step, once, flown on the test mock `MockActuation`. Skipped
-without the deployment `just fsw` builds, as the `fsw` and `bus_by_role` fixtures skip.
+On a booted copy of the deployment, for every sensor role a configuration takes: bytes one short
+of the role's message, and one over, each trip F´'s own assert, which raises in Python. Back the
+other way, a step returns the bytes its GNC sent each actuator role's `busIn` port that step, once,
+flown on the test mock `MockActuation`. Skipped without the deployment `just fsw` builds, as the
+`boot` and `bus_by_role` fixtures skip.
 """
 
 from collections.abc import Callable

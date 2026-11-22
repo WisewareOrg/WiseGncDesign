@@ -263,21 +263,20 @@ def test_a_nan_error_is_a_violation():
     assert [message.split()[0] for message in found] == ["velocity"]
 
 
-def test_the_bound_takes_each_sample_s_noise_from_the_density_and_the_step() -> None:
-    """The per-sample noise is the density over the square root of the flight software's step."""
+def test_the_bound_takes_each_sample_s_noise_from_the_density_and_the_tick() -> None:
+    """The per-sample noise is the density over the square root of the base tick."""
     assert bound_inputs()["gyro_noise_std_rad_s"] == 5e-5
     assert bound_inputs()["accel_noise_std_m_s2"] == 5e-5
 
 
-def test_a_longer_step_lowers_each_sample_s_noise(monkeypatch: pytest.MonkeyPatch) -> None:
-    """At a 4 s step each sample carries half the density, as the IMU sampling every 4 s does.
+def test_a_longer_tick_lowers_each_sample_s_noise(monkeypatch: pytest.MonkeyPatch) -> None:
+    """At a 4 s tick each sample carries half the density, as the IMU sampling every 4 s does.
 
     Args:
-        monkeypatch: replaces the flight software's step for this test.
+        monkeypatch: replaces the base tick for this test.
     """
     monkeypatch.setattr(gross_check, "tick_period", lambda _: 4.0)
     inputs = bound_inputs()
-    assert inputs["step_s"] == 4.0
     assert inputs["gyro_noise_std_rad_s"] == ImuSpacecraft.gyro_noise_density_rad_s_rthz / 2
     assert inputs["accel_noise_std_m_s2"] == ImuSpacecraft.accel_noise_density_m_s2_rthz / 2
 

@@ -157,22 +157,20 @@ def test_a_tick_missing_a_role_the_cdh_converts_is_refused_naming_it(
         adapter.tick(NS, messages)
 
 
-@pytest.mark.parametrize("excess_ns", [500])
 def test_a_tick_that_is_not_a_whole_microsecond_is_refused_naming_its_time(
-    messages_by_role: dict[str, Any], adapter: Adapter, excess_ns: int
+    messages_by_role: dict[str, Any], adapter: Adapter
 ):
-    """A tick at a whole microsecond steps; one nanoseconds past it raises, naming its time.
+    """A tick at a whole microsecond steps; one 500 ns past it raises, naming its time.
 
     Args:
         messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
-        excess_ns: ns past a whole microsecond.
     """
     whole = NS + 1_000
     adapter.tick(whole, messages_by_role)
 
-    with pytest.raises(RuntimeError, match=f"tick at {whole + excess_ns} ns "):
-        adapter.tick(whole + excess_ns, messages_by_role)
+    with pytest.raises(RuntimeError, match=f"tick at {whole + 500} ns "):
+        adapter.tick(whole + 500, messages_by_role)
 
 
 def test_the_build_names_the_pinned_framework_tag_and_the_project_version(adapter: Adapter):
@@ -234,6 +232,9 @@ def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(
     messages_by_role: dict[str, Any], adapter: Adapter
 ):
     """A power cycle keeps no write of the copy before it.
+
+    The first tick's writes are drained, which shows a tick writes; the second tick's are left in
+    the copy that the boot replaces.
 
     Args:
         messages_by_role: a message for each sensor role the configuration takes.

@@ -167,7 +167,7 @@ def _source_forms(source: type) -> dict[str, tuple[str, Form]]:
 
 
 def _build(
-    model: Model, algorithms: Collection[Path], held: Collection[str] = ()
+    model: Model, algorithms: Collection[Path], kept: Collection[str] = ()
 ) -> dict[str, SimpleNamespace]:
     """The tuples of a model's structs and of its algorithms' components, by top-level FPP module.
 
@@ -177,7 +177,7 @@ def _build(
     Args:
         model: the model.
         algorithms: the algorithms' `.fpp` files; a component one of them defines gets tuples.
-        held: qualified names already generated with an equal definition, whose tuples are kept
+        kept: qualified names already generated with an equal definition, whose tuples are kept
             and not rebuilt.
 
     Returns:
@@ -202,7 +202,7 @@ def _build(
         setattr(space, name, cls)
 
     for name, struct in model.types.items():
-        if isinstance(struct, Struct) and name not in held:
+        if isinstance(struct, Struct) and name not in kept:
             cls = namedtuple(name.rsplit(".", 1)[-1], [m.name for m in struct.members])
             _STRUCTS[cls] = struct, model.types
             _DEFINITIONS[name] = struct
@@ -210,7 +210,7 @@ def _build(
 
     files = {Path(f).resolve() for f in algorithms}
     for component in model.components.values():
-        if component.file.resolve() in files and component.name not in held:
+        if component.file.resolve() in files and component.name not in kept:
             _COMPONENTS[component.name] = component, model.types
             _DEFINITIONS[component.name] = component
             for suffix, cls in _component_tuples(component).items():

@@ -136,23 +136,20 @@ def test_a_booted_reckoner_reports_idle_and_no_state(
     ]
 
 
-@pytest.mark.parametrize("sign", [-1.0], ids=["w-negative"])
 def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     boot: Callable[..., tuple[ModuleType, FprimeStation]],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
-    sign: float,
     imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
 ):
-    """Commanded q or -q as of t = 0 and stepped 1 s at zero rate, the deployment writes q.
+    """Commanded -q as of t = 0 and stepped 1 s at zero rate, the deployment writes q.
 
     Args:
         boot: boots the configuration on the parameters given.
         decoded: drains the station's telemetry as values.
-        sign: the sign the initial quaternion is given with.
         imu_bus: the IMU message's bus for a reading.
     """
     fsw, station = boot(CONFIGURATION, {NAV_INSTANCE: NAV})
-    station.uplink("nav.initNavState", _state(0.0, sign * Q0), 1)
+    station.uplink("nav.initNavState", _state(0.0, -Q0), 1)
     fsw.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
 
     attitude = _latest(decoded(station))["nav.bodyEciAttitude"]

@@ -1,6 +1,6 @@
 """The F´ CDH generator: the C++ it emits for `Cdh.BusConverter`'s roles, and what it refuses.
 
-Each test but the tool's reads a mock model of two roles, so none needs the F´ framework clone.
+Each test reads a mock model of two roles, so none needs the F´ framework clone.
 """
 
 from collections.abc import Callable

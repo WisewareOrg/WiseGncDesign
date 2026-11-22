@@ -147,9 +147,7 @@ def algorithm_components() -> frozenset[str]:
         Their qualified names.
     """
     algorithms = set(algorithm_files())
-    return frozenset(
-        c.name for c in read(contract_files()).components.values() if c.file in algorithms
-    )
+    return frozenset(c.name for c in contract_model().components.values() if c.file in algorithms)
 
 
 def contract_files(*, contract: Contract = CONTRACT) -> tuple[Path, ...]:
@@ -294,7 +292,7 @@ def gnc_instances() -> tuple[Instance, ...]:
         The instances.
     """
     sub_topologies = [_GNC / f"{configuration}.fpp" for configuration in configurations()]
-    contract = read(contract_files()).instances
+    contract = contract_model().instances
     return tuple(
         instance
         for name, instance in read((*contract_files(), *sub_topologies)).instances.items()
