@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import Contract, configuration_model, contract_files
-from fsw.codegen.fpp_model import Model, read
+from fsw.codegen.deployment import Contract, configuration_model, contract_model
+from fsw.codegen.fpp_model import Model
 from fsw.codegen.roles import Role, roles, taken
 from fsw.mock import device, sub_topology
 
-DECLARED = roles(read(contract_files()))
+DECLARED = roles(contract_model())
 """Every role the contract declares."""
 
 SENSORS = [role for role in DECLARED if role.sensor]

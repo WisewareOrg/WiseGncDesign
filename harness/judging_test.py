@@ -18,9 +18,10 @@ import pytest
 import yaml
 from wise_dynamics.sessions import crash_path, run_path, write_planned
 
+from fsw.codegen.deployment import REPOSITORY
 from harness import notebook, requirements_tree
+from harness.conftest import write_item
 
-REPO = Path(__file__).resolve().parents[1]
 GOOD = 0.9e-3
 BAD = 1.5e-3
 PLANNED = 10
@@ -29,20 +30,6 @@ KINDS = {"attitude": "SRS901", "velocity": "SRS902", "position": "SRS903"}
 NODE = "missions/nb/Test_vehicle/test_fsw_alpha"
 NODEID = "missions/nb.py::Test_vehicle::test_fsw_alpha"
 ALL = {"scenario": "TST901", "capabilities": ["SYS901"], "rungs": None}
-
-
-def write_item(root: Path, document: str, uid: str, **fields: object) -> None:
-    """Write one item of the tree.
-
-    Args:
-        root: the project root.
-        document: "sys", "srs" or "tst".
-        uid: the item's ID.
-        **fields: the item's fields beyond `active`.
-    """
-    folder = root / "docs" / "requirements" / document
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{uid}.yml").write_text(yaml.safe_dump({"active": True, "header": uid, **fields}))
 
 
 def write_tree(root: Path) -> None:
@@ -176,7 +163,7 @@ def project(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> pytes
     files = {"analysis/conftest": "from harness.judging import *  # noqa: F403\n"}
     for name in KINDS:
         files[f"analysis/test_{name}_knowledge"] = (
-            REPO / "analysis" / f"test_{name}_knowledge.py"
+            REPOSITORY / "analysis" / f"test_{name}_knowledge.py"
         ).read_text()
     files["missions/nb"] = (
         f'from pathlib import Path\nPath(r"{pytester.path}/imported").write_text("")\n'

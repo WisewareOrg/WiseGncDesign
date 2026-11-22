@@ -14,7 +14,7 @@ from typing import Any, NamedTuple
 import h5py
 import numpy as np
 import pytest
-from wise_dynamics.sessions import crash_path, run_path
+from wise_dynamics.sessions import crash_path, run_path, write_planned
 
 from fsw.codegen.deployment import configuration_model
 from fsw.codegen.fpp_model import Array, Enum
@@ -110,7 +110,7 @@ def _write_flight(folder: Path, build: str, scenario: str, gnc: str, nodeid: str
         nodeid: the test's node ID.
     """
     folder.mkdir(parents=True)
-    (folder / "planned.json").write_text(json.dumps({"runs": CASES, "nodeid": nodeid}))
+    write_planned(folder, CASES, nodeid)
     (folder / "flight.json").write_text(
         json.dumps({"scenario": scenario, "fsw": {"gnc": gnc, "build": build}})
     )
@@ -383,7 +383,7 @@ def _planned(folder: Path) -> None:
     Args:
         folder: the flight's folder.
     """
-    (folder / "planned.json").write_text(json.dumps({"runs": CASES + 1, "nodeid": "x"}))
+    write_planned(folder, CASES + 1, "x")
 
 
 FLOAT_TLM = f"tlm/{INSTANCE}.{FLOAT}"

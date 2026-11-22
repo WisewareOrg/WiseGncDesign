@@ -13,7 +13,12 @@ from typing import Any
 import pytest
 
 from fsw.codegen import fpp_types
-from fsw.codegen.deployment import configuration_model, fprime_configurations, tick_period
+from fsw.codegen.deployment import (
+    REPOSITORY,
+    configuration_model,
+    fprime_configurations,
+    tick_period,
+)
 from fsw.codegen.roles import taken
 from fsw.mock import MOCK
 from fsw.mock.actuator.actuator import Actuator
@@ -26,7 +31,6 @@ from lab import Adapter, built
 if not all(built(c) for c in fprime_configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
 
-REPOSITORY = Path(__file__).parents[1]
 
 NS = 1_000_000_000
 """ns per s."""

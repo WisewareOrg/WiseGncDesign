@@ -17,11 +17,14 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import CLONE, algorithm_components, contract_files, gnc_instances
-from fsw.codegen.fpp_model import read
+from fsw.codegen.deployment import (
+    CLONE,
+    REPOSITORY,
+    algorithm_components,
+    contract_model,
+    gnc_instances,
+)
 from fsw.codegen.roles import roles
-
-_REPOSITORY = Path(__file__).resolve().parents[1]
 
 GENERIC = (
     "fsw/fprime/cdh",
@@ -49,7 +52,7 @@ def _tracked(*paths: str) -> list[Path]:
     """
     listed = subprocess.run(
         ["git", "ls-files", "-z", "--", *paths],
-        cwd=_REPOSITORY,
+        cwd=REPOSITORY,
         capture_output=True,
         check=True,
         text=True,
@@ -81,7 +84,7 @@ def _algorithm_names() -> re.Pattern[str]:
         The pattern: each algorithm directory, configuration, component and role's struct as
         a substring, and each instance name as a whole word.
     """
-    model = read(contract_files())
+    model = contract_model()
     directories = {path.parts[1] for path in _tracked("algorithms") if len(path.parts) > 2}
     substrings, words = set(directories), set()
     for instance in gnc_instances():
@@ -110,7 +113,7 @@ def _hits(directories: tuple[str, ...], predicate: Callable[[str], object]) -> l
     return [
         f"{path}:{number}: {line.strip()}"
         for path in _scanned(*directories)
-        for number, line in enumerate((_REPOSITORY / path).read_text().splitlines(), 1)
+        for number, line in enumerate((REPOSITORY / path).read_text().splitlines(), 1)
         if predicate(line)
     ]
 

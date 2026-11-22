@@ -12,14 +12,13 @@ import pytest
 from Basilisk.architecture import messaging
 
 from fsw.codegen import fpp_types
-from fsw.codegen.deployment import contract_files
+from fsw.codegen.deployment import contract_model
 from fsw.codegen.fields import DTYPES
-from fsw.codegen.fpp_model import read as read_model
 from fsw.codegen.roles import roles
 from fsw.python.cdh import inputs, outputs
 from fsw.python.rio.messages import commands, read
 
-DECLARED = roles(read_model(contract_files()))
+DECLARED = roles(contract_model())
 """Every role of the contract's `Cdh.BusConverter`."""
 
 ROLES = [role for role in DECLARED if role.sensor]

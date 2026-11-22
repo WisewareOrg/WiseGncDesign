@@ -8,12 +8,11 @@ from typing import Any
 import numpy as np
 
 from fsw.codegen import fpp_types
-from fsw.codegen.deployment import contract_files
-from fsw.codegen.fpp_model import read
+from fsw.codegen.deployment import contract_model
 from fsw.codegen.roles import roles
 from fsw.python.cdh.outputs import convert, pairings
 
-ACTUATORS = [role for role in roles(read(contract_files())) if not role.sensor]
+ACTUATORS = [role for role in roles(contract_model()) if not role.sensor]
 """Every actuator role of the contract's `Cdh.BusConverter`."""
 
 

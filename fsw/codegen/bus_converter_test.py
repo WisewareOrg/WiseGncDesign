@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from fsw.codegen.bus_converter import main, render
-from fsw.codegen.deployment import contract_files
-from fsw.codegen.fpp_model import Model, read
+from fsw.codegen.deployment import contract_model
+from fsw.codegen.fpp_model import Model
 from fsw.codegen.roles import CONVERTER, roles
 
 
@@ -161,7 +161,7 @@ def test_the_tool_writes_the_component_and_its_pins_for_every_role(tmp_path: Pat
         tmp_path: the directory.
     """
     main([str(tmp_path)])
-    found = roles(read(contract_files()))
+    found = roles(contract_model())
     assert found
     assert "class BusConverter final" in (tmp_path / "BusConverter.hpp").read_text()
     source = (tmp_path / "BusConverter.cpp").read_text()
@@ -179,7 +179,7 @@ def test_each_actuator_role_s_bus_port_serializer_is_named_into_namespace_cdh() 
     LabBusDriver's serial input with the port's `<Port>PortBuffer` and `<Port>PortSerializer`
     unqualified, inside namespace `Cdh`; `<Port>` is the output port's type, read from FPP.
     """
-    model = read(contract_files())
+    model = contract_model()
     actuators = [role for role in roles(model) if not role.sensor]
     assert actuators
     outputs = {port.name: port for port in model.components[CONVERTER].outputs}

@@ -34,6 +34,7 @@ __all__ = [
     "configuration_model",
     "configurations",
     "contract_files",
+    "contract_model",
     "fpp_files",
     "fprime_configurations",
     "framework_files",
@@ -299,6 +300,16 @@ def gnc_instances() -> tuple[Instance, ...]:
         for name, instance in read((*contract_files(), *sub_topologies)).instances.items()
         if name not in contract
     )
+
+
+@functools.cache
+def contract_model() -> Model:
+    """The repository's contract's model, read once per process.
+
+    Returns:
+        The model `fsw.codegen.fpp_model.read` gives of `contract_files()`.
+    """
+    return read(contract_files())
 
 
 @functools.cache

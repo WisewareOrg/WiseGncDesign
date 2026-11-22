@@ -4,7 +4,7 @@ The fixtures of a configuration's F´ build range over every configuration, one 
 sub-topology. A test or fixture reaching the F´ build takes `fprime_configuration`, which skips a
 configuration the F´ build does not build; one needing the build, or the dictionary it generates,
 skips without it. Every pytest run loads this file, the judge's included, so the FPP model is
-read, and Basilisk and F´ are imported, only by the fixtures that need them.
+read, and the F´ build is loaded, only by the fixtures that need them.
 """
 
 from __future__ import annotations
@@ -205,19 +205,6 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
     return drain
 
 
-@pytest.fixture(scope="session")
-def contract_model() -> Model:
-    """The repository's contract's model, read once per session.
-
-    Returns:
-        The model `fsw.codegen.fpp_model.read` gives of `fsw.codegen.deployment.contract_files`.
-    """
-    from fsw.codegen.deployment import contract_files
-    from fsw.codegen.fpp_model import read
-
-    return read(contract_files())
-
-
 class BusMessage(NamedTuple):
     """A bus struct and a Basilisk message of it.
 
@@ -277,30 +264,27 @@ class IcdMessage(NamedTuple):
 
 
 @pytest.fixture
-def icd_messages(contract_model: Model) -> dict[str, IcdMessage]:
+def icd_messages() -> dict[str, IcdMessage]:
     """A value of every GNC struct a role the contract declares carries, every value distinct.
 
     Each element of each member of each struct takes the next of 0.5, 1.5, 2.5, ..., in its FPP
     type and shape, so a field or element out of place changes the result.
 
-    Args:
-        contract_model: the contract's model, which declares the roles and shapes the structs.
-
     Returns:
         Each struct's value, by its qualified name.
     """
     from fsw.codegen import fpp_types
-    from fsw.codegen.deployment import CONTRACT
+    from fsw.codegen.deployment import contract_model
     from fsw.codegen.fields import form
     from fsw.codegen.roles import roles
 
-    fpp_types.load(CONTRACT)
+    model = contract_model()
     counter = itertools.count()
     messages = {}
-    for name in dict.fromkeys(role.icd for role in roles(contract_model)):
+    for name in dict.fromkeys(role.icd for role in roles(model)):
         values = {}
-        for member in contract_model.types[name].members:
-            shape, element = form(member, contract_model.types)
+        for member in model.types[name].members:
+            shape, element = form(member, model.types)
             count = int(np.prod(shape, dtype=int))
             elements = [next(counter) + 0.5 for _ in range(count)]
             values[member.name] = np.array(elements, element).reshape(shape)
@@ -410,7 +394,6 @@ def algorithm_instances() -> Callable[[str], tuple[Instance, ...]]:
 def case_parameters(
     fprime_configuration: str,
     algorithm_instances: Callable[[str], tuple[Instance, ...]],
-    contract_model: Model,
 ) -> dict[str, Any]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
@@ -420,18 +403,20 @@ def case_parameters(
     Args:
         fprime_configuration: the configuration.
         algorithm_instances: gives a configuration's algorithm instances.
-        contract_model: the contract's model, which shapes the parameters.
 
     Returns:
         Each instance's `<Name>Parameters` tuple, by its qualified name.
     """
+    from fsw.codegen.deployment import contract_model
+
+    model = contract_model()
     return {
-        instance.name: _parameters(contract_model, instance.component, lambda count: [0.0] * count)
+        instance.name: _parameters(model, instance.component, lambda count: [0.0] * count)
         for instance in algorithm_instances(fprime_configuration)
     }
 
 
-def _parameters(model: Any, component: str, elements: Callable[[int], list[float]]) -> Any:
+def _parameters(model: Model, component: str, elements: Callable[[int], list[float]]) -> Any:
     """A component's parameters tuple, each parameter of its FPP shape and type.
 
     Args:
@@ -480,7 +465,7 @@ def rate_groups(configuration: str) -> list[str]:
 
 
 @pytest.fixture
-def algorithm_parameters(contract_model: Model) -> dict[str, Any]:
+def algorithm_parameters() -> dict[str, Any]:
     """Each algorithm component's parameters, every element distinct, of its FPP shape and type.
 
     The components are `fsw.codegen.deployment.algorithm_components`. Each element of each
@@ -488,19 +473,15 @@ def algorithm_parameters(contract_model: Model) -> dict[str, Any]:
     of place shows; a parameter that is not a number or an array of them raises `ValueError`,
     naming it.
 
-    Args:
-        contract_model: the contract's model, which shapes the parameters.
-
     Returns:
         Each component's `<Name>Parameters` tuple, by its qualified name.
     """
-    from fsw.codegen.deployment import algorithm_components
+    from fsw.codegen.deployment import algorithm_components, contract_model
 
+    model = contract_model()
     counter = itertools.count()
     return {
-        name: _parameters(
-            contract_model, name, lambda count: [next(counter) + 0.5 for _ in range(count)]
-        )
+        name: _parameters(model, name, lambda count: [next(counter) + 0.5 for _ in range(count)])
         for name in sorted(algorithm_components())
     }
 

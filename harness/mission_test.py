@@ -42,6 +42,7 @@ from fsw.codegen.members import members
 from fsw.codegen.roles import taken
 from fsw.mock import MOCK, sub_topology
 from harness import requirements_tree
+from harness.conftest import write_item
 from harness.mission import BUILDS, Mission, _claims, _record_flight, mission_tests
 from lab import built
 
@@ -242,26 +243,6 @@ def failing_dispersion(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(SCENARIOS["leo500"], "disperse", boom)
 
 
-def _write_item(
-    root: Path, document: str, uid: str, links: list[str], reference: tuple[str, str] | None = None
-) -> None:
-    """Write one item of the tree.
-
-    Args:
-        root: the project root holding `docs/requirements`.
-        document: "sys", "srs" or "tst".
-        uid: the item's ID.
-        links: the IDs it links to.
-        reference: the `(path, keyword)` of the file the item references, if any.
-    """
-    item = {"active": True, "links": [{link: "stamp"} for link in links], "header": uid}
-    if reference:
-        item["references"] = [{"path": reference[0], "keyword": reference[1], "type": "file"}]
-    folder = root / "docs" / "requirements" / document
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{uid}.yml").write_text(yaml.safe_dump(item))
-
-
 def write_tree(root: Path, alpha_path: str = "scenarios/alpha.py") -> None:
     """Write the tree the module docstring draws.
 
@@ -270,16 +251,28 @@ def write_tree(root: Path, alpha_path: str = "scenarios/alpha.py") -> None:
         alpha_path: the file TST901 references for its definition `alpha`.
     """
     for uid in ("SYS901", "SYS902"):
-        _write_item(root, "sys", uid, [])
+        write_item(root, "sys", uid, links=[])
     for uid, parent in (
         ("SRS901", "SYS901"),
         ("SRS902", "SYS901"),
         ("SRS903", "SYS902"),
         ("SRS904", "SYS901"),
     ):
-        _write_item(root, "srs", uid, [parent])
-    _write_item(root, "tst", "TST901", ["SRS901", "SRS902", "SRS903"], (alpha_path, "def alpha("))
-    _write_item(root, "tst", "TST902", ["SRS902"], ("scenarios/beta.py", "def beta("))
+        write_item(root, "srs", uid, links=[{parent: "stamp"}])
+    write_item(
+        root,
+        "tst",
+        "TST901",
+        links=[{uid: "stamp"} for uid in ("SRS901", "SRS902", "SRS903")],
+        references=[{"path": alpha_path, "keyword": "def alpha(", "type": "file"}],
+    )
+    write_item(
+        root,
+        "tst",
+        "TST902",
+        links=[{"SRS902": "stamp"}],
+        references=[{"path": "scenarios/beta.py", "keyword": "def beta(", "type": "file"}],
+    )
 
 
 @pytest.fixture
@@ -332,7 +325,7 @@ def test_the_tree_functions_follow_the_root_when_it_is_reassigned(
         monkeypatch: the monkeypatch fixture.
     """
     other = tmp_path_factory.mktemp("other")
-    _write_item(other, "sys", "SYS777", [])
+    write_item(other, "sys", "SYS777", links=[])
     monkeypatch.setattr(requirements_tree, "ROOT", other)
 
     assert sorted(requirements_tree.items("SYS")) == ["SYS777"]

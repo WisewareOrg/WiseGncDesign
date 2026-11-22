@@ -16,8 +16,7 @@ from types import ModuleType
 import pytest
 
 from fsw.codegen import fpp_types
-from fsw.codegen.deployment import bus_port, configuration_model, contract_files
-from fsw.codegen.fpp_model import read
+from fsw.codegen.deployment import bus_port, configuration_model, contract_model
 from fsw.codegen.roles import taken
 from fsw.mock import MOCK
 from fsw.mock.actuator.actuator import Actuator
@@ -45,7 +44,7 @@ def _bus_out_ports() -> int:
     Returns:
         The number of ports.
     """
-    outputs = read(contract_files()).components["Bus.LabBusDriver"].outputs
+    outputs = contract_model().components["Bus.LabBusDriver"].outputs
     [bus_out] = [port for port in outputs if port.name == "busOut"]
     return bus_out.size
 

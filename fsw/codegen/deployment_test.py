@@ -13,6 +13,7 @@ import pytest
 
 from fsw.codegen.deployment import (
     CONTRACT,
+    REPOSITORY,
     Contract,
     algorithm_components,
     algorithm_files,
@@ -20,6 +21,7 @@ from fsw.codegen.deployment import (
     configuration_model,
     configurations,
     contract_files,
+    contract_model,
     fpp_files,
     fprime_configurations,
     gnc_instances,
@@ -31,9 +33,7 @@ from fsw.codegen.fpp_model import Model, read
 from fsw.codegen.roles import Role, roles, taken
 from fsw.mock import MOCK, device, edited, sub_topology
 
-_REPOSITORY = Path(__file__).resolve().parents[2]
-
-DECLARED = roles(read(contract_files()))
+DECLARED = roles(contract_model())
 """Every role the contract declares."""
 
 SENSORS = [role for role in DECLARED if role.sensor]
@@ -56,7 +56,7 @@ def test_a_deployment_s_files_are_the_contract_s_then_its_gnc_and_topology(
 
     assert files == (
         *contract_files(),
-        _REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
+        REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
         tmp_path / f"{configuration}Fsw.fpp",
     )
     text = (tmp_path / f"{configuration}Fsw.fpp").read_text()
@@ -68,7 +68,7 @@ def test_the_contract_holds_the_bus_structs_and_every_algorithm_s_files():
     """The bus structs and the algorithms the F´ build takes are in the contract."""
     files = contract_files()
 
-    assert _REPOSITORY / "fsw" / "fpp" / "interfaces" / "Bus.fpp" in files
+    assert REPOSITORY / "fsw" / "fpp" / "interfaces" / "Bus.fpp" in files
     assert algorithm_files()
     assert set(algorithm_files()) <= set(files)
 
@@ -76,7 +76,7 @@ def test_the_contract_holds_the_bus_structs_and_every_algorithm_s_files():
 def test_the_algorithm_components_are_those_an_algorithm_s_fpp_defines():
     """Each is defined in an algorithm's file; a GNC instance's component is one, or is F´'s."""
     found = algorithm_components()
-    components = read(contract_files()).components
+    components = contract_model().components
 
     assert found
     for name in found:
@@ -94,7 +94,7 @@ def test_the_configurations_are_the_gnc_sub_topologies_sorted_by_name():
     assert found
     assert list(found) == sorted(found)
     for configuration in found:
-        assert (_REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp").is_file()
+        assert (REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp").is_file()
     assert {instance.name.split(".")[0] for instance in gnc_instances()} == set(found)
 
 
@@ -285,7 +285,7 @@ def test_a_cdh_port_two_lab_bus_driver_ports_feed_is_refused_naming_both(
     contract = _mock(tmp_path, name, SENSORS)
     role = SENSORS[0]
     other = len(SENSORS)
-    original = (_REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()
+    original = (REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()
     template = tmp_path / "Fsw.fpp.in"
     template.write_text(
         edited(

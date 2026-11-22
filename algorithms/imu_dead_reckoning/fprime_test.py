@@ -13,8 +13,7 @@ from Basilisk.architecture import messaging
 from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
-from fsw.codegen.deployment import bus_port, configuration_model, contract_files
-from fsw.codegen.fpp_model import read
+from fsw.codegen.deployment import bus_port, configuration_model, contract_model
 from fsw.codegen.fpp_types import Gnc
 from fsw.codegen.roles import roles
 from ground.fprime_station import FprimeStation
@@ -91,7 +90,7 @@ def imu_bus() -> Callable[[Any, Any], list[tuple[int, bytes]]]:
         A function of the angular velocity and the acceleration, each three values in the
         platform frame, giving `[(port, bytes)]`, the message's dv and dr zero.
     """
-    model = read(contract_files())
+    model = contract_model()
     [imu_in] = [p for p in model.components["Gnc.ImuDeadReckoner"].inputs if p.name == "imuIn"]
     [role] = [r for r in roles(model) if r.icd == imu_in.args[0].type]
     port = bus_port("ImuDeadReckoning", role.input)

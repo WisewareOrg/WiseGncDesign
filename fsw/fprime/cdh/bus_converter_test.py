@@ -9,7 +9,6 @@ every role of its direction the contract's `Cdh.BusConverter` declares. Skipped 
 deployment `just fsw` builds, as the `fsw` fixture skips.
 """
 
-import functools
 import re
 from types import ModuleType
 from typing import Any
@@ -17,23 +16,12 @@ from typing import Any
 import numpy as np
 import pytest
 
-from fsw.codegen.deployment import contract_files
+from fsw.codegen.deployment import contract_model
 from fsw.codegen.fields import DTYPES, form, plan
-from fsw.codegen.fpp_model import Model, read
 from fsw.codegen.roles import Role, roles
 from fsw.python.cdh import outputs
 from fsw.python.rio.messages import commands
 from lab.bus_emulator import deserialize, serialize
-
-
-@functools.cache
-def _contract() -> Model:
-    """The contract's model, read once.
-
-    Returns:
-        The model.
-    """
-    return read(contract_files())
 
 
 def _bytes(values: list[tuple[Any, list[Any]]]) -> bytes:
@@ -57,7 +45,7 @@ def _planned(role: Role) -> list[Any]:
     Returns:
         Each GNC member, its bus field's name and its form.
     """
-    model = _contract()
+    model = contract_model()
     bus = model.types[role.bus]
     sources = {m.name.lower(): (m.name, form(m, model.types)) for m in bus.members}
     return plan(model.types[role.icd], model.types, sources, role.bus)
@@ -102,7 +90,7 @@ def _roles(sensor: bool) -> list[Role]:
     Returns:
         The roles.
     """
-    found = [role for role in roles(_contract()) if role.sensor == sensor]
+    found = [role for role in roles(contract_model()) if role.sensor == sensor]
     assert found
     return found
 
@@ -211,7 +199,7 @@ def test_bytes_too_short_for_a_role_s_input_struct_raise_naming_the_role(
         bus_messages: a message of each bus struct.
         icd_messages: a value of each GNC struct.
     """
-    for role in roles(_contract()):
+    for role in roles(contract_model()):
         if role.sensor:
             taken, data = role.bus, serialize(bus_messages[role.bus].payload)
         else:

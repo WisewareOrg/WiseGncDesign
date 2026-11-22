@@ -12,13 +12,12 @@ import pytest
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import (
     configuration_model,
-    contract_files,
+    contract_model,
 )
-from fsw.codegen.fpp_model import read
 from fsw.codegen.roles import roles, taken
 from fsw.python.cdh.inputs import convert, pairings
 
-ROLES = [role for role in roles(read(contract_files())) if role.sensor]
+ROLES = [role for role in roles(contract_model()) if role.sensor]
 """Every sensor role of the contract's `Cdh.BusConverter`."""
 
 
