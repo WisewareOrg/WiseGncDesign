@@ -112,7 +112,7 @@ def test_a_rotation_past_180_degrees_keeps_w_nonnegative_on_the_axis_angle_attit
 
     assert state.q_BN[0] >= 0.0
     estimate = Rotation.from_quat(state.q_BN, scalar_first=True)
-    assert (estimate * Rotation.from_rotvec(omega * total_t * axis).inv()).magnitude() <= 1e-5
+    assert (estimate * Rotation.from_rotvec(omega * total_t * axis).inv()).magnitude() <= 1e-5  # ty: ignore[missing-union-attribute]
 
 
 # RK4 on $\dot q = \tfrac12 q \otimes (0, \omega)$ drifts $|q|$ off 1 at sixth order in the step's
@@ -207,7 +207,7 @@ def test_a_platform_rate_turns_the_body_by_the_mounting_s_transpose():
     _, state = reckoner.step(t=dt, imu=Gnc.ImuReading(omega_p, _ZERO3))
 
     expected = Rotation.from_quat(q0, scalar_first=True) * Rotation.from_rotvec(mounting.T @ omega_p * dt)
-    np.testing.assert_allclose(state.bodyEciAttitude, expected.as_quat(scalar_first=True), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(state.bodyEciAttitude, expected.as_quat(scalar_first=True), rtol=0, atol=1e-12)  # ty: ignore[missing-union-attribute]
 
 
 @pytest.mark.parametrize("dt", [1e-3, 1e-4])
@@ -220,7 +220,7 @@ def test_q_dot_steps_the_attitude_as_scipy_rotates_it(dt: float):
     omega = np.array([0.3, -0.2, 0.5])
     for q in Rotation.random(200, random_state=5).as_quat(scalar_first=True):
         rotated = Rotation.from_quat(q, scalar_first=True) * Rotation.from_rotvec(omega * dt)
-        expected = rotated.as_quat(scalar_first=True, canonical=False)
+        expected = rotated.as_quat(scalar_first=True, canonical=False)  # ty: ignore[missing-union-attribute]
         expected *= np.sign(expected @ q)
         np.testing.assert_allclose(q + _q_dot(q, omega) * dt, expected, rtol=0, atol=dt**2)
 

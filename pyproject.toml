@@ -19,6 +19,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "check-reqs",
     "interrogate>=1.7.0",
     "pytest-xdist>=3.6",
     "ruff>=0.17.0",
@@ -36,6 +37,8 @@ fprime = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-gds==4.4.1", "fprime-too
 override-dependencies = ["pillow>=13"]
 
 [tool.uv.sources]
+# The wise-ci commit docs/requirements pins, so ty resolves its validator's import.
+check-reqs = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-reqs", rev = "6f8840aacdd7eb0c431af64f7eaa7bf326b38e29" }
 # The WiseDynamics commit this repository's scenario tests verify against.
 wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "35ac40730c240ad793caee082169430e1d66242b" }
 
