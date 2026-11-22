@@ -20,11 +20,11 @@ from fsw.codegen.deployment import (
     configuration_model,
     framework_files,
 )
+from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.fields import DTYPES
 from fsw.codegen.fpp_model import read
 from fsw.codegen.fpp_types import Gnc, Svc, _build, converter, named, parameters_from
 from fsw.mock import edited
-from ground.dictionary import Dictionary
 
 MOCK = """\
 module Mock {

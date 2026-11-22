@@ -11,8 +11,8 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
+from fsw.codegen.dictionary import Dictionary
 from fsw.python.cdh import commands, telemetry
-from ground.dictionary import Dictionary
 
 __all__ = ["GroundLink"]
 

@@ -18,11 +18,11 @@ import pytest
 from Basilisk.architecture import messaging
 
 from fsw.codegen.deployment import Contract, configuration_model
+from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.fpp_types import named
 from fsw.codegen.roles import Role, roles
 from fsw.mock import MOCK, device, sub_topology
 from fsw.python import FrameRunner
-from ground.dictionary import Dictionary
 
 CONFIGURATION = "MockFrame"
 """The mock's configuration."""

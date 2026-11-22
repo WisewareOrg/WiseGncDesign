@@ -12,8 +12,8 @@ import inspect
 from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
+from fsw.codegen.dictionary import Dictionary
 from fsw.python.cdh import telemetry
-from ground.dictionary import Dictionary
 
 __all__ = ["Dispatched", "Handler", "dispatch", "handlers"]
 

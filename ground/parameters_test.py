@@ -14,8 +14,8 @@ from typing import Any
 import numpy as np
 import pytest
 
+from fsw.codegen.dictionary import Dictionary
 from ground import parameters
-from ground.dictionary import Dictionary
 from lab import dictionary_path
 
 

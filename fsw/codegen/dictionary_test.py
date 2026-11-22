@@ -10,9 +10,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.fpp_model import Instance
 from fsw.mock import ARGS
-from ground.dictionary import Dictionary
 
 
 def test_from_component_writes_nothing_beside_the_model_and_generates_once_per_content(
@@ -403,11 +403,11 @@ def test_the_algorithm_instances_are_the_gnc_instances_of_an_algorithm_it_holds(
     mock = mock_dictionary
     held = Instance("PyMock.mock", "Mock.Mock", 0x1000)
     absent = Instance("PyMock.other", "Mock.Mock", 0x2000)
-    monkeypatch.setattr("ground.dictionary.gnc_instances", lambda: (held, absent))
-    monkeypatch.setattr("ground.dictionary.algorithm_components", lambda: {"Mock.Mock"})
+    monkeypatch.setattr("fsw.codegen.dictionary.gnc_instances", lambda: (held, absent))
+    monkeypatch.setattr("fsw.codegen.dictionary.algorithm_components", lambda: {"Mock.Mock"})
 
     assert mock.algorithm_instances() == (held,)
-    monkeypatch.setattr("ground.dictionary.algorithm_components", lambda: set())
+    monkeypatch.setattr("fsw.codegen.dictionary.algorithm_components", lambda: set())
     assert mock.algorithm_instances() == ()
 
 

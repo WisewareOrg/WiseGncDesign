@@ -132,7 +132,7 @@ component's name, importing the notebook as `algorithms.<folder>.<folder>`.
 
 ## The dictionary
 
-`ground.dictionary.Dictionary` reads an F´ JSON dictionary, F´'s published form of the FPP
+`fsw.codegen.dictionary.Dictionary` reads an F´ JSON dictionary, F´'s published form of the FPP
 model, and names its entries `<instance>.<entry>` with the instance's module dropped. It holds
 values to the model's types and leaves the bytes to the F´ ground station. `Dictionary.arguments`
 holds a command's arguments to its parameters' types. A channel's type is a primitive, an enum or
@@ -151,7 +151,7 @@ generated once per process. `Dictionary.from_component(model, instance)` generat
 component's alike, instanced alone, for mocks and tests:
 
 ```python
->>> from ground.dictionary import Dictionary
+>>> from fsw.codegen.dictionary import Dictionary
 >>> dictionary = Dictionary.from_sub_topology("ImuDeadReckoning")
 >>> position = dictionary.channel("nav.bodyEciPos")
 >>> position.units
@@ -161,7 +161,7 @@ component's alike, instanced alone, for mocks and tests:
 
 ```
 
-`ground/dictionary_test.py` asserts that every algorithm's GNC instance, in its configuration's
+`fsw/codegen/dictionary_test.py` asserts that every algorithm's GNC instance, in its configuration's
 generated dictionary, has WiseFsw's entries, IDs aside, and WiseFsw's parameter IDs, so the two
 builds are held to one contract. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).

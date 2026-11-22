@@ -6,10 +6,10 @@ import numpy as np
 import pytest
 
 from fsw.codegen import fpp_types
+from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.fpp_types import named
 from fsw.mock import MOCK
 from fsw.python.cdh import commands
-from ground.dictionary import Dictionary
 
 
 class Source:

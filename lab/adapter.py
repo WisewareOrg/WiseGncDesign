@@ -12,9 +12,9 @@ from types import ModuleType
 from typing import Any
 
 from fsw.codegen.deployment import CONTRACT, Contract, bus_port, configuration_model, tick_period
+from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.roles import Role, taken
 from ground import parameters
-from ground.dictionary import Dictionary
 from lab.bus_emulator import deserialize, serialize
 from lab.power_cycle import dictionary_path, power_cycle, source
 

@@ -15,8 +15,8 @@ import numpy as np
 import pytest
 
 from fsw.codegen.deployment import gnc_instances
+from fsw.codegen.dictionary import Dictionary
 from fsw.mock import ARGS
-from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import dictionary_path
 from lab.power_cycle import power_cycle

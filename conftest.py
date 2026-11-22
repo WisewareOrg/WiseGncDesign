@@ -21,8 +21,8 @@ import pytest
 from fsw.codegen.deployment import configurations, fprime_configurations
 
 if TYPE_CHECKING:
+    from fsw.codegen.dictionary import Dictionary
     from fsw.codegen.fpp_model import Model
-    from ground.dictionary import Dictionary
     from ground.fprime_station import FprimeStation
 
 
@@ -64,9 +64,71 @@ def dictionary(fprime_configuration: str) -> Dictionary:
     Returns:
         The dictionary.
     """
-    from ground.dictionary import Dictionary
+    from fsw.codegen.dictionary import Dictionary
 
     return Dictionary(_dictionary(fprime_configuration))
+
+
+@pytest.fixture(scope="session")
+def mock_dictionary() -> Dictionary:
+    """The mock component's dictionary, instanced as `mock` at base ID 0x1000, from FPP alone.
+
+    The component is `fsw/mock/Mock.fpp`, which includes `Extra.fppi` beside it.
+
+    Returns:
+        The dictionary.
+    """
+    import fsw.mock
+    from fsw.codegen.dictionary import Dictionary
+    from fsw.codegen.fpp_model import Instance
+
+    return Dictionary.from_component(
+        [Path(fsw.mock.__file__).with_name("Mock.fpp")], Instance("Mock.mock", "Mock.Mock", 0x1000)
+    )
+
+
+@pytest.fixture
+def render_mock() -> Callable[..., Dictionary]:
+    """Renders an edited mock and gives its dictionary.
+
+    Returns:
+        A function taking the directory the model and its `Extra.fppi` are written into, then
+        `Mock.fpp`'s edits, `extra`, `Extra.fppi`'s edits, and `base_id`, the instance's base ID,
+        each edit `(old, new)` as `fsw.mock.edited` applies it, and giving the dictionary
+        `from_component` generates.
+    """
+    import fsw.mock
+    from fsw.codegen.dictionary import Dictionary
+    from fsw.codegen.fpp_model import Instance
+
+    mock = Path(fsw.mock.__file__).with_name("Mock.fpp")
+
+    def render(
+        directory: Path,
+        *edits: tuple[str, str],
+        extra: tuple[tuple[str, str], ...] = (),
+        base_id: int = 0x1000,
+    ) -> Dictionary:
+        """Writes the edited mock into the directory and generates its dictionary.
+
+        Args:
+            directory: where `Mock.fpp` and `Extra.fppi` are written.
+            *edits: `Mock.fpp`'s edits.
+            extra: `Extra.fppi`'s edits.
+            base_id: the instance's base ID.
+
+        Returns:
+            The dictionary.
+        """
+        (directory / "Mock.fpp").write_text(fsw.mock.edited(mock.read_text(), *edits))
+        (directory / "Extra.fppi").write_text(
+            fsw.mock.edited(mock.with_name("Extra.fppi").read_text(), *extra)
+        )
+        return Dictionary.from_component(
+            [directory / "Mock.fpp"], Instance("Mock.mock", "Mock.Mock", base_id)
+        )
+
+    return render
 
 
 @pytest.fixture

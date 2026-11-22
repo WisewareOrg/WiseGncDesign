@@ -10,7 +10,7 @@ import sys
 import pytest
 
 from fsw.codegen.deployment import fprime_configurations
-from ground.dictionary import Dictionary
+from fsw.codegen.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab.power_cycle import _loaded_stamps, built, dictionary_path, power_cycle, source
 

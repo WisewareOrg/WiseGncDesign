@@ -17,13 +17,13 @@ import numpy as np
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import CONTRACT, Contract, configuration_model, tick_period
+from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.roles import taken
 from fsw.python.cdh import commands, inputs, outputs, parameters
 from fsw.python.cdh.ground_link import GroundLink
 from fsw.python.gnc.partition import GncPartition
 from fsw.python.platform.rates import RateGroupDriver, dividers
 from fsw.python.rio import messages
-from ground.dictionary import Dictionary
 
 __all__ = ["FrameRunner"]
 

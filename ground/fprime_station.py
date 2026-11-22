@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from ground.dictionary import Dictionary
+from fsw.codegen.dictionary import Dictionary
 
 __all__ = ["FprimeStation"]
 

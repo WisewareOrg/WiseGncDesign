@@ -15,8 +15,8 @@ from types import ModuleType
 import pytest
 
 from fsw.codegen.deployment import fprime_configurations
+from fsw.codegen.dictionary import Dictionary
 from ground import parameters
-from ground.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
 from lab import built, dictionary_path
 

@@ -13,7 +13,7 @@ import pytest
 from wise_dynamics.basilisk import FswHost
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
-from ground.dictionary import Dictionary
+from fsw.codegen.dictionary import Dictionary
 from ground.procedures import CommandFailed, Ground
 
 NS = 1_000_000_000
