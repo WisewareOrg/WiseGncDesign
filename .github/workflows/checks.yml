@@ -26,7 +26,7 @@ jobs:
         with:
           version: "0.13.9"
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
-      # The lock reads the F´ toolchain versions from the clone, so it comes before any locked sync.
+      # The lock reads the F´ toolchain versions from this clone.
       - run: git clone --quiet --depth 1 --branch "$(just --evaluate fprime_tag)" https://github.com/nasa/fprime fsw/fprime/lib/fprime
       - run: uv sync --locked
       - run: uv run ruff check .
@@ -104,9 +104,8 @@ jobs:
       # Tests on requires-python's floor, not whatever Python the runner image ships.
       - run: echo "UV_PYTHON=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["requires-python"].removeprefix(">="))')" >> "$GITHUB_ENV"
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
-      # The Python path with no F´ build: the F´ clone at the pinned tag, which the lock's F´ toolchain
-      # versions and a Python build's dictionary come from, then the groups and the kernel; the F´
-      # build's tests skip.
+      # The Python path with no F´ build: the F´ clone the lock and a Python build's dictionary come
+      # from, then the groups and the kernel; the F´ build's tests skip.
       - run: git clone --quiet --depth 1 --branch "$(just --evaluate fprime_tag)" https://github.com/nasa/fprime fsw/fprime/lib/fprime
       - run: uv sync --locked --group sim --group notebooks --group fprime
       - run: uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"

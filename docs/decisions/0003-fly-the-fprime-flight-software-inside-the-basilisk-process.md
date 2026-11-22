@@ -110,8 +110,7 @@ returns. Not covered: an assert thrown through F´ into pybind11.
 - F´ and Eigen are pinned by release tag, with no git submodule, and Renovate bumps both tags. The
   F´ toolchain (`cmake`, `ninja`, `fprime-tools`, `fprime-fpp`, `fprime-gds`) has no pin of its own:
   `uv.lock` holds the versions the F´ tag's `requirements.txt` declares, hashed, and a changed tag
-  fails the lock check until the lock is regenerated. The lock therefore needs the F´ clone present,
-  and every job that syncs or checks the lock clones first.
+  fails the lock check until the lock is regenerated. The lock therefore needs the F´ clone present.
 - Each flight's `flight.json` records which FSW flew: `fsw` and `build` tell two builds of one
   commit apart, and the F´ build's `projectVersion` names the commit built from (`-dirty` when
   uncommitted), so a stale extension shows against the run file's `versions_caller_commit`.

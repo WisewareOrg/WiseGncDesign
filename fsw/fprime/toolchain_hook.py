@@ -5,7 +5,7 @@ from pathlib import Path
 from hatchling.metadata.plugin.interface import MetadataHookInterface
 
 TOOLS = ("cmake", "ninja", "fprime-tools", "fprime-fpp", "fprime-gds")
-"""The tools whose version the F´ framework clone fixes; versions are read, never restated."""
+"""The tools whose version the F´ framework clone fixes."""
 
 
 class ToolchainHook(MetadataHookInterface):
