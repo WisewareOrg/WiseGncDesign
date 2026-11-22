@@ -1,8 +1,5 @@
-# The WiseFsw deployment of each configuration the F´ build builds, into a build subdirectory of its
-# own that also compiles its GNC sub-topology and builds the configuration's extension,
-# `_wise_fsw_<configuration>`; nothing rendered is in source. `python -m fsw.codegen.deployment`
-# picks the configurations, renders each deployment topology with its role wiring, and prints each
-# one's name and GNC sub-topology; the C++ templates and CMakeLists.txt.in are rendered here.
+# Builds each configuration's WiseFsw deployment and `_wise_fsw_<configuration>` extension in a
+# subdirectory of its own; `python -m fsw.codegen.deployment` picks and renders them.
 register_fprime_module(
   fsw_fprime_deployment_instances
   AUTOCODER_INPUTS

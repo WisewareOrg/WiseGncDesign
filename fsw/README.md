@@ -220,81 +220,31 @@ dictionary F´ generates for it alongside, `lab.dictionary_path(configuration)`;
 `period_s` is the configuration's `tickPeriod`, the Python build's, so the two builds fly at one
 rate.
 
-The adapter's `boot` power-cycles the deployment, as a vehicle is power-cycled between flights:
-`lab.power_cycle.power_cycle(configuration)`, the one entry point to the extensions, loads a fresh
-copy of the configuration's, and the copy's `boot` sets its topology up and leaves every component
-idle. Booting, F´'s stock PrmDb loads the case's `.dat`, which `ground.parameters.dat` makes beside
-the record with F´'s own `fprime-prm-write` conversion, in-process, when the adapter is
-constructed. PrmDb's sandbox is that directory, never the root, and a parameter the load leaves
-invalid fails the boot, named by its ID. A copy boots once, and an F´ assert raises `RuntimeError`
-in Python with F´'s own text. `FswHost` keeps whatever `boot` or `tick` raises, and checks the
-vehicle's readers; the adapter refuses a tick that is not a whole microsecond, which F´'s clock
-cannot hold.
+The adapter is lab equipment, as a hardware-in-the-loop rig is, and each piece's docstring says how
+it works:
 
-The dead reckoner's GNC sub-topology, `fsw/fpp/gnc/ImuDeadReckoning.fpp`, holds nav, the F´ rate
-group that runs it, the rate-group driver, and its rate as the FPP constant `navDivider`; `phase`
-blocks on the driver and the rate group pass the constant to their `configure()`. Each GNC
-sub-topology exposes the port `tickIn`, and a port per role it takes: `<role>In` for a sensor,
-`<role>Out` for an actuator.
-Each configuration's deployment, `WiseFsw.<Cfg>Fsw`, is rendered at configure time by
-`python -m fsw.codegen.deployment` from `fsw/fprime/deployment/Fsw.fpp.in`, its role wiring
-generated, and the other templates in `fsw/fprime/deployment/` by CMake, into the build directory,
-where it compiles its GNC sub-topology with it; the shared instances are in
-`fsw/fprime/deployment/instances.fpp`. The F´ build builds the configurations
-`fsw.codegen.deployment.fprime_configurations` selects, those whose every member's component has an
-F´ component: its `.fpp` sits beside a `CMakeLists.txt`, as in every directory under `algorithms/`
-the F´ build takes, and in `fsw/mock/actuator/`, the test mock flown by `MockActuation`. F´ finds
-which algorithms a configuration links from its FPP. Each `_wise_fsw_<configuration>.step(t_ns,
-bus)` sets SimTime to the simulation's time, runs the queued commands, pushes each `(port, bytes)`
-of `bus` out on LabBusDriver's serial port `busOut[port]`, then SimTime ticks the rate-group driver
-once, so nav runs on every `navDivider`-th step, and returns each `(port, bytes)` the step's GNC
-sent LabBusDriver's serial port `busIn[port]`. LabBusDriver is the RIO bus driver the lab uses: the
-typed port each `busOut` connects to deserializes the bytes as F´ serializes the bus struct, and
-bytes it does not consume exactly trip F´'s assert; each `busIn` holds the bytes of the bus struct
-its typed port sends until the step drains them. The template's role wiring is generated from the
-roles the sub-topology exposes: the k-th sensor role's `labBusDriver.busOut[k] -> cdh.<role>In` and
-`cdh.<role>Out` to the sub-topology's `<role>In`, and the k-th actuator role's sub-topology
-`<role>Out` to `cdh.<role>In` and `cdh.<role>Out -> labBusDriver.busIn[k]`, where `cdh` is the
-generated `Cdh.BusConverter`; an added sensor or actuator is FPP declarations alone. Each tick, the
-adapter pushes each sensor role's message, as `lab.bus_emulator` writes it, on the port
-`fsw.codegen.deployment.bus_port(configuration, "<role>In")` reads back from the rendered
-deployment; a tick missing one names it. It returns, for each actuator role's bytes the step
-returned, the Basilisk message `lab.bus_emulator.deserialize` reads them back as.
+- `lab.power_cycle` loads a fresh copy of the configuration's extension for each case, which the
+  adapter's `boot` boots on the case's `.dat`, made by `ground.parameters.dat` when the adapter is
+  constructed.
+- `lab.bus_emulator` writes a sensor's Basilisk message as the bytes F´ serializes its bus struct
+  to, and reads an actuator's bytes back, from `fsw/fpp/interfaces/Bus.fpp`.
+- `LabBusDriver`, in `fsw/fprime/rio/`, takes those bytes into the deployment and out of it.
+- `Cdh.BusConverter`, which `fsw.codegen.bus_converter` generates, converts each bus struct to its
+  GNC struct and back, by the field rule the Python build's converter follows.
+- `fsw.codegen.deployment.render` renders each configuration's deployment, `WiseFsw.<Cfg>Fsw`, from
+  `fsw/fprime/deployment/Fsw.fpp.in` at configure time, and `fpp_files` lists its FPP files for
+  `fpp_model.read`. Each GNC sub-topology exposes the port `tickIn` and a port per role it takes,
+  `<role>In` for a sensor and `<role>Out` for an actuator, so an added sensor or actuator is FPP
+  declarations alone; the shared instances are in `fsw/fprime/deployment/instances.fpp`.
+- `ground.fprime_station.FprimeStation` is the F´ build's radio edge on the adapter, which takes
+  its `period_s` from it.
 
 The rate group's health telemetry is recorded with every other channel; the deployment links F´'s
 stub `Os::RawTime`, so its cycle times read 0. Each case flies a fresh copy of the deployment, so
 every case reproduces its rate-group datasets from the seed, as it does nav's.
 
-`fsw.codegen.deployment.fpp_files(configuration, directory, *, contract=CONTRACT)` renders a
-configuration's topology and lists its deployment's FPP files, every algorithm's among them, for
-`fpp_model.read`. The reasoning is on
-[issue 57 GNC sub-topology](https://github.com/WisewareOrg/WiseGncDesign/issues/57) and in
-[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
-and [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md).
-
-The F´ build's CDH component, `Cdh.BusConverter`, is generated from its declaration in
-`fsw/fpp/interfaces/Cdh.fpp` by `fsw.codegen.bus_converter` while `just fsw` builds, into the build
-directory: for each role `fsw.codegen.roles` reads, an inline conversion `convert_<role>` that
-builds the struct its `<role>Out` sends from the one its `<role>In` takes, by the field rule the
-Python build's converter follows, `fsw.codegen.fields`: a sensor's GNC struct from its bus struct,
-an actuator's bus struct from its GNC struct. A handler sends the result on `<role>Out`. Each
-deployment instances it as `cdh`, between LabBusDriver and the GNC. The generator emits two test
-pins into each extension: `bus_<Struct>(<member>=...)` returns F´'s serialization of a bus struct
-built from its members' values, and `cdh_<role>(bus_bytes)` for a sensor, `cdh_<role>(icd_bytes)`
-for an actuator, returns F´'s serialization of the struct the conversion makes from the one F´
-deserializes from the bytes. `lab.bus_emulator.serialize(message)` writes a Basilisk message as
-the bytes F´ serializes its bus struct to, and `lab.bus_emulator.deserialize(bus, data)` reads an
-actuator's bytes back into its Basilisk message, both built from `fsw/fpp/interfaces/Bus.fpp` at
-import; each is held to `bus_<Struct>`'s bytes. A bus or GNC field must be an array of one of
-`fsw.codegen.fields.STRUCT_CODES`' primitives; the generator and the emulator refuse anything else,
-naming it. The reasoning is in
+The reasoning is in
+[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
+[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md),
 [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
 and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
-
-The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
-thread: `uplink(packet, context)` queues an F´ command packet, the next `step` runs it, and
-`responses()` returns each response under its context. `telemetry()` drains every telemetry write
-since the last call, each with its F´ time tag. The adapter carries these pins in bytes: `uplink`,
-`responses` and `telemetry` reach the loaded copy. The F´ build's radio edge is an `FprimeStation` on the adapter, which takes its
-`period_s` from it. The reasoning is in
-[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).

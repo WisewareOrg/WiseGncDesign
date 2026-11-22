@@ -1,8 +1,5 @@
-# Rendered by fsw.codegen.deployment for each configuration the F´ build builds, whose GNC
-# sub-topology exposes the port tickIn. The Simulation group is the role wiring, generated from the
-# roles the sub-topology exposes: the k-th sensor role's LabBusDriver.busOut[k] -> cdh.<role>In and
-# cdh.<role>Out -> Gnc.<role>In, the k-th actuator role's Gnc.<role>Out -> cdh.<role>In and
-# cdh.<role>Out -> LabBusDriver.busIn[k], in Cdh.BusConverter's order.
+# Rendered by fsw.codegen.deployment.render for each configuration the F´ build builds; its
+# docstring states the role wiring the Simulation group holds.
 module WiseFsw {
 
   @ The flight software run inside the simulation: the @CONFIGURATION@ configuration's GNC, fed and
