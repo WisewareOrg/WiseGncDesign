@@ -16,5 +16,15 @@
       "depNameTemplate": "libeigen/eigen",
       "datasourceTemplate": "gitlab-tags"
     }
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": ["nasa/fprime"],
+      "postUpgradeTasks": {
+        "commands": ["uv lock"],
+        "fileFilters": ["uv.lock"],
+        "executionMode": "branch"
+      }
+    }
   ]
 }
