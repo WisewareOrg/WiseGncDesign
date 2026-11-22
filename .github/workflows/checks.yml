@@ -59,10 +59,22 @@ jobs:
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
       # Syncs every group, registers the kernel and builds the F´ deployment the tests fly.
       - run: just _sync
-      # The F´ tests skip when an extension is absent, so a build that lands any configuration's
-      # short fails here: every configuration the F´ build builds, of the repository's contract and
-      # the test mocks'.
-      - run: uv run --no-sync python -c "import importlib; from fsw.codegen.deployment import CONTRACT, fprime_configurations; from fsw.mock import MOCK; [importlib.import_module(f'lab._wise_fsw_{c}') for k in (CONTRACT, MOCK) for c in fprime_configurations(contract=k)]"
+      # The F´ tests skip when an extension or its dictionary is absent, so this step imports every
+      # configuration's extension the F´ build builds, of the repository's contract and the test
+      # mocks', and checks its dictionary exists; a build that leaves either out fails here.
+      - run: |
+          uv run --no-sync python - <<'PY'
+          import importlib
+
+          import lab
+          from fsw.codegen.deployment import CONTRACT, fprime_configurations
+          from fsw.mock import MOCK
+
+          for contract in (CONTRACT, MOCK):
+              for c in fprime_configurations(contract=contract):
+                  importlib.import_module(f"lab._wise_fsw_{c}")
+                  assert lab.dictionary_path(c).exists(), c
+          PY
       - run: uv run --no-sync pytest
       # Everything the build and the suite write must be ignored; the log names what is not.
       - run: |

@@ -75,7 +75,7 @@ module Mock {
     telemetry mode: Mode
 
     param gain: F64 default 2.0
-    param mounting: Vector3
+    param mounting: Rows
     param startMode: Mode default Mode.running
     param count: U32
   }
@@ -201,11 +201,11 @@ def test_a_parameter_has_a_default_only_when_fpp_gives_one(mock: SimpleNamespace
     parameters = mock.SpinnerParameters
 
     assert parameters._fields == ("mounting", "count", "gain", "startMode")
-    built = parameters(mounting=np.zeros(3), count=4)
+    built = parameters(mounting=np.zeros((2, 3)), count=4)
     assert built.gain == 2.0
     assert built.startMode == "running"
     with pytest.raises(TypeError, match="count"):
-        parameters(mounting=np.zeros(3))
+        parameters(mounting=np.zeros((2, 3)))
 
 
 def test_parameters_from_plain_values_makes_each_array_of_its_fpp_shape_and_type(
@@ -216,16 +216,16 @@ def test_parameters_from_plain_values_makes_each_array_of_its_fpp_shape_and_type
     Args:
         mock: the mock's namespace.
     """
-    built = parameters_from(mock.SpinnerParameters, {"mounting": [1, 2, 3], "count": 4})
+    built = parameters_from(
+        mock.SpinnerParameters, {"mounting": [[1, 2, 3], [4, 5, 6]], "count": 4}
+    )
 
     assert type(built) is mock.SpinnerParameters
+    assert built.mounting.shape == (2, 3)
     assert built.mounting.dtype == np.float64
-    np.testing.assert_array_equal(built.mounting, [1.0, 2.0, 3.0])
+    np.testing.assert_array_equal(built.mounting, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
     assert built.count == 4
     assert built.gain == 2.0
-    nav = parameters_from(Gnc.ImuDeadReckonerParameters, {"mu": 1.0, "dcm_PB": np.eye(3).tolist()})
-    assert nav.dcm_PB.shape == (3, 3)
-    assert nav.dcm_PB.dtype == np.float64
 
 
 def test_parameters_from_refuses_an_array_of_another_shape_naming_it(mock: SimpleNamespace):
@@ -235,7 +235,7 @@ def test_parameters_from_refuses_an_array_of_another_shape_naming_it(mock: Simpl
         mock: the mock's namespace.
     """
     with pytest.raises(
-        ValueError, match=r"Mock\.Spinner\.mounting is \(3,\), but its value is \(2,\)"
+        ValueError, match=r"Mock\.Spinner\.mounting is \(2, 3\), but its value is \(2,\)"
     ):
         parameters_from(mock.SpinnerParameters, {"mounting": [1.0, 2.0], "count": 4})
 

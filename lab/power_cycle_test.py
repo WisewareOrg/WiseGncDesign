@@ -5,14 +5,16 @@ That a whole flight carries nothing to the next case is a mission's, so it is te
 Skipped without the deployment `just fsw` builds.
 """
 
+import os
 import sys
+from pathlib import Path
 
 import pytest
 
 from fsw.codegen.deployment import fprime_configurations
 from fsw.codegen.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab.power_cycle import _loaded_stamps, built, power_cycle, source
+from lab.power_cycle import built, power_cycle, source
 
 if not all(built(c) for c in fprime_configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
@@ -133,17 +135,27 @@ def test_a_configuration_not_built_is_refused_naming_it():
 
 
 def test_a_rebuilt_extension_is_refused_by_its_own_configuration_alone(
-    fprime_configuration: str, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """Each configuration's extension is stamped apart: another's rebuild leaves it flying.
 
-    Args:
-        fprime_configuration: the configuration checked.
-        monkeypatch: records a different file as the one this process loaded.
-    """
-    monkeypatch.setitem(_loaded_stamps, f"Other{fprime_configuration}", (-1, -1))
-    assert power_cycle(fprime_configuration)
+    The extensions are two stand-in modules in the test's directory, so no F´ build is touched.
 
-    monkeypatch.setitem(_loaded_stamps, fprime_configuration, (-1, -1))
+    Args:
+        tmp_path: where the stand-in extensions are written.
+        monkeypatch: names the stand-ins as the extensions and empties the process's stamps.
+    """
+    for name in ("a", "b"):
+        (tmp_path / f"fake_{name}.py").write_text("")
+    monkeypatch.syspath_prepend(tmp_path)
+    monkeypatch.setattr("lab.power_cycle._extension", lambda c: f"fake_{c}")
+    monkeypatch.setattr("lab.power_cycle._loaded_stamps", {})
+    source("a")
+    source("b")
+
+    status = (tmp_path / "fake_a.py").stat()
+    os.utime(tmp_path / "fake_a.py", ns=(status.st_atime_ns, status.st_mtime_ns + NS))
+
     with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
-        power_cycle(fprime_configuration)
+        source("a")
+    assert source("b") == tmp_path / "fake_b.py"

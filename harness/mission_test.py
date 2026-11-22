@@ -663,14 +663,39 @@ def test_a_component_claims_one_id_per_provides_line(
         assert _claims(model, component) == claimed
 
 
-def test_two_missions_flying_the_same_flight_are_refused(tree: Path) -> None:
-    """A vehicle, configuration, build and scenario cannot be flown twice, whatever each judges.
+@pytest.mark.parametrize(
+    ("missions", "match"),
+    [
+        ([{"rungs": ("SRS901",)}, {"rungs": ("SRS902",)}], "TST901"),
+        ([{"scenarios": ("TST901", "TST903")}], "the test name"),
+    ],
+    ids=["same-flight-twice", "same-definition-twice"],
+)
+def test_two_flights_that_would_share_a_test_are_refused(
+    tree: Path, missions: list[dict], match: str
+) -> None:
+    """A flight cannot be flown twice, whatever each mission judges, nor give two scenarios a name.
+
+    A vehicle, configuration, build and scenario cannot be flown twice. Two TST items that
+    reference one scenario definition give one flight's test the same name, which is refused.
 
     Args:
         tree: the tree.
+        missions: the fields of each mission given to `mission_tests`.
+        match: what the refusal names.
     """
-    with pytest.raises(ValueError, match="TST901"):
-        mission_tests(mission(rungs=("SRS901",)), mission(rungs=("SRS902",)))
+    (tree / "scenarios").mkdir(exist_ok=True)
+    (tree / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=1.0, body="pass"))
+    write_item(
+        tree,
+        "tst",
+        "TST903",
+        links=[{"SRS901": "stamp"}],
+        references=[{"path": "scenarios/alpha.py", "keyword": "def alpha(", "type": "file"}],
+    )
+
+    with pytest.raises(ValueError, match=match):
+        mission_tests(*(mission(**fields) for fields in missions))
 
 
 @pytest.fixture

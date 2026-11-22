@@ -14,6 +14,7 @@ import pytest
 
 from fsw.codegen.deployment import (
     REPOSITORY,
+    bus_port,
     configuration_model,
     fprime_configurations,
     tick_period,
@@ -23,6 +24,7 @@ from fsw.mock import MOCK
 from fsw.payloads import payload_type
 from ground.fprime_station import FprimeStation
 from lab import Adapter, built
+from lab.bus_emulator import serialize
 
 if not all(built(c) for c in fprime_configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
@@ -270,3 +272,31 @@ def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(
         assert list(tick) == [role.role]
         assert type(tick[role.role]) is type(python)
         holds(tick[role.role], {f: getattr(python, f) for f in type(python).__dtype__.names})
+
+
+def test_a_tick_returns_the_last_command_its_gnc_sent_an_actuator_port(
+    mock_actuation: tuple[str, Role, Any, Path],
+    holds: Callable[[Any, Mapping[str, Any]], None],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Two commands on one port in a step give the second, as the message the port carries.
+
+    Args:
+        mock_actuation: the configuration, its role, the Python build's command and the record.
+        holds: asserts a payload holds values.
+        monkeypatch: makes the copy's step send two commands on the port.
+    """
+    configuration, role, python, record = mock_actuation
+    adapter = Adapter(configuration, record, contract=MOCK)
+    adapter.boot()
+    fields = type(python).__dtype__.names
+    later = type(python)()
+    for field in fields:
+        setattr(later, field, [value + 1.0 for value in getattr(python, field)])
+    port = bus_port(configuration, role.output, contract=MOCK)
+    sent = [(port, serialize(python)), (port, serialize(later))]
+    monkeypatch.setattr(adapter._fsw, "step", lambda t_ns, bus: sent)
+
+    tick = adapter.tick(NS, {})
+
+    holds(tick[role.role], {field: getattr(later, field) for field in fields})

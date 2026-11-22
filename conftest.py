@@ -10,7 +10,7 @@ read, and the F´ build is loaded, only by the fixtures that need them.
 from __future__ import annotations
 
 import itertools
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -320,6 +320,54 @@ class BusMessage(NamedTuple):
     values: dict[str, list[Any]]
 
 
+def _bus_message(name: str, struct: Any, counter: Iterator[int]) -> BusMessage:
+    """A message of a bus struct, each element of each member the next of 0.5, 1.5, 2.5, ...
+
+    Args:
+        name: the struct's qualified name.
+        struct: the struct, as `fsw.codegen.fpp_model` reads it.
+        counter: the counts, each used once.
+
+    Returns:
+        The message, its payload the `messaging.<Name>Payload` the struct mirrors.
+    """
+    from fsw.codegen.fields import DTYPES
+    from fsw.payloads import payload_type
+
+    payload = payload_type(name)()
+    fields = {field.lower(): field for field in type(payload).__dtype__.names}
+    values = {}
+    for member in struct.members:
+        elements = [next(counter) + 0.5 for _ in range(member.size)]
+        values[member.name] = np.array(elements, DTYPES[member.type]).tolist()
+        setattr(payload, fields[member.name.lower()], values[member.name])
+    return BusMessage(struct, payload, values)
+
+
+def _role_messages(configuration: str) -> dict[str, BusMessage]:
+    """A message for each sensor role a configuration takes, every value distinct across roles.
+
+    Two roles of one bus struct get messages of their own, so a message delivered to the wrong
+    role changes the result.
+
+    Args:
+        configuration: the configuration.
+
+    Returns:
+        Each role's message, by the role's name.
+    """
+    from fsw.codegen.deployment import configuration_model, contract_model
+    from fsw.codegen.roles import taken
+
+    types = contract_model().types
+    counter = itertools.count()
+    return {
+        role.role: _bus_message(role.bus, types[role.bus], counter)
+        for role in taken(configuration_model(configuration), configuration)
+        if role.sensor
+    }
+
+
 @pytest.fixture
 def bus_messages() -> dict[str, BusMessage]:
     """A message of every bus struct in `lab.bus_emulator.BUS`, every value distinct.
@@ -331,25 +379,15 @@ def bus_messages() -> dict[str, BusMessage]:
     Returns:
         Each struct's message, by its qualified name.
     """
-    from fsw.codegen.fields import DTYPES
     from fsw.codegen.fpp_model import Struct, read
-    from fsw.payloads import payload_type
     from lab.bus_emulator import BUS
 
     counter = itertools.count()
-    messages = {}
-    for name, struct in read([BUS]).types.items():
-        if not (name.startswith("Bus.") and isinstance(struct, Struct)):
-            continue
-        payload = payload_type(name)()
-        fields = {field.lower(): field for field in type(payload).__dtype__.names}
-        values = {}
-        for member in struct.members:
-            elements = [next(counter) + 0.5 for _ in range(member.size)]
-            values[member.name] = np.array(elements, DTYPES[member.type]).tolist()
-            setattr(payload, fields[member.name.lower()], values[member.name])
-        messages[name] = BusMessage(struct, payload, values)
-    return messages
+    return {
+        name: _bus_message(name, struct, counter)
+        for name, struct in read([BUS]).types.items()
+        if name.startswith("Bus.") and isinstance(struct, Struct)
+    }
 
 
 class IcdMessage(NamedTuple):
@@ -395,18 +433,15 @@ def icd_messages() -> dict[str, IcdMessage]:
 
 
 @pytest.fixture
-def bus_by_role(
-    configuration: str, bus_messages: dict[str, BusMessage]
-) -> dict[str, tuple[int, bytes]]:
+def bus_by_role(configuration: str) -> dict[str, tuple[int, bytes]]:
     """Each sensor role's LabBusDriver port and its message's bytes, as the emulator writes them.
 
     The roles are the sensor roles the configuration takes, those its GNC sub-topology exposes
     (`fsw.codegen.roles.taken`), and each port is the one its deployment wires to the role's CDH
-    input, read from its FPP.
+    input, read from its FPP. Each role's message is its own, as `messages_by_role` gives it.
 
     Args:
         configuration: the configuration.
-        bus_messages: a message of each bus struct.
 
     Returns:
         Each role's `(port, bytes)`, by the role's name.
@@ -415,38 +450,28 @@ def bus_by_role(
     from fsw.codegen.roles import taken
     from lab.bus_emulator import serialize
 
+    messages = _role_messages(configuration)
     return {
-        role.role: (
-            bus_port(configuration, role.input),
-            serialize(bus_messages[role.bus].payload),
-        )
+        role.role: (bus_port(configuration, role.input), serialize(messages[role.role].payload))
         for role in taken(configuration_model(configuration), configuration)
         if role.sensor
     }
 
 
 @pytest.fixture
-def messages_by_role(configuration: str, bus_messages: dict[str, BusMessage]) -> dict[str, Any]:
+def messages_by_role(configuration: str) -> dict[str, Any]:
     """Each sensor role's bus message as a Basilisk payload, as WiseDynamics' host gives a build.
 
     The roles are the sensor roles the configuration takes (`fsw.codegen.roles.taken`), each with
-    its bus struct's message.
+    a message of its own, its values distinct from every other role's.
 
     Args:
         configuration: the configuration.
-        bus_messages: a message of each bus struct.
 
     Returns:
         Each role's payload, by the role's name.
     """
-    from fsw.codegen.deployment import configuration_model
-    from fsw.codegen.roles import taken
-
-    return {
-        role.role: bus_messages[role.bus].payload
-        for role in taken(configuration_model(configuration), configuration)
-        if role.sensor
-    }
+    return {role: message.payload for role, message in _role_messages(configuration).items()}
 
 
 @pytest.fixture

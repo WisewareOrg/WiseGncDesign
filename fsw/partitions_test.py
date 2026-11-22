@@ -77,12 +77,12 @@ def _scanned(*directories: str) -> list[Path]:
     return files
 
 
-def _algorithm_names() -> re.Pattern[str]:
-    """Every name of an algorithm, as one case-insensitive pattern.
+def _names() -> tuple[set[str], set[str]]:
+    """Every name of an algorithm, read from the tree and its FPP model.
 
     Returns:
-        The pattern: each algorithm directory, configuration, component and role's struct as
-        a substring, and each instance name as a whole word.
+        The names that match as substrings: each algorithm directory, configuration, component
+        and role's struct; and the instance names, which match as whole words.
     """
     model = contract_model()
     directories = {path.parts[1] for path in _tracked("algorithms") if len(path.parts) > 2}
@@ -95,6 +95,16 @@ def _algorithm_names() -> re.Pattern[str]:
             words.add(name)
     for role in roles(model):
         substrings |= {role.bus.split(".")[-1], role.icd.split(".")[-1]}
+    return substrings, words
+
+
+def _algorithm_names() -> re.Pattern[str]:
+    """Every name of an algorithm, as one case-insensitive pattern.
+
+    Returns:
+        The pattern: each name `_names` gives as a substring, and each as a whole word.
+    """
+    substrings, words = _names()
     alternatives = [re.escape(name) for name in sorted(substrings)]
     alternatives += [rf"\b{re.escape(name)}\b" for name in sorted(words)]
     return re.compile("|".join(alternatives), re.IGNORECASE)
@@ -133,3 +143,23 @@ def test_the_deployment_reaches_no_algorithm_by_its_path():
     found = _hits((DEPLOYMENT,), lambda line: "algorithms/" in line)
 
     assert not found, "a deployment template names an algorithm's path:\n" + "\n".join(found)
+
+
+def test_the_detector_finds_each_name_in_any_case_and_an_instance_name_only_as_a_word():
+    """A name is found upper-cased and inside other text; an instance name is not found in a word.
+
+    The names are the ones the generic partitions are held to, so no algorithm is named here.
+    """
+    if not CLONE.is_dir():
+        pytest.skip("the F´ framework clone is absent; run `just pinned`")
+    substrings, words = _names()
+    pattern = _algorithm_names()
+
+    assert substrings
+    assert words
+    for name in substrings:
+        assert pattern.search(name.upper()), name
+        assert pattern.search(f"x{name}x"), name
+    for name in words:
+        assert pattern.search(f"({name})"), name
+        assert not pattern.search(f"{name}igate"), name

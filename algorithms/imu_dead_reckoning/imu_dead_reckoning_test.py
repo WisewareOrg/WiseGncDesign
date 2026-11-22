@@ -195,6 +195,29 @@ def test_the_kinematics_match_the_dcm_derivative_for_a_nonaligned_rate():
     )
 
 
+def test_a_platform_rate_turns_the_body_by_the_mounting_s_transpose():
+    """With the IMU mounted 90 degrees about z, a platform rate about x turns the body about -y.
+
+    One 1e-3 s step at 0.3 rad/s matches scipy's rotation by the body rate `dcm_PB.T @ omega_P`,
+    which a mounting applied the other way, or not at all, does not.
+    """
+    mounting = Rotation.from_euler("z", 90.0, degrees=True).as_matrix()
+    omega_p = np.array([0.3, 0.0, 0.0])
+    q0 = Rotation.from_rotvec([0.4, 0.0, 0.0]).as_quat(scalar_first=True)
+    reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=0.0, dcm_PB=mounting))
+    reckoner.initNavState(epoch=0.0, attitude=q0, position=_AWAY_FROM_ORIGIN, velocity=_ZERO3)
+    dt = 1e-3
+
+    _, state = reckoner.step(t=dt, imu=Gnc.ImuReading(omega_p, _ZERO3))
+
+    expected = Rotation.from_quat(q0, scalar_first=True) * Rotation.from_rotvec(
+        mounting.T @ omega_p * dt
+    )
+    np.testing.assert_allclose(
+        state.bodyEciAttitude, expected.as_quat(scalar_first=True), rtol=0, atol=1e-12
+    )
+
+
 @pytest.mark.parametrize("dt", [1e-3, 1e-4])
 def test_q_dot_steps_the_attitude_as_scipy_rotates_it(dt: float):
     """A step q + dq/dt dt agrees with q rotated by omega dt in B, to first order in dt.
