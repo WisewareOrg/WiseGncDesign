@@ -88,6 +88,8 @@ returns. Not covered: an assert thrown through F´ into pybind11.
   either restates the versions. Rejected.
 - **Locking the whole `requirements.txt`.** It pins the test runner below this repository's minimum.
   Rejected, in favour of a local package that declares the five tools at the file's versions.
+- **Reading `requirements.txt` from the F´ clone, in place of fetching it by tag.** Built and
+  abandoned: Renovate's checkout has no clone, so every lock update it made failed. Rejected.
 - **One process per case.** Pays process start-up and import on every case. Rejected.
 - **`FW_ASSERTIONS_ALWAYS_ABORT`, in place of an assert that raises in Python.** It kills the worker
   and loses the case's failure, where a fault in an in-process F´ must fail the case. Rejected.
