@@ -1,38 +1,18 @@
 """The Python build's CDH dispatches each command by name to its instance's method of that name."""
 
-from typing import Any
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from fsw.codegen import fpp_types
 from fsw.codegen.dictionary import Dictionary
-from fsw.codegen.fpp_types import named
 from fsw.mock import MOCK
+from fsw.mock.mock_gnc import Source
 from fsw.python.cdh import commands
 
-
-class Source:
-    """`fsw.mock`'s `MockGnc.Source`: `setLevel` refuses a negative level; `reset` writes none."""
-
-    def setLevel(self, level: float) -> Any:
-        """Takes the level, refusing a negative one.
-
-        Args:
-            level: the level.
-
-        Returns:
-            `level`, written.
-
-        Raises:
-            commands.Refused: the level is negative.
-        """
-        if level < 0.0:
-            raise commands.Refused(f"level {level} is negative")
-        return named("MockGnc.SourceTelemetry")(level=level)
-
-    def reset(self) -> None:
-        """Writes nothing."""
+PARAMETERS = SimpleNamespace(gain=1.0)
+"""The mock's parameters, which no command reads."""
 
 
 @pytest.fixture(scope="module")
@@ -58,7 +38,7 @@ def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
     Args:
         dictionary: the mock's dictionary.
     """
-    handlers = commands.handlers(dictionary, {"source": Source()})
+    handlers = commands.handlers(dictionary, {"source": Source(PARAMETERS)})
 
     assert commands.dispatch(handlers, "source.setLevel", {"level": 2.0}) == (
         "OK",
@@ -94,7 +74,7 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
             """
             raise ZeroDivisionError("broken")
 
-    handlers = commands.handlers(dictionary, {"source": Broken()})
+    handlers = commands.handlers(dictionary, {"source": Broken(PARAMETERS)})
 
     with pytest.raises(ZeroDivisionError, match="broken"):
         commands.dispatch(handlers, "source.reset", {})
@@ -114,7 +94,7 @@ def test_a_handler_s_value_error_is_a_bug_and_propagates_not_a_refusal(dictionar
             """Fails as numpy does, with a `ValueError`."""
             np.zeros(3) + np.zeros(2)
 
-    handlers = commands.handlers(dictionary, {"source": Mismatched()})
+    handlers = commands.handlers(dictionary, {"source": Mismatched(PARAMETERS)})
 
     with pytest.raises(ValueError, match="broadcast"):
         commands.dispatch(handlers, "source.reset", {})
@@ -124,8 +104,8 @@ def test_a_handler_s_value_error_is_a_bug_and_propagates_not_a_refusal(dictionar
     "algorithm",
     [
         object(),
-        type("Renamed", (Source,), {"setLevel": lambda self, value: None})(),
-        type("Extra", (Source,), {"setLevel": lambda self, level, scale: None})(),
+        type("Renamed", (Source,), {"setLevel": lambda self, value: None})(PARAMETERS),
+        type("Extra", (Source,), {"setLevel": lambda self, level, scale: None})(PARAMETERS),
     ],
     ids=["no method", "other parameter", "extra parameter"],
 )
@@ -163,7 +143,9 @@ def test_arguments_reach_the_handler_as_given(dictionary: Dictionary):
 
     level = np.float64(0.5)
     commands.dispatch(
-        commands.handlers(dictionary, {"source": Recording()}), "source.setLevel", {"level": level}
+        commands.handlers(dictionary, {"source": Recording(PARAMETERS)}),
+        "source.setLevel",
+        {"level": level},
     )
 
     assert received == [level]
