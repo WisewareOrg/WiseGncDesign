@@ -21,7 +21,8 @@ class ToolchainHook(MetadataHookInterface):
 
         Raises:
             ValueError: The clone's `requirements.txt` is absent, a tool in `TOOLS` has no line in
-                it, or a tool's line is not a single `==` pin.
+                it, or a tool's line is not a single `==` pin. Any other line of the file that is
+                not a PEP 508 requirement raises `packaging`'s `InvalidRequirement`, a `ValueError`.
         """
         path = Path(self.root) / "lib/fprime/requirements.txt"
         if not path.is_file():

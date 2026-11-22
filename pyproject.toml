@@ -24,6 +24,7 @@ dev = [
     "ruff>=0.17.0",
     "pydoclint>=0.12.0",
     "hatchling",
+    "packaging",
 ]
 sim = ["wise-dynamics[notebook]"]
 notebooks = ["ipykernel>=6.29", "ipython>=9.0", "jupyter-client", "jupyterlab>=4.4", "jupytext>=1.17", "nbclient", "notebook", "pip", "traitlets"]

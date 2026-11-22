@@ -3790,6 +3790,7 @@ dependencies = [
 dev = [
     { name = "hatchling" },
     { name = "interrogate" },
+    { name = "packaging" },
     { name = "pydoclint" },
     { name = "pytest-xdist" },
     { name = "ruff" },
@@ -3830,6 +3831,7 @@ requires-dist = [
 dev = [
     { name = "hatchling" },
     { name = "interrogate", specifier = ">=1.7.0" },
+    { name = "packaging" },
     { name = "pydoclint", specifier = ">=0.12.0" },
     { name = "pytest-xdist", specifier = ">=3.6" },
     { name = "ruff", specifier = ">=0.17.0" },

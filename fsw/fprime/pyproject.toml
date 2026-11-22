@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 dynamic = ["dependencies"]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "packaging"]
 build-backend = "hatchling.build"
 
 [tool.hatch.metadata.hooks.custom]
