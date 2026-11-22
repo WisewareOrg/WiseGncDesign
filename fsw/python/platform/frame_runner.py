@@ -75,7 +75,7 @@ class FrameRunner:
         self._prm_path = Path(prm_path)
         self.period_s = tick_period(configuration, contract=contract)
         self.dictionary = Dictionary.from_sub_topology(configuration, contract=contract)
-        self._link = GroundLink(self.dictionary, {})
+        self._link = GroundLink({})
 
     def boot(self) -> None:
         """Builds every algorithm afresh on the case's parameters, with the tick count at 0.
@@ -86,15 +86,13 @@ class FrameRunner:
             {
                 name: parameters.read(
                     self._prm_path,
-                    parameters.tuple_of(component),
+                    fpp_types.named(f"{component}Parameters"),
                     f"{self._configuration}.{name}",
                 )
                 for name, component in self._gnc.components.items()
             }
         )
-        self._link = GroundLink(
-            self.dictionary, commands.handlers(self.dictionary, self._gnc.algorithms)
-        )
+        self._link = GroundLink(commands.handlers(self.dictionary, self._gnc.algorithms))
         self._driver = RateGroupDriver(self._dividers)
 
     def tick(self, t_ns: int, messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
@@ -152,6 +150,6 @@ class FrameRunner:
             raws: its writes' values, as `telemetry` gave them.
 
         Returns:
-            As `GroundLink.values` gives them.
+            As `Channel.pack_many` gives them.
         """
-        return self._link.values(name, raws)
+        return self.dictionary.channel(name).pack_many(raws)

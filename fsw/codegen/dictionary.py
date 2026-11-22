@@ -2,7 +2,8 @@
 
 Entries are named `<instance>.<entry>` with the instance's module dropped, so
 `<configuration>.<instance>.<entry>` is `<instance>.<entry>`. A type's numpy dtype is big-endian,
-as F´ serializes it; the bytes themselves are the F´ ground station's, `ground.fprime_station`.
+as F´ serializes it, so `Type.serialized` gives a value's F´ bytes; `ground.fprime_station` frames
+them into packets.
 """
 
 import functools
@@ -24,10 +25,8 @@ from fsw.codegen.deployment import (
     CONTRACT,
     REPOSITORY,
     Contract,
-    algorithm_components,
     contract_files,
     framework_files,
-    gnc_instances,
 )
 from fsw.codegen.fpp_model import Instance
 
@@ -159,7 +158,8 @@ class Channel:
     Attributes:
         id: the channel's ID.
         name: `<instance>.<channel>`.
-        units: the units in the channel's FPP `format`, `"{} m"` giving `m`, else `""`.
+        units: the units after the value's placeholder in the channel's FPP `format`, `"{.3f} m"`
+            giving `m`, else `""`.
         type: the channel's type.
     """
 
@@ -171,9 +171,8 @@ class Channel:
     def pack_many(self, written: Sequence[Any]) -> np.ndarray:
         """Every write's value in one array, from the values a Python algorithm wrote.
 
-        Each value is packed into the channel's type as F´ would serialize it: a float type
-        truncates, and a value of another kind or shape, an integer outside the type's range, or
-        an enum name that is no constant fails.
+        Each value is packed into the channel's type as F´ would serialize it: a float rounds
+        to the nearest value of its type, XX
 
         Args:
             written: each write's value.
@@ -210,6 +209,20 @@ class Channel:
             return np.array([names[value] for value in raw.tolist()], dtype=str)
         except KeyError as error:
             raise ValueError(f"channel {self.name} has no constant {error}") from error
+
+
+def _unqualified(name: str) -> str:
+    """An entry's name without its instance's module.
+
+    `<module>.<instance>.<entry>` becomes `<instance>.<entry>`.
+
+    Args:
+        name: the entry's qualified name.
+
+    Returns:
+        The name with its first dot-separated part dropped.
+    """
+    return name.split(".", 1)[1]
 
 
 class Dictionary:
@@ -250,7 +263,7 @@ class Dictionary:
         self.responses = self.type("Fw.CmdResponse").constants
         self._commands: dict[str, Command] = {}
         for entry in document["commands"]:
-            name = entry["name"].split(".", 1)[1]
+            name = _unqualified(entry["name"])
             params = tuple(p["name"] for p in entry["formalParams"])
             try:
                 types = tuple(self.type(p["type"]["name"]) for p in entry["formalParams"])
@@ -261,8 +274,8 @@ class Dictionary:
             )
         self._channels: dict[str, Channel] = {}
         for entry in document["telemetryChannels"]:
-            name = entry["name"].split(".", 1)[1]
-            units = re.fullmatch(r"\{\}\s*(.*)", entry.get("format", ""))
+            name = _unqualified(entry["name"])
+            units = re.fullmatch(r"\{[^}]*\}\s*(.*)", entry.get("format", ""))
             try:
                 ftype = self.type(entry["type"]["name"])
             except ValueError as error:
@@ -270,23 +283,9 @@ class Dictionary:
             self._channels[name] = Channel(entry["id"], name, units[1] if units else "", ftype)
         self.channels_by_id = {c.id: c for c in self._channels.values()}
         self.parameters_by_id = {
-            entry["id"]: Parameter(entry["id"], entry["name"].split(".", 1)[1])
+            entry["id"]: Parameter(entry["id"], _unqualified(entry["name"]))
             for entry in document["parameters"]
         }
-
-    def algorithm_instances(self) -> tuple[Instance, ...]:
-        """The GNC instances of an algorithm's component that this dictionary holds.
-
-        An instance is held when a command, channel or parameter of the dictionary is named under
-        its qualified name, as F´ names a deployment's entries.
-
-        Returns:
-            The instances, in `fsw.codegen.deployment.gnc_instances`' order.
-        """
-        kinds = ("commands", "telemetryChannels", "parameters")
-        held = {e["name"].rsplit(".", 1)[0] for kind in kinds for e in self._document[kind]}
-        algorithms = algorithm_components()
-        return tuple(i for i in gnc_instances() if i.name in held and i.component in algorithms)
 
     @classmethod
     def from_component(cls, model: Sequence[Path], instance: Instance) -> "Dictionary":
@@ -422,12 +421,12 @@ class Dictionary:
         prefix = f"{instance}."
         commands, channels = {}, {}
         for entry in self._document["commands"]:
-            name = entry["name"].split(".", 1)[1]
+            name = _unqualified(entry["name"])
             if name.startswith(prefix):
                 params = [[p["name"], self._resolved(p["type"])] for p in entry["formalParams"]]
                 commands[name.removeprefix(prefix)] = params
         for entry in self._document["telemetryChannels"]:
-            name = entry["name"].split(".", 1)[1]
+            name = _unqualified(entry["name"])
             if name.startswith(prefix):
                 channels[name.removeprefix(prefix)] = [
                     self._resolved(entry["type"]),
@@ -466,6 +465,18 @@ class Dictionary:
         if name not in self._commands:
             raise KeyError(f"no command {name!r}; the dictionary has {sorted(self._commands)}")
         return self._commands[name]
+
+    def commands(self, instance: str) -> tuple[Command, ...]:
+        """One instance's commands, in the dictionary's order.
+
+        Args:
+            instance: the instance's unqualified name.
+
+        Returns:
+            The commands named `<instance>.<command>`.
+        """
+        prefix = f"{instance}."
+        return tuple(c for name, c in self._commands.items() if name.startswith(prefix))
 
     def arguments(self, name: str, args: Mapping[str, Any]) -> dict[str, Any]:
         """A command's arguments held to its parameters' types, as F´'s handler gets them.

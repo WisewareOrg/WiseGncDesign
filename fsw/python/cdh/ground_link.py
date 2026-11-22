@@ -3,37 +3,26 @@
 As the F´ build's `Sim.GroundLink` stands in for its comm stack, this holds the queue of commands
 uplinked since the last tick, their responses and every raw telemetry write, each tagged with the
 tick it was written at. CDH runs the queue through `cdh.commands` and logs what each algorithm wrote
-through `cdh.telemetry`; the ground packs the values with the dictionary.
+through `cdh.telemetry`; the frame runner packs the values with the dictionary.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any, NamedTuple
 
-import numpy as np
-
-from fsw.codegen.dictionary import Dictionary
 from fsw.python.cdh import commands, telemetry
 
 __all__ = ["GroundLink"]
 
 
 class GroundLink:
-    """The ground's commands into, and the raw telemetry out of, one boot of the Python build.
+    """The ground's commands into, and the raw telemetry out of, one boot of the Python build."""
 
-    Attributes:
-        dictionary: the dictionary its commands and channels are named in.
-    """
-
-    dictionary: Dictionary
-
-    def __init__(self, dictionary: Dictionary, handlers: commands.Handlers) -> None:
+    def __init__(self, handlers: commands.Handlers) -> None:
         """Starts with nothing uplinked, answered or written.
 
         Args:
-            dictionary: the configuration's dictionary.
             handlers: each command's handler, as `cdh.commands.handlers` gives them.
         """
-        self.dictionary = dictionary
         self._handlers = handlers
         self._uplinked: list[tuple[str, Mapping[str, Any], int]] = []
         self._responses: list[tuple[int, str, str | None]] = []
@@ -91,15 +80,3 @@ class GroundLink:
         """
         drained, self._log = self._log, []
         return drained
-
-    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
-        """The values written to one channel, packed in one batch.
-
-        Args:
-            name: `<instance>.<channel>`.
-            raws: its writes' values, as `telemetry` gave them.
-
-        Returns:
-            As `Channel.pack_many` gives them.
-        """
-        return self.dictionary.channel(name).pack_many(raws)

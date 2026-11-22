@@ -4,6 +4,7 @@ Needs the F´ framework clone `just _sync` fetches, not an F´ build.
 """
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -22,7 +23,7 @@ from fsw.codegen.deployment import (
 )
 from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.fields import DTYPES
-from fsw.codegen.fpp_model import read
+from fsw.codegen.fpp_model import Instance, read
 from fsw.codegen.fpp_types import Gnc, Svc, _build, converter, named, parameters_from
 from fsw.mock import edited
 
@@ -390,7 +391,7 @@ def test_an_output_port_that_is_not_one_value_fails_generation_naming_it(
 
 
 def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_and_ports(
-    configuration: str,
+    configuration: str, algorithm_instances: Callable[[str], tuple[Instance, ...]]
 ):
     """Each algorithm instance's telemetry tuple writes exactly its dictionary's channels.
 
@@ -399,10 +400,11 @@ def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_an
 
     Args:
         configuration: the configuration.
+        algorithm_instances: gives a configuration's algorithm instances.
     """
     dictionary = Dictionary.from_sub_topology(configuration)
     components = configuration_model(configuration).components
-    instances = dictionary.algorithm_instances()
+    instances = algorithm_instances(configuration)
     assert instances
     for instance in instances:
         short = instance.name.rsplit(".", 1)[-1]

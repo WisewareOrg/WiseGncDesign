@@ -22,7 +22,7 @@ from fsw.codegen.deployment import configurations, fprime_configurations
 
 if TYPE_CHECKING:
     from fsw.codegen.dictionary import Dictionary
-    from fsw.codegen.fpp_model import Model
+    from fsw.codegen.fpp_model import Instance, Model
     from ground.fprime_station import FprimeStation
 
 
@@ -379,16 +379,49 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
     return list(bus_by_role.values())
 
 
+@pytest.fixture(scope="session")
+def algorithm_instances() -> Callable[[str], tuple[Instance, ...]]:
+    """Each configuration's GNC instances of an algorithm's component.
+
+    Returns:
+        A function taking a configuration and giving its algorithm instances, in
+        `fsw.codegen.deployment.gnc_instances`' order.
+    """
+    from fsw.codegen.deployment import algorithm_components, gnc_instances
+
+    def of(configuration: str) -> tuple[Instance, ...]:
+        """The algorithm instances of one configuration.
+
+        Args:
+            configuration: the configuration.
+
+        Returns:
+            The instances.
+        """
+        algorithms = algorithm_components()
+        return tuple(
+            i
+            for i in gnc_instances()
+            if i.name.startswith(f"{configuration}.") and i.component in algorithms
+        )
+
+    return of
+
+
 @pytest.fixture(scope="module")
-def case_parameters(dictionary: Dictionary, contract_model: Model) -> dict[str, Any]:
+def case_parameters(
+    fprime_configuration: str,
+    algorithm_instances: Callable[[str], tuple[Instance, ...]],
+    contract_model: Model,
+) -> dict[str, Any]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
 
-    The instances are those the deployment's dictionary holds, so the case skips without it. A
-    test module flying an algorithm's own values overrides this fixture, swapping that algorithm's
-    tuple in.
+    The instances are the configuration's algorithm instances. A test module flying an
+    algorithm's own values overrides this fixture, swapping that algorithm's tuple in.
 
     Args:
-        dictionary: the configuration's dictionary, which names the instances.
+        fprime_configuration: the configuration.
+        algorithm_instances: gives a configuration's algorithm instances.
         contract_model: the contract's model, which shapes the parameters.
 
     Returns:
@@ -396,7 +429,7 @@ def case_parameters(dictionary: Dictionary, contract_model: Model) -> dict[str, 
     """
     return {
         instance.name: _parameters(contract_model, instance.component, lambda count: [0.0] * count)
-        for instance in dictionary.algorithm_instances()
+        for instance in algorithm_instances(fprime_configuration)
     }
 
 

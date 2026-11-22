@@ -1,4 +1,4 @@
-"""The F´ ground station: the radio edge of the F´ build, and the only F´ codec in the repository.
+"""The F´ ground station: the F´ build's radio edge, the only F´ packet codec in the repository.
 
 It does a ground data system's job against the deployment's pins: commands go up as F´'s command
 packets, responses come down as `Fw.CmdResponse` names, and each telemetry write comes down as the

@@ -177,6 +177,37 @@ def test_values_in_the_channel_s_type_come_back_in_one_batch_with_their_units(
     assert mock.channels_by_id[offset.id] is offset
 
 
+def test_a_channel_s_units_follow_its_placeholder_whatever_the_placeholder_holds(
+    tmp_path: Path, render_mock: Callable[..., Dictionary]
+):
+    """A format spec inside the placeholder does not lose the units.
+
+    Args:
+        tmp_path: where the mock's model is written.
+        render_mock: renders the mock.
+    """
+    mock = render_mock(tmp_path, ('format "{} rad"', 'format "{.3f} rad"'))
+
+    assert mock.channel("mock.gain").units == "rad"
+
+
+def test_an_instance_s_commands_are_its_entries_commands_in_the_dictionary_s_order(
+    mock_dictionary: Dictionary,
+):
+    """`commands` names exactly the commands `entries` lists, each the dictionary's `command`.
+
+    Args:
+        mock_dictionary: the mock's dictionary.
+    """
+    mock = mock_dictionary
+
+    commands = mock.commands("mock")
+
+    assert commands
+    assert {c.name for c in commands} == {f"mock.{n}" for n in mock.entries("mock")["commands"]}
+    assert all(mock.command(c.name) is c for c in commands)
+
+
 def test_an_enum_value_that_is_no_constant_fails_naming_the_channel(mock_dictionary: Dictionary):
     """A raw enum value outside the enum's constants raises, naming the channel.
 
@@ -387,32 +418,10 @@ def test_a_parameter_of_a_type_not_coded_does_not_stop_the_dictionary_loading(
     assert {"mock.pair", "mock.label"} <= names
 
 
-def test_the_algorithm_instances_are_the_gnc_instances_of_an_algorithm_it_holds(
-    mock_dictionary: Dictionary, monkeypatch: pytest.MonkeyPatch
-):
-    """A GNC instance is one of the dictionary's when it has entries there and is an algorithm's.
-
-    The mock's dictionary holds `PyMock.mock`; a second instance of its component has no entries in
-    it, and while the mock is no algorithm's component neither instance is.
-
-    Args:
-        mock_dictionary: the mock's dictionary.
-        monkeypatch: gives the GNC sub-topologies the mock's instances, and the algorithms its
-            component.
-    """
-    mock = mock_dictionary
-    held = Instance("PyMock.mock", "Mock.Mock", 0x1000)
-    absent = Instance("PyMock.other", "Mock.Mock", 0x2000)
-    monkeypatch.setattr("fsw.codegen.dictionary.gnc_instances", lambda: (held, absent))
-    monkeypatch.setattr("fsw.codegen.dictionary.algorithm_components", lambda: {"Mock.Mock"})
-
-    assert mock.algorithm_instances() == (held,)
-    monkeypatch.setattr("fsw.codegen.dictionary.algorithm_components", lambda: set())
-    assert mock.algorithm_instances() == ()
-
-
 def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_parameter_ids(
+    fprime_configuration: str,
     dictionary: Dictionary,
+    algorithm_instances: Callable[[str], tuple[Instance, ...]],
 ):
     """Each WiseFsw algorithm instance, in its configuration's generated dictionary, is WiseFsw's.
 
@@ -423,10 +432,12 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
     rebuilt.
 
     Args:
+        fprime_configuration: the configuration.
         dictionary: the dictionary the configuration's F´ build generated.
+        algorithm_instances: gives a configuration's algorithm instances.
     """
     wise_fsw = dictionary
-    instances = wise_fsw.algorithm_instances()
+    instances = algorithm_instances(fprime_configuration)
     assert instances
 
     def ids(dictionary: Dictionary, instance: str) -> dict[str, int]:
@@ -452,15 +463,16 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
 
 
 def test_a_configuration_s_dictionary_is_its_own_deployment_generated_once_per_content(
-    configuration: str,
+    configuration: str, algorithm_instances: Callable[[str], tuple[Instance, ...]]
 ):
     """`from_sub_topology` names its deployment for the configuration and caches it per process.
 
     Args:
         configuration: the configuration.
+        algorithm_instances: gives a configuration's algorithm instances.
     """
     generated = Dictionary.from_sub_topology(configuration)
 
     assert generated.metadata["deploymentName"] == f"Py{configuration}.Py{configuration}"
-    assert generated.algorithm_instances()
+    assert algorithm_instances(configuration)
     assert Dictionary.from_sub_topology(configuration) is generated

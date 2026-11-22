@@ -15,7 +15,7 @@ from typing import Any, NamedTuple
 from fsw.codegen.dictionary import Dictionary
 from fsw.python.cdh import telemetry
 
-__all__ = ["Dispatched", "Handler", "dispatch", "handlers"]
+__all__ = ["Dispatched", "Handler", "Handlers", "dispatch", "handlers"]
 
 
 class Handler(NamedTuple):
@@ -63,12 +63,13 @@ def handlers(dictionary: Dictionary, algorithms: Mapping[str, Any]) -> Handlers:
     """
     resolved: Handlers = {}
     for instance, algorithm in algorithms.items():
-        for name, params in dictionary.entries(instance)["commands"].items():
-            if dictionary.command(f"{instance}.{name}").kind in ("set", "save"):
+        for command in dictionary.commands(instance):
+            if command.kind in ("set", "save"):
                 continue
+            name = command.name.removeprefix(f"{instance}.")
             handler = getattr(algorithm, name, None)
             found = list(inspect.signature(handler).parameters) if callable(handler) else None
-            wanted = [param for param, _ in params]
+            wanted = list(command.params)
             if found != wanted:
                 raise ValueError(
                     f"{instance}.{name} takes {wanted}; the algorithm has "
@@ -78,20 +79,20 @@ def handlers(dictionary: Dictionary, algorithms: Mapping[str, Any]) -> Handlers:
     return resolved
 
 
-def dispatch(handlers: Handlers, name: str, args: Mapping[str, Any]) -> Dispatched:
+def dispatch(table: Handlers, name: str, args: Mapping[str, Any]) -> Dispatched:
     """Runs a command's handler.
 
     Args:
-        handlers: the handlers, as `handlers` gives them.
+        table: the handlers, as `handlers` gives them.
         name: `<instance>.<command>`.
         args: the arguments by parameter name, as `Dictionary.arguments` types them.
 
     Returns:
         Its response, its reason and its writes.
     """
-    if name not in handlers:
+    if name not in table:
         return Dispatched("INVALID_OPCODE", None, [])
-    handler = handlers[name]
+    handler = table[name]
     try:
         written = handler.method(**args)
     except ValueError as error:

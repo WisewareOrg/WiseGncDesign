@@ -8,6 +8,7 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ import numpy as np
 import pytest
 
 from fsw.codegen.dictionary import Dictionary
+from fsw.codegen.fpp_model import Instance
 from ground import parameters
 from lab import dictionary_path
 
@@ -32,18 +34,18 @@ def _entry(tuple_: Any) -> dict[str, Any]:
 
 
 def _configuration_s(
-    algorithm_parameters: dict[str, Any], dictionary: Dictionary
+    algorithm_parameters: dict[str, Any], instances: tuple[Instance, ...]
 ) -> dict[str, Any]:
-    """The tuples of the algorithm instances a configuration's dictionary holds.
+    """The tuples of a configuration's algorithm instances.
 
     Args:
         algorithm_parameters: each algorithm component's tuple.
-        dictionary: the configuration's dictionary.
+        instances: the configuration's algorithm instances.
 
     Returns:
         Each instance's tuple, by its qualified name.
     """
-    return {i.name: algorithm_parameters[i.component] for i in dictionary.algorithm_instances()}
+    return {i.name: algorithm_parameters[i.component] for i in instances}
 
 
 def test_the_record_holds_every_field_under_the_instance_it_is_keyed_by(
@@ -74,6 +76,7 @@ def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(
     capsys: pytest.CaptureFixture[str],
     fprime_configuration: str,
     dictionary: Dictionary,
+    algorithm_instances: Callable[[str], tuple[Instance, ...]],
     algorithm_parameters: dict[str, Any],
 ):
     """The `.dat` decodes, with `-o` so the record is never overwritten, to the record's values.
@@ -84,10 +87,11 @@ def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(
         tmp_path: where the case's files are written.
         capsys: captures what making the `.dat` prints.
         fprime_configuration: the configuration, whose dictionary the `.dat` is made against.
-        dictionary: that dictionary.
+        dictionary: that dictionary, whose absence skips the test.
+        algorithm_instances: gives a configuration's algorithm instances.
         algorithm_parameters: each algorithm component's tuple.
     """
-    tuples = _configuration_s(algorithm_parameters, dictionary)
+    tuples = _configuration_s(algorithm_parameters, algorithm_instances(fprime_configuration))
     record = parameters.write(tuples, tmp_path / "run_0000.prm.json")
     written = record.read_text()
 
@@ -107,6 +111,7 @@ def test_a_record_naming_a_parameter_the_dictionary_lacks_makes_no_dat(
     tmp_path: Path,
     fprime_configuration: str,
     dictionary: Dictionary,
+    algorithm_instances: Callable[[str], tuple[Instance, ...]],
     algorithm_parameters: dict[str, Any],
 ):
     """F´'s tool refuses it with its own error, naming the parameter.
@@ -114,11 +119,13 @@ def test_a_record_naming_a_parameter_the_dictionary_lacks_makes_no_dat(
     Args:
         tmp_path: where the case's files are written.
         fprime_configuration: the configuration, whose dictionary the `.dat` is made against.
-        dictionary: that dictionary.
+        dictionary: that dictionary, whose absence skips the test.
+        algorithm_instances: gives a configuration's algorithm instances.
         algorithm_parameters: each algorithm component's tuple.
     """
     record = parameters.write(
-        _configuration_s(algorithm_parameters, dictionary), tmp_path / "run_0000.prm.json"
+        _configuration_s(algorithm_parameters, algorithm_instances(fprime_configuration)),
+        tmp_path / "run_0000.prm.json",
     )
     entries = json.loads(record.read_text())
     instance = sorted(entries)[0]

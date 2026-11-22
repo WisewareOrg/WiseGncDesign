@@ -8,21 +8,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fsw.codegen.fpp_types import named, parameters_from
+from fsw.codegen.fpp_types import parameters_from
 
-__all__ = ["read", "tuple_of"]
-
-
-def tuple_of(component: str) -> type:
-    """A component's parameters tuple, `<Name>Parameters`.
-
-    Args:
-        component: the component's qualified FPP name, `<module>.<component>`.
-
-    Returns:
-        The tuple.
-    """
-    return named(f"{component}Parameters")
+__all__ = ["read"]
 
 
 def read(path: Path, tuple_type: type, instance: str) -> Any:
