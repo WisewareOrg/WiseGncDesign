@@ -39,7 +39,7 @@ Tests sit beside the code they test. The suite needs the simulator installed, fr
 system C++ compiler and git. The F´ framework and Eigen are fetched by tag into gitignored folders
 under `fsw/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
 GitLab only the first time, or when a tag changes. Each sync rebuilds the F´ build cache from
-scratch, which needs no network. Why by tag is in
+scratch, which needs no network. The build also writes the gitignored type stubs ty reads. Why by tag is in
 [ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 `just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
@@ -122,6 +122,5 @@ at `report/matrix.md`. How a verdict is reached is in
 
 `just --list` shows every recipe with its description. `.github/workflows/checks.yml` is the
 authority on what CI runs: `just reqs`, the suite, wise-ci's `check-python` (ruff, docstring
-coverage and ty, which `just python` runs locally after `just _sync`, since ty reads the stubs the
-F´ build generates) and `check-adrs` over `docs/decisions/`. `process-gates.yml` also runs
+coverage and ty; `just python` runs it locally, building the F´ stubs ty reads first) and `check-adrs` over `docs/decisions/`. `process-gates.yml` also runs
 `check-python-floor` on pull requests.

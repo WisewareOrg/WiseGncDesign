@@ -215,7 +215,8 @@ configuration `fsw.codegen.deployment.fprime_configurations` selects, of the rep
 and the test mocks', into `lab` as the extension `_wise_fsw_<configuration>`, with the JSON
 dictionary F´ generates for it alongside, `lab.dictionary_path(configuration)`; its CMake target
 `_wise_fsw` builds them all, and the extension each C++ utility under `algorithms/utils/` has for
-its tests, beside its source.
+its tests, beside its source. The same build writes the gitignored type stubs `fsw/codegen/fpp_types.pyi`,
+`lab/fsw_extension.pyi` and each utility's `_<name>.pyi`.
 `just pinned` and `just local` run it as part of their sync, and `just test`, `just fly` and
 `just lab` run it first; an adapter built without it says to run `just fsw`. The adapter's
 `period_s` is the configuration's `tickPeriod`, the Python build's, so the two builds fly at one

@@ -19,9 +19,7 @@ A PR whose base is not the default branch needs the Development-field link writt
 WiseKiosk's [`link-pr` skill](https://github.com/WisewareOrg/WiseKiosk/blob/main/.claude/skills/link-pr/SKILL.md)
 for the GraphQL mutation; `Closes #N` in the body only writes that record on a default-base PR.
 
-`checks.yml` runs the requirements and test jobs, wise-ci's `check-python` (the org Python
-standard, one command in CI and locally as `just python`, which needs `just _sync` first, since ty
-reads the generated stubs) in the test job, and `check-adrs`: `docs/decisions/`
+`checks.yml` runs the requirements, `check-python` and test jobs, and `check-adrs`: `docs/decisions/`
 agrees with its index, and every ADR citation pins the ADR's current rev
 ([`docs/decisions/README.md`](docs/decisions/README.md)). See the
 [README's Recipes and CI section](README.md#recipes-and-ci).

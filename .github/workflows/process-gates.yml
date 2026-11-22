@@ -1,9 +1,9 @@
 name: process-gates
 
 # Satisfies the `process-gates` ruleset's required-status-check contexts (`check-branch`,
-# `pr-title`, `repo-floor`, `check-python-floor`): each job is top-level and named for its context. `merge_group` is a
-# deliberate addition over wise-ci's own workflow: WiseKiosk's merge queue re-runs its required
-# checks there, and these skip rather than repeat work a pull_request run already did.
+# `pr-title`, `repo-floor`, `check-python-floor`): each job is top-level and named for its context.
+# `merge_group` is a deliberate addition over wise-ci's own workflow: WiseKiosk's merge queue re-runs
+# its required checks there, and these jobs skip rather than repeat work a pull_request run already did.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]

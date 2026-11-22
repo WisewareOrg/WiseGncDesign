@@ -1,8 +1,6 @@
 name: checks
 
-# The repository's test-suite checks on pull requests: the requirements tree, the suite, and wise-ci's
-# `check-python` (lint, docstring coverage and types, run after the F´ build so ty reads its generated
-# stubs) and `check-adrs`. `just python` runs `check-python` locally.
+# The repository's checks on pull requests; README.md's Recipes and CI says what each runs.
 on:
   push:
     branches: [main]
