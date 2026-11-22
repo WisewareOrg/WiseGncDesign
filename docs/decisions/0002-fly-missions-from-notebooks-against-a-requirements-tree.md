@@ -1,11 +1,16 @@
 # 0002 — Fly missions from notebooks against a requirements tree
 
 **Status:** accepted
-**Decided:** 2026-11-11 (issue 29 missions: the spike and its plan)
-**Rev:** 1
+**Decided:** 2026-11-17 (issue 65 Missions name a GNC sub-topology and a build)
+**Rev:** 2
 
 ## Revisions
 
+- **rev 2** — 2026-11-17 — a mission names a GNC configuration and a build, and each algorithm
+  component claims its capabilities in its FPP (issue 65 Missions name a GNC sub-topology and a
+  build); cross-build parity's comparison is a tested harness function, every algorithm with an F´
+  build has its own parity notebook, and `analysis/` holds only the rung analyzers (issue 66 Parity
+  is an analyzer over run files).
 - **rev 1** — 2026-11-11 — first written (issue 29 missions).
 
 ## Context
@@ -45,16 +50,19 @@ follow.
 
 ### Missions
 
-- **A mission is a value in a notebook, outside the tree.** It holds a vehicle, an FSW builder and
-  the scenarios to fly, by TST ID, and optionally a filter of the rungs to judge, by SRS ID.
-  `mission_tests` turns missions into Monte Carlo tests when the notebook is collected.
-- **The FSW builder claims its capabilities** with `@provides("SYS...")`. Adding an FSW touches no
-  tree item.
+- **A mission is a value in a notebook, outside the tree.** It names what flies: a vehicle, a GNC
+  configuration and a build, and the scenarios to fly by TST ID. Optionally it filters the rungs to
+  judge, by SRS ID. `mission_tests` turns missions into Monte Carlo tests when the notebook is
+  collected.
+- **Each algorithm component claims its capabilities in its FPP** with `@ provides`, and a
+  configuration claims the union of its algorithms' claims. Adding an algorithm touches no tree
+  item.
 - **The vehicle is a mission parameter**, flown through the simulator's `sim_vehicle` mark and its
   `VEHICLES` registry. One session may hold several vehicles.
-- **A flight is a vehicle, an FSW and a scenario.** `mission_tests` makes a class per vehicle and a
-  test per FSW and scenario, so each flight has a folder of its own in the session. Two missions
-  flying the same flight are an error raised before anything flies.
+- **A flight is a vehicle, an FSW and a scenario**, the FSW being a configuration flown on a build.
+  `mission_tests` makes a class per vehicle and a test per FSW and scenario, so each flight has a
+  folder of its own in the session. Two missions flying the same flight are an error raised before
+  anything flies.
 - **The rungs a flight is judged on are worked out**: the rungs its scenario links to that sit under
   a capability its FSW claims. A mission's rung filter is optional; each rung it lists must be one
   of those, checked against the union of the mission's scenarios when the `Mission` is built, so a
@@ -112,14 +120,17 @@ everywhere, even with `--full-monte-carlo`, and the session name `scratch` is re
 
 - **Machinery apart from content.** `harness/`, a package at the repository root imported as
   `harness.<module>`, holds what knows no specific requirement, metric or scenario: the mission
-  code, the judging fixtures as a pytest plugin, `judge()` and `plots()`, and the tree reader.
-  Content stays where it is read: `analysis/` holds only the analyzers, `scenarios/` holds how each
-  TST is flown, and `algorithms/`, `missions/` and `cdh/` hold the rest.
+  code, the judging fixtures as a pytest plugin, `judge()` and `plots()`, the tree reader, and the
+  cross-build parity comparison. Content stays where it is read: `analysis/` holds only the rung
+  analyzers the judge runs, `scenarios/` holds how each TST is flown, and `algorithms/`,
+  `missions/`, `fsw/`, `ground/` and `lab/` hold the rest.
 - **Tests sit beside the code they test**, with no central `tests/` folder. Same-named test files
   stay apart under `--import-mode=importlib`.
-- **An algorithm is a package around its notebook.** The notebook keeps the derivation and the
-  implementation readable together; the gross check and the tests live in the package.
-- **`gnc_algorithms` is a workbook, not a library.** It is installed editable so notebooks and tests
+- **An algorithm is a package around its notebooks.** Its algorithm notebook keeps the derivation
+  and the implementation readable together. Every algorithm with an F´ build has its own parity
+  notebook, which holds the two builds to parity case by case with `harness/parity.py`. The gross
+  check and the tests live in the package.
+- **`algorithms` is a workbook, not a library.** It is installed editable so notebooks and tests
   import it, and is never shipped on its own. Its notebooks import the harness and the analyzers on
   purpose, and the F´ flight software, which is C++, never imports it.
 
@@ -146,8 +157,10 @@ was dirty. Run files carry no GNC attributes.
 - **Passing scenario definitions to a mission instead of IDs.** Rejected: the tree is the one place
   that names a scenario.
 - **The mission listing the FSW's capabilities**, **deriving them from the rungs** or **a SYS item
-  referencing a builder.** Rejected: the first restates what the builder knows, the second fails
-  because rungs are shared, and the third makes the tree know which FSWs exist.
+  referencing a component.** Rejected: the first restates what the components claim, the second
+  fails because rungs are shared, and the third makes the tree know which FSWs exist.
+- **Claims on a Python builder function**, as rev 1 had them. Rejected: FPP is the contract both
+  builds are held to (ADR 0004 rev 2), so a claim in Python covers one build and not the other.
 - **A mission name identifying a flight.** Rejected: the same flight under two names would fly
   twice into one folder.
 - **Algorithm notebooks flying campaigns the tree never judges.** Rejected: a campaign nobody judges
@@ -188,3 +201,5 @@ was dirty. Run files carry no GNC attributes.
 - Folders are skipped and listed, not hidden, so a renamed notebook shows up in the report.
 - Notebooks and their algorithm packages depend on the harness and the analyzers, so an algorithm
   cannot be lifted out of this repository unchanged.
+- Cross-build parity is a tested harness function, `harness/parity.py`, over run files; `analysis/`
+  holds only the rung analyzers the judge runs.

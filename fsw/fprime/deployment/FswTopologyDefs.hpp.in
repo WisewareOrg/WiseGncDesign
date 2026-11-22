@@ -1,0 +1,17 @@
+// What the topology autocoder requires of the @CONFIGURATION@Fsw deployment.
+#ifndef WISEFSW_@CONFIGURATION@FSWTOPOLOGYDEFS_HPP
+#define WISEFSW_@CONFIGURATION@FSWTOPOLOGYDEFS_HPP
+
+#include "fsw/fprime/deployment/@CONFIGURATION@/FppConstantsAc.hpp"
+
+namespace WiseFsw {
+
+//! The state the topology is set up with: the case's parameter file, an absolute path, and its directory.
+struct TopologyState {
+    const char* prmPath;
+    const char* prmDirectory;
+};
+
+}  // namespace WiseFsw
+
+#endif

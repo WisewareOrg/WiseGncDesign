@@ -1,0 +1,36 @@
+register_fprime_module(
+  fsw_fprime_deployment_@CONFIGURATION@
+  AUTOCODER_INPUTS
+    "@GNC_SUB_TOPOLOGY@"
+    "${CMAKE_CURRENT_LIST_DIR}/@CONFIGURATION@Fsw.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/@CONFIGURATION@FswTopology.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/@CONFIGURATION@FswTopology.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/@CONFIGURATION@FswTopologyDefs.hpp"
+  DEPENDS
+    fsw_fprime_deployment_instances
+)
+
+# The configuration's extension, `_wise_fsw_@CONFIGURATION@`, and its dictionary beside it in lab/,
+# both built by `_wise_fsw`. The F´ sub-builds only gather model information and compile nothing.
+if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
+    pybind11_add_module(_wise_fsw_@CONFIGURATION@ "${FPRIME_PROJECT_ROOT}/lab/pins/WiseFswModule.cpp")
+    target_link_libraries(_wise_fsw_@CONFIGURATION@ PRIVATE fsw_fprime_deployment_@CONFIGURATION@)
+    target_compile_definitions(_wise_fsw_@CONFIGURATION@ PRIVATE
+        WISE_FSW_MODULE=_wise_fsw_@CONFIGURATION@
+        WISE_FSW_TOPOLOGY_HEADER="fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopology.hpp")
+    # The platform implementations (Os and the like) F´ chooses at link time, as for a deployment.
+    # Its Os::Task has no thread, so the tick runs the active components.
+    fprime_target_implementations(_wise_fsw_@CONFIGURATION@ Os_Task_Sim Os_RawTime_Stub)
+    set_target_properties(_wise_fsw_@CONFIGURATION@ PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${FPRIME_PROJECT_ROOT}/lab")
+    # The dictionary ships beside the extension: Python names and decodes the telemetry with it.
+    # A target without outputs runs on every build, so the copy tracks the dictionary the build just wrote.
+    add_custom_target(wise_fsw_dictionary_@CONFIGURATION@
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_BINARY_DIR}/@CONFIGURATION@FswTopologyDictionary.json"
+            "${FPRIME_PROJECT_ROOT}/lab/@CONFIGURATION@FswTopologyDictionary.json"
+        DEPENDS fsw_fprime_deployment_@CONFIGURATION@_dictionary)
+    add_dependencies(_wise_fsw _wise_fsw_@CONFIGURATION@ wise_fsw_dictionary_@CONFIGURATION@)
+endif()

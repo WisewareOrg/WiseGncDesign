@@ -29,8 +29,8 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run interrogate -v --fail-under 100 algorithms cdh analysis harness scenarios missions
-      - run: uv run pydoclint algorithms cdh analysis harness scenarios missions
+      - run: uv run interrogate -v --fail-under 100 algorithms fsw ground lab analysis harness scenarios missions
+      - run: uv run pydoclint algorithms fsw ground lab analysis harness scenarios missions
 
   requirements:
     name: requirements
@@ -59,8 +59,22 @@ jobs:
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
       # Syncs every group, registers the kernel and builds the F´ deployment the tests fly.
       - run: just _sync
-      # The F´ tests skip when the extension is absent, so a build that lands none fails here.
-      - run: uv run --no-sync python -c "import gnc_cdh.fprime._wise_fsw"
+      # The F´ tests skip when an extension or its dictionary is absent, so this step imports every
+      # configuration's extension the F´ build builds, of the repository's contract and the test
+      # mocks', and checks its dictionary exists; a build that leaves either out fails here.
+      - run: |
+          uv run --no-sync python - <<'PY'
+          import importlib
+
+          import lab
+          from fsw.codegen.deployment import CONTRACT, fprime_configurations
+          from fsw.mock import MOCK
+
+          for contract in (CONTRACT, MOCK):
+              for c in fprime_configurations(contract=contract):
+                  importlib.import_module(f"lab._wise_fsw_{c}")
+                  assert lab.dictionary_path(c).exists(), c
+          PY
       - run: uv run --no-sync pytest
       # Everything the build and the suite write must be ignored; the log names what is not.
       - run: |
@@ -83,9 +97,19 @@ jobs:
       # which a Python build's dictionary is generated against; the F´ build's tests skip.
       - run: uv sync --locked --group sim --group notebooks --group fprime
       - run: uv run --no-sync python -m ipykernel install --sys-prefix --name wise-gnc-design --display-name "WiseGncDesign"
-      - run: git clone --quiet --depth 1 --branch "$(just --evaluate fprime_tag)" https://github.com/nasa/fprime cdh/fprime/lib/fprime
+      - run: git clone --quiet --depth 1 --branch "$(just --evaluate fprime_tag)" https://github.com/nasa/fprime fsw/fprime/lib/fprime
       - run: uv run --no-sync pytest
       - run: |
           out="$(git status --porcelain)"
           echo "$out"
           test -z "$out"
+
+  check-adrs:
+    name: check-adrs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # docs/decisions/ agrees with its index, and every ADR citation pins the ADR's current rev.
+      - uses: WisewareOrg/wise-ci/check-adrs@4b3554d330465dee925aa10e0c62355903b1488a

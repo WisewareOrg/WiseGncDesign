@@ -9,14 +9,19 @@ end in a kernel, as the test suite does.
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+import jupytext
 import pandas as pd
 from IPython.display import Image, display
 from jupyter_client.kernelspec import KernelSpecManager
+from nbclient import NotebookClient
+from nbclient.exceptions import CellExecutionError
+from traitlets.config import Config
 from wise_dynamics.sessions import current_session
 
 from harness import requirements_tree
@@ -101,8 +106,13 @@ def plots(requirement_id: str) -> None:
 def run_notebook(path: Path) -> None:
     """Execute a notebook end to end in the `wise-gnc-design` kernel, capped at two cases a flight.
 
-    The executed copy goes to a temporary directory, never beside the notebook. Cells that only
-    the notebook runs, such as those that judge and plot, run too.
+    The kernel runs in the notebook's folder, as in Lab, so the session it finds is the one its
+    flights land in. Its sessions are kept in a temporary directory of the run's own, the `sim_out`
+    every pytest the run starts takes through `PYTEST_ADDOPTS`, so two runs at once, or one run
+    and the project's own sessions, never fly or judge in one session. The kernel listens on IPC
+    sockets in that directory, not TCP ports, which kernels started at once can race to bind.
+    Nothing is written beside the notebook. Cells that only the notebook runs, such as those that
+    judge and plot, run too.
 
     Args:
         path: the notebook's percent-format file.
@@ -115,12 +125,21 @@ def run_notebook(path: Path) -> None:
             f"the {KERNEL} kernel is not registered; run `just local` or `just pinned`"
         )
     with tempfile.TemporaryDirectory() as tmp:
-        result = subprocess.run(
-            [sys.executable, "-m", "jupytext", "--execute", str(path), "-o", f"{tmp}/run.ipynb"],
-            env={**os.environ, "JPY_SESSION_NAME": str(path), "WISE_DYNAMICS_CAPPED": "1"},
-            capture_output=True,
-            text=True,
-            check=False,
+        sessions = shlex.quote(f"{tmp}/sessions")
+        client = NotebookClient(
+            jupytext.read(path),
+            timeout=None,
+            kernel_name=KERNEL,
+            resources={"metadata": {"path": str(path.parent)}},
+            config=Config({"KernelManager": {"transport": "ipc", "ip": f"{tmp}/kernel"}}),
         )
-    if result.returncode:
-        raise RuntimeError(f"{path.name} failed:\n{result.stderr}")
+        env = {
+            **os.environ,
+            "JPY_SESSION_NAME": str(path),
+            "WISE_DYNAMICS_CAPPED": "1",
+            "PYTEST_ADDOPTS": f"{os.environ.get('PYTEST_ADDOPTS', '')} -o sim_out={sessions}",
+        }
+        try:
+            client.execute(env=env)
+        except CellExecutionError as error:
+            raise RuntimeError(f"{path.name} failed:\n{error}") from error

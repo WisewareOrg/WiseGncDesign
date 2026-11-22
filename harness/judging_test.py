@@ -18,33 +18,18 @@ import pytest
 import yaml
 from wise_dynamics.sessions import crash_path, run_path, write_planned
 
+from fsw.codegen.deployment import REPOSITORY
 from harness import notebook, requirements_tree
+from harness.conftest import write_item
 
-REPO = Path(__file__).resolve().parents[1]
 GOOD = 0.9e-3
 BAD = 1.5e-3
 PLANNED = 10
 KINDS = {"attitude": "SRS901", "velocity": "SRS902", "position": "SRS903"}
 
-BODY_ECI = Path(__file__).parents[1] / "cdh" / "fprime" / "Interfaces" / "Nav" / "BodyEci.fppi"
-"""nav's estimate channels, which a toy flight software includes to be judged."""
 NODE = "missions/nb/Test_vehicle/test_fsw_alpha"
 NODEID = "missions/nb.py::Test_vehicle::test_fsw_alpha"
 ALL = {"scenario": "TST901", "capabilities": ["SYS901"], "rungs": None}
-
-
-def write_item(root: Path, document: str, uid: str, **fields: object) -> None:
-    """Write one item of the tree.
-
-    Args:
-        root: the project root.
-        document: "sys", "srs" or "tst".
-        uid: the item's ID.
-        **fields: the item's fields beyond `active`.
-    """
-    folder = root / "docs" / "requirements" / document
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{uid}.yml").write_text(yaml.safe_dump({"active": True, "header": uid, **fields}))
 
 
 def write_tree(root: Path) -> None:
@@ -74,14 +59,34 @@ def write_tree(root: Path) -> None:
     write_item(root, "tst", "TST901", links=[{uid: "stamp"} for uid in KINDS.values()])
 
 
+def write_wheel_run(path: Path, error: float) -> None:
+    """Write a run of the spinner: the wheel's momentum against the torque commanded.
+
+    The torque is written at 1 s (2 N*m) and at 3 s (0), so the momentum at t = 0 to 4 s is
+    [0, 0, 2, 4, 4]. A run whose error is not `GOOD` has the first write acting from t = 0.
+
+    Args:
+        path: the run file to create.
+        error: `GOOD` for the momentum the torque gives, else the first write moved to t = 0.
+    """
+    momentum = [0.0, 0.0, 2.0, 4.0, 4.0] if error == GOOD else [0.0, 2.0, 2.0, 2.0, 2.0]
+    with h5py.File(path, "w") as f:
+        f["t_s"] = np.arange(5.0)
+        f["truth/wheel_momentum"] = momentum
+        f["tlm_t/spinner.wheelTorque"] = [1.0, 3.0]
+        f["tlm/spinner.wheelTorque"] = [2.0, 0.0]
+
+
 def write_run(path: Path, error: float, kind: str = "attitude") -> None:
     """Write a run whose worst `kind` error is `error`, with no error of the other kinds.
 
     Args:
         path: the run file to create.
         error: the estimate's error at one sample, in rad, m/s or m.
-        kind: "attitude", "velocity" or "position".
+        kind: "attitude", "velocity", "position" or "wheel", the spinner's, as `write_wheel_run`.
     """
+    if kind == "wheel":
+        return write_wheel_run(path, error)
     identity = np.tile([1.0, 0.0, 0.0, 0.0], (5, 1))
     tlm = {
         "nav.bodyEciAttitude": identity.copy(),
@@ -178,7 +183,7 @@ def project(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> pytes
     files = {"analysis/conftest": "from harness.judging import *  # noqa: F403\n"}
     for name in KINDS:
         files[f"analysis/test_{name}_knowledge"] = (
-            REPO / "analysis" / f"test_{name}_knowledge.py"
+            REPOSITORY / "analysis" / f"test_{name}_knowledge.py"
         ).read_text()
     files["missions/nb"] = (
         f'from pathlib import Path\nPath(r"{pytester.path}/imported").write_text("")\n'
@@ -257,118 +262,157 @@ def test_rule(allowed_failures, n, p, c, expected):
     )
 
 
-def test_failures_within_the_allowance_pass(project: pytest.Pytester) -> None:
-    """One failure of ten is allowed and the rung passes; nothing was skipped.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), bad=(3,), flight=only("SRS901"))
-
-    judge(project).assert_outcomes(passed=1, skipped=2)
-
-    assert "| SRS901 | pass | 1/10/10 | 1 | 3 |" in cell_matrix(project)
-    assert "## Skipped folders" not in (session(project) / "report" / "matrix.md").read_text()
-
-
-def test_a_crash_counts_as_a_failed_case(project: pytest.Pytester) -> None:
-    """A crash and a bad run make two failures, over the allowance of one.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), bad=(3,), crashed=(5,), flight=only("SRS901"))
-
-    result = judge(project)
-
-    result.assert_outcomes(failed=1, skipped=2)
-    result.stdout.fnmatch_lines([f"*{NODEID}: 2 failed, 1 allowed*"])
-    assert "| SRS901 | fail | 2/10/10 | 1 | 3, 5 (crash) |" in cell_matrix(project)
-
-
-def test_failures_over_the_allowance_fail_name_the_cases_and_how_to_rerun_them(
+@pytest.mark.parametrize(
+    ("cases", "outcomes", "lines", "cell", "rollup"),
+    [
+        pytest.param(
+            {"bad": (3,), "flight": only("SRS901")},
+            {"passed": 1, "skipped": 2},
+            [],
+            "| SRS901 | pass | 1/10/10 | 1 | 3 |",
+            None,
+            id="within-allowance",
+        ),
+        pytest.param(
+            {"bad": (3,), "crashed": (5,), "flight": only("SRS901")},
+            {"failed": 1, "skipped": 2},
+            [f"*{NODEID}: 2 failed, 1 allowed*"],
+            "| SRS901 | fail | 2/10/10 | 1 | 3, 5 (crash) |",
+            None,
+            id="crash",
+        ),
+        pytest.param(
+            {"bad": (2, 7), "flight": only("SRS901")},
+            {"failed": 1, "skipped": 2},
+            [
+                f'*case 2: uv run --no-sync pytest "{NODEID}[[]2[]]"*--full-monte-carlo*',
+                f'*case 7: uv run --no-sync pytest "{NODEID}[[]7[]]"*--full-monte-carlo*',
+            ],
+            "| SRS901 | fail | 2/10/10 | 1 | 2, 7 |\n",
+            f"| SRS901 | [fail, 2 of 1 allowed]({NODE}/SRS901.png) | fail |",
+            id="over-allowance",
+        ),
+        pytest.param(
+            {"missing": (4,), "planned": 5, "flight": only("SRS901")},
+            {"passed": 1, "skipped": 2},
+            [],
+            "| SRS901 | pass | 0/4/5 | 0 |",
+            None,
+            id="missing-case",
+        ),
+        pytest.param(
+            {"bad": (2, 7), "kind": "velocity", "flight": only(KINDS["velocity"])},
+            {"failed": 1, "skipped": 2},
+            [f"*{NODEID}: 2 failed, 1 allowed*"],
+            None,
+            None,
+            id="velocity",
+        ),
+        pytest.param(
+            {"bad": (2, 7), "kind": "position", "flight": only(KINDS["position"])},
+            {"failed": 1, "skipped": 2},
+            [f"*{NODEID}: 2 failed, 1 allowed*"],
+            None,
+            None,
+            id="position",
+        ),
+        pytest.param(
+            {"bad": (2,), "nan": (5,), "kind": "velocity", "flight": only("SRS902")},
+            {"failed": 1, "skipped": 2},
+            [],
+            "| SRS902 | fail | 2/10/10 | 1 | 2, 5 |",
+            None,
+            id="nan",
+        ),
+    ],
+)
+def test_a_rung_is_judged_on_the_runs_found(
     project: pytest.Pytester,
+    cases: dict,
+    outcomes: dict,
+    lines: list[str],
+    cell: str | None,
+    rollup: str | None,
 ) -> None:
-    """The rung fails with a rerun command per failing case, each carrying `--full-monte-carlo`.
+    """A rung passes within its allowance of failures, and fails over it, on the runs found.
+
+    One failure of ten is allowed. A crash, and a NaN error, count as failed cases; ten crashes
+    are ten failed cases, counted as found. A failing rung names a rerun command per failing case,
+    each carrying `--full-monte-carlo`. An interrupted campaign is judged on the runs found: n
+    counts runs and crash records only, so four of five planned cases within x show p = 0.8 at
+    c = 0.5. The velocity and position analyzers read their own datasets. Nothing is skipped, and
+    the judge reads the flight's facts from its folder and never imports the notebook.
 
     Args:
         project: the project.
+        cases: the folder's cases, as `write_cases` takes them.
+        outcomes: the judge's outcomes.
+        lines: lines the judge prints, as `fnmatch_lines` takes them, or none.
+        cell: a row of the test's matrix, or None.
+        rollup: a row of the session's matrix, or None.
     """
-    write_cases(session(project), bad=(2, 7), flight=only("SRS901"))
+    write_cases(session(project), **cases)
 
     result = judge(project)
 
-    result.assert_outcomes(failed=1, skipped=2)
-    result.stdout.fnmatch_lines(
-        [
-            f'*case 2: uv run --no-sync pytest "{NODEID}[[]2[]]"*--full-monte-carlo*',
-            f'*case 7: uv run --no-sync pytest "{NODEID}[[]7[]]"*--full-monte-carlo*',
-        ]
+    result.assert_outcomes(**outcomes)
+    result.stdout.fnmatch_lines(lines)
+    if cell is not None:
+        assert cell in cell_matrix(project)
+    matrix = (session(project) / "report" / "matrix.md").read_text()
+    if rollup is not None:
+        assert rollup in matrix
+    assert "## Skipped folders" not in matrix
+    assert not (project.path / "imported").exists()
+
+
+@pytest.mark.parametrize(
+    ("bad", "outcomes"),
+    [((2, 7), {"failed": 1, "skipped": 3}), ((), {"passed": 1, "skipped": 3})],
+    ids=["fail", "pass"],
+)
+def test_the_wheel_momentum_rung_is_judged_on_the_runs_found(
+    project: pytest.Pytester, bad: tuple[int, ...], outcomes: dict
+) -> None:
+    """The spinner's wheel momentum rung fails when the momentum does not follow the torque.
+
+    A bad run has its first torque write acting from t = 0, so its momentum leads the commanded
+    torque's integral by 2 N*m*s, far over the rung's 1e-3.
+
+    Args:
+        project: the project.
+        bad: the cases whose momentum is wrong.
+        outcomes: the judge's outcomes.
+    """
+    project.makepyfile(
+        **{
+            "analysis/test_wheel_momentum": (
+                REPOSITORY / "analysis" / "test_wheel_momentum.py"
+            ).read_text()
+        }
     )
-    assert "| SRS901 | fail | 2/10/10 | 1 | 2, 7 |\n" in cell_matrix(project)
-    rollup = (session(project) / "report" / "matrix.md").read_text()
-    assert f"| SRS901 | [fail, 2 of 1 allowed]({NODE}/SRS901.png) | fail |" in rollup
+    write_item(
+        project.path,
+        "srs",
+        "SRS904",
+        links=[{"SYS901": "stamp"}],
+        references=[
+            {
+                "path": "analysis/test_wheel_momentum.py",
+                "keyword": "def test_wheel_momentum(",
+                "type": "file",
+            }
+        ],
+        x=1e-3,
+        p=0.8,
+        c=0.5,
+    )
+    write_item(
+        project.path, "tst", "TST901", links=[{uid: "stamp"} for uid in (*KINDS.values(), "SRS904")]
+    )
+    write_cases(session(project), bad=bad, kind="wheel", flight=only("SRS904"))
 
-
-def test_a_flight_whose_runs_all_crashed_fails(project: pytest.Pytester) -> None:
-    """Ten crashes are ten failed cases and are counted as ten found.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), crashed=tuple(range(PLANNED)), flight=only("SRS901"))
-
-    result = judge(project)
-
-    result.assert_outcomes(failed=1, skipped=2)
-    assert "| SRS901 | fail | 10/10/10 | 1 |" in cell_matrix(project)
-
-
-def test_a_missing_case_is_not_counted_and_the_found_cases_are_judged(
-    project: pytest.Pytester,
-) -> None:
-    """An interrupted campaign is judged on the runs found: n counts runs and crash records only.
-
-    Four of five planned cases finished, all within x, and four runs show p = 0.8 at c = 0.5.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), missing=(4,), planned=5, flight=only("SRS901"))
-
-    judge(project).assert_outcomes(passed=1, skipped=2)
-
-    assert "| SRS901 | pass | 0/4/5 | 0 |" in cell_matrix(project)
-
-
-@pytest.mark.parametrize("kind", ["velocity", "position"])
-def test_each_analyzer_judges_its_own_error(project: pytest.Pytester, kind: str) -> None:
-    """The velocity and position analyzers read their own datasets and fail runs over x.
-
-    Args:
-        project: the project.
-        kind: the analyzer, and the kind of error its runs carry.
-    """
-    write_cases(session(project), bad=(2, 7), kind=kind, flight=only(KINDS[kind]))
-
-    result = judge(project)
-
-    result.assert_outcomes(failed=1, skipped=2)
-    result.stdout.fnmatch_lines([f"*{NODEID}: 2 failed, 1 allowed*"])
-
-
-def test_a_nan_error_counts_as_a_failed_case(project: pytest.Pytester) -> None:
-    """A run whose error is NaN fails, so a diverged estimate cannot pass.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), bad=(2,), nan=(5,), kind="velocity", flight=only("SRS902"))
-
-    result = judge(project)
-
-    result.assert_outcomes(failed=1, skipped=2)
-    assert "| SRS902 | fail | 2/10/10 | 1 | 2, 5 |" in cell_matrix(project)
+    judge(project).assert_outcomes(**outcomes)
 
 
 def test_too_few_cases_found_leave_the_rung_not_judged(project: pytest.Pytester) -> None:
@@ -447,19 +491,6 @@ def test_a_stale_report_is_removed_before_judging(project: pytest.Pytester) -> N
 
     assert not stale.exists()
     assert "test_old" not in (session(project) / "report" / "matrix.md").read_text()
-
-
-def test_a_notebook_that_raises_on_import_is_still_judged(project: pytest.Pytester) -> None:
-    """The judge reads the flight's facts from its folder and never imports the notebook.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), flight=only("SRS901"))
-
-    judge(project).assert_outcomes(passed=1, skipped=2)
-
-    assert not (project.path / "imported").exists()
 
 
 def test_folders_without_a_flight_or_a_test_file_are_skipped_and_listed(
@@ -572,9 +603,9 @@ def test_a_flown_mission_is_judged_end_to_end(
 
     The flight's `flight.json` and run files come from the simulator's own writers, so a key or
     dataset the writer and the judge disagree on makes this fail. Four cases are the fewest that
-    show p = 0.8 at c = 0.5. The flight software is a toy writing nav's estimate channels with a
-    fixed state, and each rung's x is set far above its error so the verdict rests on the
-    agreement alone.
+    show p = 0.8 at c = 0.5. The flight software is `MockFlight` of `fsw.mock.MOCK`, writing
+    the nav role's estimate channels with a fixed state, and each rung's x is set far above its
+    error so the verdict rests on the agreement alone.
 
     Args:
         project: the project.
@@ -600,49 +631,24 @@ def test_a_flown_mission_is_judged_end_to_end(
         "async def alpha(ground) -> None:\n"
         "    pass\n"
     )
-    (root / "Toy.fpp").write_text(
-        "module Toy {\n"
-        "  passive component Toy {\n"
-        f'    include "{BODY_ECI}"\n'
-        "    time get port timeCaller\n"
-        "    telemetry port tlmOut\n"
-        "  }\n"
-        "}\n"
-    )
     project.makepyfile(
         test_flights="""
-from pathlib import Path
-
-from gnc_cdh.basilisk import AlgorithmModule
-from gnc_cdh.dictionary import Dictionary
-from harness.mission import Mission, mission_tests, provides
-
-
-class Toy:
-    def step(self, t):
-        return {
-            "bodyEciPos": [7.0e6, 0.0, 0.0],
-            "bodyEciVel": [0.0, 7.5e3, 0.0],
-            "bodyEciAttitude": [1.0, 0.0, 0.0, 0.0],
-        }
-
-
-@provides("SYS901")
-def reckoner(scenario):
-    model = [Path(__file__).with_name("Toy.fpp")]
-    dictionary = Dictionary.from_component(model, "Toy.Toy", instance="nav")
-    readers = scenario.vehicle.readers()
-    return AlgorithmModule(Toy(), readers, instance="nav", dictionary=dictionary)
-
+from fsw.mock import MOCK
+from harness.mission import Mission, mission_tests
 
 globals().update(
-    mission_tests(Mission(vehicle="imu_spacecraft", fsw=reckoner, scenarios=("TST901",)))
+    mission_tests(
+        Mission(
+            vehicle="imu_spacecraft", gnc="MockFlight", build="python", scenarios=("TST901",),
+            contract=MOCK,
+        )
+    )
 )
 """
     )
 
     fly_in_a_subprocess(project, "test_flights.py", "--full-monte-carlo").assert_outcomes(passed=4)
-    node = "test_flights/Test_imu_spacecraft/test_reckoner_alpha"
+    node = "test_flights/Test_imu_spacecraft/test_MockFlight_python_alpha"
     flown = session(project) / node
     assert sorted(path.name for path in flown.glob("run_*.h5")) == [
         f"run_000{case}.h5" for case in range(4)

@@ -11,7 +11,7 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^cdh/fprime/CMakeLists\\.txt$/"],
+      "managerFilePatterns": ["/^fsw/fprime/CMakeLists\\.txt$/"],
       "matchStrings": ["GIT_TAG (?<currentValue>[0-9][0-9.]*)"],
       "depNameTemplate": "libeigen/eigen",
       "datasourceTemplate": "gitlab-tags"
@@ -20,7 +20,7 @@
   "packageRules": [
     {
       "groupName": "fprime",
-      "matchPackageNames": ["nasa/fprime", "fprime-tools", "fprime-fpp"]
+      "matchPackageNames": ["nasa/fprime", "fprime-tools", "fprime-fpp", "fprime-gds"]
     },
     {
       "matchPackageNames": ["cmake", "ninja"],

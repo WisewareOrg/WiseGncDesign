@@ -1,0 +1,26 @@
+active: true
+derived: false
+header: |
+  Scenario: wheel leo500
+level: 1.3
+links:
+- SRS006: ZDPGvG4g4HHAHjox9fSBbChJdPxkxZJfYb3ikzo-lpU=
+normative: true
+rationale: |
+  Its case count is the fewest at which the judge's one-sided Clopper-Pearson rule decides the p
+  and c of SRS006<!-- Wheel momentum: 1e-4 N m s at p 0.99, c 0.90 -->, with no failure allowed.
+ref: ''
+references:
+- keyword: def wheel_leo500(
+  path: scenarios/wheel_leo.py
+  sha: a0c01b1a11627107dbcb24bd719f6aa2dacd43e1af3efa0c579b479ec03fc6cf
+  type: file
+reviewed: 3ZgFCGg8PJavGrVyU3CgaU8pko-tG_11XE-8KmgsP40=
+status: proposed
+text: |
+  A mission's FSW boots in the leo500 scenario on the mission's vehicle and runs for 5700 s with no
+  ground procedure, once per dispersed case.
+verification-justification: |
+  Settles each linked rung, for each mission flying it, over this scenario's dispersions and
+  duration. Leaves unproven any other scenario, and any rung needing more cases than it flies.
+verification-method: test

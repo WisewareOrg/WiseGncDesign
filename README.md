@@ -12,15 +12,19 @@ The repository's parts are laid out under Development.
 ### Layout
 
 ```text
-harness/       mission.py, ground.py, requirements_tree.py, judging.py (a pytest plugin),
-               notebook.py, runs.py
+harness/       mission.py, requirements_tree.py, judging.py (a pytest plugin),
+               notebook.py, runs.py, parity.py
 analysis/      one analyzer per metric: its limits, error math and plot
 scenarios/     how each scenario a TST item references is flown: its ground procedure and marks
-algorithms/gnc_algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
+algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
                                     re-exporting the notebook
-algorithms/gnc_algorithms/quaternion.py   the quaternion math numba-compiled algorithms share
+algorithms/quaternion.py   the quaternion math numba-compiled algorithms share
 missions/      notebooks that plan missions, and the test running them
-cdh/           gnc_cdh, the Python and F´ hosts and a worked example; fprime/, the F´ project
+fsw/           the flight software: python/, the Python build's partitions; fprime/, the F´
+               project; fpp/, the shared FPP contract and GNC sub-topologies; and a worked example
+ground/        the ground: dictionary, radio edge, F´ ground station and procedures
+lab/           the lab adapter hosting each configuration's F´ build in the simulation, and its
+               pybind11 module
 docs/          requirements/ (Doorstop tree), decisions/ (ADRs)
 ```
 
@@ -32,20 +36,23 @@ Tests sit beside the code they test. The suite needs the simulator installed, fr
 
 `just pinned` and `just local` also build the F´ deployment. Besides `uv.lock`, the build needs the
 system C++ compiler and git. The F´ framework and Eigen are fetched by tag into gitignored folders
-under `cdh/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
+under `fsw/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
 GitLab only the first time, or when a tag changes. Each sync rebuilds the F´ build cache from
-scratch, which needs no network.
+scratch, which needs no network. Why by tag is in
+[ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 `just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
 picked up. That rebuild reuses the existing cache, so after switching branches run `just pinned` or
 `just local` to rebuild it from scratch. A process cannot reload the extension, so a notebook
 kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. A Python build needs
 no F´ build, and the F´ build's tests skip when it is absent; where a Python build's dictionary
-comes from is in [`cdh/README.md`](cdh/README.md#the-dictionary). Why the F´ build flies inside
-the simulation, and how, is in
-[ADR 0003 rev 2](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md);
+comes from is in [`fsw/README.md`](fsw/README.md#the-dictionary). Why the F´ build flies inside
+the simulation is in
+[ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
+and how it meets the sim in
+[ADR 0006 rev 1](docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md);
 how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
-[ADR 0004 rev 1](docs/decisions/0004-carry-commands-and-telemetry-in-fprime-s-form-from-one-fpp-dictionary.md).
+[ADR 0004 rev 2](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ### Requirements and missions
 
@@ -54,21 +61,29 @@ performance with `x`, `p` and `c` as attributes, and TST items are scenarios lin
 evaluate. Its items and values are placeholders for exercising the tooling. `just reqs` checks that
 every item and link is reviewed and that no file a TST references has changed since.
 
-A mission is a vehicle, an FSW builder and the scenarios to fly, defined as a value in a notebook.
-The builder claims its capabilities with `@provides("SYS...")`, and a flight is judged on the rungs
-its scenario links to that sit under those capabilities. `mission_tests` turns missions into Monte
-Carlo tests: a class per vehicle holding a test per FSW and scenario. The reasoning is in
-[ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
+A mission is a value in a notebook: `Mission(vehicle=…, gnc=…, build=…, scenarios=…)`, with
+optional `rungs=…` and `check=…`. `gnc` names a configuration, a GNC sub-topology in
+`fsw/fpp/gnc/`, and `build` is `"python"` or `"fprime"`. Each algorithm component claims its
+capabilities with `@ provides: SYS...` lines in its `.fpp`, the configuration claims their union,
+and a flight is judged on the rungs its scenario links to that sit under those capabilities. The
+ground writes each case's parameters, from each algorithm notebook's `parameters(scenario)`, as a
+record beside its run file, and the harness builds the configuration's build on it.
+`mission_tests` turns missions into Monte Carlo tests: a class per vehicle holding a test per
+configuration, build and scenario, such as `test_ImuDeadReckoning_python_leo500`. A flight's end
+belongs to its scenario, never to a fixed length: the simulator stops only on time, so the one
+stopping rule the harness binds is the TST definition's duration. The reasoning is in
+[ADR 0002 rev 2](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md).
 
 ### Notebooks
 
-An algorithm notebook, `algorithms/gnc_algorithms/<name>/<name>.py`, holds the algorithm's
-derivation and implementation, then its mission, then cells that run in the notebook only and judge
-and plot. An algorithm with an F´ build also has `parity.py` beside it, which flies both builds and
-holds them to parity case by case. A mission notebook in `missions/` plans missions instead, such
-as one algorithm on several vehicles. Each is a jupytext percent-format `.py`, the source of truth,
-paired with an `.ipynb` beside it that git ignores. The `.py` records no kernel; the `.ipynb` keeps
-the kernel chosen on the machine, and a headless run uses the registered `wise-gnc-design` kernel.
+An algorithm notebook, `algorithms/<name>/<name>.py`, holds the algorithm's derivation and
+implementation, then its mission, then cells that run in the notebook only and judge and plot. An
+algorithm with an F´ build also has `parity.py` beside it, which flies both builds and holds them to
+parity case by case with `harness/parity.py`. A mission notebook in `missions/` plans missions
+instead, such as one algorithm on several vehicles. Each is a jupytext percent-format `.py`, the
+source of truth, paired with an `.ipynb` beside it that git ignores. The `.py` records no kernel;
+the `.ipynb` keeps the kernel chosen on the machine, and a headless run uses the registered
+`wise-gnc-design` kernel.
 
 To work in a notebook, run `just pinned` or `just local`, which sync the environment, register the
 kernel and create the `.ipynb` files, then `just lab` and open the `.ipynb` on the `WiseGncDesign`
@@ -99,10 +114,11 @@ judges, over the active session. `judge()` in a notebook does the same and retur
 per rung and a column per flight. A failing rung lists each failing case with the command that
 re-simulates it. The report lands in the session's `report/` and is rebuilt on every judging; start
 at `report/matrix.md`. How a verdict is reached is in
-[ADR 0002 rev 1](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md) and
+[ADR 0002 rev 2](docs/decisions/0002-fly-missions-from-notebooks-against-a-requirements-tree.md) and
 [ADR 0001 rev 2](docs/decisions/0001-judge-monte-carlo-sessions-with-requirement-analyzers.md).
 
 ### Recipes and CI
 
 `just --list` shows every recipe with its description. `.github/workflows/checks.yml` is the
-authority on what CI runs: lint and docstring coverage, `just reqs`, and the suite.
+authority on what CI runs: lint and docstring coverage, `just reqs`, the suite, and wise-ci's
+`check-adrs` over `docs/decisions/`.

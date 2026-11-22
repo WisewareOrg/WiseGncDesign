@@ -1,0 +1,10 @@
+register_fprime_module(
+  AUTOCODER_INPUTS
+    "${CMAKE_CURRENT_LIST_DIR}/Actuator.fpp"
+  SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/Actuator.cpp"
+  HEADERS
+    "${CMAKE_CURRENT_LIST_DIR}/Actuator.hpp"
+  DEPENDS
+    fsw_fpp_interfaces
+)

@@ -1,18 +1,29 @@
 """Fixtures shared by the harness tests."""
 
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
+import yaml
+
+
+def write_item(root: Path, document: str, uid: str, **fields: object) -> None:
+    """Write one item of the requirements tree.
+
+    Args:
+        root: the project root.
+        document: "sys", "srs" or "tst".
+        uid: the item's ID.
+        **fields: the item's fields beyond `active` and `header`.
+    """
+    folder = root / "docs" / "requirements" / document
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{uid}.yml").write_text(yaml.safe_dump({"active": True, "header": uid, **fields}))
 
 
 @pytest.fixture
 def fly_in_a_subprocess() -> Callable[..., pytest.RunResult]:
     """Run a pytester project's tests in a subprocess whose tree root is the project.
-
-    A pytester run in this process restores `sys.modules` when it ends, which drops modules numba
-    loaded lazily and breaks later tests that compile; a flight that runs the dead reckoner
-    therefore runs in its own process. The dead reckoner is imported first, under the repository's
-    tree, because it loads the analyzers that read that tree.
 
     Returns:
         A function taking the pytester and more pytest arguments, returning the result.
@@ -30,7 +41,6 @@ def fly_in_a_subprocess() -> Callable[..., pytest.RunResult]:
         """
         conftest = project.makeconftest(
             "from pathlib import Path\n\n"
-            "import gnc_algorithms.imu_dead_reckoning.imu_dead_reckoning  # noqa: F401\n"
             "from harness import requirements_tree\n\n"
             "requirements_tree.ROOT = Path(__file__).parent\n"
         )
