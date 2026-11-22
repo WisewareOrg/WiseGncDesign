@@ -11,8 +11,8 @@ For dy/dt = f(t, y), one step of size h is
 Its local error is O(h^5) and its global error O(h^4).
 
 Numba types each right-hand side by its identity in the running process, so `step` compiles once
-per right-hand side per process (about 0.5 s) and neither it nor a caller holding the right-hand
-side as a global can be cached to disk.
+per right-hand side per process, and neither it nor any compiled caller passing it a right-hand
+side can be cached to disk.
 """
 
 from collections.abc import Callable

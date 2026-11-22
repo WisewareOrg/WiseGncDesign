@@ -152,7 +152,7 @@ def test_the_global_error_shrinks_as_h_to_the_fourth(rk4: Callable[..., np.ndarr
 
 
 def test_an_orbit_matches_solve_ivp(rk4: Callable[..., np.ndarray]):
-    """One period of an e = 0.5 orbit, mu passed through, ends within 1e-8 of DOP853 and of Y0.
+    """One period of an e = 0.5 orbit, mu passed through, ends at DOP853's state and at Y0.
 
     Args:
         rk4: the build's step.
@@ -166,7 +166,7 @@ def test_an_orbit_matches_solve_ivp(rk4: Callable[..., np.ndarray]):
 
 
 def test_the_builds_fly_an_orbit_alike(cpp: Callable[..., np.ndarray]):
-    """The C++ step flies one period of the orbit to the Python step's state, within 1e-13.
+    """The C++ step flies one period of the orbit to the Python step's state.
 
     Args:
         cpp: the C++ step.

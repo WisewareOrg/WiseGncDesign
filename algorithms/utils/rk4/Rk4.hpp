@@ -8,6 +8,7 @@ namespace Rk4 {
 //! State is any type with + and scalar *, such as an Eigen vector.
 template <typename Fun, typename State, typename... Args>
 State step(const Fun& fun, double t, const State& y, double h, const Args&... args) {
+    // State(...) evaluates each stage's Eigen expression before fun takes it.
     const State k1 = fun(t, y, args...);
     const State k2 = fun(t + 0.5 * h, State(y + 0.5 * h * k1), args...);
     const State k3 = fun(t + 0.5 * h, State(y + 0.5 * h * k2), args...);
