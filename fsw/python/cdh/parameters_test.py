@@ -53,9 +53,7 @@ def _values(tuple_: Any) -> dict[str, Any]:
     return {name: np.asarray(value).tolist() for name, value in tuple_._asdict().items()}
 
 
-def test_each_instance_s_parameters_come_back_as_its_tuple(
-    tmp_path: Path, algorithm_parameters: dict[str, Any]
-):
+def test_each_instance_s_parameters_come_back_as_its_tuple(tmp_path: Path, algorithm_parameters: dict[str, Any]):
     """Keyed by the qualified instance, as the ground writes it, an array as a fresh array.
 
     Args:
@@ -106,9 +104,7 @@ def test_a_parameter_the_record_lacks_or_the_component_lacks_raises_naming_it(
             parameters.read(record, type(tuple_), _instance(component))
 
 
-def test_a_record_without_the_instance_raises_naming_it(
-    tmp_path: Path, algorithm_parameters: dict[str, Any]
-):
+def test_a_record_without_the_instance_raises_naming_it(tmp_path: Path, algorithm_parameters: dict[str, Any]):
     """An entry under another qualified name is not the instance's.
 
     Args:

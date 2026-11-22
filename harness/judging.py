@@ -118,9 +118,7 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
             if recorded.directory.relative_to(session).as_posix() in skipped:
                 continue
             flight = _flight(recorded.directory)
-            judged = requirements_tree.flight_rungs(
-                flight["scenario"], flight["capabilities"], flight["rungs"]
-            )
+            judged = requirements_tree.flight_rungs(flight["scenario"], flight["capabilities"], flight["rungs"])
             if requirement_id in judged:
                 found[recorded.nodeid] = read_test_results(recorded.directory)
         return found
@@ -209,8 +207,7 @@ def verdict(
         failing, unjudged = [], []
         for nodeid, results in claimed.items():
             failed = sorted(
-                [case for case, number in numbers[nodeid].items() if not number <= x]
-                + list(results.crashes)
+                [case for case, number in numbers[nodeid].items() if not number <= x] + list(results.crashes)
             )
             found = len(results.runs) + len(results.crashes)
             allowed = allowed_failures(found, p, c)
@@ -221,8 +218,7 @@ def verdict(
                 cell = "fail"
                 failing.append(f"{nodeid}: {len(failed)} failed, {allowed} allowed")
                 failing += [
-                    f'  case {case}: uv run --no-sync pytest "{nodeid}[{case}]" -n 0'
-                    " --full-monte-carlo"
+                    f'  case {case}: uv run --no-sync pytest "{nodeid}[{case}]" -n 0 --full-monte-carlo'
                     for case in failed
                 ]
             else:

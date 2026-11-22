@@ -98,14 +98,10 @@ def sub_topology(name: str, members: Sequence[tuple[str, str]], ports: Sequence[
     """
     return _SUB_TOPOLOGY.format(
         name=name,
-        instances="".join(
-            f"  instance {i}: {c} base id {0x6200 + 0x100 * n:#x}\n"
-            for n, (i, c) in enumerate(members)
-        ),
+        instances="".join(f"  instance {i}: {c} base id {0x6200 + 0x100 * n:#x}\n" for n, (i, c) in enumerate(members)),
         uses="".join(f"    instance {i}\n" for i, _ in members),
         wires="\n".join(
-            f"      mockRateGroup.RateGroupMemberOut[{n}] -> {i}.schedIn"
-            for n, (i, _) in enumerate(members)
+            f"      mockRateGroup.RateGroupMemberOut[{n}] -> {i}.schedIn" for n, (i, _) in enumerate(members)
         ),
         ports="".join(f"    {port}\n" for port in ports),
     )
@@ -129,8 +125,7 @@ def device(name: str, roles: Sequence[Role]) -> str:
         for role in roles
     )
     return (
-        f"module MockGnc {{\n  passive component {name} {{\n"
-        f"    sync input port schedIn: Svc.Sched\n{ports}  }}\n}}\n"
+        f"module MockGnc {{\n  passive component {name} {{\n    sync input port schedIn: Svc.Sched\n{ports}  }}\n}}\n"
     )
 
 
@@ -183,7 +178,5 @@ def device_contract(
     (directory / "gnc").mkdir(exist_ok=True)
     fpp = directory / f"{component}.fpp"
     fpp.write_text(device(component, declared))
-    (directory / "gnc" / f"{name}.fpp").write_text(
-        sub_topology(name, [("device", f"MockGnc.{component}")], ports)
-    )
+    (directory / "gnc" / f"{name}.fpp").write_text(sub_topology(name, [("device", f"MockGnc.{component}")], ports))
     return Contract((fpp,), directory / "gnc")

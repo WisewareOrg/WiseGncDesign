@@ -56,8 +56,7 @@ def _keyword(instance: str, port: str) -> str:
     """
     if not port.endswith("In"):
         raise ValueError(
-            f"{_name(instance)}.{port} is a data input whose name does not end in In, so it"
-            " names no step keyword"
+            f"{_name(instance)}.{port} is a data input whose name does not end in In, so it names no step keyword"
         )
     return port.removesuffix("In")
 
@@ -117,9 +116,9 @@ class GncPartition:
         """
         topology = f"{configuration}.Gnc"
         connections = model.topologies[topology]
-        component = {
-            c.from_instance: model.instances[c.from_instance].component for c in connections
-        } | {c.to_instance: model.instances[c.to_instance].component for c in connections}
+        component = {c.from_instance: model.instances[c.from_instance].component for c in connections} | {
+            c.to_instance: model.instances[c.to_instance].component for c in connections
+        }
         groups = rate_group_members(model, configuration)
         driver = next(i for i, kind in component.items() if kind == DRIVER)
         self.rate_groups = tuple(groups)
@@ -130,10 +129,7 @@ class GncPartition:
         missing = sorted(set(wanted.values()) - set(by_name))
         extra = sorted(set(by_name) - set(wanted.values()))
         if missing or extra:
-            raise ValueError(
-                f"{topology}: no class for the components {missing}; the classes {extra} match no"
-                " member"
-            )
+            raise ValueError(f"{topology}: no class for the components {missing}; the classes {extra} match no member")
         self._classes = {m: by_name[name] for m, name in wanted.items()}
         self.components = {_name(m): model.instances[m].component for m in members}
 
@@ -143,9 +139,7 @@ class GncPartition:
         self._routes: dict[tuple[str, str], tuple[str, str]] = {}
         for c in connections:
             if c.from_instance not in scheduling:
-                edge = (
-                    f"{_name(c.from_instance)}.{c.from_port} -> {_name(c.to_instance)}.{c.to_port}"
-                )
+                edge = f"{_name(c.from_instance)}.{c.from_port} -> {_name(c.to_instance)}.{c.to_port}"
                 if order[c.to_instance] <= order[c.from_instance]:
                     raise ValueError(
                         f"{edge} is a backward edge into a member that runs no later in the"

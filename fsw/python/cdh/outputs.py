@@ -25,10 +25,7 @@ def pairings(roles: Sequence[Role]) -> list[Pair]:
     Returns:
         The pairs, in the roles' order.
     """
-    return [
-        Pair(role.role, fpp_types.named(role.bus), fpp_types.named(role.icd), role.output)
-        for role in roles
-    ]
+    return [Pair(role.role, fpp_types.named(role.bus), fpp_types.named(role.icd), role.output) for role in roles]
 
 
 def convert(pairs: Sequence[Pair], values: Mapping[str, Any]) -> dict[str, Any]:
@@ -43,7 +40,5 @@ def convert(pairs: Sequence[Pair], values: Mapping[str, Any]) -> dict[str, Any]:
         Each bus struct's tuple, by its role, for the ports written.
     """
     return {
-        pair.role: fpp_types.converter(pair.icd, pair.bus)(values[pair.port])
-        for pair in pairs
-        if pair.port in values
+        pair.role: fpp_types.converter(pair.icd, pair.bus)(values[pair.port]) for pair in pairs if pair.port in values
     }

@@ -34,8 +34,7 @@ def write(parameters: Mapping[str, Any], path: Path) -> Path:
     """
     record = {
         instance: {
-            name: value.tolist() if isinstance(value, np.ndarray) else value
-            for name, value in tuple_._asdict().items()
+            name: value.tolist() if isinstance(value, np.ndarray) else value for name, value in tuple_._asdict().items()
         }
         for instance, tuple_ in parameters.items()
     }

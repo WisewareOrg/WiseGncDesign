@@ -160,9 +160,7 @@ def variants(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Contract]:
         _component(package, "Second", ["provides: SYS902"], notebook=SECOND),
         _component(package, "Unclaimed"),
         _component(package, "Classless", ["provides: SYS901"], notebook=""),
-        _component(
-            package, "Parameterless", ["provides: SYS901"], True, "class Parameterless:\n    pass\n"
-        ),
+        _component(package, "Parameterless", ["provides: SYS901"], True, "class Parameterless:\n    pass\n"),
     )
     gnc = root / "gnc"
     gnc.mkdir()
@@ -429,9 +427,7 @@ def _vehicle_for(configuration: str) -> str:
         vehicle = VEHICLES[name]()
         if sensors <= set(vehicle.readers()) and actuators <= set(vehicle.writers()):
             return name
-    raise AssertionError(
-        f"no vehicle reads {sorted(sensors)} and writes {sorted(actuators)} for {configuration}"
-    )
+    raise AssertionError(f"no vehicle reads {sorted(sensors)} and writes {sorted(actuators)} for {configuration}")
 
 
 def _claimed(configuration: str) -> tuple[list[str], str]:
@@ -587,16 +583,12 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
     if not built(fprime_configuration):
         pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
     _, scenario = _claimed(fprime_configuration)
-    flight = Mission(
-        _vehicle_for(fprime_configuration), fprime_configuration, "fprime", (scenario,)
-    )
+    flight = Mission(_vehicle_for(fprime_configuration), fprime_configuration, "fprime", (scenario,))
     [(cls, vehicle_class)] = mission_tests(flight).items()
     [name] = [name for name in vars(vehicle_class) if name.startswith("test_")]
     test = f"test_flights.py::{cls}::{name}"
     pytester.makepyfile(
-        test_flights=FPRIME_FLIGHT.format(
-            vehicle=flight.vehicle, gnc=fprime_configuration, scenario=scenario
-        )
+        test_flights=FPRIME_FLIGHT.format(vehicle=flight.vehicle, gnc=fprime_configuration, scenario=scenario)
     )
     options = ("-p", "no:cacheprovider", "-p", "no:xdist")
 
@@ -672,9 +664,7 @@ def test_a_component_claims_one_id_per_provides_line(
     ],
     ids=["same-flight-twice", "same-definition-twice"],
 )
-def test_two_flights_that_would_share_a_test_are_refused(
-    tree: Path, missions: list[dict], match: str
-) -> None:
+def test_two_flights_that_would_share_a_test_are_refused(tree: Path, missions: list[dict], match: str) -> None:
     """A flight cannot be flown twice, whatever each mission judges, nor give two scenarios a name.
 
     A vehicle, configuration, build and scenario cannot be flown twice. Two TST items that
@@ -734,8 +724,7 @@ def test_flight_json_survives_a_case_that_crashes_before_it_flies(
     project.makepyfile(
         test_flights=flying(
             f'gnc="Both", build="python", scenarios=("TST901",), contract={in_notebook(variants)}',
-            'gnc="MockFlight", build="python", scenarios=("TST901",), rungs=("SRS902",),'
-            " contract=MOCK",
+            'gnc="MockFlight", build="python", scenarios=("TST901",), rungs=("SRS902",), contract=MOCK',
         )
     )
 
@@ -878,9 +867,7 @@ def test_a_scenario_file_that_raised_on_import_is_imported_afresh_once_fixed(
 
     (scenarios / "alpha.py").write_text(ALPHA.format(duration=1.0, body="pass"))
     [vehicle_class] = mission_tests(flown).values()
-    assert [name for name in vars(vehicle_class) if name.startswith("test_")] == [
-        "test_MockFlight_python_alpha"
-    ]
+    assert [name for name in vars(vehicle_class) if name.startswith("test_")] == ["test_MockFlight_python_alpha"]
 
 
 def test_a_flight_runs_the_procedure_on_the_build_s_radio_edge_for_the_scenario_s_duration(
@@ -938,9 +925,7 @@ def test_a_case_s_parameter_record_is_written_beside_its_run_file_from_each_memb
     path = [str(variants.gnc.parent), *filter(None, [os.environ.get("PYTHONPATH")])]
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join(path))
     project.makepyfile(
-        test_flights=flying(
-            f'gnc="Both", build="python", scenarios=("TST901",), contract={in_notebook(variants)}'
-        )
+        test_flights=flying(f'gnc="Both", build="python", scenarios=("TST901",), contract={in_notebook(variants)}')
     )
 
     result = fly_in_a_subprocess(project)
@@ -1032,9 +1017,7 @@ def test_a_procedure_that_forgets_an_await_fails_the_case(
     pyproject = tomllib.loads((REPOSITORY / "pyproject.toml").read_text())
     filters = pyproject["tool"]["pytest"]["ini_options"]["filterwarnings"]
     project.makeini("[pytest]\nfilterwarnings =\n" + "".join(f"    {f}\n" for f in filters))
-    (project.path / "scenarios" / "alpha.py").write_text(
-        ALPHA.format(duration=3.0, body="ground.sleep(1.0)")
-    )
+    (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=3.0, body="ground.sleep(1.0)"))
     project.makepyfile(test_flights=FLIGHT)
 
     result = fly_in_a_subprocess(project)
@@ -1138,10 +1121,7 @@ def test_the_mock_actuator_s_command_spins_the_wheel_through_its_writer_alike_on
 
     built_fprime = built("MockActuation")
     (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=10.0, body="pass"))
-    missions = [
-        f'gnc="MockActuation", build="{build}", scenarios=("TST901",), contract=MOCK'
-        for build in BUILDS
-    ]
+    missions = [f'gnc="MockActuation", build="{build}", scenarios=("TST901",), contract=MOCK' for build in BUILDS]
     project.makepyfile(test_flights=flying(*missions, vehicle="imu_wheel_spacecraft"))
 
     result = fly_in_a_subprocess(project)

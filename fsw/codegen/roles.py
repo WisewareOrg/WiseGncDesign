@@ -117,10 +117,7 @@ def taken(model: Model, configuration: str) -> tuple[Role, ...]:
         sensor = port.port in {p.name for p in component.inputs}
         if not any(_exposed_at(role) == (short, sensor) for role in declared):
             kind, end = ("sensor", "input") if sensor else ("actuator", "output")
-            raise ValueError(
-                f"{topology}'s port {short}, an instance's {end}, names no {kind} role of"
-                f" {CONVERTER}"
-            )
+            raise ValueError(f"{topology}'s port {short}, an instance's {end}, names no {kind} role of {CONVERTER}")
         exposed.add((short, sensor))
     return tuple(role for role in declared if _exposed_at(role) in exposed)
 

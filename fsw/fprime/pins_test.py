@@ -66,9 +66,7 @@ def divergences(group: list[str], framework: list[str]) -> list[str]:
 def test_the_project_pins_the_f_prime_tools_at_the_framework_versions():
     """Each tool is `==`-pinned in the `fprime` group at the version the framework clone pins."""
     assert REQUIREMENTS.is_file(), f"{REQUIREMENTS} is absent: run `just _sync` to clone F´"
-    group = tomllib.loads((REPOSITORY / "pyproject.toml").read_text())["dependency-groups"][
-        "fprime"
-    ]
+    group = tomllib.loads((REPOSITORY / "pyproject.toml").read_text())["dependency-groups"]["fprime"]
     framework = REQUIREMENTS.read_text().splitlines()
     assert divergences(group, framework) == []
 

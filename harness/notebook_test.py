@@ -80,9 +80,7 @@ def test_the_run_is_capped_and_names_the_notebook_as_its_session(tmp_path: Path)
     assert [path.name for path in tmp_path.iterdir()] == ["env.py"]
 
 
-def test_an_unregistered_kernel_fails_the_run_naming_the_fix(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_an_unregistered_kernel_fails_the_run_naming_the_fix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """With no `wise-gnc-design` kernel the run refuses before executing, and says how to register.
 
     Args:

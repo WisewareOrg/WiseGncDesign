@@ -35,9 +35,7 @@ def _sources(*members: Member) -> dict:
 
 def test_each_target_field_comes_from_its_namesake_ignoring_case_and_extras_are_dropped() -> None:
     """`Rate` comes from `rate`, `count` from `COUNT`; the source's `extra` is not planned."""
-    sources = _sources(
-        Member("extra", "I32", None), Member("COUNT", "U16", None), Member("rate", "F64", 3)
-    )
+    sources = _sources(Member("extra", "I32", None), Member("COUNT", "U16", None), Member("rate", "F64", 3))
     planned = plan(TARGET, TYPES, sources, "Mock.Source")
     assert [(member.name, name, f) for member, name, f in planned] == [
         ("Rate", "rate", ((3,), np.dtype("float64"))),
@@ -74,9 +72,7 @@ def test_each_target_field_comes_from_its_namesake_ignoring_case_and_extras_are_
         ),
     ],
 )
-def test_a_field_the_rule_cannot_fill_is_refused_by_name(
-    target: Struct, sources: dict, match: str
-) -> None:
+def test_a_field_the_rule_cannot_fill_is_refused_by_name(target: Struct, sources: dict, match: str) -> None:
     """A missing field, a struct field, another shape and another element type are each refused.
 
     Args:

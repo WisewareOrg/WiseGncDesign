@@ -60,11 +60,7 @@ def attitude_bound_rad(
         (N,) rad.
     """
     t, dt = t_s, step_s
-    return (
-        gyro_bias_rad_s * t
-        + 0.5 * omega_dot_max_rad_s2 * dt * t
-        + 3.0 * gyro_noise_std_rad_s * np.sqrt(t * dt)
-    )
+    return gyro_bias_rad_s * t + 0.5 * omega_dot_max_rad_s2 * dt * t + 3.0 * gyro_noise_std_rad_s * np.sqrt(t * dt)
 
 
 def velocity_bound_m_s(
@@ -94,9 +90,7 @@ def velocity_bound_m_s(
         (N,) m/s.
     """
     t, dt, n = t_s, step_s, mean_motion_rad_s
-    return (1.0 + (n * t) ** 2 / 3.0) * (
-        accel_bias_m_s2 * t + 3.0 * accel_noise_std_m_s2 * np.sqrt(t * dt)
-    )
+    return (1.0 + (n * t) ** 2 / 3.0) * (accel_bias_m_s2 * t + 3.0 * accel_noise_std_m_s2 * np.sqrt(t * dt))
 
 
 def position_bound_m(
@@ -163,9 +157,7 @@ def error_growth(
         for command in json.loads(str(run["commands"]))
         if command["name"] == "nav.initNavState" and command["response"] == "OK"
     )
-    omega_dot = np.linalg.norm(np.diff(run["truth/omega_BN_B"], axis=0), axis=1) / np.diff(
-        run["t_s"]
-    )
+    omega_dot = np.linalg.norm(np.diff(run["truth/omega_BN_B"], axis=0), axis=1) / np.diff(run["t_s"])
     gyro_bias = float(np.linalg.norm(run["draw_gyro_bias_P_rad_s"]))
     accel_bias = float(np.linalg.norm(run["draw_accel_bias_P_m_s2"]))
     n = np.sqrt(mu / float(np.linalg.norm(run["truth/r_N"][0])) ** 3)
@@ -174,9 +166,7 @@ def error_growth(
             "nav.bodyEciAttitude",
             "truth/q_BN",
             attitude_error_rad,
-            lambda t: attitude_bound_rad(
-                t, gyro_bias, omega_dot.max(), gyro_noise_std_rad_s, step_s
-            ),
+            lambda t: attitude_bound_rad(t, gyro_bias, omega_dot.max(), gyro_noise_std_rad_s, step_s),
         ),
         "velocity error [m/s]": (
             "nav.bodyEciVel",
@@ -251,8 +241,7 @@ def violations(
         if over.size:
             k = over[0]
             found.append(
-                f"{name} exceeds {BOUND_FACTOR} x its bound from t = {t[k]} s: "
-                f"{error[k]} > {BOUND_FACTOR * bound[k]}"
+                f"{name} exceeds {BOUND_FACTOR} x its bound from t = {t[k]} s: {error[k]} > {BOUND_FACTOR * bound[k]}"
             )
     return found
 

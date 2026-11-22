@@ -55,9 +55,7 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(
         converter_mock(
             (
                 "    sync input port bIn",
-                "    sync input port cIn: Bus.A\n"
-                "    output port cOut: Gnc.AIcd\n"
-                "    sync input port bIn",
+                "    sync input port cIn: Bus.A\n    output port cOut: Gnc.AIcd\n    sync input port bIn",
             ),
         )
     )["BusConverterPins.hpp"]

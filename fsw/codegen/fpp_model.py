@@ -337,8 +337,7 @@ def parse(directory: Path) -> Model:
         instances[qualified] = Instance(qualified, component, entry["baseId"])
 
     topologies = {
-        _qualified(topology): _connections(topology, instance_map)
-        for topology in analysis["topologyMap"].values()
+        _qualified(topology): _connections(topology, instance_map) for topology in analysis["topologyMap"].values()
     }
     ports = {
         f"{_qualified(topology)}.{name}": TopologyPort(*_port_end(port["pii"], instance_map))
@@ -424,9 +423,7 @@ def _connections(topology: dict[str, Any], instance_map: dict[str, Any]) -> tupl
             from_instance, from_port = _port_end(c["from"]["port"], instance_map)
             to_instance, to_port = _port_end(c["to"]["port"], instance_map)
             from_index, to_index = from_numbers[_key(c)], to_numbers[_key(c)]
-            connections.append(
-                Connection(from_instance, from_port, from_index, to_instance, to_port, to_index)
-            )
+            connections.append(Connection(from_instance, from_port, from_index, to_instance, to_port, to_index))
     return tuple(sorted(connections, key=lambda c: (c.from_instance, c.from_port, c.from_index)))
 
 
@@ -541,9 +538,7 @@ def _component(
     channels = []
     for channel in entry["tlmChannelMap"].values():
         position, data = spec(channel)
-        channels.append(
-            (position, Channel(data["name"], _type_name(channel["channelType"], nodes)))
-        )
+        channels.append((position, Channel(data["name"], _type_name(channel["channelType"], nodes))))
     parameters = []
     for parameter in entry["paramMap"].values():
         position, data = spec(parameter)

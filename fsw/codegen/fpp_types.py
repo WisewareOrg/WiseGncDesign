@@ -128,9 +128,7 @@ def parameters_from(tuple_type: type, values: Mapping[str, Any]) -> Any:
         if shape and parameter.name in converted:
             value = np.array(converted[parameter.name], dtype=element)
             if value.shape != shape:
-                raise ValueError(
-                    f"{component.name}.{parameter.name} is {shape}, but its value is {value.shape}"
-                )
+                raise ValueError(f"{component.name}.{parameter.name} is {shape}, but its value is {value.shape}")
             converted[parameter.name] = value
     return tuple_type(**converted)
 
@@ -160,15 +158,10 @@ def _source_forms(source: type) -> dict[str, tuple[str, Form]]:
         struct, types = _STRUCTS[source]
         return {m.name.lower(): (m.name, form(m, types)) for m in struct.members}
     fields = source.__dtype__.fields
-    return {
-        name.lower(): (name, (fields[name][0].shape, fields[name][0].base))
-        for name in source.__dtype__.names
-    }
+    return {name.lower(): (name, (fields[name][0].shape, fields[name][0].base)) for name in source.__dtype__.names}
 
 
-def _build(
-    model: Model, algorithms: Collection[Path], kept: Collection[str] = ()
-) -> dict[str, SimpleNamespace]:
+def _build(model: Model, algorithms: Collection[Path], kept: Collection[str] = ()) -> dict[str, SimpleNamespace]:
     """The tuples of a model's structs and of its algorithms' components, by top-level FPP module.
 
     Each struct's tuple is recorded for `converter`, and each algorithm's component for
@@ -233,8 +226,7 @@ def _component_tuples(component: Component) -> dict[str, type]:
     for port in component.outputs:
         if port.size != 1 or len(port.args) != 1:
             raise ValueError(
-                f"{component.name}.{port.name}: an output port is a field only with one argument"
-                " and no port array"
+                f"{component.name}.{port.name}: an output port is a field only with one argument and no port array"
             )
     name = component.name.rsplit(".", 1)[-1]
     outputs = [p.name for p in component.outputs]

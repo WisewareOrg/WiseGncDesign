@@ -86,9 +86,7 @@ def test_the_command_writes_navstate_alone_and_the_next_step_propagates_from_its
     reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=0.0, dcm_PB=_IDENTITY))
     velocity = np.array([1.0, 2.0, 3.0])
 
-    commanded = reckoner.initNavState(
-        epoch=60.0, attitude=_Q_IDENTITY, position=_AWAY_FROM_ORIGIN, velocity=velocity
-    )
+    commanded = reckoner.initNavState(epoch=60.0, attitude=_Q_IDENTITY, position=_AWAY_FROM_ORIGIN, velocity=velocity)
     _, stepped = reckoner.step(t=61.0, imu=Gnc.ImuReading(_ZERO3, _ZERO3))
 
     assert commanded == Gnc.ImuDeadReckonerTelemetry(navState="initialized")
@@ -163,9 +161,7 @@ def test_gravity_alone_keeps_a_quarter_circular_orbit_on_the_analytic_position()
 
     theta = n * state.t
     expected_r = radius * np.array([np.cos(theta), np.sin(theta), 0.0])
-    np.testing.assert_allclose(
-        state.r_BN_N, expected_r, atol=1.0, err_msg="quarter-orbit position error exceeds 1 m"
-    )
+    np.testing.assert_allclose(state.r_BN_N, expected_r, atol=1.0, err_msg="quarter-orbit position error exceeds 1 m")
 
 
 # The quaternion kinematics agree with the direction cosine matrix derivative identity
@@ -210,12 +206,8 @@ def test_a_platform_rate_turns_the_body_by_the_mounting_s_transpose():
 
     _, state = reckoner.step(t=dt, imu=Gnc.ImuReading(omega_p, _ZERO3))
 
-    expected = Rotation.from_quat(q0, scalar_first=True) * Rotation.from_rotvec(
-        mounting.T @ omega_p * dt
-    )
-    np.testing.assert_allclose(
-        state.bodyEciAttitude, expected.as_quat(scalar_first=True), rtol=0, atol=1e-12
-    )
+    expected = Rotation.from_quat(q0, scalar_first=True) * Rotation.from_rotvec(mounting.T @ omega_p * dt)
+    np.testing.assert_allclose(state.bodyEciAttitude, expected.as_quat(scalar_first=True), rtol=0, atol=1e-12)
 
 
 @pytest.mark.parametrize("dt", [1e-3, 1e-4])
@@ -239,9 +231,7 @@ def test_a_nan_error_is_a_violation():
     n = len(t_s)
     identity = np.tile([1.0, 0.0, 0.0, 0.0], (n, 1))
     r_N = np.tile([7.0e6, 0.0, 0.0], (n, 1))
-    commands = [
-        {"name": "nav.initNavState", "args": {"epoch": 0.0}, "response": "OK", "context": 1}
-    ]
+    commands = [{"name": "nav.initNavState", "args": {"epoch": 0.0}, "response": "OK", "context": 1}]
     run = {
         "t_s": t_s,
         "commands": np.asarray(json.dumps(commands)),
@@ -299,12 +289,8 @@ def test_the_bound_s_step_is_nav_s_integration_step_not_the_base_tick(
     inputs = bound_inputs()
 
     assert inputs["step_s"] == 1.0
-    assert inputs["gyro_noise_std_rad_s"] == (
-        ImuSpacecraft.gyro_noise_density_rad_s_rthz / np.sqrt(0.5)
-    )
-    assert inputs["accel_noise_std_m_s2"] == (
-        ImuSpacecraft.accel_noise_density_m_s2_rthz / np.sqrt(0.5)
-    )
+    assert inputs["gyro_noise_std_rad_s"] == (ImuSpacecraft.gyro_noise_density_rad_s_rthz / np.sqrt(0.5))
+    assert inputs["accel_noise_std_m_s2"] == (ImuSpacecraft.accel_noise_density_m_s2_rthz / np.sqrt(0.5))
 
 
 @pytest.mark.sim_scenario("leo500")

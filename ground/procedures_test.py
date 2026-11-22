@@ -344,9 +344,7 @@ def test_a_command_answered_other_than_ok_fails_the_procedure_naming_it(edge: St
     ground = _ground(edge, _sends("mock.setMode", mode="slow"))
     edge.answers.append((1, "VALIDATION_ERROR", "not in this mode"))
 
-    with pytest.raises(
-        CommandFailed, match="mock.setMode was answered VALIDATION_ERROR: not in this mode"
-    ) as raised:
+    with pytest.raises(CommandFailed, match="mock.setMode was answered VALIDATION_ERROR: not in this mode") as raised:
         _tick(ground, 1)
 
     assert raised.value.reason == "not in this mode"
@@ -362,9 +360,7 @@ def test_a_command_never_answered_times_out(edge: StubEdge):
     """
     ground = _ground(edge, _sends("mock.setMode", timeout_s=1.0, mode="fast"))
 
-    with pytest.raises(
-        TimeoutError, match=r"at t = 1.0 s waiting until mock.setMode is answered, by t = 1.0 s"
-    ):
+    with pytest.raises(TimeoutError, match=r"at t = 1.0 s waiting until mock.setMode is answered, by t = 1.0 s"):
         _tick(ground, 1)
 
 

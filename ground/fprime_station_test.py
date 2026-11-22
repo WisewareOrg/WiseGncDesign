@@ -107,9 +107,7 @@ def test_serialized_writes_become_values_in_one_batch(mock: FprimeStation):
     ],
     ids=["number", "numpy-array", "wrong-length", "misaligned"],
 )
-def test_values_takes_whole_serialized_values_only(
-    mock: FprimeStation, channel: str, serialized: list
-):
+def test_values_takes_whole_serialized_values_only(mock: FprimeStation, channel: str, serialized: list):
     """Written values, numpy arrays included, or bytes of the wrong length fail, naming the channel.
 
     Args:
@@ -132,8 +130,7 @@ def _test_command(dictionary: Dictionary) -> bytes:
     """
     command = dictionary.command(TEST_COMMAND)
     args = {
-        param: 1.5 if type_.dtype.kind == "f" else 1
-        for param, type_ in zip(command.params, command.types, strict=True)
+        param: 1.5 if type_.dtype.kind == "f" else 1 for param, type_ in zip(command.params, command.types, strict=True)
     }
     station = FprimeStation(ModuleType("no_deployment"), dictionary)
     return station.encode_command(TEST_COMMAND, dictionary.arguments(TEST_COMMAND, args))
@@ -152,9 +149,7 @@ def _unknown_opcode(configuration: str) -> int:
     return max(c["opcode"] for c in document["commands"]) + 1
 
 
-def _gnc_writes(
-    writes: list[tuple[str, int, Any]], configuration: str
-) -> list[tuple[str, int, Any]]:
+def _gnc_writes(writes: list[tuple[str, int, Any]], configuration: str) -> list[tuple[str, int, Any]]:
     """The writes of the configuration's GNC instances among drained ones.
 
     Args:

@@ -60,9 +60,7 @@ class Source:
         """
         LOG.append(("source", "step", t))
         sample = named("MockGnc.Sample")(value=self._gain * self._level + t)
-        return named("MockGnc.SourceOutputs")(sampleOut=sample), named("MockGnc.SourceTelemetry")(
-            level=self._level
-        )
+        return named("MockGnc.SourceOutputs")(sampleOut=sample), named("MockGnc.SourceTelemetry")(level=self._level)
 
 
 class Sink:

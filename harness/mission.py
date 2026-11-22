@@ -98,19 +98,13 @@ def _claims(model: Model, component: Component) -> list[str]:
             does not hold, naming the component.
     """
     claimed = [
-        line.removeprefix(_PROVIDES).strip()
-        for line in model.annotations[component.name]
-        if line.startswith(_PROVIDES)
+        line.removeprefix(_PROVIDES).strip() for line in model.annotations[component.name] if line.startswith(_PROVIDES)
     ]
     if not claimed:
-        raise ValueError(
-            f"{component.name} claims no capability: {component.file} has no `@ provides` line"
-        )
+        raise ValueError(f"{component.name} claims no capability: {component.file} has no `@ provides` line")
     unknown = [uid for uid in claimed if uid not in requirements_tree.items("SYS")]
     if unknown:
-        raise ValueError(
-            f"no capability {unknown} in the requirements tree, claimed by {component.name}"
-        )
+        raise ValueError(f"no capability {unknown} in the requirements tree, claimed by {component.name}")
     return claimed
 
 
@@ -237,9 +231,7 @@ class Mission:
             raise ValueError(f"no vehicle {self.vehicle!r}; known: {sorted(VEHICLES)}")
         known = configurations(contract=self.contract)
         if self.gnc not in known:
-            raise ValueError(
-                f"no configuration {self.gnc!r} in {self.contract.gnc}; known: {list(known)}"
-            )
+            raise ValueError(f"no configuration {self.gnc!r} in {self.contract.gnc}; known: {list(known)}")
         if self.build not in BUILDS:
             raise ValueError(f"no build {self.build!r}; known: {list(BUILDS)}")
         if self.build == "fprime" and self.gnc not in fprime_configurations(contract=self.contract):
@@ -257,10 +249,7 @@ class Mission:
         for scenario_id in self.scenarios:
             rungs = requirements_tree.flight_rungs(scenario_id, capabilities)
             if not rungs:
-                raise ValueError(
-                    f"{scenario_id} judges no rung under {self.gnc}'s capabilities"
-                    f" {list(capabilities)}"
-                )
+                raise ValueError(f"{scenario_id} judges no rung under {self.gnc}'s capabilities {list(capabilities)}")
             reached.update(rungs)
         outside = sorted(set(self.rungs or ()) - reached)
         if outside:
@@ -323,8 +312,7 @@ def mission_tests(*missions: Mission) -> dict[str, type]:
             test.__qualname__ = f"{name}.{test.__name__}"
             methods[test.__name__] = test
     return {
-        name: type(name, (), {"_write_flight_json": _write_flight_json, **methods})
-        for name, methods in classes.items()
+        name: type(name, (), {"_write_flight_json": _write_flight_json, **methods}) for name, methods in classes.items()
     }
 
 
@@ -446,17 +434,13 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         record = run_path(sim_test_directory, sim_case_index).with_suffix(".prm.json")
         parameters.write(
             {
-                member.instance: member.tuple_type()
-                if member.parameters is None
-                else member.parameters(sim_scenario)
+                member.instance: member.tuple_type() if member.parameters is None else member.parameters(sim_scenario)
                 for member in mission._found.members
             },
             record,
         )
         if mission.build == "python":
-            fsw = radio = FrameRunner(
-                mission.gnc, record, mission._found.classes, contract=mission.contract
-            )
+            fsw = radio = FrameRunner(mission.gnc, record, mission._found.classes, contract=mission.contract)
         else:
             fsw = Adapter(mission.gnc, record, contract=mission.contract)
             radio = FprimeStation(fsw, fsw.dictionary)
@@ -472,9 +456,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             period_s=ground_period_s,
         )
         try:
-            datasets = sim_scenario.run(
-                host, fsw_fields={}, duration_s=sim_duration_s, ground=ground
-            )
+            datasets = sim_scenario.run(host, fsw_fields={}, duration_s=sim_duration_s, ground=ground)
         except BaseException:
             if ground.failure is None:
                 raise
@@ -494,9 +476,7 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
 
 
 @functools.cache
-def _definition(
-    reference: tuple[tuple[str, str], ...], root: Path
-) -> Callable[[Ground], Coroutine[Any, Any, None]]:
+def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[[Ground], Coroutine[Any, Any, None]]:
     """The scenario definition a TST item's reference names.
 
     A module already loaded, or loading, from the referenced file supplies it, so a notebook can

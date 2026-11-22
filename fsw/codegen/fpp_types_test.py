@@ -216,9 +216,7 @@ def test_parameters_from_plain_values_makes_each_array_of_its_fpp_shape_and_type
     Args:
         mock: the mock's namespace.
     """
-    built = parameters_from(
-        mock.SpinnerParameters, {"mounting": [[1, 2, 3], [4, 5, 6]], "count": 4}
-    )
+    built = parameters_from(mock.SpinnerParameters, {"mounting": [[1, 2, 3], [4, 5, 6]], "count": 4})
 
     assert type(built) is mock.SpinnerParameters
     assert built.mounting.shape == (2, 3)
@@ -234,9 +232,7 @@ def test_parameters_from_refuses_an_array_of_another_shape_naming_it(mock: Simpl
     Args:
         mock: the mock's namespace.
     """
-    with pytest.raises(
-        ValueError, match=r"Mock\.Spinner\.mounting is \(2, 3\), but its value is \(2,\)"
-    ):
+    with pytest.raises(ValueError, match=r"Mock\.Spinner\.mounting is \(2, 3\), but its value is \(2,\)"):
         parameters_from(mock.SpinnerParameters, {"mounting": [1.0, 2.0], "count": 4})
 
 
@@ -257,9 +253,7 @@ def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(mock: Simpl
     assert converted.count == 4
     assert converted.mode == "running"
 
-    shaped = converter(mock.Shapes, mock.Shapes)(
-        mock.Shapes(rows=[[1, 2, 3], [4, 5, 6]], counts=[7, 8])
-    )
+    shaped = converter(mock.Shapes, mock.Shapes)(mock.Shapes(rows=[[1, 2, 3], [4, 5, 6]], counts=[7, 8]))
 
     assert shaped.rows.shape == (2, 3)
     assert shaped.rows.dtype == np.dtype("float64")
@@ -312,9 +306,7 @@ def test_a_converter_refuses_a_field_that_breaks_the_field_rule(
     ],
     ids=["two arguments", "port array", "serial"],
 )
-def test_an_output_port_that_is_not_one_value_fails_generation_naming_it(
-    tmp_path: Path, port: str, replacement: str
-):
+def test_an_output_port_that_is_not_one_value_fails_generation_naming_it(tmp_path: Path, port: str, replacement: str):
     """An output port with other than one argument, or an array of ports, has no field.
 
     Args:
@@ -346,9 +338,7 @@ def test_each_gnc_instance_s_tuples_name_its_dictionary_s_channels_parameters_an
         short = instance.name.rsplit(".", 1)[-1]
         component = instance.component
         channels = dictionary.entries(short)["channels"]
-        parameters = [
-            p.name.removeprefix(f"{short}.") for p in dictionary.parameters_by_id.values()
-        ]
+        parameters = [p.name.removeprefix(f"{short}.") for p in dictionary.parameters_by_id.values()]
         ports = [p.name for p in components[component].outputs]
         assert sorted(named(f"{component}Telemetry")._fields) == sorted(channels), instance.name
         assert sorted(named(f"{component}Parameters")._fields) == sorted(parameters), instance.name
@@ -444,9 +434,7 @@ def test_a_contract_s_new_name_in_an_existing_module_leaves_that_module_s_namesp
     """
     gnc = dict(vars(Gnc))
 
-    fpp_types.load(
-        _contract(tmp_path, "module Gnc {\n  struct MockAdded {\n    value: F64\n  }\n}\n")
-    )
+    fpp_types.load(_contract(tmp_path, "module Gnc {\n  struct MockAdded {\n    value: F64\n  }\n}\n"))
 
     assert named("Gnc.MockAdded")._fields == ("value",)
     assert not hasattr(Gnc, "MockAdded")
@@ -461,8 +449,6 @@ def test_a_loaded_contract_makes_tuples_only_for_the_names_it_adds(tmp_path: Pat
     """
     before = set(fpp_types._STRUCTS)
 
-    fpp_types.load(
-        _contract(tmp_path, "module MockHeld {\n  struct Fresh {\n    value: F64\n  }\n}\n")
-    )
+    fpp_types.load(_contract(tmp_path, "module MockHeld {\n  struct Fresh {\n    value: F64\n  }\n}\n"))
 
     assert set(fpp_types._STRUCTS) - before == {named("MockHeld.Fresh")}

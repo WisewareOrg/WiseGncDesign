@@ -290,9 +290,7 @@ class ImuDeadReckoner:
         self.navState = "initialized"
         return Gnc.ImuDeadReckonerTelemetry(navState=self.navState)
 
-    def step(
-        self, t: float, imu: Gnc.ImuReading
-    ) -> tuple[Gnc.ImuDeadReckonerOutputs, Gnc.ImuDeadReckonerTelemetry]:
+    def step(self, t: float, imu: Gnc.ImuReading) -> tuple[Gnc.ImuDeadReckonerOutputs, Gnc.ImuDeadReckonerTelemetry]:
         """Advances the state to `t` by one RK4 step, once commanded, and writes it.
 
         Args:
@@ -350,9 +348,7 @@ def parameters(scenario: Scenario) -> Gnc.ImuDeadReckonerParameters:
     Returns:
         The parameters, which the ground writes as the case's record.
     """
-    return Gnc.ImuDeadReckonerParameters(
-        mu=scenario.mu_m3_s2["earth"], dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB)
-    )
+    return Gnc.ImuDeadReckonerParameters(mu=scenario.mu_m3_s2["earth"], dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB))
 
 
 # %% [markdown]

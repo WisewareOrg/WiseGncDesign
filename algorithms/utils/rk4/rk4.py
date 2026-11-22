@@ -24,9 +24,7 @@ __all__ = ["step"]
 
 
 @njit
-def step(
-    fun: Callable[..., np.ndarray], t: float, y: np.ndarray, h: float, *args: object
-) -> np.ndarray:
+def step(fun: Callable[..., np.ndarray], t: float, y: np.ndarray, h: float, *args: object) -> np.ndarray:
     """One RK4 step of dy/dt = fun(t, y, *args) from t to t + h.
 
     Args:

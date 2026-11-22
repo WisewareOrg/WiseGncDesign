@@ -92,17 +92,12 @@ def source(configuration: str) -> Path:
     """
     spec = importlib.util.find_spec(_extension(configuration))
     if spec is None:
-        raise ModuleNotFoundError(
-            f"the F´ deployment of {configuration} is not built; run `just fsw`"
-        )
+        raise ModuleNotFoundError(f"the F´ deployment of {configuration} is not built; run `just fsw`")
     path = Path(spec.origin)
     status = os.stat(path)
     stamp = (status.st_ino, status.st_mtime_ns)
     if _loaded_stamps.setdefault(configuration, stamp) != stamp:
-        raise RuntimeError(
-            f"{path} was rebuilt after this process loaded it;"
-            " restart the kernel to fly the new build"
-        )
+        raise RuntimeError(f"{path} was rebuilt after this process loaded it; restart the kernel to fly the new build")
     return path
 
 

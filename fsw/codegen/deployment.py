@@ -211,9 +211,7 @@ def render(configuration: str, directory: Path, *, contract: Contract = CONTRACT
     return topology
 
 
-def fpp_files(
-    configuration: str, directory: Path, *, contract: Contract = CONTRACT
-) -> tuple[Path, ...]:
+def fpp_files(configuration: str, directory: Path, *, contract: Contract = CONTRACT) -> tuple[Path, ...]:
     """Renders a configuration's deployment topology into `directory`, and lists its model's files.
 
     Args:
@@ -258,9 +256,7 @@ def fprime_configurations(*, contract: Contract = CONTRACT) -> tuple[str, ...]:
         The names, sorted, a subset of `configurations`.
     """
     return tuple(
-        configuration
-        for configuration in configurations(contract=contract)
-        if _fprime_built(configuration, contract)
+        configuration for configuration in configurations(contract=contract) if _fprime_built(configuration, contract)
     )
 
 
@@ -381,10 +377,7 @@ def bus_port(configuration: str, port: str, *, contract: Contract = CONTRACT) ->
         and (connection.to_instance, connection.to_port) == ("WiseFsw.labBusDriver", "busIn")
     ]
     if len(found) != 1:
-        raise ValueError(
-            f"{configuration}'s deployment wires cdh.{port} to LabBusDriver port(s) {found},"
-            " not one"
-        )
+        raise ValueError(f"{configuration}'s deployment wires cdh.{port} to LabBusDriver port(s) {found}, not one")
     return found[0]
 
 

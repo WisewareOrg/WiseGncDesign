@@ -55,9 +55,7 @@ def _assert_commands_of_its_actuators(configuration: str, commands: dict[str, An
         commands: what a tick returned, by role.
     """
     actuators = {
-        role.role: role
-        for role in taken(configuration_model(configuration), configuration)
-        if not role.sensor
+        role.role: role for role in taken(configuration_model(configuration), configuration) if not role.sensor
     }
     assert set(commands) <= set(actuators), sorted(commands)
     for role, payload in commands.items():
@@ -119,9 +117,7 @@ def test_the_adapter_delivers_each_role_s_message_on_its_lab_bus_driver_port(
     assert sorted(stepped[0]) == sorted(bus)
 
 
-def test_each_boot_power_cycles_a_fresh_copy(
-    configuration: str, messages_by_role: dict[str, Any], adapter: Adapter
-):
+def test_each_boot_power_cycles_a_fresh_copy(configuration: str, messages_by_role: dict[str, Any], adapter: Adapter):
     """A second boot powers on another copy, where one copy refuses a second boot.
 
     Args:
@@ -228,9 +224,7 @@ def test_the_telemetry_is_every_write_the_ticks_drained_since_the_last_call(
     assert adapter.telemetry() == []
 
 
-def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(
-    messages_by_role: dict[str, Any], adapter: Adapter
-):
+def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(messages_by_role: dict[str, Any], adapter: Adapter):
     """A power cycle keeps no write of the copy before it.
 
     The first tick's writes are drained, which shows a tick writes; the second tick's are left in

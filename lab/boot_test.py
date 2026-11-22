@@ -160,9 +160,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
 
 
 @pytest.mark.parametrize("path", ["run_0000.prm.dat", "/run_0000.prm.dat"])
-def test_a_relative_path_or_one_in_the_root_is_refused(
-    fsw: ModuleType, path: str, parameter_ids: list[int]
-):
+def test_a_relative_path_or_one_in_the_root_is_refused(fsw: ModuleType, path: str, parameter_ids: list[int]):
     """The sandbox is the file's directory, which is never the root, so neither path boots.
 
     Args:

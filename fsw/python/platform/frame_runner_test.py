@@ -162,9 +162,7 @@ def test_the_telemetry_is_each_write_of_the_frame_tagged_with_its_time(runner: F
     assert {t_ns for _, t_ns, _ in writes} == {NS // 2, NS}
     received = [(t_ns, raw) for name, t_ns, raw in writes if name == "sink.received"]
     [(t_ns, raw)] = received
-    np.testing.assert_array_equal(
-        runner.values("sink.received", [raw]), [2.5 * 2.0 + t_ns / NS + 0.25]
-    )
+    np.testing.assert_array_equal(runner.values("sink.received", [raw]), [2.5 * 2.0 + t_ns / NS + 0.25])
     assert runner.telemetry() == []
 
 

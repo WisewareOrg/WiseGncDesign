@@ -47,9 +47,7 @@ def _cells() -> dict[tuple[str, str], dict]:
     """
     report = _report()
     return {
-        ("/".join(path.parent.relative_to(report).parts[-3:]), path.stem): json.loads(
-            path.read_text()
-        )
+        ("/".join(path.parent.relative_to(report).parts[-3:]), path.stem): json.loads(path.read_text())
         for path in sorted(report.rglob("SRS*.json"))
     }
 
@@ -121,9 +119,7 @@ def run_notebook(path: Path) -> None:
         RuntimeError: the kernel is not registered, or a cell raised.
     """
     if KERNEL not in KernelSpecManager().find_kernel_specs():
-        raise RuntimeError(
-            f"the {KERNEL} kernel is not registered; run `just local` or `just pinned`"
-        )
+        raise RuntimeError(f"the {KERNEL} kernel is not registered; run `just local` or `just pinned`")
     with tempfile.TemporaryDirectory() as tmp:
         sessions = shlex.quote(f"{tmp}/sessions")
         client = NotebookClient(

@@ -36,9 +36,7 @@ def members(model: Model, configuration: str) -> dict[str, tuple[Instance, ...]]
         raise ValueError(f"{topology} has {len(drivers)} rate group drivers: {drivers}")
     [driver] = drivers
     # The model sorts connections by their from-port's number, so each filter keeps that order.
-    groups = [
-        c.to_instance for c in connections if (c.from_instance, c.from_port) == (driver, "CycleOut")
-    ]
+    groups = [c.to_instance for c in connections if (c.from_instance, c.from_port) == (driver, "CycleOut")]
     return {
         group: tuple(
             model.instances[c.to_instance]

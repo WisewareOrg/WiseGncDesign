@@ -52,9 +52,7 @@ def _written(payload: Any) -> tuple[Any, Any]:
     return message, reader
 
 
-def _assert_holds(
-    holds: Callable[[Any, Mapping[str, Any]], None], bus: Any, message: Any, role: str
-) -> None:
+def _assert_holds(holds: Callable[[Any, Mapping[str, Any]], None], bus: Any, message: Any, role: str) -> None:
     """A bus struct holds a bus message's values, each member an array of its FPP type.
 
     Args:

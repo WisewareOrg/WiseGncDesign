@@ -270,10 +270,7 @@ class Ground(sysModel.SysModel):
         """
         self._now_ns = CurrentSimNanos
         try:
-            self._answers.update(
-                (context, (response, reason))
-                for context, response, reason in self._edge.responses()
-            )
+            self._answers.update((context, (response, reason)) for context, response, reason in self._edge.responses())
             writes = self._edge.telemetry()
             self._writes += writes
             self._latest.update((name, raw) for name, _, raw in writes)
@@ -295,8 +292,7 @@ class Ground(sysModel.SysModel):
         """
         if self._coroutine is not None:
             raise TimeoutError(
-                f"the flight ended at t = {self.now_s} s with the procedure waiting until"
-                f" {self._waiting.until}"
+                f"the flight ended at t = {self.now_s} s with the procedure waiting until {self._waiting.until}"
             )
 
     def telemetry_datasets(self) -> dict[str, tuple[np.ndarray, str]]:

@@ -64,9 +64,7 @@ __all__ = ["WheelSpinner", "parameters"]
 
 # %%
 WHEELS = next(
-    member.size
-    for member in contract_model().types["Gnc.WheelCommand"].members
-    if member.name == "motorTorque"
+    member.size for member in contract_model().types["Gnc.WheelCommand"].members if member.name == "motorTorque"
 )
 """The wheels a `Gnc.WheelCommand` commands: its `motorTorque` array's length in the contract."""
 
@@ -95,9 +93,7 @@ class WheelSpinner:
             The command on `wheelOut`, and the telemetry `wheelTorque`, N*m, the first wheel's
             torque.
         """
-        return Gnc.WheelSpinnerOutputs(wheelOut=self._command), Gnc.WheelSpinnerTelemetry(
-            wheelTorque=self._torque
-        )
+        return Gnc.WheelSpinnerOutputs(wheelOut=self._command), Gnc.WheelSpinnerTelemetry(wheelTorque=self._torque)
 
 
 # %% [markdown]

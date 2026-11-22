@@ -51,9 +51,7 @@ def test_a_gnc_typed_input_with_a_bus_typed_output_is_an_actuator_role(
     model = converter_mock(
         (
             "    output port bOut: Gnc.BIcd\n",
-            "    output port bOut: Gnc.BIcd\n"
-            "    sync input port cIn: Gnc.BIcd\n"
-            "    output port cOut: Bus.B\n",
+            "    output port bOut: Gnc.BIcd\n    sync input port cIn: Gnc.BIcd\n    output port cOut: Bus.B\n",
         )
     )
     assert roles(model)[2] == Role("c", "Bus.B", "Gnc.BIcd", "cIn", "cOut", False)
@@ -108,9 +106,7 @@ def test_a_configuration_takes_the_roles_its_sub_topology_exposes_in_converter_o
     """
     assert SENSORS and ACTUATORS
     ports = [exposure(role) for role in reversed(exposed)]
-    model = configuration_model(
-        "Taking", contract=device_contract(tmp_path, "Taking", DECLARED, ports)
-    )
+    model = configuration_model("Taking", contract=device_contract(tmp_path, "Taking", DECLARED, ports))
 
     assert taken(model, "Taking") == tuple(exposed)
 
@@ -124,9 +120,7 @@ def test_a_configuration_takes_the_roles_its_sub_topology_exposes_in_converter_o
     ],
     ids=["sensor-name-on-an-output", "actuator-name-on-an-input", "no-role-s-name"],
 )
-def test_a_port_that_names_no_role_in_its_direction_is_refused_naming_it(
-    tmp_path: Path, port: str, named: str
-) -> None:
+def test_a_port_that_names_no_role_in_its_direction_is_refused_naming_it(tmp_path: Path, port: str, named: str) -> None:
     """A sub-topology port whose name is no role's in the direction of the port it exposes.
 
     Args:
@@ -134,9 +128,7 @@ def test_a_port_that_names_no_role_in_its_direction_is_refused_naming_it(
         port: the port's declaration.
         named: the direction of the instance port it exposes, as the refusal names it.
     """
-    model = configuration_model(
-        "Refused", contract=device_contract(tmp_path, "Refused", DECLARED, [port])
-    )
+    model = configuration_model("Refused", contract=device_contract(tmp_path, "Refused", DECLARED, [port]))
     short = port.split()[1]
 
     with pytest.raises(ValueError, match=rf"port {short}, an instance's .*, names no {named} role"):

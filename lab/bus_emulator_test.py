@@ -18,9 +18,7 @@ from lab import bus_emulator
 from lab.bus_emulator import deserialize, serialize
 
 
-def _assert_holds(
-    holds: Callable[[Any, Mapping[str, Any]], None], payload: Any, message: Any, name: str
-) -> None:
+def _assert_holds(holds: Callable[[Any, Mapping[str, Any]], None], payload: Any, message: Any, name: str) -> None:
     """A payload is a fresh `messaging.<Name>Payload` holding a bus message's values.
 
     Args:
@@ -74,9 +72,7 @@ def test_a_member_outside_the_emulator_s_domain_is_refused_by_name(
         bus_emulator._packer.cache_clear()
 
 
-def test_the_emulator_writes_the_bytes_f_prime_serializes(
-    fsw: ModuleType, bus_messages: dict[str, Any]
-) -> None:
+def test_the_emulator_writes_the_bytes_f_prime_serializes(fsw: ModuleType, bus_messages: dict[str, Any]) -> None:
     """F´'s serialization of each bus struct from the same values equals the emulator's bytes.
 
     Each element of each message has its own value, so a misplaced member or byte order shows.

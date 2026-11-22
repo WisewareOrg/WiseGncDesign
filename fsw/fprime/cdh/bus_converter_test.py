@@ -87,9 +87,7 @@ def _icd_bytes(message: Any) -> bytes:
     return _bytes([(np.asarray(v).dtype, v) for v in message.values.values()])
 
 
-def test_each_role_s_bus_struct_converts_to_its_gnc_struct(
-    fsw: ModuleType, bus_messages: dict[str, Any]
-) -> None:
+def test_each_role_s_bus_struct_converts_to_its_gnc_struct(fsw: ModuleType, bus_messages: dict[str, Any]) -> None:
     """Each role's pin gives the GNC struct the field rule takes from the emulator's bytes.
 
     Args:

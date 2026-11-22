@@ -90,9 +90,7 @@ def test_arguments_are_typed_as_f_prime_s_handler_gets_them(mock_dictionary: Dic
     ],
     ids=["missing", "extra", "short-array"],
 )
-def test_arguments_that_will_not_fit_are_refused_naming_what(
-    mock_dictionary: Dictionary, args: dict, match: str
-):
+def test_arguments_that_will_not_fit_are_refused_naming_what(mock_dictionary: Dictionary, args: dict, match: str):
     """Missing arguments, or one that does not fit its type, raise naming it.
 
     Args:
@@ -195,12 +193,8 @@ def test_written_values_are_held_to_the_channel_s_type(mock_dictionary: Dictiona
     mock = mock_dictionary
     offset = mock.channel("mock.offset")
 
-    np.testing.assert_array_equal(
-        offset.pack_many([np.array([1.0, 2.0, 3.0]), [4, 5, 6]]), [[1, 2, 3], [4, 5, 6]]
-    )
-    np.testing.assert_array_equal(
-        mock.channel("mock.mounting").pack_many([ARGS["mounting"]])[0], ARGS["mounting"]
-    )
+    np.testing.assert_array_equal(offset.pack_many([np.array([1.0, 2.0, 3.0]), [4, 5, 6]]), [[1, 2, 3], [4, 5, 6]])
+    np.testing.assert_array_equal(mock.channel("mock.mounting").pack_many([ARGS["mounting"]])[0], ARGS["mounting"])
     assert mock.channel("mock.enabled").pack_many([True, False]).tolist() == [1.0, 0.0]
     assert mock.channel("mock.mode").pack_many(["slow"]).tolist() == ["slow"]
     assert mock.channel("mock.count").pack_many([np.uint8(7), 255, 0]).tolist() == [7.0, 255.0, 0.0]
@@ -299,9 +293,7 @@ def test_entries_differ_when_the_contract_does(
     assert render_mock(tmp_path / "a").entries("mock") != changed.entries("mock")
 
 
-def test_entries_are_equal_when_only_ids_and_opcodes_differ(
-    tmp_path: Path, render_mock: Callable[..., Dictionary]
-):
+def test_entries_are_equal_when_only_ids_and_opcodes_differ(tmp_path: Path, render_mock: Callable[..., Dictionary]):
     """A channel ID and an opcode set by hand leave `entries` unchanged.
 
     Args:
@@ -329,9 +321,7 @@ _PARAMETERS = """    param get port prmGetOut
 """Parameters given to the mock, with the ports a component with parameters needs."""
 
 
-def test_each_parameter_is_listed_by_id_with_its_name(
-    tmp_path: Path, render_mock: Callable[..., Dictionary]
-):
+def test_each_parameter_is_listed_by_id_with_its_name(tmp_path: Path, render_mock: Callable[..., Dictionary]):
     """The mock's two parameters come by ID, named `mock.<parameter>`; their commands are marked.
 
     Instanced at base ID 0x2000, the two parameters are 0x2000 and 0x2001.
@@ -340,9 +330,7 @@ def test_each_parameter_is_listed_by_id_with_its_name(
         tmp_path: where the mock's model is written.
         render_mock: renders the mock.
     """
-    mock = render_mock(
-        tmp_path, ("    time get port", _PARAMETERS + "    time get port"), base_id=0x2000
-    )
+    mock = render_mock(tmp_path, ("    time get port", _PARAMETERS + "    time get port"), base_id=0x2000)
 
     named = {p.name: p for p in mock.parameters_by_id.values()}
 

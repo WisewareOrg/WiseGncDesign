@@ -131,9 +131,7 @@ def test_a_booted_reckoner_reports_idle_and_no_state(
     for tick in range(1, divider + 1):
         fsw.step(t_ns=tick * NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
 
-    assert [(n, v) for n, _, v in decoded(station) if n.startswith("nav.")] == [
-        ("nav.navState", "idle")
-    ]
+    assert [(n, v) for n, _, v in decoded(station) if n.startswith("nav.")] == [("nav.navState", "idle")]
 
 
 def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(

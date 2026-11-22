@@ -111,9 +111,7 @@ def _write_flight(folder: Path, build: str, scenario: str, gnc: str, nodeid: str
     """
     folder.mkdir(parents=True)
     write_planned(folder, CASES, nodeid)
-    (folder / "flight.json").write_text(
-        json.dumps({"scenario": scenario, "fsw": {"gnc": gnc, "build": build}})
-    )
+    (folder / "flight.json").write_text(json.dumps({"scenario": scenario, "fsw": {"gnc": gnc, "build": build}}))
     for case in range(CASES):
         rng = np.random.default_rng(case)
         run = run_path(folder, case)
@@ -479,9 +477,7 @@ CHANGES = [
 """Each change of an identical twin, with a fragment of the one problem it makes, or None."""
 
 
-@pytest.mark.parametrize(
-    ("change", "problem"), [c[1:] for c in CHANGES], ids=[c[0] for c in CHANGES]
-)
+@pytest.mark.parametrize(("change", "problem"), [c[1:] for c in CHANGES], ids=[c[0] for c in CHANGES])
 def test_parity_reports_each_compared_difference_once_and_never_an_extra(
     twin: Twin, change: Callable[[Twin], None], problem: str | None
 ) -> None:

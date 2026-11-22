@@ -124,12 +124,8 @@ def render_mock() -> Callable[..., Dictionary]:
             The dictionary.
         """
         (directory / "Mock.fpp").write_text(edited(_MOCK.read_text(), *edits))
-        (directory / "Extra.fppi").write_text(
-            edited(_MOCK.with_name("Extra.fppi").read_text(), *extra)
-        )
-        return Dictionary.from_component(
-            [directory / "Mock.fpp"], _INSTANCE._replace(base_id=base_id)
-        )
+        (directory / "Extra.fppi").write_text(edited(_MOCK.with_name("Extra.fppi").read_text(), *extra))
+        return Dictionary.from_component([directory / "Mock.fpp"], _INSTANCE._replace(base_id=base_id))
 
     return render
 
@@ -616,11 +612,7 @@ def _algorithm_instances(configuration: str) -> tuple[Instance, ...]:
     from fsw.codegen.deployment import algorithm_components, gnc_instances
 
     algorithms = algorithm_components()
-    return tuple(
-        i
-        for i in gnc_instances()
-        if i.name.startswith(f"{configuration}.") and i.component in algorithms
-    )
+    return tuple(i for i in gnc_instances() if i.name.startswith(f"{configuration}.") and i.component in algorithms)
 
 
 @pytest.fixture(scope="session")
