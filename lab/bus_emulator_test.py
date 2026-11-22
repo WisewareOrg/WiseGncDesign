@@ -147,7 +147,7 @@ def test_a_member_outside_the_emulator_s_domain_is_refused_by_name(
     """
     payload = next(iter(bus_messages.values())).payload
     mock = Struct("Bus.Mock", (member,))
-    monkeypatch.setitem(bus_emulator._STRUCTS, type(payload).__name__.lower(), mock)
+    monkeypatch.setitem(bus_emulator._STRUCTS, type(payload), mock)
     bus_emulator._packer.cache_clear()
     try:
         with pytest.raises(KeyError, match=rf"Bus\.Mock\.{named}, which the bus emulator"):

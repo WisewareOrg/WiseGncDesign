@@ -15,13 +15,13 @@ from typing import Any
 
 import numpy as np
 import pytest
-from Basilisk.architecture import messaging
 
 from fsw.codegen.deployment import Contract, configuration_model
 from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.fpp_types import named
 from fsw.codegen.roles import Role, roles
 from fsw.mock import MOCK, device, sub_topology
+from fsw.payloads import payload_type
 from fsw.python import FrameRunner
 
 CONFIGURATION = "MockFrame"
@@ -462,12 +462,10 @@ def test_each_actuator_role_s_command_returns_as_its_message_in_the_ticks_gnc_wr
         [],
         sorted(role.role for role in actuators),
     ]
-    payloads = {n.lower(): n for n in dir(messaging) if n.endswith("Payload")}
     for commands in (ticks[0], ticks[2]):
         for role in actuators:
             payload = commands[role.role]
-            name = payloads[role.bus.removeprefix("Bus.").lower() + "payload"]
-            assert type(payload) is getattr(messaging, name), role.role
+            assert type(payload) is payload_type(role.bus), role.role
             icd = {m.lower(): v for m, v in icd_messages[role.icd].values.items()}
             for field in type(payload).__dtype__.names:
                 np.testing.assert_array_equal(

@@ -238,24 +238,22 @@ def bus_messages() -> dict[str, BusMessage]:
 
     Each element of each member of each struct takes the next of 0.5, 1.5, 2.5, ..., in its FPP
     type, so a field or element out of place changes the result. Each struct's payload is the
-    `messaging.<Name>Payload` it mirrors, matched ignoring case as `bus_test.py` holds them.
+    `messaging.<Name>Payload` it mirrors, as `fsw.payloads.payload_type` gives it.
 
     Returns:
         Each struct's message, by its qualified name.
     """
-    from Basilisk.architecture import messaging
-
     from fsw.codegen.fields import DTYPES
     from fsw.codegen.fpp_model import Struct, read
+    from fsw.payloads import payload_type
     from lab.bus_emulator import BUS
 
-    payloads = {n.lower(): getattr(messaging, n) for n in dir(messaging) if n.endswith("Payload")}
     counter = itertools.count()
     messages = {}
     for name, struct in read([BUS]).types.items():
         if not (name.startswith("Bus.") and isinstance(struct, Struct)):
             continue
-        payload = payloads[name.removeprefix("Bus.").lower() + "payload"]()
+        payload = payload_type(name)()
         fields = {field.lower(): field for field in type(payload).__dtype__.names}
         values = {}
         for member in struct.members:

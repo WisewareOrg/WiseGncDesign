@@ -13,10 +13,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from Basilisk.architecture import messaging
 
 from fsw.codegen.fields import DTYPES
 from fsw.codegen.fpp_model import Struct, read
+from fsw.payloads import payload_type
 
 BUS = Path(__file__).with_name("Bus.fpp")
 
@@ -67,15 +67,8 @@ def _payload_fields(struct: Struct) -> list[Field]:
 
     Returns:
         The fields of `messaging.<Name>Payload`, in Basilisk's order.
-
-    Raises:
-        KeyError: no payload matches the struct's name.
     """
-    wanted = struct.name.removeprefix("Bus.").lower() + "payload"
-    payloads = {n.lower(): getattr(messaging, n) for n in dir(messaging) if n.endswith("Payload")}
-    if wanted not in payloads:
-        raise KeyError(f"{struct.name}: no Basilisk payload named like {wanted}")
-    dtype = payloads[wanted].__dtype__
+    dtype = payload_type(struct.name).__dtype__
     return [(n.lower(), dtype.fields[n][0]) for n in dtype.names]
 
 

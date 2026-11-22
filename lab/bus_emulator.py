@@ -27,11 +27,11 @@ BUS = Path(__file__).resolve().parents[1] / "fsw" / "fpp" / "interfaces" / "Bus.
 """The bus structs' FPP file."""
 
 _STRUCTS = {
-    name.removeprefix("Bus.").lower() + "payload": struct_
+    payload_type(name): struct_
     for name, struct_ in read([BUS]).types.items()
     if name.startswith("Bus.") and isinstance(struct_, Struct)
 }
-"""Each bus struct, by the name of the payload it mirrors in lower case."""
+"""Each bus struct, by the Basilisk payload class it mirrors."""
 
 
 @functools.cache
@@ -48,10 +48,9 @@ def _packer(payload: type) -> tuple[struct.Struct, tuple[str, ...]]:
         KeyError: no bus struct mirrors the payload, naming it; or a member is not an inline array
             of one of `fsw.codegen.fields.STRUCT_CODES`, naming the member and the type.
     """
-    key = payload.__name__.lower()
-    if key not in _STRUCTS:
+    if payload not in _STRUCTS:
         raise KeyError(f"no bus struct in {BUS.name} mirrors {payload.__name__}")
-    bus = _STRUCTS[key]
+    bus = _STRUCTS[payload]
     fields = {name.lower(): name for name in payload.__dtype__.names}
     layout = ">"
     for member in bus.members:
@@ -99,6 +98,6 @@ def deserialize(bus: str, data: bytes) -> Any:
     payload = payload_type(bus)()
     packer, fields = _packer(type(payload))
     values = iter(packer.unpack(data))
-    for member, field in zip(_STRUCTS[type(payload).__name__.lower()].members, fields, strict=True):
+    for member, field in zip(_STRUCTS[type(payload)].members, fields, strict=True):
         setattr(payload, field, [next(values) for _ in range(member.size)])
     return payload
