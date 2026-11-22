@@ -40,7 +40,7 @@ in `fsw/python/<partition>/`, and FPP gives each its structure:
 Each module's docstrings say what it refuses. An algorithm's `step(t, ...)` takes a keyword per
 data input, named as the input port without its `In`, in the input's FPP type, and returns its
 `<Name>Outputs` and `<Name>Telemetry` tuples; its command methods return its `<Name>Telemetry` or
-`None`. Frames and mountings belong to the algorithm.
+`None`, and raise `fsw.python.cdh.commands.Refused` to refuse the command. Frames and mountings belong to the algorithm.
 
 ## RadioEdge
 

@@ -23,6 +23,7 @@ from fsw.codegen.roles import Role, roles
 from fsw.mock import MOCK, device, sub_topology
 from fsw.payloads import payload_type
 from fsw.python import FrameRunner
+from fsw.python.cdh.commands import Refused
 
 CONFIGURATION = "MockFrame"
 """The mock's configuration."""
@@ -57,10 +58,10 @@ class Source:
             The level, written.
 
         Raises:
-            ValueError: the level is negative.
+            Refused: the level is negative.
         """
         if level < 0.0:
-            raise ValueError(f"level {level} is negative")
+            raise Refused(f"level {level} is negative")
         LOG.append(("source", "setLevel", level))
         self._level = level
         return named("MockGnc.SourceTelemetry")(level=level)

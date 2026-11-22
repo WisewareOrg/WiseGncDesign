@@ -25,10 +25,10 @@ class Source:
             `level`, written.
 
         Raises:
-            ValueError: the level is negative.
+            commands.Refused: the level is negative.
         """
         if level < 0.0:
-            raise ValueError(f"level {level} is negative")
+            raise commands.Refused(f"level {level} is negative")
         return named("MockGnc.SourceTelemetry")(level=level)
 
     def reset(self) -> None:
@@ -77,7 +77,7 @@ def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
 
 
 def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Dictionary):
-    """Anything but `ValueError` from a handler is raised whole.
+    """Anything but `Refused` from a handler is raised whole.
 
     Args:
         dictionary: the mock's dictionary.
@@ -97,6 +97,26 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
     handlers = commands.handlers(dictionary, {"source": Broken()})
 
     with pytest.raises(ZeroDivisionError, match="broken"):
+        commands.dispatch(handlers, "source.reset", {})
+
+
+def test_a_handler_s_value_error_is_a_bug_and_propagates_not_a_refusal(dictionary: Dictionary):
+    """A `ValueError` out of a handler, such as numpy's broadcast mismatch, is raised whole.
+
+    Args:
+        dictionary: the mock's dictionary.
+    """
+
+    class Mismatched(Source):
+        """A mock whose `reset` adds arrays of other shapes."""
+
+        def reset(self) -> None:
+            """Fails as numpy does, with a `ValueError`."""
+            np.zeros(3) + np.zeros(2)
+
+    handlers = commands.handlers(dictionary, {"source": Mismatched()})
+
+    with pytest.raises(ValueError, match="broadcast"):
         commands.dispatch(handlers, "source.reset", {})
 
 

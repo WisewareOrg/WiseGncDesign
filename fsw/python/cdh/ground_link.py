@@ -67,7 +67,7 @@ class GroundLink:
 
         Returns:
             `(context, response, reason)`: the response a name of `Fw.CmdResponse`, and the
-            message of the `ValueError` a handler refused it with, else `None`.
+            message of the `Refused` a handler refused it with, else `None`.
         """
         drained, self._responses = self._responses, []
         return drained

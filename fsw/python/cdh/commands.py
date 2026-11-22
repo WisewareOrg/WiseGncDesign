@@ -2,9 +2,10 @@
 
 Every command the dictionary gives a GNC instance is a method of its algorithm, named and
 parametered as in FPP, but for the set and save commands F´ generates for each parameter, which are
-not the algorithm's. A handler that returns answers `OK`, and one that raises `ValueError` answers
-`VALIDATION_ERROR` with the error's message as the reason; a name that is not a handler's answers
-`INVALID_OPCODE`; any other exception is a bug and propagates. A handler returns its algorithm's
+not the algorithm's. A handler that returns answers `OK`, and one that raises `Refused` answers
+`VALIDATION_ERROR` with the exception's message as the reason, as F´'s handler refuses on its
+response port; a name that is not a handler's answers `INVALID_OPCODE`; any other exception,
+`ValueError` included, is a bug and propagates. A handler returns its algorithm's
 `<Name>Telemetry` tuple, or `None`.
 """
 
@@ -15,7 +16,11 @@ from typing import Any, NamedTuple
 from fsw.codegen.dictionary import Dictionary
 from fsw.python.cdh import telemetry
 
-__all__ = ["Dispatched", "Handler", "Handlers", "dispatch", "handlers"]
+__all__ = ["Dispatched", "Handler", "Handlers", "Refused", "dispatch", "handlers"]
+
+
+class Refused(Exception):
+    """Raised by a handler to refuse its command; its message is the reason the ground gets."""
 
 
 class Handler(NamedTuple):
@@ -35,7 +40,7 @@ class Dispatched(NamedTuple):
 
     Attributes:
         response: the `Fw.CmdResponse` name.
-        reason: the message of the `ValueError` the handler refused the command with, else `None`.
+        reason: the message of the `Refused` the handler refused the command with, else `None`.
         writes: the telemetry the handler wrote, as `telemetry.writes` gives it.
     """
 
@@ -95,6 +100,6 @@ def dispatch(table: Handlers, name: str, args: Mapping[str, Any]) -> Dispatched:
     handler = table[name]
     try:
         written = handler.method(**args)
-    except ValueError as error:
+    except Refused as error:
         return Dispatched("VALIDATION_ERROR", str(error), [])
     return Dispatched("OK", None, telemetry.writes(handler.instance, written))
