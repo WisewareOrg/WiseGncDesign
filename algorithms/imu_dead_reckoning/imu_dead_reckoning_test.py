@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
-from wise_dynamics.basilisk import ImuSpacecraft, Scenario
+from wise_dynamics.basilisk import ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from algorithms.imu_dead_reckoning import gross_check
@@ -300,7 +300,7 @@ def test_the_bound_s_step_is_nav_s_integration_step_not_the_base_tick(
 @pytest.mark.sim_vehicle("imu_spacecraft")
 @pytest.mark.sim_runs(1)
 def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting(
-    sim_scenario: Scenario,
+    sim_scenario: Leo500,
 ) -> None:
     """`mu` is WiseDynamics' scenario's Earth's, and `dcm_PB` its vehicle's IMU mounting.
 
@@ -310,7 +310,6 @@ def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting(
     Args:
         sim_scenario: the case's dispersed scenario.
     """
-    assert isinstance(sim_scenario, Leo500)
     nav = parameters(sim_scenario)
 
     assert type(nav) is Gnc.ImuDeadReckonerParameters
