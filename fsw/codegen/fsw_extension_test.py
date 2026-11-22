@@ -27,7 +27,13 @@ The `bus_*` and `cdh_*` pins are reached only by computed name.
 
 
 class Built(NamedTuple):
-    """One configuration's extension, as loaded and as the emitter renders it."""
+    """One configuration's extension, as loaded and as the emitter renders it.
+
+    Attributes:
+        copy: a loaded copy of the extension.
+        source: the stub the emitter renders for it.
+        protocol: the stub's `FswExtension` class.
+    """
 
     copy: FswExtension
     source: str
@@ -84,7 +90,7 @@ def built(fprime_configuration: str) -> Iterator[Built]:
         fprime_configuration: the configuration.
 
     Yields:
-        A copy of the extension, the stub the emitter renders for it, and the stub's protocol class.
+        Built: the extension, its rendered stub and the stub's protocol class.
     """
     if not lab.built(fprime_configuration):
         pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
