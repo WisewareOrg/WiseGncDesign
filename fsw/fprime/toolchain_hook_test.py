@@ -9,7 +9,7 @@ import importlib.util
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, NoReturn
 from urllib.error import URLError
 
 import pytest
@@ -192,6 +192,14 @@ class TestToolchainHook:
         urls: list[str] = []
 
         def fetch(url: str) -> FakeResponse:
+            """Record the URL and answer with the five tools' pins.
+
+            Args:
+                url: the URL the hook fetches.
+
+            Returns:
+                A response holding the pins.
+            """
             urls.append(url)
             return FakeResponse("\n".join(pin_lines()))
 
@@ -222,7 +230,15 @@ class TestToolchainHook:
             tmp_path: the root holding `fprime-tag`.
         """
 
-        def fetch(url: str) -> FakeResponse:
+        def fetch(url: str) -> NoReturn:
+            """Fail as an unreachable network does.
+
+            Args:
+                url: the URL the hook fetches.
+
+            Raises:
+                URLError: always.
+            """
             raise URLError("no route to host")
 
         with pytest.raises(ValueError, match="nasa/fprime/v9.9.9/requirements.txt"):
