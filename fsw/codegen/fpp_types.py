@@ -166,7 +166,9 @@ def _source_forms(source: type) -> dict[str, tuple[str, Form]]:
     }
 
 
-def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamespace]:
+def _build(
+    model: Model, algorithms: Collection[Path], held: Collection[str] = ()
+) -> dict[str, SimpleNamespace]:
     """The tuples of a model's structs and of its algorithms' components, by top-level FPP module.
 
     Each struct's tuple is recorded for `converter`, and each algorithm's component for
@@ -175,6 +177,8 @@ def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamesp
     Args:
         model: the model.
         algorithms: the algorithms' `.fpp` files; a component one of them defines gets tuples.
+        held: qualified names already generated with an equal definition, whose tuples are kept
+            and not rebuilt.
 
     Returns:
         Each top-level module's namespace, nested modules as namespaces within it.
@@ -198,7 +202,7 @@ def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamesp
         setattr(space, name, cls)
 
     for name, struct in model.types.items():
-        if isinstance(struct, Struct):
+        if isinstance(struct, Struct) and name not in held:
             cls = namedtuple(name.rsplit(".", 1)[-1], [m.name for m in struct.members])
             _STRUCTS[cls] = struct, model.types
             _DEFINITIONS[name] = struct
@@ -206,7 +210,7 @@ def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamesp
 
     files = {Path(f).resolve() for f in algorithms}
     for component in model.components.values():
-        if component.file.resolve() in files:
+        if component.file.resolve() in files and component.name not in held:
             _COMPONENTS[component.name] = component, model.types
             _DEFINITIONS[component.name] = component
             for suffix, cls in _component_tuples(component).items():
@@ -274,7 +278,7 @@ def load(contract: Contract) -> None:
     for name, definition in definitions.items():
         if _DEFINITIONS.get(name, definition) != definition:
             raise ValueError(f"{name} is already generated from another definition")
-    for top, space in _build(model, contract.algorithms).items():
+    for top, space in _build(model, contract.algorithms, frozenset(_DEFINITIONS)).items():
         held = _namespaces.get(top)
         _namespaces[top] = space if held is None else _merged(held, space)
     _LOADED.add(contract)

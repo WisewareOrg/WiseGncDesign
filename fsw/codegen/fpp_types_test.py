@@ -513,3 +513,18 @@ def test_a_contract_s_new_name_in_an_existing_module_leaves_that_module_s_namesp
     assert named("Gnc.MockAdded")._fields == ("value",)
     assert not hasattr(Gnc, "MockAdded")
     assert dict(vars(Gnc)) == gnc
+
+
+def test_a_loaded_contract_makes_tuples_only_for_the_names_it_adds(tmp_path: Path):
+    """A struct already held keeps its tuple: the one new struct is all `load` registers.
+
+    Args:
+        tmp_path: where the contract is written.
+    """
+    before = set(fpp_types._STRUCTS)
+
+    fpp_types.load(
+        _contract(tmp_path, "module MockHeld {\n  struct Fresh {\n    value: F64\n  }\n}\n")
+    )
+
+    assert set(fpp_types._STRUCTS) - before == {named("MockHeld.Fresh")}
