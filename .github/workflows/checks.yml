@@ -48,6 +48,9 @@ jobs:
       # wise-ci's check-python: ruff, interrogate, pydoclint and ty over every tracked Python file.
       # After the build, since ty reads the generated stubs and the built extensions.
       - uses: WisewareOrg/wise-ci/check-python@d2483ccf39ccce58ccfbaa75d3d1c6466ff6701e
+        env:
+          # The action runs on wise-ci's own interpreter; the floor's UV_PYTHON, set above, finds none for it.
+          UV_PYTHON: ""
       # The F´ tests skip when an extension or its dictionary is absent, so this step imports every
       # configuration's extension the F´ build builds, of the repository's contract and the test
       # mocks', and checks its dictionary exists, and imports `_<name>` of every algorithm utility
