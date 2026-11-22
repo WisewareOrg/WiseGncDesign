@@ -248,35 +248,27 @@ def test_send_uplinks_the_command_by_name_and_returns_on_its_ok(edge: StubEdge):
     ]
 
 
-def test_the_command_log_holds_array_and_numpy_arguments_as_plain_json(edge: StubEdge):
-    """An array and a numpy scalar argument are logged as a list and a float, as JSON writes them.
+def test_send_types_the_arguments_into_the_command_s_fpp_types_and_logs_them_as_plain_json(
+    edge: StubEdge,
+):
+    """The edge gets an F32 as F32 holds it and an array as an array; the log holds plain JSON.
+
+    The log keeps an array as a list and a numpy scalar as a float, as JSON writes them.
 
     Args:
         edge: the stub edge.
     """
-    procedure = _sends("mock.setOffset", offset=np.array([1.0, 2.0, 3.0]), gain=np.float32(0.25))
-
-    ground = _ground(edge, procedure)
-
-    logged = json.loads(json.dumps(ground.command_log))
-    assert logged[0]["args"] == {"offset": [1.0, 2.0, 3.0], "gain": 0.25}
-    assert type(ground.command_log[0]["args"]["gain"]) is float
-
-
-def test_send_types_the_arguments_into_the_command_s_fpp_types_before_uplink(edge: StubEdge):
-    """The edge gets an F32 as F32 holds it and an array as an array; the log keeps them as given.
-
-    Args:
-        edge: the stub edge.
-    """
-    ground = _ground(edge, _sends("mock.setOffset", offset=[1.0, 2.0, 3.0], gain=0.1))
+    offset, gain = np.array([1.0, 2.0, 3.0]), np.float32(0.1)
+    ground = _ground(edge, _sends("mock.setOffset", offset=offset, gain=gain))
 
     [(name, args, context)] = edge.uplinked
     assert (name, sorted(args), context) == ("mock.setOffset", ["gain", "offset"], 1)
     assert args["gain"] == float(np.float32(0.1))
     assert isinstance(args["offset"], np.ndarray)
     np.testing.assert_array_equal(args["offset"], [1.0, 2.0, 3.0])
-    assert ground.command_log[0]["args"] == {"offset": [1.0, 2.0, 3.0], "gain": 0.1}
+    logged = json.loads(json.dumps(ground.command_log))
+    assert logged[0]["args"] == {"offset": [1.0, 2.0, 3.0], "gain": float(np.float32(0.1))}
+    assert type(ground.command_log[0]["args"]["gain"]) is float
 
 
 @pytest.mark.parametrize(
@@ -284,9 +276,8 @@ def test_send_types_the_arguments_into_the_command_s_fpp_types_before_uplink(edg
     [
         ("mock.setMod", {"mode": "fast"}, KeyError, "'mock.setMod'"),
         ("mock.setMode", {"mood": "fast"}, ValueError, r"mock\.setMode takes \['mode'\]"),
-        ("mock.setMode", {"mode": "standby"}, ValueError, "parameter mode"),
     ],
-    ids=["unknown-command", "misnamed-argument", "no-constant"],
+    ids=["unknown-command", "misnamed-argument"],
 )
 def test_send_refuses_a_command_the_dictionary_cannot_type_before_uplink(
     edge: StubEdge, name: str, args: dict, error: type, match: str

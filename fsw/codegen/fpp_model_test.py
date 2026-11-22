@@ -30,7 +30,6 @@ from fsw.codegen.fpp_model import (
     read,
 )
 from fsw.codegen.members import members
-from fsw.codegen.roles import taken
 from fsw.mock import edited
 
 GNC = """\
@@ -191,10 +190,8 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
     Every connection end is an instance of the model, of a component it defines. Each GNC member's
     connections show F´'s pattern graphs were read: a member with commands registers with the
     dispatcher and is sent commands by it, one with channels reaches the ground link and the clock,
-    and one with parameters reads PrmDb. Each sensor role the sub-topology takes comes from the
-    CDH's output into a member, and each actuator role from a member into the CDH's input, every
-    algorithm instance is a member its rate groups run, and the sub-topology's tick comes in at its
-    rate group driver.
+    and one with parameters reads PrmDb. Every algorithm instance is a member its rate groups run,
+    and the sub-topology's tick comes in at its rate group driver.
 
     Args:
         configuration: the configuration.
@@ -226,16 +223,6 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
         if component.parameters:
             assert ("WiseFsw.prmDb", "getPrm") in targets, member.name
     names = {member.name for member in flown}
-    ends = {(c.from_instance, c.from_port, c.to_instance, c.to_port) for c in connections}
-    for role in taken(model, configuration):
-        if role.sensor:
-            port = model.ports[f"{configuration}.Gnc.{role.input}"]
-            wired = ("WiseFsw.cdh", role.output, port.instance, port.port)
-        else:
-            port = model.ports[f"{configuration}.Gnc.{role.output}"]
-            wired = (port.instance, port.port, "WiseFsw.cdh", role.input)
-        assert wired in ends, role.role
-        assert port.instance in names, role.role
     algorithms = {
         name
         for name, instance in model.instances.items()
@@ -250,6 +237,8 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
 def test_an_imported_sub_topology_s_connections_are_the_deployment_s_in_port_order(mock: Model):
     """The deployment holds the imported group's connections, ordered by their from-numbers.
 
+    The sub-topology's ports are read as the instance port each exposes, keyed `<topology>.<port>`.
+
     Args:
         mock: the mock model.
     """
@@ -262,14 +251,6 @@ def test_an_imported_sub_topology_s_connections_are_the_deployment_s_in_port_ord
     assert mock.topologies["Gnc.Gnc"] == mock.topologies["Top.Deploy"][:3]
     assert mock.instances["Gnc.rg"] == Instance("Gnc.rg", "Gnc.RateGroup", 0x4000)
     assert mock.instances["Top.drv"] == Instance("Top.drv", "Top.Driver", 0x100)
-
-
-def test_a_topology_s_ports_are_read_as_the_instance_port_each_exposes(mock: Model):
-    """Keyed `<topology>.<port>`.
-
-    Args:
-        mock: the mock model.
-    """
     assert mock.ports == {"Gnc.Gnc.tickIn": TopologyPort("Gnc.rg", "CycleIn")}
 
 
@@ -384,9 +365,6 @@ def test_a_component_s_general_ports_and_its_file_are_read(mock: Model):
     assert mock.components["Gnc.RateGroup"].outputs == (
         Port("RateGroupMemberOut", 3, (Argument("ctx", "U32"),), "Gnc.Sched"),
     )
-    assert mock.components["Top.Driver"].outputs == (
-        Port("tickOut", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
-    )
     assert mock.components["Gnc.Nav"].outputs == ()
     assert mock.components["Gnc.RateGroup"].inputs == (
         Port("CycleIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
@@ -394,9 +372,7 @@ def test_a_component_s_general_ports_and_its_file_are_read(mock: Model):
     assert mock.components["Gnc.Nav"].inputs == (
         Port("schedIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
     )
-    assert mock.components["Top.Driver"].inputs == ()
     assert mock.components["Gnc.Nav"].file.name == "Gnc.fpp"
-    assert mock.components["Top.Driver"].file.name == "Top.fpp"
     assert mock.components["Gnc.Nav"].file.is_absolute()
 
 

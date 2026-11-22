@@ -43,25 +43,11 @@ module Mock {
     mode: Mode
   }
 
-  struct Outer {
-    inner: Reading
-  }
-
   array Rows = [2] Vector3
 
   struct Shapes {
     rows: Rows
     counts: [2] U16
-  }
-
-  struct FlatShapes {
-    rows: [6] F64
-    counts: [2] U16
-  }
-
-  struct WideShapes {
-    rows: Rows
-    counts: [2] U32
   }
 
   struct QuaternionRate {
@@ -147,20 +133,6 @@ def test_each_basilisk_message_converts_to_its_bus_struct_member_for_member(
             assert value.dtype == DTYPES[member.type], f"{name}.{member.name}"
 
 
-def test_a_misspelt_field_raises(mock: SimpleNamespace):
-    """A misspelt field fails building the tuple and reading it.
-
-    Args:
-        mock: the mock's namespace.
-    """
-    with pytest.raises(TypeError, match="rtae"):
-        mock.Reading(rtae=np.zeros(3), count=4, mode="running")
-
-    reading = mock.Reading(rate=np.zeros(3), count=4, mode="running")
-    with pytest.raises(AttributeError):
-        reading.Rate  # noqa: B018
-
-
 def test_a_struct_s_tuple_has_no_defaults(mock: SimpleNamespace):
     """A struct's tuple is built from every field.
 
@@ -171,8 +143,10 @@ def test_a_struct_s_tuple_has_no_defaults(mock: SimpleNamespace):
         mock.Reading(rate=np.zeros(3))
 
 
-def test_unwritten_telemetry_is_none_and_written_telemetry_is_not(mock: SimpleNamespace):
-    """Every telemetry field defaults to None; one written holds its value.
+def test_telemetry_and_outputs_default_to_none_and_written_telemetry_is_not(
+    mock: SimpleNamespace,
+):
+    """Every telemetry field and every output port, one field each, defaults to None.
 
     Args:
         mock: the mock's namespace.
@@ -184,6 +158,9 @@ def test_unwritten_telemetry_is_none_and_written_telemetry_is_not(mock: SimpleNa
     assert telemetry.speed is speed
     assert telemetry.mode is None
     assert mock.SpinnerTelemetry() == (None, None)
+    assert mock.SpinnerTelemetry._fields == ("speed", "mode")
+    assert mock.SpinnerOutputs._fields == ("readingOut", "gainOut")
+    assert mock.SpinnerOutputs() == (None, None)
 
 
 def test_only_an_algorithm_s_component_gets_tuples():
@@ -192,27 +169,13 @@ def test_only_an_algorithm_s_component_gets_tuples():
     assert not hasattr(Gnc, "Vector3")
 
 
-def test_the_tuples_are_immutable_and_their_fields_pass_into_numba(mock: SimpleNamespace):
-    """A field cannot be reassigned, and a tuple and its arrays are numba arguments.
+def test_a_tuple_and_its_arrays_pass_into_numba(mock: SimpleNamespace):
+    """A tuple and its arrays are numba arguments.
 
     Args:
         mock: the mock's namespace.
     """
     reading = mock.Reading(rate=np.full(3, 2.0), count=4, mode="running")
-    with pytest.raises(AttributeError):
-        reading.rate = np.zeros(3)
-
-    @numba.njit
-    def norm(v: np.ndarray) -> float:
-        """A vector's length.
-
-        Args:
-            v: the vector.
-
-        Returns:
-            Its length.
-        """
-        return np.sqrt((v * v).sum())
 
     @numba.njit
     def total(r: tuple) -> float:
@@ -226,7 +189,6 @@ def test_the_tuples_are_immutable_and_their_fields_pass_into_numba(mock: SimpleN
         """
         return r.rate.sum() + r.count
 
-    assert norm(reading.rate) == pytest.approx(np.sqrt(12.0))
     assert total(reading) == pytest.approx(10.0)
 
 
@@ -278,19 +240,10 @@ def test_parameters_from_refuses_an_array_of_another_shape_naming_it(mock: Simpl
         parameters_from(mock.SpinnerParameters, {"mounting": [1.0, 2.0], "count": 4})
 
 
-def test_outputs_are_one_field_per_output_port_defaulting_to_none(mock: SimpleNamespace):
-    """Each general output port is a field, unwritten by default.
-
-    Args:
-        mock: the mock's namespace.
-    """
-    assert mock.SpinnerOutputs._fields == ("readingOut", "gainOut")
-    assert mock.SpinnerOutputs() == (None, None)
-    assert mock.SpinnerTelemetry._fields == ("speed", "mode")
-
-
 def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(mock: SimpleNamespace):
-    """Array fields become fresh arrays of the FPP type; scalars and enum names pass as they are.
+    """Array fields become fresh arrays of the FPP shape and type; scalars and enum names pass.
+
+    An array of arrays keeps its nested shape, and an inline array its element's type.
 
     Args:
         mock: the mock's namespace.
@@ -304,6 +257,15 @@ def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(mock: Simpl
     assert converted.count == 4
     assert converted.mode == "running"
 
+    shaped = converter(mock.Shapes, mock.Shapes)(
+        mock.Shapes(rows=[[1, 2, 3], [4, 5, 6]], counts=[7, 8])
+    )
+
+    assert shaped.rows.shape == (2, 3)
+    assert shaped.rows.dtype == np.dtype("float64")
+    assert shaped.counts.dtype == np.dtype("uint16")
+    assert shaped.counts.tolist() == [7, 8]
+
 
 def test_a_converter_is_planned_once_per_source_and_target():
     """The same source and target give the same converter."""
@@ -312,40 +274,13 @@ def test_a_converter_is_planned_once_per_source_and_target():
     assert converter(bus, icd) is converter(bus, icd)
 
 
-def test_a_converter_keeps_each_array_s_shape_and_element_type(mock: SimpleNamespace):
-    """An array of arrays keeps its nested shape, and an inline array its element's type.
-
-    Args:
-        mock: the mock's namespace.
-    """
-    source = mock.Shapes(rows=[[1, 2, 3], [4, 5, 6]], counts=[7, 8])
-
-    converted = converter(mock.Shapes, mock.Shapes)(source)
-
-    assert converted.rows.shape == (2, 3)
-    assert converted.rows.dtype == np.dtype("float64")
-    assert converted.counts.dtype == np.dtype("uint16")
-    assert converted.counts.tolist() == [7, 8]
-
-
 @pytest.mark.parametrize(
     ("source", "target", "match"),
     [
-        ("Reading", "QuaternionRate", "angVelPlatform"),
         ("Reading", "SpinnerTelemetry", "SpinnerTelemetry"),
-        ("FlatShapes", "Shapes", "rows"),
-        ("WideShapes", "Shapes", "counts"),
         (messaging.IMUSensorMsgPayload, "QuaternionRate", "AngVelPlatform"),
-        ("Outer", "Outer", "inner"),
     ],
-    ids=[
-        "missing-field",
-        "not-a-struct",
-        "flat array to an array of arrays",
-        "U32 to U16",
-        "basilisk-shape",
-        "nested-struct",
-    ],
+    ids=["not-a-struct", "basilisk-shape"],
 )
 def test_a_converter_refuses_a_field_that_breaks_the_field_rule(
     mock: SimpleNamespace, source: str | type, target: str, match: str

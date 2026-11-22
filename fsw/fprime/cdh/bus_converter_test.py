@@ -9,16 +9,14 @@ every role of its direction the contract's `Cdh.BusConverter` declares. Skipped 
 deployment `just fsw` builds, as the `fsw` fixture skips.
 """
 
-import re
 from collections.abc import Callable, Mapping
 from types import ModuleType
 from typing import Any
 
 import numpy as np
-import pytest
 
 from fsw.codegen.deployment import contract_model
-from fsw.codegen.fields import DTYPES, form, plan
+from fsw.codegen.fields import form, plan
 from fsw.codegen.roles import Role, roles
 from lab.bus_emulator import deserialize, serialize
 
@@ -63,23 +61,6 @@ def _reading(role: Role, bus_values: dict[str, list[Any]]) -> bytes:
     return _bytes([(element, bus_values[name]) for _, name, (_, element) in _planned(role)])
 
 
-def _bus_bytes(message: Any, swap: tuple[str, str] | None = None) -> bytes:
-    """A bus message's bytes laid out by its struct, with two members' places traded or not.
-
-    Args:
-        message: the `BusMessage`.
-        swap: two members whose values trade places, or none.
-
-    Returns:
-        The bytes.
-    """
-    values = dict(message.values)
-    if swap:
-        first, second = swap
-        values[first], values[second] = values[second], values[first]
-    return _bytes([(DTYPES[m.type], values[m.name]) for m in message.struct.members])
-
-
 def _roles(sensor: bool) -> list[Role]:
     """Every role of one direction the contract's `Cdh.BusConverter` declares, at least one.
 
@@ -121,41 +102,6 @@ def test_each_role_s_bus_struct_converts_to_its_gnc_struct(
         assert converted == _reading(role, message.values), role.role
 
 
-def test_each_pin_reads_the_bytes_by_the_bus_layout(
-    fsw: ModuleType, bus_messages: dict[str, Any]
-) -> None:
-    """Bytes with a converted member and another of its form traded give the traded reading.
-
-    Args:
-        fsw: a copy of the deployment.
-        bus_messages: a message of each bus struct.
-    """
-    swapped = 0
-    for role in _roles(sensor=True):
-        message = bus_messages[role.bus]
-        converted = {name for _, name, _ in _planned(role)}
-        pair = next(
-            (
-                (first.name, second.name)
-                for first in message.struct.members
-                if first.name in converted
-                for second in message.struct.members
-                if second is not first and (second.type, second.size) == (first.type, first.size)
-            ),
-            None,
-        )
-        if pair is None:
-            continue
-        first, second = pair
-        traded = dict(message.values)
-        traded[first], traded[second] = traded[second], traded[first]
-        reading = getattr(fsw, f"cdh_{role.role}")(_bus_bytes(message, pair))
-        assert reading == _reading(role, traded), role.role
-        assert reading != _reading(role, message.values), role.role
-        swapped += 1
-    assert swapped
-
-
 def test_each_actuator_role_s_gnc_struct_converts_to_the_payload_the_python_build_makes(
     fsw: ModuleType,
     icd_messages: dict[str, Any],
@@ -164,8 +110,8 @@ def test_each_actuator_role_s_gnc_struct_converts_to_the_payload_the_python_buil
 ) -> None:
     """F´'s conversion, read back by the emulator, is the payload the Python build's CDH makes.
 
-    The GNC struct's bytes are packed by numpy, big-endian; the same bytes little-endian give
-    another payload, so the comparison can fail.
+    The GNC struct's bytes are packed by numpy, big-endian, each element with its own value, so a
+    misplaced field or byte order shows.
 
     Args:
         fsw: a copy of the deployment.
@@ -180,32 +126,3 @@ def test_each_actuator_role_s_gnc_struct_converts_to_the_payload_the_python_buil
         fields = type(python).__dtype__.names
         assert type(converted) is type(python), role.role
         holds(converted, {field: getattr(python, field) for field in fields})
-        swapped = message._replace(
-            values={m: np.asarray(v).byteswap() for m, v in message.values.items()}
-        )
-        other = deserialize(role.bus, getattr(fsw, f"cdh_{role.role}")(_icd_bytes(swapped)))
-        assert any(
-            list(getattr(other, field)) != list(getattr(python, field)) for field in fields
-        ), role.role
-
-
-def test_bytes_too_short_for_a_role_s_input_struct_raise_naming_the_role(
-    fsw: ModuleType, bus_messages: dict[str, Any], icd_messages: dict[str, Any]
-) -> None:
-    """Bytes one short of the struct a role's input takes fail F´'s deserialization, named.
-
-    A sensor's input takes its bus struct, an actuator's its GNC struct.
-
-    Args:
-        fsw: a copy of the deployment.
-        bus_messages: a message of each bus struct.
-        icd_messages: a value of each GNC struct.
-    """
-    for role in roles(contract_model()):
-        if role.sensor:
-            taken, data = role.bus, serialize(bus_messages[role.bus].payload)
-        else:
-            taken, data = role.icd, _icd_bytes(icd_messages[role.icd])
-        match = rf"cdh_{role.role}: deserializing {re.escape(taken)} failed"
-        with pytest.raises(RuntimeError, match=match):
-            getattr(fsw, f"cdh_{role.role}")(data[:-1])

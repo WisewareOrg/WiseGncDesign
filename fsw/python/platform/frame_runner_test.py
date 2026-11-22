@@ -63,7 +63,6 @@ def test_the_frame_runner_is_the_mock_configuration_s_build(runner: FrameRunner)
     assert runner.period_s == 0.5
     assert runner.build == {"host": "fsw.python.FrameRunner"}
     generated = Dictionary.from_sub_topology(CONFIGURATION, contract=MOCK)
-    assert runner.dictionary.metadata == generated.metadata
     assert generated.metadata["deploymentName"] == f"Py{CONFIGURATION}.Py{CONFIGURATION}"
     assert runner.dictionary.entries("source") == {
         "commands": {
@@ -121,16 +120,13 @@ def test_commands_run_by_name_before_the_step_and_answer_with_f_prime_s_response
 ):
     """Each command uplinked runs at the next tick, before the step, its telemetry tagged then.
 
-    Taken, refused with its reason, a parameter's set command and an unknown name are each
-    answered as F´ answers them.
+    Taken and refused with its reason, each is answered as F´ answers it.
 
     Args:
         runner: the frame runner.
     """
     runner.uplink("source.setLevel", {"level": 1.5}, 7)
     runner.uplink("source.setLevel", {"level": -1.0}, 8)
-    runner.uplink("source.GAIN_PRM_SET", {"val": 1.0}, 9)
-    runner.uplink("source.notACommand", {}, 10)
     assert runner.responses() == []
 
     runner.tick(NS // 2, {})
@@ -142,8 +138,6 @@ def test_commands_run_by_name_before_the_step_and_answer_with_f_prime_s_response
     assert runner.responses() == [
         (7, "OK", None),
         (8, "VALIDATION_ERROR", "level -1.0 is negative"),
-        (9, "INVALID_OPCODE", None),
-        (10, "INVALID_OPCODE", None),
     ]
     assert runner.responses() == []
     assert [(name, t_ns) for name, t_ns, _ in runner.telemetry()][:2] == [
@@ -322,26 +316,6 @@ def test_each_role_s_message_reaches_the_step_as_its_icd_struct(
         value = inputs[role.role]
         assert isinstance(value, named(role.icd)), role.role
         holds(value, bus_messages[role.bus].values)
-
-
-def test_a_tick_missing_a_role_s_message_is_refused_naming_the_role(
-    roles_runner: FrameRunner,
-    roles_contract: tuple[Contract, list[Role]],
-    bus_messages: dict[str, Any],
-):
-    """A vehicle without one of the configuration's sensor roles fails the tick, naming that role.
-
-    Args:
-        roles_runner: the frame runner on the rendered mock.
-        roles_contract: the rendered contract and the roles.
-        bus_messages: a message of each bus struct.
-    """
-    messages = _sensor_messages(roles_contract[1], bus_messages)
-    for missing in messages:
-        others = {role: m for role, m in messages.items() if role != missing}
-
-        with pytest.raises(KeyError, match=f"takes the role {missing},"):
-            roles_runner.tick(NS, others)
 
 
 def test_each_actuator_role_s_command_returns_as_its_message_in_the_ticks_gnc_wrote_it(

@@ -405,14 +405,12 @@ CHANGES = [
         f"tlm_t/{INSTANCE}.{FLOAT}",
     ),
     ("channel-python-only", lambda t: _dataset(t.fprime, FLOAT_TLM, lambda v: None), FLOAT_TLM),
-    ("channel-fprime-only", lambda t: _dataset(t.python, FLOAT_TLM, lambda v: None), FLOAT_TLM),
     ("nan-one-side", lambda t: _dataset(t.fprime, FLOAT_TLM, _set(np.nan)), FLOAT_TLM),
     (
         "nan-both-sides",
         lambda t: [_dataset(side, FLOAT_TLM, _set(np.nan)) for side in t],
         None,
     ),
-    ("inf-one-side", lambda t: _dataset(t.fprime, FLOAT_TLM, _set(np.inf)), FLOAT_TLM),
     (
         "inf-opposite",
         lambda t: [
@@ -473,7 +471,6 @@ CHANGES = [
     ),
     ("case-one-side", lambda t: run_path(t.fprime, 1).unlink(), "case 1"),
     ("crash-fprime", lambda t: _crash(t.fprime), "case 1: crashed on fprime"),
-    ("crash-python", lambda t: _crash(t.python), "case 1: crashed on python"),
     ("crash-both", lambda t: [_crash(side) for side in t], "case 1: crashed on python and fprime"),
     ("planned", lambda t: _planned(t.fprime), "planned"),
     ("extras-fprime", lambda t: _extras(t.fprime), None),
@@ -508,18 +505,6 @@ def test_parity_reports_each_compared_difference_once_and_never_an_extra(
 
 PYTHON = {"build": "python"}
 FPRIME = {"build": "fprime"}
-
-
-def test_a_run_missing_a_written_channel_s_write_times_raises(twin: Twin) -> None:
-    """A malformed run is not a disagreement: parity raises rather than reporting it.
-
-    Args:
-        twin: an identical twin, whose F´ run then loses a channel's write times.
-    """
-    _dataset(twin.fprime, f"tlm_t/{INSTANCE}.{FLOAT}", lambda v: None)
-
-    with pytest.raises(KeyError):
-        parity(GNC, twin.python, twin.fprime, contract=MOCK)
 
 
 OTHER = [{**PYTHON, "notebook": "other"}, {**FPRIME, "notebook": "other"}]

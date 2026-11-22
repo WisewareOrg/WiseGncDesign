@@ -45,42 +45,44 @@ def test_each_target_field_comes_from_its_namesake_ignoring_case_and_extras_are_
     ]
 
 
-def test_a_field_missing_from_the_source_is_refused_by_name() -> None:
-    """A source without `count` raises, naming the source, the field and the target."""
-    with pytest.raises(ValueError, match="Mock.Source has no field count for Mock.Target"):
-        plan(TARGET, TYPES, _sources(Member("rate", "F64", 3)), "Mock.Source")
+@pytest.mark.parametrize(
+    ("target", "sources", "match"),
+    [
+        pytest.param(
+            TARGET,
+            _sources(Member("rate", "F64", 3)),
+            "Mock.Source has no field count for Mock.Target",
+            id="missing",
+        ),
+        pytest.param(
+            Struct("Mock.Target", (Member("inner", "Mock.Inner", None),)),
+            _sources(Member("inner", "Mock.Inner", None)),
+            r"Mock\.Target\.inner is a struct, which is not converted",
+            id="struct",
+        ),
+        pytest.param(
+            TARGET,
+            _sources(Member("rate", "F64", 4), Member("count", "U16", None)),
+            r"Mock\.Target\.Rate is \(3,\) float64, but Mock\.Source\.rate is \(4,\)",
+            id="shape",
+        ),
+        pytest.param(
+            TARGET,
+            _sources(Member("rate", "F32", 3), Member("count", "U16", None)),
+            r"Mock\.Target\.Rate is \(3,\) float64, but Mock\.Source\.rate is \(3,\) float32",
+            id="element-type",
+        ),
+    ],
+)
+def test_a_field_the_rule_cannot_fill_is_refused_by_name(
+    target: Struct, sources: dict, match: str
+) -> None:
+    """A missing field, a struct field, another shape and another element type are each refused.
 
-
-def test_a_target_field_that_is_a_struct_is_refused_by_name() -> None:
-    """A target member of struct type is not converted, naming it."""
-    target = Struct("Mock.Target", (Member("inner", "Mock.Inner", None),))
-    sources = _sources(Member("inner", "Mock.Inner", None))
-    with pytest.raises(
-        ValueError, match=r"Mock\.Target\.inner is a struct, which is not converted"
-    ):
+    Args:
+        target: the target struct.
+        sources: the source's members, as `plan` takes them.
+        match: the refusal, naming the source, the field and the target.
+    """
+    with pytest.raises(ValueError, match=match):
         plan(target, TYPES, sources, "Mock.Source")
-
-
-def test_a_field_of_another_shape_is_refused_by_name() -> None:
-    """A four-element `rate` cannot fill the three-element `Rate`, naming both."""
-    sources = _sources(Member("rate", "F64", 4), Member("count", "U16", None))
-    with pytest.raises(
-        ValueError, match=r"Mock\.Target\.Rate is \(3,\) float64, but Mock\.Source\.rate is \(4,\)"
-    ):
-        plan(TARGET, TYPES, sources, "Mock.Source")
-
-
-def test_a_field_of_another_element_type_is_refused_by_name() -> None:
-    """An `F32` `rate` cannot fill the `F64` `Rate`, naming both."""
-    sources = _sources(Member("rate", "F32", 3), Member("count", "U16", None))
-    with pytest.raises(
-        ValueError,
-        match=r"Mock\.Target\.Rate is \(3,\) float64, but Mock\.Source\.rate is \(3,\) float32",
-    ):
-        plan(TARGET, TYPES, sources, "Mock.Source")
-
-
-def test_a_form_follows_arrays_of_arrays_and_names_a_type_that_is_not_a_number() -> None:
-    """`[4] Mat` is four by two by three `F64`s; an enum or struct element keeps its FPP name."""
-    assert form(Member("m", "Mock.Mat", 4), TYPES) == ((4, 2, 3), np.dtype("float64"))
-    assert form(Member("i", "Mock.Inner", None), TYPES) == ((), "Mock.Inner")

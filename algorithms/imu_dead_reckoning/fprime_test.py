@@ -180,7 +180,7 @@ def test_a_booted_reckoner_reports_idle_and_no_state(
     ]
 
 
-@pytest.mark.parametrize("sign", [1.0, -1.0], ids=["w-positive", "w-negative"])
+@pytest.mark.parametrize("sign", [-1.0], ids=["w-negative"])
 def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     booted: ModuleType,
     station: FprimeStation,

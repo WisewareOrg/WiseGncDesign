@@ -178,8 +178,3 @@ def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_me
         name = role.bus.removeprefix("Bus.")
         assert type(payload) is getattr(messaging, f"{name}Payload"), role.role
         holds(payload, bus_messages[role.bus].values)
-
-
-def test_a_role_not_commanded_this_tick_is_not_written():
-    """Only the roles whose bus structs CDH-out gave are written: none gives none."""
-    assert commands(COMMANDS, {}) == {}

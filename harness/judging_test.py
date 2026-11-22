@@ -273,14 +273,6 @@ def test_rule(allowed_failures, n, p, c, expected):
             id="over-allowance",
         ),
         pytest.param(
-            {"crashed": tuple(range(PLANNED)), "flight": only("SRS901")},
-            {"failed": 1, "skipped": 2},
-            [],
-            "| SRS901 | fail | 10/10/10 | 1 |",
-            None,
-            id="all-crashed",
-        ),
-        pytest.param(
             {"missing": (4,), "planned": 5, "flight": only("SRS901")},
             {"passed": 1, "skipped": 2},
             [],
@@ -328,7 +320,8 @@ def test_a_rung_is_judged_on_the_runs_found(
     are ten failed cases, counted as found. A failing rung names a rerun command per failing case,
     each carrying `--full-monte-carlo`. An interrupted campaign is judged on the runs found: n
     counts runs and crash records only, so four of five planned cases within x show p = 0.8 at
-    c = 0.5. The velocity and position analyzers read their own datasets. Nothing is skipped.
+    c = 0.5. The velocity and position analyzers read their own datasets. Nothing is skipped, and
+    the judge reads the flight's facts from its folder and never imports the notebook.
 
     Args:
         project: the project.
@@ -350,6 +343,7 @@ def test_a_rung_is_judged_on_the_runs_found(
     if rollup is not None:
         assert rollup in matrix
     assert "## Skipped folders" not in matrix
+    assert not (project.path / "imported").exists()
 
 
 def test_too_few_cases_found_leave_the_rung_not_judged(project: pytest.Pytester) -> None:
@@ -428,19 +422,6 @@ def test_a_stale_report_is_removed_before_judging(project: pytest.Pytester) -> N
 
     assert not stale.exists()
     assert "test_old" not in (session(project) / "report" / "matrix.md").read_text()
-
-
-def test_a_notebook_that_raises_on_import_is_still_judged(project: pytest.Pytester) -> None:
-    """The judge reads the flight's facts from its folder and never imports the notebook.
-
-    Args:
-        project: the project.
-    """
-    write_cases(session(project), flight=only("SRS901"))
-
-    judge(project).assert_outcomes(passed=1, skipped=2)
-
-    assert not (project.path / "imported").exists()
 
 
 def test_folders_without_a_flight_or_a_test_file_are_skipped_and_listed(

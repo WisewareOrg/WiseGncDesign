@@ -7,7 +7,6 @@ matched ignoring case. Offsets and padding are not compared, since F´ serialize
 F´ build.
 """
 
-import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -15,7 +14,7 @@ import numpy as np
 import pytest
 
 from fsw.codegen.fields import DTYPES
-from fsw.codegen.fpp_model import Struct, read
+from fsw.codegen.fpp_model import Member, Struct, read
 from fsw.payloads import payload_type
 
 BUS = Path(__file__).with_name("Bus.fpp")
@@ -80,92 +79,70 @@ def test_each_bus_struct_mirrors_its_basilisk_payload() -> None:
         assert _struct_fields(struct) == _payload_fields(struct), struct.name
 
 
-Seed = Callable[[list[str], list[int]], None]
-"""A drift seeded into a struct's member lines: the file's lines, and the indices of the struct's
-members' lines, in FPP's order."""
+Edit = Callable[[tuple[Member, ...]], tuple[Member, ...]]
+"""An edit of a struct's members."""
 
 
-def _rename(lines: list[str], members: list[int]) -> None:
+def _rename(members: tuple[Member, ...]) -> tuple[Member, ...]:
     """The first member renamed.
 
     Args:
-        lines: Bus.fpp's lines, edited in place.
-        members: the indices of the struct's members' lines.
+        members: the struct's members.
+
+    Returns:
+        The members.
     """
-    lines[members[0]] = lines[members[0]].replace(":", "Renamed:", 1)
+    return (members[0]._replace(name=members[0].name + "Renamed"), *members[1:])
 
 
-def _delete(lines: list[str], members: list[int]) -> None:
+def _delete(members: tuple[Member, ...]) -> tuple[Member, ...]:
     """The first member deleted.
 
     Args:
-        lines: Bus.fpp's lines, edited in place.
-        members: the indices of the struct's members' lines.
+        members: the struct's members.
+
+    Returns:
+        The members.
     """
-    lines[members[0]] = ""
+    return members[1:]
 
 
-def _swap(lines: list[str], members: list[int]) -> None:
+def _swap(members: tuple[Member, ...]) -> tuple[Member, ...]:
     """The first two members in each other's place.
 
     Args:
-        lines: Bus.fpp's lines, edited in place.
-        members: the indices of the struct's members' lines.
+        members: the struct's members.
+
+    Returns:
+        The members.
     """
-    first, second = members[:2]
-    lines[first], lines[second] = lines[second], lines[first]
+    return (members[1], members[0], *members[2:])
 
 
-def _reshape(lines: list[str], members: list[int]) -> None:
+def _reshape(members: tuple[Member, ...]) -> tuple[Member, ...]:
     """The first array member one element longer.
 
     Args:
-        lines: Bus.fpp's lines, edited in place.
-        members: the indices of the struct's members' lines.
+        members: the struct's members.
+
+    Returns:
+        The members.
     """
-    index = next(i for i in members if re.search(r":\s*\[\d+\]", lines[i]))
-    lines[index] = re.sub(
-        r"\[(\d+)\]", lambda size: f"[{int(size.group(1)) + 1}]", lines[index], count=1
-    )
+    index = next(i for i, member in enumerate(members) if member.size is not None)
+    longer = members[index]._replace(size=members[index].size + 1)
+    return (*members[:index], longer, *members[index + 1 :])
 
 
-def _recase(lines: list[str], members: list[int]) -> None:
+def _recase(members: tuple[Member, ...]) -> tuple[Member, ...]:
     """The first member's name in capitals, a name that differs only in case.
 
     Args:
-        lines: Bus.fpp's lines, edited in place.
-        members: the indices of the struct's members' lines.
-    """
-    name, rest = lines[members[0]].split(":", 1)
-    lines[members[0]] = f"{name.upper()}:{rest}"
-
-
-def _seeded(struct: Struct, seed: Seed, tmp_path: Path) -> Struct:
-    """A bus struct from a copy of Bus.fpp with a drift seeded into it, once seen to change it.
-
-    Args:
-        struct: the struct, as Bus.fpp declares it.
-        seed: the drift to seed into the struct's member lines.
-        tmp_path: where the copy is written.
+        members: the struct's members.
 
     Returns:
-        The copy's struct of that name.
+        The members.
     """
-    text = BUS.read_text()
-    lines = text.splitlines(keepends=True)
-    opening = re.compile(rf"\s*struct {re.escape(struct.name.removeprefix('Bus.'))}\s*\{{")
-    start = next(i for i, line in enumerate(lines) if opening.match(line))
-    end = next(i for i in range(start, len(lines)) if lines[i].strip() == "}")
-    names = {member.name for member in struct.members}
-    members = [i for i in range(start + 1, end) if lines[i].split(":", 1)[0].strip() in names]
-    assert len(members) == len(struct.members), struct.name
-    seed(lines, members)
-    seeded = "".join(lines)
-    assert seeded != text
-    copy = tmp_path / "Bus.fpp"
-    copy.write_text(seeded)
-    (copied,) = (s for s in _bus_structs(copy) if s.name == struct.name)
-    return copied
+    return (members[0]._replace(name=members[0].name.upper()), *members[1:])
 
 
 STRUCTS = _bus_structs(BUS)
@@ -174,35 +151,25 @@ STRUCTS = _bus_structs(BUS)
 
 @pytest.mark.parametrize("struct", STRUCTS, ids=lambda struct: struct.name)
 @pytest.mark.parametrize(
-    "seed", [_rename, _delete, _swap, _reshape], ids=["renamed", "missing", "swapped", "reshaped"]
+    ("edit", "mirrors"),
+    [(_rename, False), (_delete, False), (_swap, False), (_reshape, False), (_recase, True)],
+    ids=["renamed", "missing", "swapped", "reshaped", "recased"],
 )
-def test_a_drifted_bus_struct_differs_from_its_payload(
-    struct: Struct, seed: Seed, tmp_path: Path
+def test_an_edited_bus_struct_mirrors_its_payload_only_when_the_edit_is_in_case_alone(
+    struct: Struct, edit: Edit, mirrors: bool
 ) -> None:
-    """A copy of Bus.fpp with a member renamed, missing, moved or resized no longer mirrors it.
+    """A member renamed, missing, moved or resized no longer mirrors the payload; a recase does.
+
+    Each struct is edited in memory, and held to the payload of the unedited struct.
 
     Args:
-        struct: the bus struct the drift is seeded into.
-        seed: the drift.
-        tmp_path: where the seeded copy is written.
+        struct: the bus struct, edited.
+        edit: the edit.
+        mirrors: whether the edited struct still mirrors its payload.
     """
-    if seed is _swap and len(struct.members) < 2:
+    if edit is _swap and len(struct.members) < 2:
         pytest.skip(f"{struct.name} has one member, so none can move")
-    if seed is _reshape and all(member.size is None for member in struct.members):
+    if edit is _reshape and all(member.size is None for member in struct.members):
         pytest.skip(f"{struct.name} has no array member to resize")
-    drifted = _seeded(struct, seed, tmp_path)
-    assert _struct_fields(drifted) != _payload_fields(drifted)
-
-
-@pytest.mark.parametrize("struct", STRUCTS, ids=lambda struct: struct.name)
-def test_a_member_name_differing_only_in_case_still_mirrors_its_field(
-    struct: Struct, tmp_path: Path
-) -> None:
-    """A copy of Bus.fpp with a member's name in capitals still mirrors its payload.
-
-    Args:
-        struct: the bus struct the recased name is seeded into.
-        tmp_path: where the seeded copy is written.
-    """
-    recased = _seeded(struct, _recase, tmp_path)
-    assert _struct_fields(recased) == _payload_fields(recased)
+    edited = struct._replace(members=edit(struct.members))
+    assert (_struct_fields(edited) == _payload_fields(struct)) is mirrors

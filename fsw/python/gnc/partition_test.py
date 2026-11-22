@@ -230,54 +230,16 @@ def test_members_run_in_rate_group_order_and_an_output_reaches_a_later_member_in
 
     assert [("source", 1.0, Value(3.0)), ("sink", 1.0, Value(6.0))] == LOG
     assert telemetry == [("source", SourceTelemetry(count=1)), ("sink", Nothing())]
-    assert telemetry[0].instance == "source"
-    assert gnc.algorithms["source"].parameters == "p"
-    assert sorted(gnc.algorithms) == ["sink", "slow", "source"]
 
 
-def test_a_frame_returns_each_output_port_its_members_wrote_and_none_it_did_not(
-    gnc: GncPartition, model: Model
-):
-    """`slowOut` is in a frame's outputs only when slow ran and wrote it.
-
-    Slow runs at the first tick and every second one after; it writes an echo above 2 only, so the
-    first tick's echo of 1 writes nothing.
-
-    Args:
-        gnc: the mock's partition.
-        model: the mock's model.
-    """
-    driver = RateGroupDriver(dividers(model, gnc.rate_groups))
-    outputs = []
-    for t, seed in ((1.0, 1.0), (2.0, 3.0), (3.0, 3.0), (4.0, 5.0), (5.0, 5.0)):
-        gnc.write("seedIn", Value(seed))
-        frame = gnc.run(t, driver.tick())
-        assert isinstance(frame, Frame)
-        outputs.append(frame.outputs)
-
-    assert outputs == [{}, {}, {"slowOut": Value(3.0)}, {}, {"slowOut": Value(5.0)}]
-
-
-def test_a_member_output_both_routed_and_exposed_is_refused_naming_it(tmp_path: Path):
-    """An output feeds one input or one sub-topology port, never both.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    mock = edited(
-        MOCK, ("    port slowOut = slow.slowOut\n", "    port echoOut = source.echoOut\n")
-    )
-
-    with pytest.raises(ValueError, match=r"source\.echoOut .*port echoOut"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
-
-
-def test_frames_follow_the_fpp_rate_constants_and_an_input_keeps_its_latest_value(
+def test_frames_follow_the_fpp_rate_constants_and_return_the_outputs_their_members_wrote(
     gnc: GncPartition, model: Model
 ):
     """Slow's group, `slowDivider` = 2, runs at the first tick and every second one after.
 
-    An unwritten output, the echo of an even seed, leaves slow's input at the last echo.
+    An unwritten output, the echo of an even seed, leaves slow's input at the last echo. A frame
+    returns `slowOut` only when slow ran and wrote it: it writes an echo above 2 only, so the first
+    run's echo of 1 writes nothing.
 
     Args:
         gnc: the mock's partition.
@@ -285,10 +247,14 @@ def test_frames_follow_the_fpp_rate_constants_and_an_input_keeps_its_latest_valu
     """
     driver = RateGroupDriver(dividers(model, gnc.rate_groups))
     assert gnc.rate_groups == ("Mock.fastRateGroup", "Mock.slowRateGroup")
+    outputs = []
     for t, seed in ((1.0, 1.0), (2.0, 3.0), (3.0, 4.0), (4.0, 5.0), (5.0, 6.0)):
         gnc.write("seedIn", Value(seed))
-        gnc.run(t, driver.tick())
+        frame = gnc.run(t, driver.tick())
+        assert isinstance(frame, Frame)
+        outputs.append(frame.outputs)
 
+    assert outputs == [{}, {}, {"slowOut": Value(3.0)}, {}, {"slowOut": Value(5.0)}]
     assert [(t, value) for name, t, value in LOG if name == "slow"] == [
         (1.0, Value(1.0)),
         (3.0, Value(3.0)),
@@ -321,20 +287,6 @@ def test_boot_drops_every_input_held(gnc: GncPartition):
         gnc.run(1.0, [0])
 
 
-def test_boot_builds_every_algorithm_afresh(gnc: GncPartition):
-    """A second boot replaces each algorithm with a new one on the parameters given.
-
-    Args:
-        gnc: the mock's partition.
-    """
-    first = gnc.algorithms["source"]
-
-    gnc.boot({"source": "q", "sink": None, "slow": None})
-
-    assert gnc.algorithms["source"] is not first
-    assert gnc.algorithms["source"].parameters == "q"
-
-
 @pytest.mark.parametrize(
     ("classes", "named"),
     [
@@ -357,96 +309,88 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
         GncPartition(model, "Mock", classes)
 
 
-def test_a_data_input_not_named_in_ends_is_refused_naming_it(tmp_path: Path):
-    """A connected input's keyword is its name without `In`, so another name has none.
+@pytest.mark.parametrize(
+    ("edits", "match"),
+    [
+        (
+            (("    port slowOut = slow.slowOut\n", "    port echoOut = source.echoOut\n"),),
+            r"source\.echoOut .*port echoOut",
+        ),
+        (
+            (
+                (
+                    "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
+                    "    sync input port value: Value\n  }\n\n  passive component Slow",
+                ),
+                ("source.valueOut -> sink.valueIn", "source.valueOut -> sink.value"),
+            ),
+            r"sink\.value\b",
+        ),
+        (
+            (
+                (
+                    "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
+                    "    sync input port valueIn: Value\n    sync input port backIn: Value\n  }\n\n"
+                    "  passive component Slow",
+                ),
+                (
+                    "    output port slowOut: Value\n  }\n\n  instance",
+                    "    output port slowOut: Value\n    output port backOut: Value\n"
+                    "  }\n\n  instance",
+                ),
+                (
+                    "      source.echoOut -> slow.valueIn\n",
+                    "      source.echoOut -> slow.valueIn\n      slow.backOut -> sink.backIn\n",
+                ),
+            ),
+            r"slow\.backOut -> sink\.backIn is a backward edge",
+        ),
+        (
+            (
+                (
+                    "    output port echoOut: Value\n",
+                    "    output port echoOut: Value\n    output port loopOut: Value\n"
+                    "    sync input port loopIn: Value\n",
+                ),
+                (
+                    "      source.echoOut -> slow.valueIn\n",
+                    "      source.echoOut -> slow.valueIn\n      source.loopOut -> source.loopIn\n",
+                ),
+            ),
+            r"source\.loopOut -> source\.loopIn is a backward edge",
+        ),
+        (
+            (
+                ("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n"),
+                (
+                    "      source.valueOut -> sink.valueIn\n",
+                    "      source.valueOut[0] -> sink.valueIn\n"
+                    "      source.valueOut[1] -> slow.doubleIn\n",
+                ),
+                (
+                    "    output port slowOut: Value\n  }\n\n  instance",
+                    "    output port slowOut: Value\n    sync input port doubleIn: Value\n  }\n\n"
+                    "  instance",
+                ),
+            ),
+            r"source\.valueOut routes to more than one input",
+        ),
+    ],
+    ids=["routed-and-exposed", "input-not-named-in", "backward-edge", "self-loop", "fan-out"],
+)
+def test_a_partition_the_frame_cannot_run_is_refused_naming_the_edge(
+    tmp_path: Path, edits: tuple[tuple[str, str], ...], match: str
+):
+    """An output feeds one input or one port; a data input is `<name>In`; no edge runs backward.
+
+    A connected input's keyword is its name without `In`, so another name has none. An edge into a
+    member that runs earlier in the frame, or from a member to itself, is a delayed feedback, not
+    supported. FPP fans one output out only through a port array; the partition refuses it.
 
     Args:
         tmp_path: where the mock is written.
+        edits: the mock's edits.
+        match: the refusal, naming what breaks.
     """
-    mock = edited(
-        MOCK,
-        (
-            "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
-            "    sync input port value: Value\n  }\n\n  passive component Slow",
-        ),
-        ("source.valueOut -> sink.valueIn", "source.valueOut -> sink.value"),
-    )
-
-    with pytest.raises(ValueError, match=r"sink\.value\b"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
-
-
-def test_a_backward_edge_is_refused_naming_it(tmp_path: Path):
-    """An edge into a member that runs earlier in the frame is a delayed feedback, not supported.
-
-    Slow runs after sink, so `slow -> sink` would reach sink only at its next run.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    mock = edited(
-        MOCK,
-        (
-            "    sync input port valueIn: Value\n  }\n\n  passive component Slow",
-            "    sync input port valueIn: Value\n    sync input port backIn: Value\n  }\n\n"
-            "  passive component Slow",
-        ),
-        (
-            "    output port slowOut: Value\n  }\n\n  instance",
-            "    output port slowOut: Value\n    output port backOut: Value\n  }\n\n  instance",
-        ),
-        (
-            "      source.echoOut -> slow.valueIn\n",
-            "      source.echoOut -> slow.valueIn\n      slow.backOut -> sink.backIn\n",
-        ),
-    )
-
-    with pytest.raises(ValueError, match=r"slow\.backOut -> sink\.backIn is a backward edge"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
-
-
-def test_a_self_loop_is_refused_as_a_backward_edge(tmp_path: Path):
-    """An edge from a member to itself reaches it only at its next run, a delayed feedback.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    mock = edited(
-        MOCK,
-        (
-            "    output port echoOut: Value\n",
-            "    output port echoOut: Value\n    output port loopOut: Value\n"
-            "    sync input port loopIn: Value\n",
-        ),
-        (
-            "      source.echoOut -> slow.valueIn\n",
-            "      source.echoOut -> slow.valueIn\n      source.loopOut -> source.loopIn\n",
-        ),
-    )
-
-    with pytest.raises(ValueError, match=r"source\.loopOut -> source\.loopIn is a backward edge"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
-
-
-def test_an_output_feeding_more_than_one_input_is_refused_naming_it(tmp_path: Path):
-    """FPP fans one output out only through a port array; the partition refuses it, naming it.
-
-    Args:
-        tmp_path: where the mock is written.
-    """
-    mock = edited(
-        MOCK,
-        ("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n"),
-        (
-            "      source.valueOut -> sink.valueIn\n",
-            "      source.valueOut[0] -> sink.valueIn\n      source.valueOut[1] -> slow.doubleIn\n",
-        ),
-        (
-            "    output port slowOut: Value\n  }\n\n  instance",
-            "    output port slowOut: Value\n    sync input port doubleIn: Value\n  }\n\n"
-            "  instance",
-        ),
-    )
-
-    with pytest.raises(ValueError, match=r"source\.valueOut routes to more than one input"):
-        GncPartition(_model(tmp_path, mock), "Mock", (Sink, Slow, Source))
+    with pytest.raises(ValueError, match=match):
+        GncPartition(_model(tmp_path, edited(MOCK, *edits)), "Mock", (Sink, Slow, Source))

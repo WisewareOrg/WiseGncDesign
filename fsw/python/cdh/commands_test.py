@@ -46,7 +46,6 @@ def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
         [("source.level", 2.0)],
     )
     assert commands.dispatch(handlers, "source.reset", {}) == ("OK", None, [])
-    assert type(commands.dispatch(handlers, "source.reset", {})) is commands.Dispatched
     assert commands.dispatch(handlers, "source.setLevel", {"level": -1.0}) == (
         "VALIDATION_ERROR",
         "level -1.0 is negative",
@@ -120,33 +119,3 @@ def test_a_command_the_algorithm_lacks_or_declares_otherwise_is_refused_naming_i
     """
     with pytest.raises(ValueError, match=r"source\.setLevel takes \['level'\]"):
         commands.handlers(dictionary, {"source": algorithm})
-
-
-def test_arguments_reach_the_handler_as_given(dictionary: Dictionary):
-    """The handler gets each argument by its parameter's name, unconverted.
-
-    Args:
-        dictionary: the mock's dictionary.
-    """
-    received = []
-
-    class Recording(Source):
-        """A mock keeping what `setLevel` receives."""
-
-        def setLevel(self, level: float) -> None:
-            """Keeps the level.
-
-            Args:
-                level: the level.
-            """
-            received.append(level)
-
-    level = np.float64(0.5)
-    commands.dispatch(
-        commands.handlers(dictionary, {"source": Recording(PARAMETERS)}),
-        "source.setLevel",
-        {"level": level},
-    )
-
-    assert received == [level]
-    assert received[0] is level

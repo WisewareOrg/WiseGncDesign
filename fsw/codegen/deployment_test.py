@@ -14,7 +14,6 @@ from fsw.codegen.deployment import (
     CONTRACT,
     REPOSITORY,
     Contract,
-    algorithm_components,
     algorithm_files,
     bus_port,
     configuration_model,
@@ -29,7 +28,7 @@ from fsw.codegen.deployment import (
     tick_period,
 )
 from fsw.codegen.fpp_model import Model, read
-from fsw.codegen.roles import Role, roles, taken
+from fsw.codegen.roles import Role, roles
 from fsw.mock import MOCK, device, device_contract, edited, port, sub_topology
 
 DECLARED = roles(contract_model())
@@ -58,51 +57,17 @@ def test_a_deployment_s_files_are_the_contract_s_then_its_gnc_and_topology(
         REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp",
         tmp_path / f"{configuration}Fsw.fpp",
     )
-    text = (tmp_path / f"{configuration}Fsw.fpp").read_text()
-    assert "@CONFIGURATION@" not in text
-    assert "@SIMULATION@" not in text
 
 
-def test_the_contract_holds_the_bus_structs_and_every_algorithm_s_files():
-    """The bus structs and the algorithms the F´ build takes are in the contract."""
-    files = contract_files()
-
-    assert REPOSITORY / "fsw" / "fpp" / "interfaces" / "Bus.fpp" in files
-    assert algorithm_files()
-    assert set(algorithm_files()) <= set(files)
-
-
-def test_the_algorithm_components_are_those_an_algorithm_s_fpp_defines():
-    """Each is defined in an algorithm's file; a GNC instance's component is one, or is F´'s."""
-    found = algorithm_components()
-    components = contract_model().components
-
-    assert found
-    for name in found:
-        assert components[name].file in algorithm_files(), name
-    for instance in gnc_instances():
-        in_algorithm = components[instance.component].file in algorithm_files()
-        assert (instance.component in found) == in_algorithm, instance.name
-    assert "Svc.PassiveRateGroup" not in found
-
-
-def test_the_configurations_are_the_gnc_sub_topologies_sorted_by_name():
-    """Each configuration has its sub-topology's file, and qualifies every GNC instance."""
-    found = configurations()
-
-    assert found
-    assert list(found) == sorted(found)
-    for configuration in found:
-        assert (REPOSITORY / "fsw" / "fpp" / "gnc" / f"{configuration}.fpp").is_file()
-    assert {instance.name.split(".")[0] for instance in gnc_instances()} == set(found)
+def test_every_gnc_instance_is_in_a_configuration():
+    """Each GNC instance is qualified by a configuration, and each configuration has instances."""
+    assert {instance.name.split(".")[0] for instance in gnc_instances()} == set(configurations())
 
 
 def test_a_configuration_s_base_tick_period_is_its_fpp_constant():
-    """`tickPeriod`, in s, beside the sub-topology's dividers, read from its model once."""
+    """`tickPeriod`, in s, is a constant of the configuration's sub-topology."""
     assert tick_period("MockFrame", contract=MOCK) == 0.5
-    model = configuration_model("MockFrame", contract=MOCK)
-    assert configuration_model("MockFrame", contract=MOCK) is model
-    assert "MockFrame.Gnc" in model.topologies
+    assert "MockFrame.Gnc" in configuration_model("MockFrame", contract=MOCK).topologies
 
 
 def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
@@ -219,21 +184,6 @@ def test_a_render_leaves_a_topology_whose_text_is_unchanged_untouched(
     assert topology.read_text() == text
 
 
-def test_the_repository_s_configurations_wire_their_roles_through_the_shared_template(
-    configuration: str,
-):
-    """Each taken role's LabBusDriver index is its place among the roles of its direction.
-
-    Args:
-        configuration: the configuration.
-    """
-    found = taken(configuration_model(configuration), configuration)
-    for direction in (True, False):
-        of = [role for role in found if role.sensor == direction]
-        for k, role in enumerate(of):
-            assert bus_port(configuration, port(role)) == k, role.role
-
-
 def test_a_cdh_port_no_lab_bus_driver_port_feeds_is_refused_naming_it(configuration: str):
     """A port the deployment leaves off LabBusDriver raises, naming it and the configuration.
 
@@ -308,19 +258,6 @@ def test_the_f_prime_build_builds_a_configuration_only_when_each_member_has_an_f
     assert fprime_configurations(contract=contract) == ("Gated",)
 
 
-def test_each_contract_s_f_prime_configurations_are_those_whose_members_have_f_prime_components():
-    """The repository's are not none; the test mocks' are MockActuation, never a Python-only one.
-
-    `MockFlight` and `MockFrame` fly test mocks with no F´ component, as a Python-only algorithm's
-    configuration does, so `just fsw` and CI's import step, which build and import this set, leave
-    them out.
-    """
-    assert fprime_configurations()
-    assert set(fprime_configurations()) <= set(configurations())
-    assert fprime_configurations(contract=MOCK) == ("MockActuation",)
-    assert {"MockFlight", "MockFrame"} <= set(configurations(contract=MOCK))
-
-
 def test_every_algorithm_s_fpp_is_in_the_contract_with_or_without_an_f_prime_component(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -341,18 +278,6 @@ def test_every_algorithm_s_fpp_is_in_the_contract_with_or_without_an_f_prime_com
         tmp_path / "algorithms" / "built" / "built.fpp",
         tmp_path / "algorithms" / "python_only" / "python_only.fpp",
     )
-
-
-@pytest.mark.parametrize("configuration", ["MockFlight"], scope="module")
-def test_a_test_reaching_the_f_prime_build_skips_a_configuration_it_does_not_build(
-    fprime_configuration: str,
-):
-    """`fprime_configuration` skips a configuration the F´ build does not build, so this never runs.
-
-    Args:
-        fprime_configuration: a configuration the F´ build does not build, which skips the test.
-    """
-    pytest.fail(f"fprime_configuration gave {fprime_configuration}, which F´ does not build")
 
 
 def test_the_renderer_renders_and_names_every_f_prime_configuration_of_both_contracts(

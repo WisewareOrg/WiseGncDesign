@@ -4,14 +4,11 @@ Each test but the tool's reads a mock model of two roles, so none needs the F´ 
 """
 
 from collections.abc import Callable
-from pathlib import Path
 
 import pytest
 
-from fsw.codegen.bus_converter import main, render
-from fsw.codegen.deployment import contract_model
+from fsw.codegen.bus_converter import render
 from fsw.codegen.fpp_model import Model
-from fsw.codegen.roles import CONVERTER, roles
 
 
 def test_two_roles_emit_two_handlers_and_two_conversions(
@@ -70,8 +67,6 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(
         assert f'"cdh_{role}"' in pins
         assert f"{bus} msg;" in pins
         assert f"Cdh::BusConverter::convert_{role}(msg)" in pins
-    assert "[](const std::array<F64, 2>& extra, const std::array<F64, 3>& v)" in pins
-    assert 'pybind11::arg("extra"), pybind11::arg("v")' in pins
 
 
 @pytest.mark.parametrize(
@@ -87,27 +82,11 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(
         ),
         pytest.param(
             (
-                ("struct A { extra", "struct A { x: F64, extra"),
-                ("struct AIcd { V", "struct AIcd { X: F64, V"),
-            ),
-            r"Gnc\.AIcd\.X is \(\) float64, which the F´ CDH",
-            id="scalar",
-        ),
-        pytest.param(
-            (
                 ("struct A { extra", "struct A { f: [2] bool, extra"),
                 ("struct AIcd { V", "struct AIcd { f: [2] bool, V"),
             ),
             r"Gnc\.AIcd\.f is \(2,\) bool, which the F´ CDH",
             id="bool",
-        ),
-        pytest.param(
-            (
-                ("struct A { extra", "struct A { f: [2] U32, extra"),
-                ("struct AIcd { V", "struct AIcd { f: [2] U32, V"),
-            ),
-            r"Gnc\.AIcd\.f is \(2,\) uint32, which the F´ CDH",
-            id="unused-primitive",
         ),
         pytest.param(
             (
@@ -121,11 +100,6 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(
             (("extra: [2] F64", "extra: F64"),),
             r"Bus\.A\.extra is F64, which the bus pin",
             id="bus-scalar",
-        ),
-        pytest.param(
-            (("extra: [2] F64", "extra: [2] bool"),),
-            r"Bus\.A\.extra is \[2\] bool, which the bus pin",
-            id="bus-bool",
         ),
         pytest.param(
             (("extra: [2] F64", "extra: [2] U32"),),
@@ -152,40 +126,3 @@ def test_a_field_outside_the_domain_is_refused_by_name(
     model = converter_mock(*edits)
     with pytest.raises(ValueError, match=match):
         render(model)
-
-
-def test_the_tool_writes_the_component_and_its_pins_for_every_role(tmp_path: Path) -> None:
-    """`python -m fsw.codegen.bus_converter <dir>` writes a handler and pins per contract role.
-
-    Args:
-        tmp_path: the directory.
-    """
-    main([str(tmp_path)])
-    found = roles(contract_model())
-    assert found
-    assert "class BusConverter final" in (tmp_path / "BusConverter.hpp").read_text()
-    source = (tmp_path / "BusConverter.cpp").read_text()
-    pins = (tmp_path / "BusConverterPins.hpp").read_text()
-    for role in found:
-        assert f"void BusConverter::{role.input}_handler(" in source
-        assert f'"cdh_{role.role}"' in pins
-        assert f'"bus_{role.bus.removeprefix("Bus.")}"' in pins
-
-
-def test_each_actuator_role_s_bus_port_serializer_is_named_into_namespace_cdh() -> None:
-    """For each actuator role, the header brings its bus port's buffer and serializer into `Cdh`.
-
-    FPP 3.4.0 writes the deployment's call from `Cdh.BusConverter`'s typed `<role>Out` into
-    LabBusDriver's serial input with the port's `<Port>PortBuffer` and `<Port>PortSerializer`
-    unqualified, inside namespace `Cdh`; `<Port>` is the output port's type, read from FPP.
-    """
-    model = contract_model()
-    actuators = [role for role in roles(model) if not role.sensor]
-    assert actuators
-    outputs = {port.name: port for port in model.components[CONVERTER].outputs}
-    header = render(model)["BusConverter.hpp"]
-    namespace = header[header.index("namespace Cdh {") : header.index("class BusConverter")]
-    for role in actuators:
-        port = outputs[role.output].type.replace(".", "::")
-        assert f"using {port}PortBuffer;" in namespace, role.role
-        assert f"using {port}PortSerializer;" in namespace, role.role

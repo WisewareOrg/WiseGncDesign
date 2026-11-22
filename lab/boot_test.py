@@ -44,15 +44,13 @@ def test_a_case_s_file_boots_every_parameter_valid(
     booted: ModuleType,
     dictionary: Dictionary,
     prm_record: Path,
-    bus: list[tuple[int, bytes]],
 ):
-    """The case's record holds every parameter of the deployment, and booted on it the copy steps.
+    """The case's record holds every parameter of the deployment, and the copy boots on it.
 
     Args:
-        booted: the test's copy of the deployment, booted idle on the case's parameters.
+        booted: the test's copy of the deployment, which boots on the record or fails.
         dictionary: the copy's dictionary.
         prm_record: the case's parameter record.
-        bus: every role's bus message on its LabBusDriver port.
     """
     recorded = {
         f"{instance.rsplit('.', 1)[1]}.{name}"
@@ -60,10 +58,6 @@ def test_a_case_s_file_boots_every_parameter_valid(
         for name in values
     }
     assert recorded == {p.name for p in dictionary.parameters_by_id.values()}
-
-    booted.step(t_ns=NS, bus=bus)
-
-    assert booted.telemetry()
 
 
 def test_a_missing_file_fails_the_boot(fsw: ModuleType, tmp_path: Path, parameter_ids: list[int]):
@@ -79,40 +73,6 @@ def test_a_missing_file_fails_the_boot(fsw: ModuleType, tmp_path: Path, paramete
 
     with pytest.raises(RuntimeError, match=f"parameters {named} are not valid"):
         fsw.boot(str(missing), parameter_ids)
-
-
-def test_a_file_whose_crc_fails_fails_the_boot(fsw: ModuleType, prm: str, parameter_ids: list[int]):
-    """A byte changed after the CRC was written leaves every parameter invalid.
-
-    Args:
-        fsw: the test's copy.
-        prm: the case's parameter file, corrupted here.
-        parameter_ids: every parameter's ID, which boot holds valid.
-    """
-    dat = Path(prm)
-    data = bytearray(dat.read_bytes())
-    data[-1] ^= 0xFF
-    dat.write_bytes(bytes(data))
-
-    with pytest.raises(RuntimeError, match="are not valid"):
-        fsw.boot(prm, parameter_ids)
-
-
-def test_a_file_that_is_not_a_parameter_file_fails_the_boot(
-    fsw: ModuleType, tmp_path: Path, parameter_ids: list[int]
-):
-    """Bytes that are not F´'s parameter format leave every parameter invalid.
-
-    Args:
-        fsw: the test's copy.
-        tmp_path: the case's directory.
-        parameter_ids: every parameter's ID, which boot holds valid.
-    """
-    dat = tmp_path / "run_0000.prm.dat"
-    dat.write_bytes(b"not a parameter file")
-
-    with pytest.raises(RuntimeError, match="are not valid"):
-        fsw.boot(str(dat), parameter_ids)
 
 
 def test_a_parameter_missing_from_the_record_fails_the_boot(

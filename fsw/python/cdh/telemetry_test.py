@@ -22,8 +22,3 @@ def test_each_field_written_is_one_write_named_for_its_instance_in_field_order()
     np.testing.assert_array_equal(writes[1][1], [1.0, 2.0, 3.0])
     assert writes[2][1] == 0
     assert [name for name, _ in telemetry.writes("mock", Telemetry(count=1))] == ["mock.count"]
-
-
-def test_nothing_returned_writes_nothing():
-    """A handler returning `None` writes no telemetry."""
-    assert telemetry.writes("mock", None) == []

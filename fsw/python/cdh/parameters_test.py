@@ -77,41 +77,32 @@ def test_each_instance_s_parameters_come_back_as_its_tuple(
             np.testing.assert_array_equal(getattr(read, name), value, err_msg=component)
 
 
-def test_a_parameter_missing_from_the_record_raises_naming_it(
-    tmp_path: Path, algorithm_parameters: dict[str, Any]
+@pytest.mark.parametrize("change", ["drop", "add"])
+def test_a_parameter_the_record_lacks_or_the_component_lacks_raises_naming_it(
+    tmp_path: Path, algorithm_parameters: dict[str, Any], change: str
 ):
-    """A record without one of an instance's parameters fails, as the F´ build's boot does.
+    """A record without one of an instance's parameters, or naming one the tuple lacks, fails.
+
+    The first fails as the F´ build's boot does, the second as F´'s tool does.
 
     Args:
         tmp_path: where the record is written.
         algorithm_parameters: each algorithm component's tuple.
+        change: `drop` removes a parameter from the record, `add` names one the component lacks.
     """
     for component, tuple_ in algorithm_parameters.items():
         values = _values(tuple_)
-        if not values:
-            continue
-        missing = sorted(values)[0]
-        del values[missing]
+        if change == "drop":
+            if not values:
+                continue
+            name = sorted(values)[0]
+            del values[name]
+        else:
+            name = "notAParameter"
+            values[name] = 1.0
         record = _record(tmp_path, {_instance(component): values})
 
-        with pytest.raises(TypeError, match=re.escape(missing)):
-            parameters.read(record, type(tuple_), _instance(component))
-
-
-def test_a_parameter_the_component_lacks_raises_naming_it(
-    tmp_path: Path, algorithm_parameters: dict[str, Any]
-):
-    """A record naming a field the tuple lacks fails, as F´'s tool does.
-
-    Args:
-        tmp_path: where the record is written.
-        algorithm_parameters: each algorithm component's tuple.
-    """
-    for component, tuple_ in algorithm_parameters.items():
-        values = {**_values(tuple_), "notAParameter": 1.0}
-        record = _record(tmp_path, {_instance(component): values})
-
-        with pytest.raises(TypeError, match="notAParameter"):
+        with pytest.raises(TypeError, match=re.escape(name)):
             parameters.read(record, type(tuple_), _instance(component))
 
 

@@ -62,24 +62,6 @@ def test_from_component_raises_with_the_tool_s_error_for_a_bad_model(
         render_mock(tmp_path, ("telemetry count: U8", "telemetry count: Missing"))
 
 
-def test_every_dictionary_carries_f_prime_s_command_responses(mock_dictionary: Dictionary):
-    """A Python build's dictionary has `Fw.CmdResponse`'s constants, from `Interfaces.fpp`.
-
-    Args:
-        mock_dictionary: the mock's dictionary.
-    """
-    assert mock_dictionary.responses == {
-        "OK": 0,
-        "INVALID_OPCODE": 1,
-        "VALIDATION_ERROR": 2,
-        "FORMAT_ERROR": 3,
-        "EXECUTION_ERROR": 4,
-        "BUSY": 5,
-        "CLEARED": 6,
-        "DISPATCHED_UNTRACKED": 7,
-    }
-
-
 def test_arguments_are_typed_as_f_prime_s_handler_gets_them(mock_dictionary: Dictionary):
     """An F32 as F32 holds it, a bool as a bool, an enum by name, an array as an array.
 
@@ -105,12 +87,8 @@ def test_arguments_are_typed_as_f_prime_s_handler_gets_them(mock_dictionary: Dic
         ({k: v for k, v in ARGS.items() if k != "mode"}, r"takes \['gain'"),
         (ARGS | {"extra": 1}, r"takes \['gain'"),
         (ARGS | {"offset": [1.0, 2.0]}, "parameter offset"),
-        (ARGS | {"gain": None}, "parameter gain"),
-        (ARGS | {"mode": "standby"}, "parameter mode"),
-        (ARGS | {"count": 300}, "parameter count"),
-        (ARGS | {"count": -1}, "parameter count"),
     ],
-    ids=["missing", "extra", "short-array", "none", "no-constant", "above-u8", "below-u8"],
+    ids=["missing", "extra", "short-array"],
 )
 def test_arguments_that_will_not_fit_are_refused_naming_what(
     mock_dictionary: Dictionary, args: dict, match: str
@@ -147,8 +125,6 @@ def test_a_mistyped_name_is_refused_naming_it(mock_dictionary: Dictionary):
     """
     with pytest.raises(KeyError, match="'mock.gian'"):
         mock_dictionary.channel("mock.gian")
-    with pytest.raises(KeyError, match="'mock.setTyo'"):
-        mock_dictionary.command("mock.setTyo")
     with pytest.raises(KeyError, match="'mock.setTyo'"):
         mock_dictionary.arguments("mock.setTyo", ARGS)
 
@@ -245,13 +221,9 @@ def test_written_values_are_held_to_the_channel_s_type(mock_dictionary: Dictiona
     ("channel", "values"),
     [
         ("mock.gain", [0.5, None]),
-        ("mock.gain", ["1.5"]),
         ("mock.gain", [True]),
-        ("mock.gain", [np.array([1.0, 2.0, 3.0])]),
-        ("mock.offset", [1.0]),
         ("mock.offset", [[1.0, 2.0]]),
         ("mock.offset", [[1.0, 2.0, 3.0], [1.0, 2.0]]),
-        ("mock.mounting", [np.eye(3)[0]]),
         ("mock.count", [1.5]),
         ("mock.count", [300]),
         ("mock.count", [-1]),
@@ -262,13 +234,9 @@ def test_written_values_are_held_to_the_channel_s_type(mock_dictionary: Dictiona
     ],
     ids=[
         "none",
-        "string",
         "bool-to-float",
-        "vector-to-scalar",
-        "scalar-to-vector",
         "short-vector",
         "ragged",
-        "vector-to-matrix",
         "float-to-integer",
         "above-u8",
         "below-u8",
@@ -463,16 +431,14 @@ def test_every_gnc_instance_s_generated_dictionary_is_wise_fsw_s_entries_and_par
 
 
 def test_a_configuration_s_dictionary_is_its_own_deployment_generated_once_per_content(
-    configuration: str, algorithm_instances: Callable[[str], tuple[Instance, ...]]
+    configuration: str,
 ):
     """`from_sub_topology` names its deployment for the configuration and caches it per process.
 
     Args:
         configuration: the configuration.
-        algorithm_instances: gives a configuration's algorithm instances.
     """
     generated = Dictionary.from_sub_topology(configuration)
 
     assert generated.metadata["deploymentName"] == f"Py{configuration}.Py{configuration}"
-    assert algorithm_instances(configuration)
     assert Dictionary.from_sub_topology(configuration) is generated

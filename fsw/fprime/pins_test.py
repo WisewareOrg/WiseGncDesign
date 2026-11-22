@@ -6,6 +6,7 @@ that tag was released with.
 
 import tomllib
 
+import pytest
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
@@ -88,31 +89,51 @@ PROJECT = [
 ]
 
 
-def test_a_tool_pinned_to_another_version_diverges():
-    """A project pin that differs from the framework's is reported, naming the tool."""
-    wrong = [p.replace("fprime-tools==4.4.0", "fprime-tools==4.5.0") for p in PROJECT]
-    assert divergences(wrong, FRAMEWORK) == ["fprime-tools: project 4.5.0, framework 4.4.0"]
+VARIANT = [
+    "CMake == 3.26.0",
+    "Ninja==1.11.1.4  # comment",
+    "fprime_tools==4.4.0",
+    'fprime.fpp==3.4.0; sys_platform == "linux"',
+    "FPRIME-GDS==4.4.0",
+    "",
+    "# a comment line",
+    "pybind11>=2.13",
+]
+"""The project's pins spelled otherwise: name case, `_` for `-`, spacing, markers and comments."""
 
 
-def test_a_tool_that_is_not_exactly_pinned_diverges():
-    """A range, or a tool missing from either side, is reported."""
-    ranged = [p.replace("cmake==3.26.0", "cmake>=3.26.0") for p in PROJECT]
-    assert divergences(ranged, FRAMEWORK) == ["cmake is not ==-pinned in the fprime group"]
-    assert divergences(PROJECT, FRAMEWORK[:4]) == [
-        "fprime-fpp is not ==-pinned in the framework's requirements.txt"
-    ]
+@pytest.mark.parametrize(
+    ("group", "framework", "expected"),
+    [
+        (
+            [p.replace("fprime-tools==4.4.0", "fprime-tools==4.5.0") for p in PROJECT],
+            FRAMEWORK,
+            ["fprime-tools: project 4.5.0, framework 4.4.0"],
+        ),
+        (
+            [p.replace("cmake==3.26.0", "cmake>=3.26.0") for p in PROJECT],
+            FRAMEWORK,
+            ["cmake is not ==-pinned in the fprime group"],
+        ),
+        (
+            PROJECT,
+            FRAMEWORK[:4],
+            ["fprime-fpp is not ==-pinned in the framework's requirements.txt"],
+        ),
+        (VARIANT, FRAMEWORK, []),
+    ],
+    ids=["another-version", "a-range", "missing-from-the-framework", "spelling-variant"],
+)
+def test_a_tool_is_reported_only_when_it_is_pinned_apart_not_when_it_is_spelled_apart(
+    group: list[str], framework: list[str], expected: list[str]
+):
+    """A differing version, a range, or a pin missing from a side is reported, naming the tool.
 
+    A spelling variant of the same pin is not.
 
-def test_a_spelling_variant_of_the_same_pin_agrees():
-    """Name case, `_` for `-`, spacing, markers and comments do not read as divergence."""
-    variant = [
-        "CMake == 3.26.0",
-        "Ninja==1.11.1.4  # comment",
-        "fprime_tools==4.4.0",
-        'fprime.fpp==3.4.0; sys_platform == "linux"',
-        "FPRIME-GDS==4.4.0",
-        "",
-        "# a comment line",
-        "pybind11>=2.13",
-    ]
-    assert divergences(variant, FRAMEWORK) == []
+    Args:
+        group: the project's pins.
+        framework: the framework's pins.
+        expected: the divergences reported.
+    """
+    assert divergences(group, framework) == expected

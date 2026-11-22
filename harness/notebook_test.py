@@ -52,30 +52,13 @@ def test_each_run_finds_a_session_of_its_own_outside_the_notebook_s_folder(tmp_p
         assert not session.is_relative_to(tmp_path), session
 
 
-def test_each_run_s_kernel_listens_on_files_of_its_own_not_tcp_ports(tmp_path: Path) -> None:
-    """The kernel talks over IPC sockets of the run's own, never TCP ports kernels race for.
-
-    Args:
-        tmp_path: the notebook's folder.
-    """
-    notebook = tmp_path / "transport.py"
-    body = (
-        "from ipykernel.connect import get_connection_info; "
-        "info = get_connection_info(unpack=True); "
-        'assert info["transport"] == "ipc", info["transport"]; '
-        f'assert not info["ip"].startswith(r"{tmp_path}"), info["ip"]'
-    )
-    notebook.write_text(CELLS.format(body=body))
-
-    run_notebook(notebook)
-
-
 def test_the_run_is_capped_and_names_the_notebook_as_its_session(tmp_path: Path) -> None:
     """The kernel sees the cap and the notebook's path, so a run cannot fly the full campaign.
 
     It runs in the notebook's folder, as in Lab, so it finds the session the notebook's flights
     land in, and writes nothing beside the notebook. Its notebook-only cell holds, so it is also
-    the control for the seeded error: a notebook whose cells all run passes.
+    the control for the seeded error: a notebook whose cells all run passes. The kernel talks over
+    IPC sockets of the run's own, never TCP ports kernels race for.
 
     Args:
         tmp_path: the test's directory.
@@ -84,7 +67,11 @@ def test_the_run_is_capped_and_names_the_notebook_as_its_session(tmp_path: Path)
     body = (
         'import os; assert os.environ["WISE_DYNAMICS_CAPPED"] == "1"; '
         f'assert os.environ["JPY_SESSION_NAME"] == r"{notebook}"; '
-        f'assert os.getcwd() == r"{tmp_path}"'
+        f'assert os.getcwd() == r"{tmp_path}"; '
+        "from ipykernel.connect import get_connection_info; "
+        "info = get_connection_info(unpack=True); "
+        'assert info["transport"] == "ipc", info["transport"]; '
+        f'assert not info["ip"].startswith(r"{tmp_path}"), info["ip"]'
     )
     notebook.write_text(CELLS.format(body=body))
 

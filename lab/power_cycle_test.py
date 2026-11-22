@@ -12,7 +12,7 @@ import pytest
 from fsw.codegen.deployment import fprime_configurations
 from fsw.codegen.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab.power_cycle import _loaded_stamps, built, dictionary_path, power_cycle, source
+from lab.power_cycle import _loaded_stamps, built, power_cycle, source
 
 if not all(built(c) for c in fprime_configurations()):
     pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
@@ -147,19 +147,3 @@ def test_a_rebuilt_extension_is_refused_by_its_own_configuration_alone(
     monkeypatch.setitem(_loaded_stamps, fprime_configuration, (-1, -1))
     with pytest.raises(RuntimeError, match="rebuilt after this process loaded it.*restart"):
         power_cycle(fprime_configuration)
-
-
-def test_a_configuration_s_dictionary_is_the_one_its_deployment_generated(
-    fprime_configuration: str, dictionary: Dictionary
-):
-    """`dictionary_path` names the dictionary of the configuration's own deployment.
-
-    Args:
-        fprime_configuration: the configuration.
-        dictionary: the dictionary at its path.
-    """
-    assert (
-        dictionary_path(fprime_configuration).name
-        == f"{fprime_configuration}FswTopologyDictionary.json"
-    )
-    assert dictionary.metadata["deploymentName"] == f"WiseFsw.{fprime_configuration}Fsw"

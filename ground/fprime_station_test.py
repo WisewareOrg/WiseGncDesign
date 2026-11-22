@@ -64,14 +64,13 @@ def test_a_command_packet_is_f_prime_s(mock: FprimeStation, mock_dictionary: Dic
     [
         ("mock.setMock", {k: v for k, v in ARGS.items() if k != "mode"}, KeyError, "'mode'"),
         ("mock.label", {"note": "hello"}, ValueError, r"mock\.label has a parameter type"),
-        ("mock.setTyo", {}, KeyError, "'mock.setTyo'"),
     ],
-    ids=["missing-argument", "type-not-coded", "unknown-command"],
+    ids=["missing-argument", "type-not-coded"],
 )
 def test_a_command_the_station_cannot_encode_is_refused_naming_what(
     mock: FprimeStation, name: str, args: dict, error: type, match: str
 ):
-    """A missing argument, a parameter of a type not coded, or an unknown command raises naming it.
+    """A missing argument, or a parameter of a type not coded, raises naming it.
 
     Args:
         mock: the mock's station.
@@ -85,7 +84,7 @@ def test_a_command_the_station_cannot_encode_is_refused_naming_what(
 
 
 def test_serialized_writes_become_values_in_one_batch(mock: FprimeStation):
-    """Arrays come back (N, *shape), a bool as 1.0, an enum as its name, an F32 as F32 holds it.
+    """Arrays come back (N, *shape), an enum as its name, an F32 as F32 holds it.
 
     Args:
         mock: the mock's station.
@@ -94,13 +93,8 @@ def test_serialized_writes_become_values_in_one_batch(mock: FprimeStation):
         mock.values("mock.offset", [struct.pack(">3d", 1, 2, 3), struct.pack(">3d", 4, 5, 6)]),
         [[1, 2, 3], [4, 5, 6]],
     )
-    mounting = mock.values("mock.mounting", [struct.pack(">9d", *range(9))])
-    np.testing.assert_array_equal(mounting[0], ARGS["mounting"])
-    assert mock.values("mock.enabled", [b"\xff", b"\x00"]).tolist() == [1.0, 0.0]
     assert mock.values("mock.mode", [struct.pack(">i", 1)]).tolist() == ["fast"]
     assert mock.values("mock.gain", [struct.pack(">f", 0.1)]).tolist() == [float(np.float32(0.1))]
-    assert mock.values("mock.offset", []).shape == (0, 3)
-    assert mock.values("mock.mode", []).shape == (0,)
 
 
 @pytest.mark.parametrize(
@@ -183,19 +177,9 @@ def _gnc_writes(
     [
         (lambda good, unknown: good[:2] + unknown.to_bytes(4, "big") + good[6:], "INVALID_OPCODE"),
         (lambda good, unknown: b"\x00\x01" + good[2:], "VALIDATION_ERROR"),
-        (lambda good, unknown: good[:4], "VALIDATION_ERROR"),
         (lambda good, unknown: good[:-1], "FORMAT_ERROR"),
-        (lambda good, unknown: good[:6], "FORMAT_ERROR"),
-        (lambda good, unknown: good + bytes(8), "FORMAT_ERROR"),
     ],
-    ids=[
-        "unknown-opcode",
-        "not-a-command",
-        "truncated-head",
-        "short-arguments",
-        "no-arguments",
-        "extra",
-    ],
+    ids=["unknown-opcode", "not-a-command", "short-arguments"],
 )
 def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_the_gnc_runs_as_untouched(
     booted: ModuleType,

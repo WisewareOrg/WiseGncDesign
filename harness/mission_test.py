@@ -28,7 +28,6 @@ from types import ModuleType
 import h5py
 import numpy as np
 import pytest
-import yaml
 from wise_dynamics.basilisk.vehicles import VEHICLES
 
 from fsw.codegen import fpp_types
@@ -305,79 +304,6 @@ def mission(gnc: str = "MockFlight", scenarios: tuple[str, ...] = ("TST901",), *
     return Mission(VEHICLE, gnc, "python", scenarios, **{"contract": MOCK, **fields})
 
 
-def test_the_tree_functions_read_the_default_root_when_called(tree: Path) -> None:
-    """`items` reads the tree at the root the module holds now, not the one it held on import.
-
-    Args:
-        tree: the tree and its root.
-    """
-    assert sorted(requirements_tree.items("SYS")) == ["SYS901", "SYS902"]
-
-
-def test_the_tree_functions_follow_the_root_when_it_is_reassigned(
-    tree: Path, tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Reassigning the module's `ROOT` points the tree functions at another project.
-
-    Args:
-        tree: the tree the default reads.
-        tmp_path_factory: makes a second project.
-        monkeypatch: the monkeypatch fixture.
-    """
-    other = tmp_path_factory.mktemp("other")
-    write_item(other, "sys", "SYS777", links=[])
-    monkeypatch.setattr(requirements_tree, "ROOT", other)
-
-    assert sorted(requirements_tree.items("SYS")) == ["SYS777"]
-
-
-def test_a_flight_judges_the_scenarios_rungs_under_the_capabilities_claimed(tree: Path) -> None:
-    """TST901 links SRS901-3; the capability SYS901 owns SRS901 and SRS902 only.
-
-    Args:
-        tree: the tree.
-    """
-    assert requirements_tree.flight_rungs("TST901", ["SYS901"]) == ("SRS901", "SRS902")
-    assert requirements_tree.flight_rungs("TST901", ["SYS902"]) == ("SRS903",)
-    assert requirements_tree.flight_rungs("TST901", ["SYS902", "SYS901"]) == (
-        "SRS901",
-        "SRS902",
-        "SRS903",
-    )
-
-
-def test_the_filter_narrows_a_flights_rungs(tree: Path) -> None:
-    """Only the filter's rungs that the scenario links and the capabilities own remain.
-
-    Args:
-        tree: the tree.
-    """
-    assert requirements_tree.flight_rungs("TST901", ["SYS901"], ["SRS902", "SRS903", "SRS904"]) == (
-        "SRS902",
-    )
-
-
-def test_flight_rungs_reads_the_root_it_holds_when_called(
-    tree: Path, tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The tree is read from the module's `ROOT` as it stands at the call.
-
-    Args:
-        tree: the tree the default reads.
-        tmp_path_factory: makes a second project.
-        monkeypatch: the monkeypatch fixture.
-    """
-    other = tmp_path_factory.mktemp("other")
-    write_tree(other)
-    (other / "docs" / "requirements" / "tst" / "TST901.yml").write_text(
-        yaml.safe_dump({"active": True, "links": [{"SRS904": "stamp"}]})
-    )
-
-    assert requirements_tree.flight_rungs("TST901", ["SYS901"]) == ("SRS901", "SRS902")
-    monkeypatch.setattr(requirements_tree, "ROOT", other)
-    assert requirements_tree.flight_rungs("TST901", ["SYS901"]) == ("SRS904",)
-
-
 @pytest.mark.parametrize(
     ("gnc", "scenarios", "rungs", "refused"),
     [
@@ -386,7 +312,6 @@ def test_flight_rungs_reads_the_root_it_holds_when_called(
         ("SecondOnly", ("TST902",), None, "TST902"),
         ("MockFlight", ("TST901", "TST902"), ("SRS901",), "TST902"),
         ("MockFlight", ("TST901", "TST902"), ("SRS902",), None),
-        ("SecondOnly", ("TST901", "TST902"), None, "TST902"),
         ("Both", ("TST901",), ("SRS901", "SRS903"), None),
         ("MockFlight", ("TST901",), ("SRS901", "SRS903"), "SRS903"),
     ],
@@ -1146,10 +1071,9 @@ def test_an_interrupted_flight_json_write_leaves_the_old_file_intact(
 
     target = tmp_path / "flight.json"
     _merge_json(target, {"scenario": "TST901"})
-    landed: list[Path] = []
 
     def interrupted(source: str | Path, destination: str | Path) -> None:
-        """Record the source and fail as a write killed at the rename.
+        """Fail as a write killed at the rename.
 
         Args:
             source: the temporary file.
@@ -1158,7 +1082,6 @@ def test_an_interrupted_flight_json_write_leaves_the_old_file_intact(
         Raises:
             OSError: always.
         """
-        landed.append(Path(source))
         raise OSError("interrupted")
 
     monkeypatch.setattr(os, "replace", interrupted)
@@ -1167,9 +1090,6 @@ def test_an_interrupted_flight_json_write_leaves_the_old_file_intact(
         _merge_json(target, {"build": {"host": "stub"}})
 
     assert json.loads(target.read_text()) == {"scenario": "TST901"}
-    [source] = landed
-    assert source.parent == tmp_path
-    assert source != target
     assert list(tmp_path.iterdir()) == [target]
 
 

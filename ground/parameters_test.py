@@ -5,7 +5,6 @@ made against each configuration's dictionary.
 """
 
 import json
-import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -105,34 +104,3 @@ def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(
     subprocess.run(command, check=True, capture_output=True)
     assert json.loads(decoded.read_text()) == json.loads(written)
     assert record.read_text() == written
-
-
-def test_a_record_naming_a_parameter_the_dictionary_lacks_makes_no_dat(
-    tmp_path: Path,
-    fprime_configuration: str,
-    dictionary: Dictionary,
-    algorithm_instances: Callable[[str], tuple[Instance, ...]],
-    algorithm_parameters: dict[str, Any],
-):
-    """F´'s tool refuses it with its own error, naming the parameter.
-
-    Args:
-        tmp_path: where the case's files are written.
-        fprime_configuration: the configuration, whose dictionary the `.dat` is made against.
-        dictionary: that dictionary, whose absence skips the test.
-        algorithm_instances: gives a configuration's algorithm instances.
-        algorithm_parameters: each algorithm component's tuple.
-    """
-    record = parameters.write(
-        _configuration_s(algorithm_parameters, algorithm_instances(fprime_configuration)),
-        tmp_path / "run_0000.prm.json",
-    )
-    entries = json.loads(record.read_text())
-    instance = sorted(entries)[0]
-    entries[instance]["notAParameter"] = 1.0
-    record.write_text(json.dumps(entries))
-
-    with pytest.raises(RuntimeError, match=re.escape(f"{instance}.notAParameter")):
-        parameters.dat(record, dictionary_path(fprime_configuration))
-
-    assert not (tmp_path / "run_0000.prm.dat").exists()

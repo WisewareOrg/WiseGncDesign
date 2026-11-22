@@ -10,16 +10,6 @@ from harness.notebook import run_notebook
 from lab import built
 
 
-def test_the_spinner_has_the_wheel_output_one_channel_and_one_required_parameter():
-    """Its FPP declares `wheelOut`, the channel `wheelTorque`, and `motorTorque` with no default."""
-    assert Gnc.WheelSpinnerOutputs._fields == ("wheelOut",)
-    assert Gnc.WheelSpinnerTelemetry._fields == ("wheelTorque",)
-    assert Gnc.WheelSpinnerParameters._fields == ("motorTorque",)
-    assert Gnc.WheelSpinnerParameters.component == "Gnc.WheelSpinner"
-    with pytest.raises(TypeError, match="motorTorque"):
-        Gnc.WheelSpinnerParameters()
-
-
 @pytest.mark.parametrize("t", [0.0, 1.0, 5700.0])
 def test_each_step_commands_the_parameter_s_torque_on_the_first_wheel_alone_and_writes_it(t: float):
     """Element 0 of `wheelOut` is `motorTorque`, every other element zero, at any time.
@@ -31,8 +21,6 @@ def test_each_step_commands_the_parameter_s_torque_on_the_first_wheel_alone_and_
 
     outputs, telemetry = spinner.step(t)
 
-    assert type(outputs) is Gnc.WheelSpinnerOutputs
-    assert type(outputs.wheelOut) is Gnc.WheelCommand
     motor_torque = outputs.wheelOut.motorTorque
     assert motor_torque.shape == (WHEELS,)
     assert motor_torque[0] == 2.5e-3

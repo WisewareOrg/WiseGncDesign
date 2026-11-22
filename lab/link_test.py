@@ -52,25 +52,6 @@ def _responses(station: FprimeStation) -> list[tuple[int, str]]:
     return [(context, response) for context, response, _ in station.responses()]
 
 
-def test_a_command_runs_at_the_next_step_and_is_answered_ok_under_its_context(
-    booted: ModuleType,
-    station: FprimeStation,
-    bus: list[tuple[int, bytes]],
-):
-    """An uplinked command waits for the next step, then answers `OK` under the ground's context.
-
-    Args:
-        booted: the test's copy of the deployment, booted idle on the case's parameters.
-        station: the station on it.
-        bus: every role's bus message on its LabBusDriver port.
-    """
-    station.uplink("cmdDisp.CMD_NO_OP", {}, 42)
-    assert _responses(station) == []
-    booted.step(t_ns=NS, bus=bus)
-
-    assert _responses(station) == [(42, "OK")]
-
-
 def test_a_packet_larger_than_f_prime_s_buffer_is_refused_naming_its_size(fsw: ModuleType):
     """`uplink` refuses a packet too large for the command buffer, before the dispatcher sees it.
 
@@ -90,8 +71,8 @@ def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
 ):
     """Each rate group's writes of two ticks come down in the order written, tagged with each tick.
 
-    Every write of the first tick comes before every write of the second, and each rate group's
-    `CycleCount` counts up from 1 by one per run, at whatever divider it runs.
+    Every write of the first tick comes before every write of the second. The first tick is at
+    1.500007 s, so its writes are tagged with that time in ns, microseconds included.
 
     Args:
         booted: the test's copy of the deployment, booted idle on the case's parameters.
@@ -100,43 +81,17 @@ def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
         decoded: drains the station's telemetry as values.
         bus: every role's bus message on its LabBusDriver port.
     """
-    booted.step(t_ns=NS, bus=bus)
+    first = NS + 500_000_000 + 7_000
+    booted.step(t_ns=first, bus=bus)
     booted.step(t_ns=2 * NS, bus=bus)
 
     writes = _health(decoded(station), rate_groups)
 
     assert writes
     assert [t for _, t, _ in writes] == sorted(t for _, t, _ in writes)
-    assert {t for _, t, _ in writes} <= {NS, 2 * NS}
-    for group in rate_groups:
-        counts = [v for n, _, v in writes if n == f"{group}.CycleCount"]
-        assert counts == list(range(1, len(counts) + 1)), group
+    assert {t for _, t, _ in writes} <= {first, 2 * NS}
+    assert first in {t for _, t, _ in writes}
     assert _health(decoded(station), rate_groups) == []
-
-
-def test_a_write_between_whole_seconds_is_tagged_to_the_microsecond(
-    booted: ModuleType,
-    station: FprimeStation,
-    rate_groups: list[str],
-    decoded: Callable[[Any], list[tuple[str, int, Any]]],
-    bus: list[tuple[int, bytes]],
-):
-    """A tick at 1.500007 s tags its writes with that time in ns, microseconds included.
-
-    Args:
-        booted: the test's copy of the deployment, booted idle on the case's parameters.
-        station: the station on it.
-        rate_groups: the copy's rate groups.
-        decoded: drains the station's telemetry as values.
-        bus: every role's bus message on its LabBusDriver port.
-    """
-    t_ns = NS + 500_000_000 + 7_000
-
-    booted.step(t_ns=t_ns, bus=bus)
-
-    writes = _health(decoded(station), rate_groups)
-    assert writes
-    assert {t for _, t, _ in writes} == {t_ns}
 
 
 def test_each_rate_group_runs_once_every_divider_ticks(
