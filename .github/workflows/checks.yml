@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+# Every job runs on requires-python's floor, not whatever Python the runner image ships.
+env:
+  UV_PYTHON: "3.12"
+
 concurrency:
   group: checks-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
