@@ -17,6 +17,10 @@ resolution-markers = [
 ]
 
 [manifest]
+members = [
+    "fprime-toolchain",
+    "wise-gnc-design",
+]
 overrides = [{ name = "pillow", specifier = ">=13" }]
 
 [[package]]
@@ -1140,7 +1144,7 @@ wheels = [
 [[package]]
 name = "fprime-toolchain"
 version = "0"
-source = { directory = "fsw/fprime" }
+source = { editable = "fsw/fprime" }
 dependencies = [
     { name = "cmake" },
     { name = "fprime-fpp" },
@@ -3831,7 +3835,7 @@ dev = [
     { name = "ruff", specifier = ">=0.17.0" },
 ]
 fprime = [
-    { name = "fprime-toolchain", directory = "fsw/fprime" },
+    { name = "fprime-toolchain", editable = "fsw/fprime" },
     { name = "pybind11", specifier = ">=2.13" },
 ]
 notebooks = [

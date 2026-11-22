@@ -36,8 +36,11 @@ fprime = ["fprime-toolchain", "pybind11>=2.13"]
 # and bokeh, which do, accept 13. Drop the override once a Basilisk release lifts the cap.
 override-dependencies = ["pillow>=13"]
 
+[tool.uv.workspace]
+members = ["fsw/fprime"]
+
 [tool.uv.sources]
-fprime-toolchain = { path = "fsw/fprime" }
+fprime-toolchain = { workspace = true }
 # The WiseDynamics commit this repository's scenario tests verify against.
 wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "35ac40730c240ad793caee082169430e1d66242b" }
 
