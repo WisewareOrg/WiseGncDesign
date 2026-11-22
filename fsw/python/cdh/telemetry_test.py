@@ -1,13 +1,24 @@
 """The Python build's CDH logs an algorithm's telemetry tuple as one write per field written."""
 
-from collections import namedtuple
+from typing import Any, NamedTuple
 
 import numpy as np
 
 from fsw.python.cdh import telemetry
 
-Telemetry = namedtuple("Telemetry", ["mode", "position", "count"], defaults=[None] * 3)
-"""A telemetry tuple."""
+
+class Telemetry(NamedTuple):
+    """A telemetry tuple.
+
+    Attributes:
+        mode: the mode, or `None`.
+        position: the position, or `None`.
+        count: the count, or `None`.
+    """
+
+    mode: Any = None
+    position: Any = None
+    count: Any = None
 
 
 def test_each_field_written_is_one_write_named_for_its_instance_in_field_order():

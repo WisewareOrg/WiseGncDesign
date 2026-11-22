@@ -262,7 +262,9 @@ class Dictionary:
         self._definitions = {t["qualifiedName"]: t for t in document["typeDefinitions"]}
         constants = {c["qualifiedName"]: c["value"] for c in document["constants"]}
         self._bools = (constants["FW_SERIALIZE_FALSE_VALUE"], constants["FW_SERIALIZE_TRUE_VALUE"])
-        self.responses = self.type("Fw.CmdResponse").constants
+        responses = self.type("Fw.CmdResponse").constants
+        assert responses is not None, "`Fw.CmdResponse` is an enum"
+        self.responses = responses
         self._commands: dict[str, Command] = {}
         for entry in document["commands"]:
             name = _unqualified(entry["name"])
@@ -504,6 +506,7 @@ class Dictionary:
             if ftype.bools:
                 value = value == ftype.bools[1]
             elif ftype.constants is not None:
+                assert not isinstance(value, np.ndarray), "`Dictionary.type` codes no array of enums"
                 value = {v: k for k, v in ftype.constants.items()}[value]
             typed[param] = value
         return typed

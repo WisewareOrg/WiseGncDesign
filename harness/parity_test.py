@@ -206,7 +206,7 @@ def _dataset(folder: Path, name: str, change: Callable[[np.ndarray], np.ndarray 
         change: takes the values and gives the new ones.
     """
     with h5py.File(run_path(folder, 0), "a") as f:
-        values = f[name][()] if name in f else None
+        values: Any = f[name][()] if name in f else None
         new = change(values)
         if name in f:
             del f[name]

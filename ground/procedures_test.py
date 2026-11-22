@@ -5,8 +5,8 @@ what each test gives it; the tests that fly Leo500 host it, as a stub build, in 
 """
 
 import json
-from collections.abc import Callable, Coroutine, Sequence
-from typing import Any
+from collections.abc import Callable, Coroutine, Mapping, Sequence
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -38,11 +38,11 @@ class StubEdge:
             dictionary: the mock's dictionary.
         """
         self.dictionary = dictionary
-        self.uplinked: list[tuple[str, dict[str, Any], int]] = []
+        self.uplinked: list[tuple[str, Mapping[str, Any], int]] = []
         self.answers: list[tuple[int, str, str | None]] = []
         self.writes: list[tuple[str, int, Any]] = []
 
-    def uplink(self, name: str, args: dict[str, Any], context: int) -> None:
+    def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Keeps the command, its arguments and its context.
 
         Args:
@@ -280,7 +280,7 @@ def test_send_types_the_arguments_into_the_command_s_fpp_types_and_logs_them_as_
     ids=["unknown-command", "misnamed-argument"],
 )
 def test_send_refuses_a_command_the_dictionary_cannot_type_before_uplink(
-    edge: StubEdge, name: str, args: dict, error: type, match: str
+    edge: StubEdge, name: str, args: dict, error: type[BaseException], match: str
 ):
     """An unknown command, or arguments that do not fit, raise at `send`, and nothing goes up.
 
@@ -448,7 +448,7 @@ class StubBuild(StubEdge):
     def boot(self) -> None:
         """Boots with nothing to do."""
 
-    def tick(self, t_ns: int, messages_by_role: dict[str, Any]) -> dict[str, Any]:
+    def tick(self, t_ns: int, messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
         """Runs the commands uplinked since the last tick, then writes the time.
 
         Args:
@@ -546,7 +546,7 @@ def test_a_procedure_that_cannot_start_is_kept_whole(edge: StubEdge):
         """Takes no ground, so it cannot be started with one."""
         return None
 
-    ground = Ground(procedure, edge, dict, lambda: None)
+    ground = Ground(cast(Any, procedure), edge, dict, lambda: None)
 
     with pytest.raises(TypeError) as raised:
         ground.Reset(0)

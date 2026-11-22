@@ -22,7 +22,7 @@ def test_a_divider_of_zero_never_runs_its_rate_group_as_in_f_prime():
     assert [driver.tick() for _ in range(3)] == [[0], [], [0]]
 
 
-def _constants(constants: dict[str, int]) -> Model:
+def _constants(constants: dict[str, int | float]) -> Model:
     """A model holding only constants.
 
     Args:

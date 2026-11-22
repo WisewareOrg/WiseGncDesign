@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 
 from fsw.codegen.fields import form, plan
-from fsw.codegen.fpp_model import Array, Member, Struct
+from fsw.codegen.fpp_model import Array, Member, Struct, Types
 
-TYPES = {
+TYPES: Types = {
     "Mock.Row": Array("Mock.Row", 3, "F64"),
     "Mock.Mat": Array("Mock.Mat", 2, "Mock.Row"),
     "Mock.Inner": Struct("Mock.Inner", (Member("a", "F64", None),)),

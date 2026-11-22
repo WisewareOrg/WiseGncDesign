@@ -19,6 +19,7 @@
 import numpy as np
 
 from fsw.codegen.deployment import contract_model
+from fsw.codegen.fpp_model import Struct
 from fsw.codegen.fpp_types import Gnc
 from harness.mission import Mission, mission_tests
 
@@ -63,10 +64,11 @@ __all__ = ["WheelSpinner", "parameters"]
 
 
 # %%
-WHEELS = next(
-    member.size for member in contract_model().types["Gnc.WheelCommand"].members if member.name == "motorTorque"
-)
+_COMMAND = contract_model().types["Gnc.WheelCommand"]
+assert isinstance(_COMMAND, Struct), "`Gnc.WheelCommand` is a struct"
+WHEELS = next(member.size for member in _COMMAND.members if member.name == "motorTorque")
 """The wheels a `Gnc.WheelCommand` commands: its `motorTorque` array's length in the contract."""
+assert WHEELS is not None, "`motorTorque` is an array"
 
 
 class WheelSpinner:

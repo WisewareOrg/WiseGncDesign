@@ -129,7 +129,9 @@ def _reshape(members: tuple[Member, ...]) -> tuple[Member, ...]:
         The members.
     """
     index = next(i for i, member in enumerate(members) if member.size is not None)
-    longer = members[index]._replace(size=members[index].size + 1)
+    size = members[index].size
+    assert size is not None, "the member is an array"
+    longer = members[index]._replace(size=size + 1)
     return (*members[:index], longer, *members[index + 1 :])
 
 

@@ -27,7 +27,7 @@ import numpy as np
 
 from fsw.codegen.deployment import REPOSITORY, contract_files
 from fsw.codegen.fields import DTYPES, STRUCT_CODES, form, plan
-from fsw.codegen.fpp_model import Component, Model, read
+from fsw.codegen.fpp_model import Component, Model, Struct, read
 from fsw.codegen.roles import CONVERTER, Role, roles
 
 __all__ = ["main", "render"]
@@ -77,10 +77,11 @@ def _copies(model: Model, role: Role) -> list[str]:
             array of one of `fsw.codegen.fields.STRUCT_CODES`, naming it.
     """
     (source, source_var), (target, target_var) = _ends(role)
-    members = model.types[source].members
-    sources = {m.name.lower(): (m.name, form(m, model.types)) for m in members}
+    source_struct, target_struct = model.types[source], model.types[target]
+    assert isinstance(source_struct, Struct) and isinstance(target_struct, Struct), f"{source} and {target} are structs"
+    sources = {m.name.lower(): (m.name, form(m, model.types)) for m in source_struct.members}
     statements = []
-    for member, name, (shape, element) in plan(model.types[target], model.types, sources, source):
+    for member, name, (shape, element) in plan(target_struct, model.types, sources, source):
         if len(shape) != 1 or not isinstance(element, np.dtype) or element not in _NUMBERS:
             raise ValueError(
                 f"{target}.{member.name} is {shape} {element}, which the F´ CDH does not copy:"
@@ -230,6 +231,7 @@ def _bus_pin(model: Model, qualified: str) -> str:
             naming it.
     """
     bus = model.types[qualified]
+    assert isinstance(bus, Struct), f"{qualified} is a struct"
     parameters, fills, arguments = [], [], []
     for member in bus.members:
         if member.type not in STRUCT_CODES or member.size is None:
@@ -293,12 +295,12 @@ def _usings(component: Component, found: list[Role]) -> str:
         A comment and two declarations per actuator role, `<Port>` its `<role>Out`'s port type.
     """
     ports = {port.name: port.type for port in component.outputs}
-    lines = [
-        f"using {_cpp(ports[role.output])}{suffix};"
-        for role in found
-        if not role.sensor
-        for suffix in ("PortBuffer", "PortSerializer")
-    ]
+    lines = []
+    for role in found:
+        if not role.sensor:
+            port_type = ports[role.output]
+            assert port_type is not None, f"{role.output} is a typed port"
+            lines.extend(f"using {_cpp(port_type)}{suffix};" for suffix in ("PortBuffer", "PortSerializer"))
     if not lines:
         return ""
     comment = "// FPP 3.4.0 names a connected port's serializer unqualified, in this namespace."

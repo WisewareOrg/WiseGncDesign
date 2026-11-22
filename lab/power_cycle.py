@@ -93,6 +93,7 @@ def source(configuration: str) -> Path:
     spec = importlib.util.find_spec(_extension(configuration))
     if spec is None:
         raise ModuleNotFoundError(f"the F´ deployment of {configuration} is not built; run `just fsw`")
+    assert spec.origin is not None, f"{spec.name} is an extension module file"
     path = Path(spec.origin)
     status = os.stat(path)
     stamp = (status.st_ino, status.st_mtime_ns)
@@ -123,6 +124,7 @@ def power_cycle(configuration: str) -> ModuleType:
     name = f"_power_cycle_{n}.{path.name.split('.')[0]}"
     loader = importlib.machinery.ExtensionFileLoader(name, str(copy))
     spec = importlib.util.spec_from_loader(name, loader, origin=str(copy))
+    assert spec is not None, f"{name} is loaded by its own loader"
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)
     return module

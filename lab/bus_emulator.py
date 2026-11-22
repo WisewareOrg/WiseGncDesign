@@ -99,5 +99,6 @@ def deserialize(bus: str, data: bytes) -> Any:
     packer, fields = _packer(type(payload))
     values = iter(packer.unpack(data))
     for member, field in zip(_STRUCTS[type(payload)].members, fields, strict=True):
+        assert member.size is not None, f"{member.name} is an array"
         setattr(payload, field, [next(values) for _ in range(member.size)])
     return payload

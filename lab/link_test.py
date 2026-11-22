@@ -110,7 +110,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     """
     constants = read(fpp_files(configuration, tmp_path)).constants
     dividers = {
-        name.removeprefix(f"{configuration}.").removesuffix("Divider") + "RateGroup": divider
+        name.removeprefix(f"{configuration}.").removesuffix("Divider") + "RateGroup": int(divider)
         for name, divider in constants.items()
         if name.startswith(f"{configuration}.") and name.endswith("Divider")
     }

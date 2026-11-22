@@ -118,6 +118,7 @@ def claimed_runs(request: pytest.FixtureRequest) -> Callable[[str], dict[str, Ca
             if recorded.directory.relative_to(session).as_posix() in skipped:
                 continue
             flight = _flight(recorded.directory)
+            assert flight is not None, f"{recorded.directory} is not skipped, so it holds a `flight.json`"
             judged = requirements_tree.flight_rungs(flight["scenario"], flight["capabilities"], flight["rungs"])
             if requirement_id in judged:
                 found[recorded.nodeid] = read_test_results(recorded.directory)

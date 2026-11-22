@@ -68,7 +68,7 @@ def test_a_command_packet_is_f_prime_s(mock: FprimeStation, mock_dictionary: Dic
     ids=["missing-argument", "type-not-coded"],
 )
 def test_a_command_the_station_cannot_encode_is_refused_naming_what(
-    mock: FprimeStation, name: str, args: dict, error: type, match: str
+    mock: FprimeStation, name: str, args: dict, error: type[BaseException], match: str
 ):
     """A missing argument, or a parameter of a type not coded, raises naming it.
 
@@ -129,6 +129,7 @@ def _test_command(dictionary: Dictionary) -> bytes:
         The packet.
     """
     command = dictionary.command(TEST_COMMAND)
+    assert command.types is not None, f"{TEST_COMMAND} takes parameters of coded types"
     args = {
         param: 1.5 if type_.dtype.kind == "f" else 1 for param, type_ in zip(command.params, command.types, strict=True)
     }

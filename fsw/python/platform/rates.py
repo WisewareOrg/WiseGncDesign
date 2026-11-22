@@ -57,5 +57,7 @@ def dividers(model: Model, rate_groups: Sequence[str]) -> tuple[int, ...]:
         constant = group.removesuffix("RateGroup") + "Divider"
         if constant not in model.constants:
             raise KeyError(f"{group} has no divider constant {constant}")
-        found.append(model.constants[constant])
+        divider = model.constants[constant]
+        assert isinstance(divider, int), f"{constant} is an integer constant"
+        found.append(divider)
     return tuple(found)

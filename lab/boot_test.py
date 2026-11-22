@@ -110,6 +110,7 @@ def _changed(value: object, counter: Iterator[int]) -> object:
     """
     if isinstance(value, list):
         return [_changed(v, counter) for v in value]
+    assert isinstance(value, int | float), "a parameter's value is a number or nested lists of numbers"
     return value + next(counter)
 
 

@@ -265,7 +265,7 @@ def load(contract: Contract) -> None:
         return
     model = read(contract_files(contract=contract))
     files = {Path(f).resolve() for f in contract.algorithms}
-    definitions = {name: t for name, t in model.types.items() if isinstance(t, Struct)}
+    definitions: dict[str, Struct | Component] = {name: t for name, t in model.types.items() if isinstance(t, Struct)}
     definitions |= {c.name: c for c in model.components.values() if c.file.resolve() in files}
     for name, definition in definitions.items():
         if _DEFINITIONS.get(name, definition) != definition:

@@ -7,6 +7,7 @@ its output `slowOut`.
 
 from collections import namedtuple
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -139,7 +140,7 @@ class Sink:
             parameters: whatever boot gave it.
         """
 
-    def step(self, t: float, value: Value) -> tuple[Nothing, Nothing]:
+    def step(self, t: float, value: Value) -> tuple[Any, Any]:
         """Logs the step.
 
         Args:
