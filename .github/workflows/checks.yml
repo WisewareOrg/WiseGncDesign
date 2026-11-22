@@ -120,4 +120,4 @@ jobs:
         with:
           persist-credentials: false
       # docs/decisions/ agrees with its index, and every ADR citation pins the ADR's current rev.
-      - uses: WisewareOrg/wise-ci/check-adrs@4b3554d330465dee925aa10e0c62355903b1488a
+      - uses: WisewareOrg/wise-ci/check-adrs@6f8840aacdd7eb0c431af64f7eaa7bf326b38e29
