@@ -24,7 +24,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Protocol, cast
 
 import pytest
 from wise_dynamics.basilisk import FswHost
@@ -270,6 +270,44 @@ class Mission:
         return replace(self, **changes)
 
 
+class _ScenarioDefinition(Protocol):
+    """A scenario's definition: its ground procedure, an `async def` carrying its `sim_` marks.
+
+    Attributes:
+        pytestmark: the marks pytest's decorators stored on it, its `sim_` marks among them.
+    """
+
+    __name__: str
+    pytestmark: list[pytest.Mark]
+
+    def __call__(self, ground: Ground, /) -> Coroutine[Any, Any, None]:
+        """The procedure, run on a ground.
+
+        Args:
+            ground: the ground the procedure runs on.
+
+        Returns:
+            The procedure's coroutine, which the ground runs to its end.
+        """
+        ...
+
+
+class _ScenarioTest(Protocol):
+    """A mission's test through one scenario, carrying what pytest and the judge read off it.
+
+    Attributes:
+        pytestmark: its marks: the vehicle's, then its definition's.
+        mission: the mission it flies.
+        scenario_id: the TST ID it flies.
+    """
+
+    __name__: str
+    __qualname__: str
+    pytestmark: list[pytest.Mark]
+    mission: Mission
+    scenario_id: str
+
+
 def mission_tests(*missions: Mission) -> dict[str, type]:
     """The Monte Carlo tests of every mission: a class per vehicle, a test per FSW and scenario.
 
@@ -297,7 +335,7 @@ def mission_tests(*missions: Mission) -> dict[str, type]:
                     " in one mission"
                 )
             flown.add(flight)
-    classes: dict[str, dict[str, Callable[..., None]]] = {}
+    classes: dict[str, dict[str, _ScenarioTest]] = {}
     for mission in missions:
         name = f"Test_{mission.vehicle}"
         methods = classes.setdefault(name, {})
@@ -327,7 +365,8 @@ def _write_flight_json(self: object, request: pytest.FixtureRequest, sim_test_di
         request: the fixture request, whose function carries the mission and scenario.
         sim_test_directory: the test's directory in the session.
     """
-    _record_flight(request.function.mission, request.function.scenario_id, sim_test_directory)
+    test: _ScenarioTest = request.function
+    _record_flight(test.mission, test.scenario_id, sim_test_directory)
 
 
 def _record_flight(mission: Mission, scenario_id: str, directory: Path) -> None:
@@ -381,7 +420,7 @@ def _merge_json(path: Path, mapping: dict[str, Any]) -> None:
         raise
 
 
-def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
+def _scenario_test(mission: Mission, scenario_id: str) -> _ScenarioTest:
     """The Monte Carlo test flying a mission through one scenario.
 
     The TST item's reference names the scenario's definition, its ground procedure, whose `sim_`
@@ -448,13 +487,14 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         host = FswHost(fsw, sim_scenario.vehicle)
         # The simulation holds the ground, so a strong reference back would keep every case.
         scenario = weakref.ref(sim_scenario)
-        ground = Ground(
-            definition,
-            radio,
-            sim_scenario.vehicle.tracking(),
-            lambda: scenario().stop_ground(),
-            period_s=ground_period_s,
-        )
+
+        def stop() -> None:
+            """Stops the simulation's ground, which the simulation still holds when the ground calls this."""
+            alive = scenario()
+            assert alive is not None, "the simulation holds the ground that stops it"
+            alive.stop_ground()
+
+        ground = Ground(definition, radio, sim_scenario.vehicle.tracking(), stop, period_s=ground_period_s)
         try:
             datasets = sim_scenario.run(host, fsw_fields={}, duration_s=sim_duration_s, ground=ground)
         except BaseException:
@@ -468,15 +508,16 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         if problems:
             pytest.fail("\n".join(problems), pytrace=False)
 
-    test.pytestmark = [*test.pytestmark, *definition.pytestmark]
-    test.__name__ = f"test_{mission.gnc}_{mission.build}_{definition.__name__}"
-    test.mission = mission
-    test.scenario_id = scenario_id
-    return test
+    scenario_test = cast(_ScenarioTest, test)
+    scenario_test.pytestmark = [*scenario_test.pytestmark, *definition.pytestmark]
+    scenario_test.__name__ = f"test_{mission.gnc}_{mission.build}_{definition.__name__}"
+    scenario_test.mission = mission
+    scenario_test.scenario_id = scenario_id
+    return scenario_test
 
 
 @functools.cache
-def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[[Ground], Coroutine[Any, Any, None]]:
+def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> _ScenarioDefinition:
     """The scenario definition a TST item's reference names.
 
     A module already loaded, or loading, from the referenced file supplies it, so a notebook can
@@ -498,9 +539,11 @@ def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[
         BaseException: the file raised while importing; it is then not left registered, so a
             later lookup imports it afresh.
     """
-    reference = dict(reference)
-    path = (root / reference["path"]).resolve()
-    name = re.match(r"def (\w+)\(", reference["keyword"]).group(1)
+    fields = dict(reference)
+    path = (root / fields["path"]).resolve()
+    declaration = re.match(r"def (\w+)\(", fields["keyword"])
+    assert declaration is not None, f"{fields['keyword']} declares a definition"
+    name = declaration.group(1)
     for module in list(sys.modules.values()):
         file = getattr(module, "__file__", None)
         if file and Path(file).resolve() == path and hasattr(module, name):
@@ -510,8 +553,9 @@ def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> Callable[
         return getattr(main, name)
     module_name = f"_scenarios_{path}"
     if module_name in sys.modules:
-        raise ValueError(f"{reference['path']} flies {name} before it defines it")
+        raise ValueError(f"{fields['path']} flies {name} before it defines it")
     spec = importlib.util.spec_from_file_location(module_name, path)
+    assert spec is not None and spec.loader is not None, f"{path} is a Python file"
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     try:

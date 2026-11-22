@@ -19,7 +19,7 @@ from Basilisk.architecture import messaging
 
 from fsw.codegen.fields import STRUCT_CODES
 from fsw.codegen.fpp_model import Struct, read
-from fsw.payloads import payload_type
+from fsw.payloads import Payload, payload_type
 
 __all__ = ["BUS", "deserialize", "serialize"]
 
@@ -35,7 +35,7 @@ _STRUCTS = {
 
 
 @functools.cache
-def _packer(payload: type) -> tuple[struct.Struct, tuple[str, ...]]:
+def _packer(payload: type[Payload]) -> tuple[struct.Struct, tuple[str, ...]]:
     """A payload type's packer, and its fields in the bus struct's order, planned once.
 
     Args:

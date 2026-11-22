@@ -24,6 +24,7 @@ from collections.abc import Callable, Iterator, Sequence
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import h5py
 import numpy as np
@@ -289,7 +290,7 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def mission(gnc: str = "MockFlight", scenarios: tuple[str, ...] = ("TST901",), **fields) -> Mission:
+def mission(gnc: str = "MockFlight", scenarios: tuple[str, ...] = ("TST901",), **fields: Any) -> Mission:
     """A mission flying a test mock configuration on the Python build.
 
     Args:
@@ -300,7 +301,8 @@ def mission(gnc: str = "MockFlight", scenarios: tuple[str, ...] = ("TST901",), *
     Returns:
         The mission.
     """
-    return Mission(VEHICLE, gnc, "python", scenarios, **{"contract": MOCK, **fields})
+    fields.setdefault("contract", MOCK)
+    return Mission(VEHICLE, gnc, "python", scenarios, **fields)
 
 
 @pytest.mark.parametrize(
@@ -536,7 +538,7 @@ globals().update(
 """A notebook flying a repository configuration's F´ build through one scenario."""
 
 
-def _contents(path: Path) -> dict[str, object]:
+def _contents(path: Path) -> dict[str, Any]:
     """Every dataset of a run file, and every root attribute but its creation time.
 
     Args:
@@ -594,7 +596,7 @@ def test_a_case_flown_after_another_writes_the_run_file_it_writes_alone(
 
     pytester.runpytest_subprocess(*options, f"{test}[1]").assert_outcomes(passed=1)
     [alone] = pytester.path.rglob("run_0001.h5")
-    alone = shutil.move(alone, pytester.path / "alone.h5")
+    alone = Path(shutil.move(alone, pytester.path / "alone.h5"))
     pytester.runpytest_subprocess(*options, f"{test}[0]", f"{test}[1]").assert_outcomes(passed=2)
     [first] = pytester.path.rglob("run_0000.h5")
     [after] = pytester.path.rglob("run_0001.h5")

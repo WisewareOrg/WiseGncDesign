@@ -11,7 +11,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
-from Basilisk.architecture import messaging
+from Basilisk.architecture.messaging.SCStatesMsgPayload import SCStatesMsgPayload
 
 from fsw.codegen.fpp_model import Member, Struct
 from lab import bus_emulator
@@ -35,7 +35,7 @@ def _assert_holds(holds: Callable[[Any, Mapping[str, Any]], None], payload: Any,
 def test_a_message_with_no_bus_struct_is_refused_by_name() -> None:
     """A payload that no `Bus.<Name>` mirrors raises `KeyError` naming it."""
     with pytest.raises(KeyError, match="SCStatesMsgPayload"):
-        serialize(messaging.SCStatesMsgPayload())
+        serialize(SCStatesMsgPayload())
 
 
 @pytest.mark.parametrize(
