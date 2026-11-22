@@ -59,14 +59,34 @@ def write_tree(root: Path) -> None:
     write_item(root, "tst", "TST901", links=[{uid: "stamp"} for uid in KINDS.values()])
 
 
+def write_wheel_run(path: Path, error: float) -> None:
+    """Write a run of the spinner: the wheel's momentum against the torque commanded.
+
+    The torque is written at 1 s (2 N*m) and at 3 s (0), so the momentum at t = 0 to 4 s is
+    [0, 0, 2, 4, 4]. A run whose error is not `GOOD` has the first write acting from t = 0.
+
+    Args:
+        path: the run file to create.
+        error: `GOOD` for the momentum the torque gives, else the first write moved to t = 0.
+    """
+    momentum = [0.0, 0.0, 2.0, 4.0, 4.0] if error == GOOD else [0.0, 2.0, 2.0, 2.0, 2.0]
+    with h5py.File(path, "w") as f:
+        f["t_s"] = np.arange(5.0)
+        f["truth/wheel_momentum"] = momentum
+        f["tlm_t/spinner.wheelTorque"] = [1.0, 3.0]
+        f["tlm/spinner.wheelTorque"] = [2.0, 0.0]
+
+
 def write_run(path: Path, error: float, kind: str = "attitude") -> None:
     """Write a run whose worst `kind` error is `error`, with no error of the other kinds.
 
     Args:
         path: the run file to create.
         error: the estimate's error at one sample, in rad, m/s or m.
-        kind: "attitude", "velocity" or "position".
+        kind: "attitude", "velocity", "position" or "wheel", the spinner's, as `write_wheel_run`.
     """
+    if kind == "wheel":
+        return write_wheel_run(path, error)
     identity = np.tile([1.0, 0.0, 0.0, 0.0], (5, 1))
     tlm = {
         "nav.bodyEciAttitude": identity.copy(),
@@ -344,6 +364,55 @@ def test_a_rung_is_judged_on_the_runs_found(
         assert rollup in matrix
     assert "## Skipped folders" not in matrix
     assert not (project.path / "imported").exists()
+
+
+@pytest.mark.parametrize(
+    ("bad", "outcomes"),
+    [((2, 7), {"failed": 1, "skipped": 3}), ((), {"passed": 1, "skipped": 3})],
+    ids=["fail", "pass"],
+)
+def test_the_wheel_momentum_rung_is_judged_on_the_runs_found(
+    project: pytest.Pytester, bad: tuple[int, ...], outcomes: dict
+) -> None:
+    """The spinner's wheel momentum rung fails when the momentum does not follow the torque.
+
+    A bad run has its first torque write acting from t = 0, so its momentum leads the commanded
+    torque's integral by 2 N*m*s, far over the rung's 1e-3.
+
+    Args:
+        project: the project.
+        bad: the cases whose momentum is wrong.
+        outcomes: the judge's outcomes.
+    """
+    project.makepyfile(
+        **{
+            "analysis/test_wheel_momentum": (
+                REPOSITORY / "analysis" / "test_wheel_momentum.py"
+            ).read_text()
+        }
+    )
+    write_item(
+        project.path,
+        "srs",
+        "SRS904",
+        links=[{"SYS901": "stamp"}],
+        references=[
+            {
+                "path": "analysis/test_wheel_momentum.py",
+                "keyword": "def test_wheel_momentum(",
+                "type": "file",
+            }
+        ],
+        x=1e-3,
+        p=0.8,
+        c=0.5,
+    )
+    write_item(
+        project.path, "tst", "TST901", links=[{uid: "stamp"} for uid in (*KINDS.values(), "SRS904")]
+    )
+    write_cases(session(project), bad=bad, kind="wheel", flight=only("SRS904"))
+
+    judge(project).assert_outcomes(**outcomes)
 
 
 def test_too_few_cases_found_leave_the_rung_not_judged(project: pytest.Pytester) -> None:

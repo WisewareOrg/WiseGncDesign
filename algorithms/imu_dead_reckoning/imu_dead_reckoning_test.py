@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
-from wise_dynamics.basilisk import ImuSpacecraft
+from wise_dynamics.basilisk import ImuSpacecraft, Scenario
 
 from algorithms.imu_dead_reckoning import gross_check
 from algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
@@ -308,19 +308,25 @@ def test_the_bound_s_step_is_nav_s_integration_step_not_the_base_tick(
     )
 
 
-def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() -> None:
-    """`mu` is the scenario's Earth's, and `dcm_PB` the vehicle's IMU mounting, as given."""
-    mounting = [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
-    scenario = SimpleNamespace(
-        mu_m3_s2={"earth": 4.9048695e12, "moon": 1.0},
-        vehicle=SimpleNamespace(imu=SimpleNamespace(dcm_PB=mounting)),
-    )
+@pytest.mark.sim_scenario("leo500")
+@pytest.mark.sim_vehicle("imu_spacecraft")
+@pytest.mark.sim_runs(1)
+def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting(
+    sim_scenario: Scenario,
+) -> None:
+    """`mu` is WiseDynamics' scenario's Earth's, and `dcm_PB` its vehicle's IMU mounting.
 
-    nav = parameters(scenario)
+    The scenario is the one the notebook's mission flies, as WiseDynamics' fixture gives it, so a
+    renamed field there fails this test.
+
+    Args:
+        sim_scenario: the case's dispersed scenario.
+    """
+    nav = parameters(sim_scenario)
 
     assert type(nav) is Gnc.ImuDeadReckonerParameters
-    assert nav.mu == 4.9048695e12
-    np.testing.assert_array_equal(nav.dcm_PB, mounting)
+    assert nav.mu == sim_scenario.mu_m3_s2["earth"]
+    np.testing.assert_array_equal(nav.dcm_PB, sim_scenario.vehicle.imu.dcm_PB)
 
 
 def test_the_notebook_runs_end_to_end() -> None:
