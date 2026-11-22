@@ -1,12 +1,12 @@
 // The ground's side of the deployment: commands up, responses and every telemetry write down.
-#ifndef SIM_GROUNDLINK_HPP
-#define SIM_GROUNDLINK_HPP
+#ifndef CDH_GROUNDLINK_HPP
+#define CDH_GROUNDLINK_HPP
 
 #include <vector>
 
 #include "fsw/fprime/cdh/GroundLinkComponentAc.hpp"
 
-namespace Sim {
+namespace Cdh {
 
 class GroundLink final : public GroundLinkComponentBase {
   public:
@@ -42,6 +42,6 @@ class GroundLink final : public GroundLinkComponentBase {
     std::vector<Response> m_responses;
 };
 
-}  // namespace Sim
+}  // namespace Cdh
 
 #endif

@@ -1,6 +1,6 @@
 """The Python build's ground link: the commands the ground uplinks and the telemetry it drains.
 
-As the F´ build's `Sim.GroundLink` stands in for its comm stack, this holds the queue of commands
+As the F´ build's `Cdh.GroundLink` stands in for its comm stack, this holds the queue of commands
 uplinked since the last tick, their responses and every raw telemetry write, each tagged with the
 tick it was written at. CDH runs the queue through `cdh.commands` and logs what each algorithm wrote
 through `cdh.telemetry`; the frame runner packs the values with the dictionary.

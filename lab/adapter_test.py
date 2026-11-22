@@ -270,7 +270,8 @@ def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(
         adapter: the configuration's adapter, booted.
     """
     adapter.tick(NS, messages_by_role)
-    assert adapter._writes
+    assert adapter.telemetry()
+    adapter.tick(2 * NS, messages_by_role)
 
     adapter.boot()
 

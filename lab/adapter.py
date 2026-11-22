@@ -30,11 +30,10 @@ class Adapter:
     every component idle and PrmDb loading the case's `.dat`, so a case keeps nothing of an earlier
     one. `tick` sets the clock, runs the uplinked commands, pushes each sensor role's message, as
     the bus emulator writes it, on the LabBusDriver port the deployment wires to the CDH's
-    `<role>In`, ticks the rate groups, drains the copy's telemetry writes, and returns the bytes the
-    CDH's `<role>Out` sent each actuator role's LabBusDriver port, as the bus emulator reads them
-    back. The radio link is the copy's pins, in bytes: `uplink` and `responses` reach the current
-    copy, and `telemetry` returns what the ticks drained. `ground.fprime_station.FprimeStation` is
-    the ground's codec for them.
+    `<role>In`, ticks the rate groups, and returns the bytes the CDH's `<role>Out` sent each
+    actuator role's LabBusDriver port, as the bus emulator reads them back. The radio link is the
+    copy's pins, in bytes: `uplink`, `responses` and `telemetry` reach the loaded copy.
+    `ground.fprime_station.FprimeStation` is the ground's codec for them.
 
     Attributes:
         period_s: s, the base tick's period, the configuration's FPP constant `tickPeriod`.
@@ -48,8 +47,6 @@ class Adapter:
     build: dict[str, str]
     _fsw: ModuleType
     """The copy the last `boot` powered on; unset before the first."""
-    _writes: list[tuple[int, int, bytes]]
-    """What `telemetry` returns next."""
 
     def __init__(
         self, configuration: str, prm_path: Path, *, contract: Contract = CONTRACT
@@ -93,7 +90,6 @@ class Adapter:
         `boot`, a `.dat` path longer than F´'s file names hold raises `ValueError`, and a parameter
         the `.dat` leaves invalid raises `RuntimeError`, naming each.
         """
-        self._writes = []
         self._fsw = power_cycle(self._configuration)
         self._fsw.boot(str(self._dat.resolve()), sorted(self.dictionary.parameters_by_id))
 
@@ -126,7 +122,6 @@ class Adapter:
                 )
             bus.append((port, serialize(messages_by_role[role])))
         sent = self._fsw.step(t_ns=t_ns, bus=bus)
-        self._writes += self._fsw.telemetry()
         commands = {}
         for port, data in sent:
             role = self._actuators[port]
@@ -151,10 +146,9 @@ class Adapter:
         return self._fsw.responses()
 
     def telemetry(self) -> list[tuple[int, int, bytes]]:
-        """Every telemetry write the ticks drained since the last call or boot, oldest first.
+        """The loaded copy's telemetry writes since the last call, oldest first.
 
         Returns:
             `(channel ID, F´ time tag in ns, serialized value)`.
         """
-        writes, self._writes = self._writes, []
-        return writes
+        return self._fsw.telemetry()

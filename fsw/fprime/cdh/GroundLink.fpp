@@ -1,4 +1,4 @@
-module Sim {
+module Cdh {
 
   @ The ground's side of the deployment: commands up, responses and every telemetry write down
   passive component GroundLink {

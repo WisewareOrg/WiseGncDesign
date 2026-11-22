@@ -4,8 +4,6 @@
 
 #include "fsw/fprime/deployment/@CONFIGURATION@/FppConstantsAc.hpp"
 
-namespace PingEntries {}
-
 namespace WiseFsw {
 
 //! The state the topology is set up with: the case's parameter file, an absolute path, and its directory.

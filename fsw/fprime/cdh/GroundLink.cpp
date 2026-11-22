@@ -1,6 +1,6 @@
 #include "fsw/fprime/cdh/GroundLink.hpp"
 
-namespace Sim {
+namespace Cdh {
 
 namespace {
 
@@ -39,4 +39,4 @@ void GroundLink::tlmIn_handler(FwIndexType portNum, FwChanIdType id, Fw::Time& t
     this->m_writes.push_back({id, ns, std::vector<U8>(data, data + val.getSize())});
 }
 
-}  // namespace Sim
+}  // namespace Cdh

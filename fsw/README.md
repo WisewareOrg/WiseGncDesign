@@ -294,8 +294,7 @@ and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-lo
 The deployment takes commands through F´'s own command dispatcher, which runs on the tick's
 thread: `uplink(packet, context)` queues an F´ command packet, the next `step` runs it, and
 `responses()` returns each response under its context. `telemetry()` drains every telemetry write
-since the last call, each with its F´ time tag. The adapter carries these pins in bytes: `uplink`
-and `responses` reach the current copy, and its `telemetry` returns the writes each tick drained
-since the last call. The F´ build's radio edge is an `FprimeStation` on the adapter, which takes its
+since the last call, each with its F´ time tag. The adapter carries these pins in bytes: `uplink`,
+`responses` and `telemetry` reach the loaded copy. The F´ build's radio edge is an `FprimeStation` on the adapter, which takes its
 `period_s` from it. The reasoning is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
