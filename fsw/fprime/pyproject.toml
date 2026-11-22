@@ -1,0 +1,18 @@
+[project]
+name = "fprime-toolchain"
+version = "0"
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata.hooks.custom]
+path = "toolchain_hook.py"
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "toolchain_hook.py" }, { file = "lib/fprime/requirements.txt" }]

@@ -23,12 +23,13 @@ dev = [
     "pytest-xdist>=3.6",
     "ruff>=0.17.0",
     "pydoclint>=0.12.0",
+    "hatchling",
 ]
 sim = ["wise-dynamics[notebook]"]
 notebooks = ["ipykernel>=6.29", "ipython>=9.0", "jupyter-client", "jupyterlab>=4.4", "jupytext>=1.17", "nbclient", "notebook", "pip", "traitlets"]
-# The F´ toolchain at the versions the F´ clone pins (held to them by fsw/fprime/pins_test.py),
-# packaging, which that test parses with, and pybind11 for the deployment's Python module.
-fprime = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-gds==4.4.1", "fprime-tools==4.4.0", "ninja==1.11.1.4", "packaging", "pybind11>=2.13"]
+# The F´ toolchain, whose versions fsw/fprime reads from the F´ clone's requirements.txt, and pybind11
+# for the deployment's Python module.
+fprime = ["fprime-toolchain", "pybind11>=2.13"]
 
 [tool.uv]
 # bsk caps Pillow at 12.2.0, below its security fixes. Basilisk never imports Pillow; matplotlib
@@ -36,6 +37,7 @@ fprime = ["cmake==3.26.0", "fprime-fpp==3.4.0", "fprime-gds==4.4.1", "fprime-too
 override-dependencies = ["pillow>=13"]
 
 [tool.uv.sources]
+fprime-toolchain = { path = "fsw/fprime" }
 # The WiseDynamics commit this repository's scenario tests verify against.
 wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "35ac40730c240ad793caee082169430e1d66242b" }
 
