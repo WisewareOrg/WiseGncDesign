@@ -1,5 +1,5 @@
-# The F´ release the framework clone is pinned to.
-fprime_tag := "v4.4.2"
+# The F´ release the framework clone and the lock's F´ toolchain pins are fixed by.
+fprime_tag := trim(read("fsw/fprime/fprime-tag"))
 
 # Sync the sim, notebook and F´ groups at their locked versions, register the kernel and build the F´ deployment from scratch.
 _sync:

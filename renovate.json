@@ -4,8 +4,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^justfile$/"],
-      "matchStrings": ["fprime_tag := \"(?<currentValue>v[0-9.]+)\""],
+      "managerFilePatterns": ["/^fsw/fprime/fprime-tag$/"],
+      "matchStrings": ["^(?<currentValue>v[0-9.]+)"],
       "depNameTemplate": "nasa/fprime",
       "datasourceTemplate": "github-tags"
     },
@@ -19,12 +19,13 @@
   ],
   "packageRules": [
     {
-      "groupName": "fprime",
-      "matchPackageNames": ["nasa/fprime", "fprime-tools", "fprime-fpp", "fprime-gds"]
-    },
-    {
-      "matchPackageNames": ["cmake", "ninja"],
-      "enabled": false
+      "matchPackageNames": ["nasa/fprime"],
+      "postUpgradeTasks": {
+        "commands": ["uv lock"],
+        "installTools": { "python": {}, "uv": {} },
+        "fileFilters": ["uv.lock"],
+        "executionMode": "branch"
+      }
     }
   ]
 }

@@ -3,10 +3,10 @@ revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version == '3.14.*' and sys_platform == 'win32'",
     "python_full_version >= '3.15' and sys_platform == 'emscripten'",
-    "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.14.*' and sys_platform == 'win32'",
+    "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version == '3.14.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'emscripten'",
@@ -17,6 +17,10 @@ resolution-markers = [
 ]
 
 [manifest]
+members = [
+    "fprime-toolchain",
+    "wise-gnc-design",
+]
 overrides = [{ name = "pillow", specifier = ">=13" }]
 
 [[package]]
@@ -1112,7 +1116,7 @@ wheels = [
 
 [[package]]
 name = "fprime-gds"
-version = "4.4.1"
+version = "4.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "argcomplete" },
@@ -1132,9 +1136,30 @@ dependencies = [
     { name = "pyzmq" },
     { name = "spacepackets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a6/22/890eec28613c99f7e46f3afe7888ba061cce588674eb566624dbb84e2846/fprime_gds-4.4.1.tar.gz", hash = "sha256:558a7f2b89dbc434899dcacd233765c94970612da54ab3bd3f61875c433f6629", size = 2383149, upload-time = "2026-10-20T00:15:28.188Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/a7/b700954cbe2422d34406ffc1f4d8f2afaf950d0c6bd37e434677a7cbf5d6/fprime_gds-4.4.0.tar.gz", hash = "sha256:6e286cde1711953aa1bc8c27ada505df967951b6958e399689d71a097055b231", size = 2379318, upload-time = "2026-09-30T22:10:52.162Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/5f/7cc1324e883ca04f403efd4bebb6800533ef5b703aeb7c4e55638fac24b0/fprime_gds-4.4.1-py3-none-any.whl", hash = "sha256:0e81f1beea911386572bf7bc062a887a263f4cf6ab63da127d3f766ecea5e3c8", size = 2220456, upload-time = "2026-10-20T00:15:26.14Z" },
+    { url = "https://files.pythonhosted.org/packages/83/ad/09de3adf46b8e8f59d57e9e1a863d40a65640722b1fb25a1d40cf3bd5ccb/fprime_gds-4.4.0-py3-none-any.whl", hash = "sha256:7cb325cdd95265f885a4c6cbbc71cacbb4b4434bd5c8941b01112ddabb0778f9", size = 2218916, upload-time = "2026-09-30T22:10:50.315Z" },
+]
+
+[[package]]
+name = "fprime-toolchain"
+version = "0"
+source = { editable = "fsw/fprime" }
+dependencies = [
+    { name = "cmake" },
+    { name = "fprime-fpp" },
+    { name = "fprime-gds" },
+    { name = "fprime-tools" },
+    { name = "ninja" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cmake", specifier = "==3.26.0" },
+    { name = "fprime-fpp", specifier = "==3.4.0" },
+    { name = "fprime-gds", specifier = "==4.4.0" },
+    { name = "fprime-tools", specifier = "==4.4.0" },
+    { name = "ninja", specifier = "==1.11.1.4" },
 ]
 
 [[package]]
@@ -3726,12 +3751,7 @@ dev = [
     { name = "ruff" },
 ]
 fprime = [
-    { name = "cmake" },
-    { name = "fprime-fpp" },
-    { name = "fprime-gds" },
-    { name = "fprime-tools" },
-    { name = "ninja" },
-    { name = "packaging" },
+    { name = "fprime-toolchain" },
     { name = "pybind11" },
 ]
 notebooks = [
@@ -3770,12 +3790,7 @@ dev = [
     { name = "ruff", specifier = ">=0.17.0" },
 ]
 fprime = [
-    { name = "cmake", specifier = "==3.26.0" },
-    { name = "fprime-fpp", specifier = "==3.4.0" },
-    { name = "fprime-gds", specifier = "==4.4.1" },
-    { name = "fprime-tools", specifier = "==4.4.0" },
-    { name = "ninja", specifier = "==1.11.1.4" },
-    { name = "packaging" },
+    { name = "fprime-toolchain", editable = "fsw/fprime" },
     { name = "pybind11", specifier = ">=2.13" },
 ]
 notebooks = [
