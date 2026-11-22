@@ -1,4 +1,4 @@
-"""The F´ toolchain metadata hook declares the toolchain at the versions the framework's requirements pin.
+"""The toolchain metadata hook declares the tools at the versions the framework's requirements pin.
 
 The hook names five tools and never their versions, so each test writes a requirements file whose
 versions differ from the repository's real ones. The hook is loaded by path: `fsw/fprime` is a
@@ -46,7 +46,9 @@ def _update(root: Path) -> dict[str, Any]:
     return metadata
 
 
-def test_the_hook_declares_the_five_tools_at_the_versions_the_file_pins_and_nothing_else(tmp_path: Path):
+def test_the_hook_declares_the_five_tools_at_the_versions_the_file_pins_and_nothing_else(
+    tmp_path: Path,
+):
     """Only the toolchain's lines become dependencies; other pins, comments and blanks are dropped.
 
     Args:
@@ -87,7 +89,13 @@ def test_the_hook_refuses_a_file_missing_a_tool_naming_it(tmp_path: Path):
     """
     _requirements(
         tmp_path,
-        ["cmake==9.8.7", "fprime-fpp==1.2.3", "fprime-tools==5.6.8", "ninja==2.3.4.5", "fprime-gds-extra==0.0.1"],
+        [
+            "cmake==9.8.7",
+            "fprime-fpp==1.2.3",
+            "fprime-tools==5.6.8",
+            "ninja==2.3.4.5",
+            "fprime-gds-extra==0.0.1",
+        ],
     )
 
     with pytest.raises(ValueError, match="fprime-gds"):
