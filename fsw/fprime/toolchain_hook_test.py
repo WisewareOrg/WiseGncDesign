@@ -155,7 +155,7 @@ class TestToolchainHook:
         with pytest.raises(ValueError, match="cmake"):
             self.update()
 
-    def test_a_missing_requirements_file_says_to_run_just_sync(self):
-        """A root without the framework clone raises a message naming `just _sync`."""
-        with pytest.raises(ValueError, match="just _sync"):
+    def test_a_missing_requirements_file_says_to_run_just_pinned(self):
+        """A root without the framework clone raises a message naming `just pinned`."""
+        with pytest.raises(ValueError, match="just pinned"):
             self.update()
