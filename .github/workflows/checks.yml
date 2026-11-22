@@ -55,6 +55,8 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.7"
+      # Tests on requires-python's floor, not whatever Python the runner image ships.
+      - run: echo "UV_PYTHON=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["requires-python"].removeprefix(">="))')" >> "$GITHUB_ENV"
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
       # Syncs every group, registers the kernel and builds the F´ deployment the tests fly.
       - run: just _sync
@@ -91,6 +93,8 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.7"
+      # Tests on requires-python's floor, not whatever Python the runner image ships.
+      - run: echo "UV_PYTHON=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["requires-python"].removeprefix(">="))')" >> "$GITHUB_ENV"
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
       # The Python path with no F´ build: the groups, the kernel and the F´ clone at the pinned tag,
       # which a Python build's dictionary is generated against; the F´ build's tests skip.
