@@ -62,9 +62,7 @@ class TestToolchainHook:
         Args:
             lines: the file's lines.
         """
-        path = self.root / "lib" / "fprime" / "requirements.txt"
-        path.parent.mkdir(parents=True)
-        path.write_text("\n".join(lines) + "\n")
+        self.requirements = "\n".join(lines) + "\n"
 
     def update(self) -> dict[str, Any]:
         """Run the hook on the root, as the build backend does.
@@ -72,9 +70,7 @@ class TestToolchainHook:
         Returns:
             The metadata the hook updated.
         """
-        metadata: dict[str, Any] = {}
-        self.module.ToolchainHook(str(self.root), {}).update(metadata)
-        return metadata
+        return {"dependencies": self.module.toolchain(self.requirements)}
 
     def test_only_the_five_tools_become_dependencies(self):
         """Other pins, comments and blanks in the file are dropped."""
@@ -153,9 +149,4 @@ class TestToolchainHook:
         self.write_requirements(pin_lines(cmake=unpinned))
 
         with pytest.raises(ValueError, match="cmake"):
-            self.update()
-
-    def test_a_missing_requirements_file_says_to_run_just_pinned(self):
-        """A root without the framework clone raises a message naming `just pinned`."""
-        with pytest.raises(ValueError, match="just pinned"):
             self.update()

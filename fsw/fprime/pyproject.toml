@@ -15,4 +15,4 @@ path = "toolchain_hook.py"
 bypass-selection = true
 
 [tool.uv]
-cache-keys = [{ file = "pyproject.toml" }, { file = "toolchain_hook.py" }, { file = "lib/fprime/requirements.txt" }]
+cache-keys = [{ file = "pyproject.toml" }, { file = "toolchain_hook.py" }, { file = "fprime-tag" }]

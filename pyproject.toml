@@ -28,7 +28,7 @@ dev = [
 ]
 sim = ["wise-dynamics[notebook]"]
 notebooks = ["ipykernel>=6.29", "ipython>=9.0", "jupyter-client", "jupyterlab>=4.4", "jupytext>=1.17", "nbclient", "notebook", "pip", "traitlets"]
-# The F´ toolchain, whose versions fsw/fprime reads from the F´ clone's requirements.txt, and pybind11
+# The F´ toolchain, whose versions fsw/fprime reads from the F´ tag's requirements.txt, and pybind11
 # for the deployment's Python module.
 fprime = ["fprime-toolchain", "pybind11>=2.13"]
 

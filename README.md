@@ -39,9 +39,8 @@ Tests sit beside the code they test. The suite needs the simulator installed, fr
 system C++ compiler and git. The F´ framework and Eigen are fetched by tag into gitignored folders
 under `fsw/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
 GitLab only the first time, or when a tag changes. Each sync rebuilds the F´ build cache from
-scratch, which needs no network. The lock takes the F´ toolchain's versions from that clone, so a
-bare `uv sync` or `uv lock` needs it cloned first, which `just pinned` does. Why by tag, and why one
-pin, is in
+scratch, which needs no network. The lock takes the F´ toolchain's versions from the
+`requirements.txt` at the F´ tag over the network. Why by tag, and why one pin, is in
 [ADR 0003 rev 4](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 `just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is

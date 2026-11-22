@@ -107,14 +107,13 @@ returns. Not covered: an assert thrown through F´ into pybind11.
 - The rate groups' health telemetry is recorded on F´'s stub raw time, so it repeats from the seed
   with cycle times of 0; the trade is on issue 57 GNC sub-topology, and its cost is issue 80
   telemetry recording cost.
-- F´ and Eigen are pinned by release tag, with no git submodule, and Renovate bumps both tags. The
-  F´ toolchain (`cmake`, `ninja`, `fprime-tools`, `fprime-fpp`, `fprime-gds`) has no pin of its own:
-  `uv.lock` holds the versions the F´ tag's `requirements.txt` declares, hashed, and a changed tag
-  fails the lock check until the lock is regenerated. The lock therefore needs the F´ clone present,
-  which Renovate has no copy of, so its F´ tag PR stays red until someone checks out the branch, runs
-  `just _sync` (it clones F´ at the new tag, then stops at the stale lock), then `uv lock`, and pushes
-  the lock. A post-upgrade task is not used: it would need `allowedCommands` in the shared runner's
-  global config, which no repository in the organization uses.
+- F´ and Eigen are pinned by release tag, with no git submodule, and Renovate bumps both tags; F´'s
+  is in `fsw/fprime/fprime-tag`, which the justfile and Renovate read. The F´ toolchain (`cmake`,
+  `ninja`, `fprime-tools`, `fprime-fpp`, `fprime-gds`) has no pin of its own: `uv.lock` holds the
+  versions the `requirements.txt` at that tag declares, hashed, which the lock reads from GitHub
+  rather than from a clone, so every lock update works without one and needs network. A changed tag
+  fails the lock check only when F´ moved those pins, and Renovate's tag PR is then red until
+  someone runs `uv lock` on its branch.
 - Each flight's `flight.json` records which FSW flew: `fsw` and `build` tell two builds of one
   commit apart, and the F´ build's `projectVersion` names the commit built from (`-dirty` when
   uncommitted), so a stale extension shows against the run file's `versions_caller_commit`.

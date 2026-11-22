@@ -4,8 +4,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^justfile$/"],
-      "matchStrings": ["fprime_tag := \"(?<currentValue>v[0-9.]+)\""],
+      "managerFilePatterns": ["/^fsw/fprime/fprime-tag$/"],
+      "matchStrings": ["^(?<currentValue>v[0-9.]+)"],
       "depNameTemplate": "nasa/fprime",
       "datasourceTemplate": "github-tags"
     },
