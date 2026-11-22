@@ -10,6 +10,7 @@ deployment `just fsw` builds, as the `fsw` fixture skips.
 """
 
 import re
+from collections.abc import Callable, Mapping
 from types import ModuleType
 from typing import Any
 
@@ -19,8 +20,6 @@ import pytest
 from fsw.codegen.deployment import contract_model
 from fsw.codegen.fields import DTYPES, form, plan
 from fsw.codegen.roles import Role, roles
-from fsw.python.cdh import outputs
-from fsw.python.rio.messages import commands
 from lab.bus_emulator import deserialize, serialize
 
 
@@ -158,7 +157,10 @@ def test_each_pin_reads_the_bytes_by_the_bus_layout(
 
 
 def test_each_actuator_role_s_gnc_struct_converts_to_the_payload_the_python_build_makes(
-    fsw: ModuleType, icd_messages: dict[str, Any]
+    fsw: ModuleType,
+    icd_messages: dict[str, Any],
+    python_command: Callable[[Role, Any], Any],
+    holds: Callable[[Any, Mapping[str, Any]], None],
 ) -> None:
     """F´'s conversion, read back by the emulator, is the payload the Python build's CDH makes.
 
@@ -168,16 +170,16 @@ def test_each_actuator_role_s_gnc_struct_converts_to_the_payload_the_python_buil
     Args:
         fsw: a copy of the deployment.
         icd_messages: a value of each GNC struct, its members' values distinct.
+        python_command: gives the Python build's command for a role.
+        holds: asserts a payload holds values.
     """
     for role in _roles(sensor=False):
         message = icd_messages[role.icd]
-        pairs = outputs.pairings([role])
-        python = commands(pairs, outputs.convert(pairs, {role.output: message.value}))[role.role]
+        python = python_command(role, message.value)
         converted = deserialize(role.bus, getattr(fsw, f"cdh_{role.role}")(_icd_bytes(message)))
         fields = type(python).__dtype__.names
         assert type(converted) is type(python), role.role
-        for field in fields:
-            assert list(getattr(converted, field)) == list(getattr(python, field)), role.role
+        holds(converted, {field: getattr(python, field) for field in fields})
         swapped = message._replace(
             values={m: np.asarray(v).byteswap() for m, v in message.values.items()}
         )

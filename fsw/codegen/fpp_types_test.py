@@ -4,7 +4,7 @@ Needs the F´ framework clone `just _sync` fetches, not an F´ build.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -127,23 +127,24 @@ def mock(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
 
 
 def test_each_basilisk_message_converts_to_its_bus_struct_member_for_member(
-    bus_messages: dict[str, Any],
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
     """Each Basilisk message becomes its bus struct, each member its values in its FPP type.
 
     Args:
         bus_messages: a message of each bus struct, its members' values distinct.
+        holds: asserts a tuple holds values.
     """
     assert bus_messages
     for name, message in bus_messages.items():
         bus = converter(type(message.payload), named(name))(message.payload)
 
         assert type(bus) is named(name), name
+        holds(bus, message.values)
         for member in message.struct.members:
             value = getattr(bus, member.name)
             assert isinstance(value, np.ndarray), f"{name}.{member.name}"
             assert value.dtype == DTYPES[member.type], f"{name}.{member.name}"
-            assert value.tolist() == message.values[member.name], f"{name}.{member.name}"
 
 
 def test_a_misspelt_field_raises(mock: SimpleNamespace):

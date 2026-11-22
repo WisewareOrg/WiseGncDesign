@@ -5,6 +5,7 @@ The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's me
 """
 
 import re
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import numpy as np
@@ -51,26 +52,32 @@ def _written(payload: Any) -> tuple[Any, Any]:
     return message, reader
 
 
-def _assert_holds(bus: Any, message: Any, role: str) -> None:
+def _assert_holds(
+    holds: Callable[[Any, Mapping[str, Any]], None], bus: Any, message: Any, role: str
+) -> None:
     """A bus struct holds a bus message's values, each member an array of its FPP type.
 
     Args:
+        holds: asserts a tuple holds values.
         bus: the bus struct's tuple, as read.
         message: the bus message: its struct, and each member's values by its FPP name.
         role: the role, named on failure.
     """
+    holds(bus, message.values)
     for member in message.struct.members:
         got = getattr(bus, member.name)
         assert isinstance(got, np.ndarray), f"{role}.{member.name}"
-        np.testing.assert_array_equal(got, message.values[member.name], err_msg=role)
         assert got.dtype == DTYPES[member.type], f"{role}.{member.name}"
 
 
-def test_each_paired_role_s_message_is_read_as_its_bus_struct(bus_messages: dict[str, Any]):
+def test_each_paired_role_s_message_is_read_as_its_bus_struct(
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
+):
     """Each role's payload is read as its bus struct; a role no pair names is not read.
 
     Args:
         bus_messages: a message of each bus struct.
+        holds: asserts a tuple or payload holds values.
     """
     assert PAIRS
     readers = {}
@@ -82,11 +89,11 @@ def test_each_paired_role_s_message_is_read_as_its_bus_struct(bus_messages: dict
     assert list(read_) == [role.role for role in ROLES]
     for role in ROLES:
         assert isinstance(read_[role.role], fpp_types.named(role.bus)), role.role
-        _assert_holds(read_[role.role], bus_messages[role.bus], role.role)
+        _assert_holds(holds, read_[role.role], bus_messages[role.bus], role.role)
 
 
 def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
-    bus_messages: dict[str, Any],
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
     """A payload whose class is not messaging's, and declares no fields, is read through its name.
 
@@ -96,6 +103,7 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
 
     Args:
         bus_messages: a message of each bus struct.
+        holds: asserts a tuple or payload holds values.
     """
     for pair, role in zip(PAIRS, ROLES, strict=True):
         payload = bus_messages[role.bus].payload
@@ -105,10 +113,12 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
 
         read_ = read([pair], {role.role: alias})[role.role]
 
-        _assert_holds(read_, bus_messages[role.bus], role.role)
+        _assert_holds(holds, read_, bus_messages[role.bus], role.role)
 
 
-def test_a_read_message_keeps_its_values_after_the_next_tick(bus_messages: dict[str, Any]):
+def test_a_read_message_keeps_its_values_after_the_next_tick(
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
+):
     """The host's payload is a live view of the reader's buffer; the conversion copies it.
 
     Each role's message is read, and written again with other values, as the next tick's sensor
@@ -116,6 +126,7 @@ def test_a_read_message_keeps_its_values_after_the_next_tick(bus_messages: dict[
 
     Args:
         bus_messages: a message of each bus struct.
+        holds: asserts a tuple or payload holds values.
     """
     for pair, role in zip(PAIRS, ROLES, strict=True):
         message, reader = _written(bus_messages[role.bus].payload)
@@ -129,7 +140,7 @@ def test_a_read_message_keeps_its_values_after_the_next_tick(bus_messages: dict[
 
         field = type(later).__dtype__.names[0]
         assert list(getattr(payload, field)) == list(getattr(later, field)), role.role
-        _assert_holds(read_, bus_messages[role.bus], role.role)
+        _assert_holds(holds, read_, bus_messages[role.bus], role.role)
 
 
 def test_a_paired_role_the_vehicle_does_not_have_is_refused_naming_it():
@@ -139,7 +150,7 @@ def test_a_paired_role_the_vehicle_does_not_have_is_refused_naming_it():
 
 
 def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_message(
-    bus_messages: dict[str, Any],
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
     """Each commanded role's bus struct becomes a new `messaging.<Name>Payload`, field by field.
 
@@ -148,6 +159,7 @@ def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_me
 
     Args:
         bus_messages: a message of each bus struct, its members' values distinct.
+        holds: asserts a tuple or payload holds values.
     """
     assert COMMANDS
     buses = {
@@ -165,11 +177,7 @@ def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_me
         payload = written[role.role]
         name = role.bus.removeprefix("Bus.")
         assert type(payload) is getattr(messaging, f"{name}Payload"), role.role
-        message = bus_messages[role.bus]
-        fields = {f.lower(): f for f in type(payload).__dtype__.names}
-        for member in message.struct.members:
-            got = getattr(payload, fields[member.name.lower()])
-            np.testing.assert_array_equal(got, message.values[member.name], err_msg=role.role)
+        holds(payload, bus_messages[role.bus].values)
 
 
 def test_a_role_not_commanded_this_tick_is_not_written():

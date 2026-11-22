@@ -10,7 +10,7 @@ read, and the F´ build is loaded, only by the fixtures that need them.
 from __future__ import annotations
 
 import itertools
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -23,6 +23,7 @@ from fsw.codegen.deployment import configurations, fprime_configurations
 if TYPE_CHECKING:
     from fsw.codegen.dictionary import Dictionary
     from fsw.codegen.fpp_model import Instance, Model
+    from fsw.codegen.roles import Role
     from ground.fprime_station import FprimeStation
 
 
@@ -203,6 +204,106 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
         return [(name, t_ns, edge.values(name, [raw])[0]) for name, t_ns, raw in edge.telemetry()]
 
     return drain
+
+
+@pytest.fixture
+def holds() -> Callable[[Any, Mapping[str, Any]], None]:
+    """An assertion that a tuple or a Basilisk payload holds values, its fields matched by name.
+
+    Returns:
+        A function taking a tuple or a payload and each field's expected values, by the field's
+        name in any case. It checks every field of the first, naming the field on failure: its
+        shape is the expected values', and its elements equal them.
+    """
+
+    def check(value: Any, values: Mapping[str, Any]) -> None:
+        """Checks each field of the value against the expected values of its name.
+
+        Args:
+            value: a tuple, or a Basilisk payload.
+            values: the expected values, by field name, ignoring case; names the value lacks are
+                not read.
+        """
+        names = value._fields if hasattr(value, "_fields") else type(value).__dtype__.names
+        expected = {name.lower(): v for name, v in values.items()}
+        for name in names:
+            got, want = getattr(value, name), expected[name.lower()]
+            assert np.shape(got) == np.shape(want), f"{name}: shape {np.shape(got)}"
+            np.testing.assert_array_equal(got, want, err_msg=name)
+
+    return check
+
+
+@pytest.fixture
+def python_command() -> Callable[[Role, Any], Any]:
+    """The Python build's command for an actuator role.
+
+    Returns:
+        A function taking the role and its GNC struct's value, and giving the
+        `messaging.<Name>Payload` the Python build's CDH-out and RIO-out make of it.
+    """
+    from fsw.python.cdh import outputs
+    from fsw.python.rio.messages import commands
+
+    def command(role: Role, icd_value: Any) -> Any:
+        """The role's command, as the Python build makes it.
+
+        Args:
+            role: the actuator role.
+            icd_value: the value written on the role's GNC output port.
+
+        Returns:
+            The payload.
+        """
+        pairs = outputs.pairings([role])
+        return commands(pairs, outputs.convert(pairs, {role.output: icd_value}))[role.role]
+
+    return command
+
+
+class MockActuationCase(NamedTuple):
+    """The test mock `MockActuation` configuration's actuator, its command and a case record.
+
+    Attributes:
+        configuration: the configuration, `MockActuation`.
+        role: its one role, an actuator's.
+        command: the payload the Python build's CDH-out and RIO-out make of the mock's command.
+        record: the case's parameter record, which the F´ build boots on.
+    """
+
+    configuration: str
+    role: Role
+    command: Any
+    record: Path
+
+
+@pytest.fixture
+def mock_actuation(tmp_path: Path, python_command: Callable[[Role, Any], Any]) -> MockActuationCase:
+    """`MockActuation`, whose one test mock sends a fixed command each step; skips unbuilt.
+
+    Args:
+        tmp_path: where the case's record is written.
+        python_command: gives the Python build's command for a role.
+
+    Returns:
+        The configuration, its role, the command and the record.
+    """
+    from fsw.codegen import fpp_types
+    from fsw.codegen.deployment import configuration_model
+    from fsw.codegen.roles import taken
+    from fsw.mock import MOCK
+    from fsw.mock.actuator.actuator import Actuator
+    from lab import built
+
+    configuration = "MockActuation"
+    if not built(configuration):
+        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
+    fpp_types.load(MOCK)
+    [role] = taken(configuration_model(configuration, contract=MOCK), configuration)
+    command = python_command(role, Actuator(None).step(0.0)[0][0])
+    record = tmp_path / "run_0000.prm.json"
+    record.write_text('{"MockActuation.actuator": {}}')
+    return MockActuationCase(configuration, role, command, record)
 
 
 class BusMessage(NamedTuple):

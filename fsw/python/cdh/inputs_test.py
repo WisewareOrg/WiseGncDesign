@@ -4,6 +4,7 @@ Each configuration's pairing is of the sensor roles it takes, read from the cont
 sub-topology; the conversion ranges over every sensor role, on `bus_messages`' values.
 """
 
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import numpy as np
@@ -45,7 +46,7 @@ def test_each_configuration_pairs_each_sensor_role_to_the_struct_its_gnc_port_ta
 
 
 def test_each_role_s_bus_struct_is_converted_to_its_icd_struct_at_its_gnc_port(
-    bus_messages: dict[str, Any],
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
     """Each role's bus struct reaches its port as a fresh ICD struct, each field its namesake's.
 
@@ -54,6 +55,7 @@ def test_each_role_s_bus_struct_is_converted_to_its_icd_struct_at_its_gnc_port(
 
     Args:
         bus_messages: a message of each bus struct, its members' values distinct.
+        holds: asserts a tuple holds values.
     """
     pairs = pairings(ROLES)
     messages = {
@@ -70,6 +72,4 @@ def test_each_role_s_bus_struct_is_converted_to_its_icd_struct_at_its_gnc_port(
     for pair, role in zip(pairs, ROLES, strict=True):
         reading = converted[pair.port]
         assert isinstance(reading, pair.icd), pair.port
-        values = {m.lower(): v for m, v in bus_messages[role.bus].values.items()}
-        for field in reading._fields:
-            np.testing.assert_array_equal(getattr(reading, field), values[field.lower()])
+        holds(reading, bus_messages[role.bus].values)

@@ -7,6 +7,7 @@ deployment `just fsw` builds, as the `fsw` fixture skips.
 
 import re
 import struct
+from collections.abc import Callable, Mapping
 from types import ModuleType
 from typing import Any
 
@@ -73,34 +74,35 @@ def test_each_message_is_its_members_big_endian_and_packed_in_declaration_order(
         assert serialize(message.payload) != _packed(message, "<"), name
 
 
-def _assert_holds(payload: Any, message: Any, name: str) -> None:
+def _assert_holds(
+    holds: Callable[[Any, Mapping[str, Any]], None], payload: Any, message: Any, name: str
+) -> None:
     """A payload is a fresh `messaging.<Name>Payload` holding a bus message's values.
 
     Args:
+        holds: asserts a payload holds values.
         payload: the payload.
         message: the `BusMessage`.
         name: the bus struct, named on failure.
     """
     assert type(payload) is type(message.payload), name
     assert payload is not message.payload, name
-    fields = {field.lower(): field for field in type(payload).__dtype__.names}
-    for member in message.struct.members:
-        got = getattr(payload, fields[member.name.lower()])
-        np.testing.assert_array_equal(got, message.values[member.name], err_msg=name)
+    holds(payload, message.values)
 
 
 def test_each_struct_s_bytes_are_read_back_as_a_payload_of_the_message_it_mirrors(
-    bus_messages: dict[str, Any],
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ) -> None:
     """Each struct's big-endian packed bytes give back its values; its little-endian bytes do not.
 
     Args:
         bus_messages: a message of each bus struct.
+        holds: asserts a payload holds values.
     """
     for name, message in bus_messages.items():
-        _assert_holds(deserialize(name, _packed(message)), message, name)
+        _assert_holds(holds, deserialize(name, _packed(message)), message, name)
         with pytest.raises(AssertionError):
-            _assert_holds(deserialize(name, _packed(message, "<")), message, name)
+            _assert_holds(holds, deserialize(name, _packed(message, "<")), message, name)
 
 
 def test_bytes_of_another_length_than_the_struct_s_are_refused(
@@ -182,14 +184,15 @@ def test_the_emulator_writes_the_bytes_f_prime_serializes(
 
 
 def test_the_emulator_reads_back_the_bytes_f_prime_serializes(
-    fsw: ModuleType, bus_messages: dict[str, Any]
+    fsw: ModuleType, bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ) -> None:
     """F´'s serialization of each bus struct, read back by the emulator, gives its values.
 
     Args:
         fsw: a copy of the deployment.
         bus_messages: a message of each bus struct.
+        holds: asserts a payload holds values.
     """
     for name, message in bus_messages.items():
         pin = getattr(fsw, re.sub(r"^Bus\.", "bus_", name))
-        _assert_holds(deserialize(name, pin(**message.values)), message, name)
+        _assert_holds(holds, deserialize(name, pin(**message.values)), message, name)

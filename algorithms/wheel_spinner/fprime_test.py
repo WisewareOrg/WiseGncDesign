@@ -12,9 +12,7 @@ import pytest
 from algorithms.wheel_spinner.wheel_spinner import WheelSpinner
 from fsw.codegen.deployment import bus_port, configuration_model
 from fsw.codegen.fpp_types import Gnc
-from fsw.codegen.roles import taken
-from fsw.python.cdh import outputs
-from fsw.python.rio.messages import commands
+from fsw.codegen.roles import Role, taken
 from ground.fprime_station import FprimeStation
 from lab import built
 from lab.bus_emulator import serialize
@@ -60,6 +58,7 @@ def test_each_step_sends_the_notebook_s_command_and_writes_its_torque(
     booted: ModuleType,
     station: FprimeStation,
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
+    python_command: Callable[[Role, Any], Any],
 ) -> None:
     """Booted on the record's torque, each step returns the wheel bytes the Python build makes.
 
@@ -72,11 +71,11 @@ def test_each_step_sends_the_notebook_s_command_and_writes_its_torque(
         booted: the test's copy of the deployment, booted on the case's parameters.
         station: the station on it.
         decoded: drains the station's telemetry as values.
+        python_command: gives the Python build's command for a role.
     """
     [role] = taken(configuration_model(configuration), configuration)
-    pairs = outputs.pairings([role])
     sent, _ = WheelSpinner(SPINNER).step(0.0)
-    command = commands(pairs, outputs.convert(pairs, {role.output: sent.wheelOut}))[role.role]
+    command = python_command(role, sent.wheelOut)
     expected = [(bus_port(configuration, role.output), serialize(command))]
 
     for k in (1, 2, 3):

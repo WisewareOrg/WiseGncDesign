@@ -6,7 +6,6 @@ FPP's own analysis; which configurations the F´ build builds, on a mock contrac
 """
 
 import os
-from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -31,7 +30,7 @@ from fsw.codegen.deployment import (
 )
 from fsw.codegen.fpp_model import Model, read
 from fsw.codegen.roles import Role, roles, taken
-from fsw.mock import MOCK, device, edited, sub_topology
+from fsw.mock import MOCK, device, device_contract, edited, port, sub_topology
 
 DECLARED = roles(contract_model())
 """Every role the contract declares."""
@@ -125,29 +124,6 @@ def test_a_configuration_without_a_tick_period_is_refused_naming_the_constant(
         tick_period("MockFrame", contract=MOCK)
 
 
-def _mock(directory: Path, name: str, exposed: Sequence[Role]) -> Contract:
-    """A mock contract of one configuration, whose device takes every declared role.
-
-    Args:
-        directory: where the device and the configuration are written.
-        name: the configuration.
-        exposed: the roles its sub-topology exposes.
-
-    Returns:
-        The contract.
-    """
-    (directory / "gnc").mkdir()
-    fpp = directory / "Device.fpp"
-    fpp.write_text(device("Device", DECLARED))
-    ports = [role.input if role.sensor else role.output for role in exposed]
-    (directory / "gnc" / f"{name}.fpp").write_text(
-        sub_topology(
-            name, [("device", "MockGnc.Device")], [f"port {p} = device.{p}" for p in ports]
-        )
-    )
-    return Contract((fpp,), directory / "gnc")
-
-
 def _simulation(model: Model, name: str) -> set[tuple[str, str, int, str, str, int]]:
     """A rendered deployment's connections to and from LabBusDriver and the CDH.
 
@@ -192,7 +168,7 @@ def test_a_configuration_s_role_wiring_is_generated_from_the_roles_it_takes(
     """
     assert SENSORS and ACTUATORS
     name = "Wired"
-    contract = _mock(tmp_path, name, exposed)
+    contract = device_contract(tmp_path, name, DECLARED, exposed)
     gnc = f"{name}.device"
 
     model = read(fpp_files(name, tmp_path, contract=contract))
@@ -219,8 +195,7 @@ def test_a_configuration_s_role_wiring_is_generated_from_the_roles_it_takes(
     assert "@" not in text.replace("@ ", "")
     for of in (sensors, actuators):
         for k, role in enumerate(of):
-            port = role.input if role.sensor else role.output
-            assert bus_port(name, port, contract=contract) == k, role.role
+            assert bus_port(name, port(role), contract=contract) == k, role.role
 
 
 def test_a_render_leaves_a_topology_whose_text_is_unchanged_untouched(
@@ -256,8 +231,7 @@ def test_the_repository_s_configurations_wire_their_roles_through_the_shared_tem
     for direction in (True, False):
         of = [role for role in found if role.sensor == direction]
         for k, role in enumerate(of):
-            port = role.input if role.sensor else role.output
-            assert bus_port(configuration, port) == k, role.role
+            assert bus_port(configuration, port(role)) == k, role.role
 
 
 def test_a_cdh_port_no_lab_bus_driver_port_feeds_is_refused_naming_it(configuration: str):
@@ -282,7 +256,7 @@ def test_a_cdh_port_two_lab_bus_driver_ports_feed_is_refused_naming_both(
         monkeypatch: renders the deployment from that template.
     """
     name = "Twice"
-    contract = _mock(tmp_path, name, SENSORS)
+    contract = device_contract(tmp_path, name, DECLARED, SENSORS)
     role = SENSORS[0]
     other = len(SENSORS)
     original = (REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()

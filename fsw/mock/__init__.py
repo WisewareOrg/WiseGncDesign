@@ -17,7 +17,7 @@ import numpy as np
 from fsw.codegen.deployment import Contract
 from fsw.codegen.roles import Role
 
-__all__ = ["ARGS", "MOCK", "device", "edited", "sub_topology"]
+__all__ = ["ARGS", "MOCK", "device", "device_contract", "edited", "port", "sub_topology"]
 
 _HERE = Path(__file__).resolve().parent
 
@@ -122,3 +122,47 @@ def device(name: str, roles: Sequence[Role]) -> str:
         f"module MockGnc {{\n  passive component {name} {{\n"
         f"    sync input port schedIn: Svc.Sched\n{ports}  }}\n}}\n"
     )
+
+
+def port(role: Role) -> str:
+    """The name of the port a role's GNC struct crosses a sub-topology at.
+
+    Args:
+        role: the role.
+
+    Returns:
+        `<role>In` for a sensor, `<role>Out` for an actuator.
+    """
+    return role.input if role.sensor else role.output
+
+
+def device_contract(
+    directory: Path,
+    name: str,
+    declared: Sequence[Role],
+    exposed: Sequence[Role],
+    component: str = "Device",
+) -> Contract:
+    """A test mock contract of one configuration: a device taking every declared role.
+
+    The device is written beside the configuration's GNC sub-topology, which exposes the ports of
+    the roles given.
+
+    Args:
+        directory: where the device and the configuration are written.
+        name: the configuration's name.
+        declared: the roles the device's ports are of.
+        exposed: the roles whose ports the sub-topology exposes, in order.
+        component: the device component's name, in module `MockGnc`.
+
+    Returns:
+        The contract, whose one algorithm is the device.
+    """
+    (directory / "gnc").mkdir(exist_ok=True)
+    fpp = directory / f"{component}.fpp"
+    fpp.write_text(device(component, declared))
+    ports = [f"port {port(role)} = device.{port(role)}" for role in exposed]
+    (directory / "gnc" / f"{name}.fpp").write_text(
+        sub_topology(name, [("device", f"MockGnc.{component}")], ports)
+    )
+    return Contract((fpp,), directory / "gnc")

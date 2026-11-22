@@ -3,9 +3,8 @@
 The conversion ranges over every actuator role the contract declares, on `icd_messages`' values.
 """
 
+from collections.abc import Callable, Mapping
 from typing import Any
-
-import numpy as np
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import contract_model
@@ -17,7 +16,7 @@ ACTUATORS = [role for role in roles(contract_model()) if not role.sensor]
 
 
 def test_each_role_s_icd_struct_written_at_its_gnc_port_is_converted_to_its_bus_struct(
-    icd_messages: dict[str, Any],
+    icd_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
     """Each written GNC output becomes a fresh bus struct, each field its ICD namesake's.
 
@@ -27,6 +26,7 @@ def test_each_role_s_icd_struct_written_at_its_gnc_port_is_converted_to_its_bus_
 
     Args:
         icd_messages: a value of each ICD struct, its members' values distinct.
+        holds: asserts a tuple holds values.
     """
     assert ACTUATORS
     pairs = pairings(ACTUATORS)
@@ -44,6 +44,4 @@ def test_each_role_s_icd_struct_written_at_its_gnc_port_is_converted_to_its_bus_
     for role in ACTUATORS:
         bus = converted[role.role]
         assert isinstance(bus, fpp_types.named(role.bus)), role.role
-        icd = {m.lower(): v for m, v in icd_messages[role.icd].values.items()}
-        for field in bus._fields:
-            np.testing.assert_array_equal(getattr(bus, field), icd[field.lower()], role.role)
+        holds(bus, icd_messages[role.icd].values)

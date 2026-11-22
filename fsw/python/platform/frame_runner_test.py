@@ -10,6 +10,7 @@ each test needs.
 """
 
 import json
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,7 @@ from fsw.codegen.deployment import Contract, configuration_model
 from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.fpp_types import named
 from fsw.codegen.roles import Role, roles
-from fsw.mock import MOCK, device, sub_topology
+from fsw.mock import MOCK, device_contract
 from fsw.mock.mock_gnc import LOG, Sink, Source
 from fsw.payloads import payload_type
 from fsw.python import FrameRunner
@@ -246,18 +247,8 @@ def roles_contract(tmp_path_factory: pytest.TempPathFactory) -> tuple[Contract, 
     """
     declared = roles(configuration_model(CONFIGURATION, contract=MOCK))
     directory = tmp_path_factory.mktemp("roles")
-    (directory / "gnc").mkdir()
-    fpp = directory / "MockDevice.fpp"
-    fpp.write_text(device("MockDevice", declared))
-    ports = [r.input if r.sensor else r.output for r in declared]
-    (directory / "gnc" / "MockRoles.fpp").write_text(
-        sub_topology(
-            "MockRoles",
-            [("device", "MockGnc.MockDevice")],
-            [f"port {port} = device.{port}" for port in ports],
-        )
-    )
-    return Contract((fpp,), directory / "gnc"), declared
+    contract = device_contract(directory, "MockRoles", declared, declared, component="MockDevice")
+    return contract, declared
 
 
 @pytest.fixture
@@ -307,6 +298,7 @@ def test_each_role_s_message_reaches_the_step_as_its_icd_struct(
     roles_runner: FrameRunner,
     roles_contract: tuple[Contract, list[Role]],
     bus_messages: dict[str, Any],
+    holds: Callable[[Any, Mapping[str, Any]], None],
 ):
     """A tick reads each sensor role's message and converts it, so the step gets its ICD struct.
 
@@ -316,6 +308,7 @@ def test_each_role_s_message_reaches_the_step_as_its_icd_struct(
         roles_runner: the frame runner on the rendered mock.
         roles_contract: the rendered contract and the roles.
         bus_messages: a message of each bus struct, its members' values distinct.
+        holds: asserts a tuple holds values.
     """
     sensors = [role for role in roles_contract[1] if role.sensor]
     assert sensors
@@ -328,9 +321,7 @@ def test_each_role_s_message_reaches_the_step_as_its_icd_struct(
     for role in sensors:
         value = inputs[role.role]
         assert isinstance(value, named(role.icd)), role.role
-        bus = {m.lower(): v for m, v in bus_messages[role.bus].values.items()}
-        for field in value._fields:
-            np.testing.assert_array_equal(getattr(value, field), bus[field.lower()], role.role)
+        holds(value, bus_messages[role.bus].values)
 
 
 def test_a_tick_missing_a_role_s_message_is_refused_naming_the_role(
@@ -358,6 +349,7 @@ def test_each_actuator_role_s_command_returns_as_its_message_in_the_ticks_gnc_wr
     roles_contract: tuple[Contract, list[Role]],
     bus_messages: dict[str, Any],
     icd_messages: dict[str, Any],
+    holds: Callable[[Any, Mapping[str, Any]], None],
 ):
     """A tick returns each actuator command GNC wrote as its Basilisk payload, and none it did not.
 
@@ -370,6 +362,7 @@ def test_each_actuator_role_s_command_returns_as_its_message_in_the_ticks_gnc_wr
         roles_contract: the rendered contract and the roles.
         bus_messages: a message of each bus struct.
         icd_messages: a value of each ICD struct, the device's commands among them.
+        holds: asserts a payload holds values.
     """
     actuators = [role for role in roles_contract[1] if not role.sensor]
     assert actuators
@@ -386,8 +379,4 @@ def test_each_actuator_role_s_command_returns_as_its_message_in_the_ticks_gnc_wr
         for role in actuators:
             payload = commands[role.role]
             assert type(payload) is payload_type(role.bus), role.role
-            icd = {m.lower(): v for m, v in icd_messages[role.icd].values.items()}
-            for field in type(payload).__dtype__.names:
-                np.testing.assert_array_equal(
-                    getattr(payload, field), icd[field.lower()], role.role
-                )
+            holds(payload, icd_messages[role.icd].values)

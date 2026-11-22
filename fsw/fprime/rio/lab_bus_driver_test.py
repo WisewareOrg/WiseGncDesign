@@ -12,18 +12,15 @@ import functools
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
-from fsw.codegen import fpp_types
 from fsw.codegen.deployment import bus_port, configuration_model, contract_model
-from fsw.codegen.roles import taken
+from fsw.codegen.roles import Role, taken
 from fsw.mock import MOCK
-from fsw.mock.actuator.actuator import Actuator
-from fsw.python.cdh import outputs
-from fsw.python.rio.messages import commands
 from ground import parameters
-from lab import built, dictionary_path
+from lab import dictionary_path
 from lab.bus_emulator import serialize
 from lab.power_cycle import power_cycle
 
@@ -155,26 +152,19 @@ def test_a_step_in_which_gnc_sends_no_actuator_command_returns_none(
     assert booted.step(t_ns=2 * NS, bus=bus) == []
 
 
-def test_each_step_returns_the_bytes_its_gnc_sent_each_actuator_port_once(tmp_path: Path) -> None:
+def test_each_step_returns_the_bytes_its_gnc_sent_each_actuator_port_once(
+    mock_actuation: tuple[str, Role, Any, Path],
+) -> None:
     """MockActuation's command reaches `busIn` each step, and each step returns that step's alone.
 
     The bytes are the bus struct F´ serializes for the command, as the Python build's CDH-out and
     RIO-out make it and the bus emulator writes it, on the port the deployment wires the role to.
 
     Args:
-        tmp_path: where the case's record and `.dat` are written.
+        mock_actuation: the configuration, its role, the Python build's command and the record.
     """
-    configuration = "MockActuation"
-    if not built(configuration):
-        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
-    fpp_types.load(MOCK)
-    [role] = taken(configuration_model(configuration, contract=MOCK), configuration)
-    pairs = outputs.pairings([role])
-    sent = Actuator(None).step(0.0)[0]
-    command = commands(pairs, outputs.convert(pairs, {role.output: sent[0]}))[role.role]
+    configuration, role, command, record = mock_actuation
     expected = [(bus_port(configuration, role.output, contract=MOCK), serialize(command))]
-    record = tmp_path / "run_0000.prm.json"
-    record.write_text('{"MockActuation.actuator": {}}')
     fsw = power_cycle(configuration)
     fsw.boot(str(parameters.dat(record, dictionary_path(configuration)).resolve()), [])
 
