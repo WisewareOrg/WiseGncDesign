@@ -22,6 +22,7 @@
       "matchPackageNames": ["nasa/fprime"],
       "postUpgradeTasks": {
         "commands": ["uv lock"],
+        "installTools": { "python": {}, "uv": {} },
         "fileFilters": ["uv.lock"],
         "executionMode": "branch"
       }
