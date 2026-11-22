@@ -21,6 +21,7 @@ def test_each_step_commands_the_parameter_s_torque_on_the_first_wheel_alone_and_
 
     outputs, telemetry = spinner.step(t)
 
+    assert outputs.wheelOut is not None
     motor_torque = outputs.wheelOut.motorTorque
     assert motor_torque.shape == (WHEELS,)
     assert motor_torque[0] == 2.5e-3

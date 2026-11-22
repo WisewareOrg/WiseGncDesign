@@ -178,7 +178,7 @@ def test_a_tuple_and_its_arrays_pass_into_numba(mock: SimpleNamespace):
     reading = mock.Reading(rate=np.full(3, 2.0), count=4, mode="running")
 
     @numba.njit
-    def total(r: tuple) -> float:
+    def total(r: Any) -> float:
         """The sum of a reading's rate and its count.
 
         Args:

@@ -5,6 +5,7 @@ Needs the F´ framework clone `just _sync` fetches, not an F´ build.
 
 import ast
 from types import SimpleNamespace
+from typing import Any
 
 from fsw.codegen import fpp_types, fpp_types_stub
 
@@ -21,7 +22,7 @@ def _classes(body: list[ast.stmt]) -> dict[str, ast.ClassDef]:
     return {node.name: node for node in body if isinstance(node, ast.ClassDef)}
 
 
-def _runtime(space: SimpleNamespace, path: str = "") -> dict[str, type]:
+def _runtime(space: SimpleNamespace, path: str = "") -> dict[str, type[Any]]:
     """Every tuple class in a namespace, by dotted path, walking nested namespaces.
 
     Args:
@@ -31,7 +32,7 @@ def _runtime(space: SimpleNamespace, path: str = "") -> dict[str, type]:
     Returns:
         The tuple classes by path, such as `Svc.Ccsds.TCHeader`.
     """
-    found: dict[str, type] = {}
+    found: dict[str, type[Any]] = {}
     for name, value in vars(space).items():
         if isinstance(value, SimpleNamespace):
             found |= _runtime(value, f"{path}{name}.")
@@ -40,13 +41,13 @@ def _runtime(space: SimpleNamespace, path: str = "") -> dict[str, type]:
     return found
 
 
-def _tree() -> dict[str, type]:
+def _tree() -> dict[str, type[Any]]:
     """Every tuple class the runtime module exposes, by dotted path.
 
     Returns:
         The tuple classes by path, walking each namespace in `fpp_types.__all__`.
     """
-    found: dict[str, type] = {}
+    found: dict[str, type[Any]] = {}
     for name in fpp_types.__all__:
         value = getattr(fpp_types, name)
         if isinstance(value, SimpleNamespace):

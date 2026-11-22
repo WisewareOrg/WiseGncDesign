@@ -50,7 +50,7 @@ _LOADED: set[Contract] = set()
 
 
 @functools.cache
-def converter(source: type, target: type) -> Callable[[Any], Any]:
+def converter(source: type[Any], target: type[Any]) -> Callable[[Any], Any]:
     """A function converting a `source` value to a `target` tuple, each field taken by name.
 
     Fields are taken by `fsw.codegen.fields.plan`'s rule. An array field becomes a fresh array of
@@ -89,7 +89,7 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
     return convert
 
 
-def named(name: str) -> type:
+def named(name: str) -> type[Any]:
     """A struct's or a component's tuple, by its FPP qualified name.
 
     Args:
@@ -105,7 +105,7 @@ def named(name: str) -> type:
     return getattr(space, base)
 
 
-def parameters_from(tuple_type: type, values: Mapping[str, Any]) -> Any:
+def parameters_from(tuple_type: type[Any], values: Mapping[str, Any]) -> Any:
     """A component's parameters tuple from plain values, such as a JSON object's.
 
     An array field becomes a fresh array of its FPP shape and type; a scalar or an enum name passes
@@ -145,7 +145,7 @@ def _same(value: Any) -> Any:
     return value
 
 
-def _source_forms(source: type) -> dict[str, tuple[str, Form]]:
+def _source_forms(source: type[Any]) -> dict[str, tuple[str, Form]]:
     """Each field of a converter's source, by its name in lower case.
 
     Args:

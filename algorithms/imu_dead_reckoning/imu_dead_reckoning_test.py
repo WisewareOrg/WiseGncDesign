@@ -91,6 +91,7 @@ def test_the_command_writes_navstate_alone_and_the_next_step_propagates_from_its
 
     assert commanded == Gnc.ImuDeadReckonerTelemetry(navState="initialized")
     assert stepped.navState == "propagated"
+    assert stepped.bodyEciPos is not None
     np.testing.assert_allclose(stepped.bodyEciPos, _AWAY_FROM_ORIGIN + velocity, rtol=1e-15)
     np.testing.assert_array_equal(stepped.bodyEciVel, velocity)
     np.testing.assert_array_equal(stepped.bodyEciAttitude, _Q_IDENTITY)
@@ -207,6 +208,7 @@ def test_a_platform_rate_turns_the_body_by_the_mounting_s_transpose():
     _, state = reckoner.step(t=dt, imu=Gnc.ImuReading(omega_p, _ZERO3))
 
     expected = Rotation.from_quat(q0, scalar_first=True) * Rotation.from_rotvec(mounting.T @ omega_p * dt)
+    assert state.bodyEciAttitude is not None
     np.testing.assert_allclose(state.bodyEciAttitude, expected.as_quat(scalar_first=True), rtol=0, atol=1e-12)  # ty: ignore[missing-union-attribute]
 
 

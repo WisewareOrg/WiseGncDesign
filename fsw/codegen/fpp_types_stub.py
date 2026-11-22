@@ -15,6 +15,7 @@ annotated names `fpp_types.py` writes, is that file's own, read with `ast` and i
 import ast
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 
@@ -91,7 +92,7 @@ def _annotation(member: Member, types: Types) -> str:
     return "str"
 
 
-def _fields(cls: type) -> list[tuple[Member, Types, str]]:
+def _fields(cls: type[Any]) -> list[tuple[Member, Types, str]]:
     """Each field of a generated tuple, with the model's types and how the tuple wraps it.
 
     Args:
@@ -133,7 +134,7 @@ def _members(component: Component, kind: str) -> list[Member]:
     return [Member(p.name, p.type, None) for p in [*required, *defaulted]]
 
 
-def _tuple(name: str, cls: type, depth: int) -> list[str]:
+def _tuple(name: str, cls: type[Any], depth: int) -> list[str]:
     """A tuple class as stub lines.
 
     Args:

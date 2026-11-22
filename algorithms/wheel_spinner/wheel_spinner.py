@@ -66,9 +66,10 @@ __all__ = ["WheelSpinner", "parameters"]
 # %%
 _COMMAND = contract_model().types["Gnc.WheelCommand"]
 assert isinstance(_COMMAND, Struct), "`Gnc.WheelCommand` is a struct"
-WHEELS = next(member.size for member in _COMMAND.members if member.name == "motorTorque")
+_MOTOR_TORQUE = next(member for member in _COMMAND.members if member.name == "motorTorque")
+assert _MOTOR_TORQUE.size is not None, "`motorTorque` is an array"
+WHEELS = _MOTOR_TORQUE.size
 """The wheels a `Gnc.WheelCommand` commands: its `motorTorque` array's length in the contract."""
-assert WHEELS is not None, "`motorTorque` is an array"
 
 
 class WheelSpinner:
