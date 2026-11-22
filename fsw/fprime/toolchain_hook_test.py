@@ -11,6 +11,8 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
 HOOK = Path(__file__).parent / "toolchain_hook.py"
 """The hook module, beside this test."""
@@ -115,3 +117,70 @@ def test_the_hook_names_every_missing_tool(tmp_path: Path):
 
     message = str(raised.value)
     assert all(tool in message for tool in ("fprime-tools", "fprime-fpp", "fprime-gds"))
+
+
+def test_the_hook_declares_a_pin_spelled_otherwise_as_the_same_clean_requirement(tmp_path: Path):
+    """An inline comment, name case, `_` for `-` and spaces around `==` do not change the pin.
+
+    Args:
+        tmp_path: the root holding a requirements file whose pins are spelled in variant ways.
+    """
+    _requirements(
+        tmp_path,
+        [
+            "CMake == 9.8.7",
+            "ninja==2.3.4.5  # the generator",
+            "fprime_tools==5.6.8",
+            "FPRIME-FPP==1.2.3",
+            "fprime.gds==5.6.7",
+        ],
+    )
+
+    metadata = _update(tmp_path)
+
+    parsed = {
+        canonicalize_name(r.name): str(r.specifier)
+        for r in map(Requirement, metadata["dependencies"])
+    }
+    assert parsed == {
+        "cmake": "==9.8.7",
+        "ninja": "==2.3.4.5",
+        "fprime-tools": "==5.6.8",
+        "fprime-fpp": "==1.2.3",
+        "fprime-gds": "==5.6.7",
+    }
+
+
+@pytest.mark.parametrize("unpinned", ["cmake>=9.8.7", "cmake~=9.8", "cmake"])
+def test_the_hook_refuses_a_tool_that_is_not_pinned_with_an_equals_sign(
+    tmp_path: Path, unpinned: str
+):
+    """A range or a bare name for a tool is not a pin, so the hook raises naming the tool.
+
+    Args:
+        tmp_path: the root holding a requirements file whose `cmake` line is not an `==` pin.
+        unpinned: the `cmake` line.
+    """
+    _requirements(
+        tmp_path,
+        [
+            unpinned,
+            "fprime-fpp==1.2.3",
+            "fprime-gds==5.6.7",
+            "fprime-tools==5.6.8",
+            "ninja==2.3.4.5",
+        ],
+    )
+
+    with pytest.raises(ValueError, match="cmake"):
+        _update(tmp_path)
+
+
+def test_the_hook_tells_a_missing_requirements_file_to_run_just_sync(tmp_path: Path):
+    """A root without the framework clone raises a message naming `just _sync`, not a bare OS error.
+
+    Args:
+        tmp_path: a root with no `lib/fprime/requirements.txt`.
+    """
+    with pytest.raises(ValueError, match="just _sync"):
+        _update(tmp_path)
