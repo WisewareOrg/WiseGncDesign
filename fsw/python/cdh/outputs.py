@@ -6,7 +6,6 @@ ICD struct is converted to the bus struct field by field with `fsw.codegen.fpp_t
 every array a fresh copy: each bus field from the ICD field of its name, ignoring case.
 """
 
-import functools
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -32,20 +31,6 @@ def pairings(roles: Sequence[Role]) -> list[Pair]:
     ]
 
 
-@functools.cache
-def _conversion(icd: type, bus: type) -> Any:
-    """An ICD struct's conversion to a bus struct, planned once.
-
-    Args:
-        icd: the ICD struct's tuple.
-        bus: the bus struct's tuple.
-
-    Returns:
-        The conversion.
-    """
-    return fpp_types.converter(icd, bus)
-
-
 def convert(pairs: Sequence[Pair], values: Mapping[str, Any]) -> dict[str, Any]:
     """Each written GNC output as its role's bus struct.
 
@@ -58,7 +43,7 @@ def convert(pairs: Sequence[Pair], values: Mapping[str, Any]) -> dict[str, Any]:
         Each bus struct's tuple, by its role, for the ports written.
     """
     return {
-        pair.role: _conversion(pair.icd, pair.bus)(values[pair.port])
+        pair.role: fpp_types.converter(pair.icd, pair.bus)(values[pair.port])
         for pair in pairs
         if pair.port in values
     }

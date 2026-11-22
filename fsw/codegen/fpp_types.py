@@ -31,14 +31,14 @@ import numpy as np
 
 from fsw.codegen.deployment import CONTRACT, Contract, contract_files
 from fsw.codegen.fields import Form, form, plan
-from fsw.codegen.fpp_model import Array, Component, Enum, Member, Model, Struct, read
+from fsw.codegen.fpp_model import Component, Member, Model, Struct, Types, read
 
 __all__ = ["converter", "load", "named", "parameters_from"]
 
-_STRUCTS: dict[type, tuple[Struct, dict[str, Struct | Enum | Array]]] = {}
+_STRUCTS: dict[type, tuple[Struct, Types]] = {}
 """Each struct's tuple, to its struct and the model's types, for `converter`."""
 
-_COMPONENTS: dict[str, tuple[Component, dict[str, Struct | Enum | Array]]] = {}
+_COMPONENTS: dict[str, tuple[Component, Types]] = {}
 """Each algorithm's component, by its qualified name, with the model's types, for
 `parameters_from`."""
 
@@ -49,11 +49,13 @@ _LOADED: set[Contract] = set()
 """Each contract `load` has generated the tuples of."""
 
 
+@functools.cache
 def converter(source: type, target: type) -> Callable[[Any], Any]:
     """A function converting a `source` value to a `target` tuple, each field taken by name.
 
     Fields are taken by `fsw.codegen.fields.plan`'s rule. An array field becomes a fresh array of
-    the FPP type; a scalar or an enum name passes as it is.
+    the FPP type; a scalar or an enum name passes as it is. A conversion is planned once per
+    `(source, target)`.
 
     Args:
         source: a struct's tuple, or a Basilisk message payload's type.
@@ -180,7 +182,9 @@ def _build(model: Model, algorithms: Collection[Path]) -> dict[str, SimpleNamesp
     namespaces: dict[str, SimpleNamespace] = {}
 
     def place(qualified: str, cls: type) -> None:
-        """Puts a tuple in its module's namespace, named as FPP names it, which pickle follows.
+        """Puts a tuple in its module's namespace, its `__qualname__` the FPP qualified name.
+
+        `fsw.python.rio.messages` reads the qualified name to find a bus struct's payload.
 
         Args:
             qualified: its FPP qualified name, such as `Gnc.ImuReading`.

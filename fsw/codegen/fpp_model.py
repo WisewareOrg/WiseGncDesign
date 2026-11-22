@@ -31,6 +31,7 @@ __all__ = [
     "Port",
     "Struct",
     "TopologyPort",
+    "Types",
     "parse",
     "read",
 ]
@@ -150,6 +151,10 @@ class Array(NamedTuple):
     element: str
 
 
+Types = dict[str, Struct | Enum | Array]
+"""Every struct, enum and array type of a model, by its qualified name."""
+
+
 class Argument(NamedTuple):
     """A command argument.
 
@@ -262,7 +267,7 @@ class Model(NamedTuple):
     topologies: dict[str, tuple[Connection, ...]]
     ports: dict[str, TopologyPort]
     constants: dict[str, int | float]
-    types: dict[str, Struct | Enum | Array]
+    types: Types
     components: dict[str, Component]
     annotations: dict[str, tuple[str, ...]]
 
@@ -342,7 +347,7 @@ def parse(directory: Path) -> Model:
     }
 
     constants = {}
-    types: dict[str, Struct | Enum | Array] = {}
+    types: Types = {}
     for node_id, node in nodes.items():
         if node.kind == "DefConstant":
             ((kind, value),) = values[node_id].items()

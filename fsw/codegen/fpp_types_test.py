@@ -303,6 +303,13 @@ def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(mock: Simpl
     assert converted.mode == "running"
 
 
+def test_a_converter_is_planned_once_per_source_and_target():
+    """The same source and target give the same converter."""
+    bus, icd = named("Bus.ImuSensorMsg"), named("Gnc.ImuReading")
+
+    assert converter(bus, icd) is converter(bus, icd)
+
+
 def test_a_converter_keeps_each_array_s_shape_and_element_type(mock: SimpleNamespace):
     """An array of arrays keeps its nested shape, and an inline array its element's type.
 

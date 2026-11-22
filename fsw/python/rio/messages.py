@@ -9,8 +9,7 @@ fresh payload of the class `fsw.payloads.payload_type` gives, each field from th
 its name, ignoring case.
 """
 
-import functools
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -21,20 +20,6 @@ from fsw.payloads import payload_type
 from fsw.python.cdh.inputs import Pair
 
 __all__ = ["commands", "read"]
-
-
-@functools.cache
-def _conversion(payload: type, bus: type) -> Callable[[Any], Any]:
-    """A payload type's conversion to a bus struct, planned once.
-
-    Args:
-        payload: the Basilisk message payload's type.
-        bus: the bus struct's tuple.
-
-    Returns:
-        The conversion.
-    """
-    return converter(getattr(messaging, payload.__name__), bus)
 
 
 def read(pairs: Sequence[Pair], messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
@@ -59,7 +44,7 @@ def read(pairs: Sequence[Pair], messages_by_role: Mapping[str, Any]) -> dict[str
                 f" {sorted(messages_by_role)} lack"
             )
         message = messages_by_role[pair.role]
-        read_[pair.role] = _conversion(type(message), pair.bus)(message)
+        read_[pair.role] = converter(getattr(messaging, type(message).__name__), pair.bus)(message)
     return read_
 
 

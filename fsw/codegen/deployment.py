@@ -27,6 +27,7 @@ __all__ = [
     "CLONE",
     "CONTRACT",
     "Contract",
+    "REPOSITORY",
     "algorithm_components",
     "algorithm_files",
     "bus_port",
@@ -42,9 +43,10 @@ __all__ = [
     "tick_period",
 ]
 
-_REPOSITORY = Path(__file__).resolve().parents[2]
+REPOSITORY = Path(__file__).resolve().parents[2]
+"""The repository's root."""
 
-CLONE = _REPOSITORY / "fsw" / "fprime" / "lib" / "fprime"
+CLONE = REPOSITORY / "fsw" / "fprime" / "lib" / "fprime"
 """The F´ framework clone `just _sync` fetches."""
 
 _FRAMEWORK = (
@@ -92,10 +94,10 @@ _PROJECT = (
 )
 """The repository's files of every deployment's model, its algorithms and GNC sub-topology aside."""
 
-_GNC = _REPOSITORY / "fsw" / "fpp" / "gnc"
+_GNC = REPOSITORY / "fsw" / "fpp" / "gnc"
 """The GNC sub-topologies, one `<configuration>.fpp` per configuration."""
 
-_TEMPLATE = _REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in"
+_TEMPLATE = REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in"
 """The deployment topology's template, rendered per configuration."""
 
 
@@ -114,7 +116,7 @@ def algorithm_files() -> tuple[Path, ...]:
     Returns:
         The files, absolute, sorted.
     """
-    return tuple(sorted(_REPOSITORY.glob("algorithms/*/*.fpp")))
+    return tuple(sorted(REPOSITORY.glob("algorithms/*/*.fpp")))
 
 
 class Contract(NamedTuple):
@@ -160,7 +162,7 @@ def contract_files(*, contract: Contract = CONTRACT) -> tuple[Path, ...]:
     """
     return (
         *framework_files(),
-        *(_REPOSITORY / path for path in _PROJECT),
+        *(REPOSITORY / path for path in _PROJECT),
         *contract.algorithms,
     )
 

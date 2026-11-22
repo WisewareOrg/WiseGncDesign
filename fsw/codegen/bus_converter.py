@@ -25,14 +25,12 @@ from pathlib import Path
 
 import numpy as np
 
-from fsw.codegen.deployment import contract_files
+from fsw.codegen.deployment import REPOSITORY, contract_files
 from fsw.codegen.fields import DTYPES, STRUCT_CODES, form, plan
 from fsw.codegen.fpp_model import Component, Model, read
 from fsw.codegen.roles import CONVERTER, Role, roles
 
 __all__ = ["main", "render"]
-
-_REPOSITORY = Path(__file__).resolve().parents[2]
 
 _NUMBERS = [DTYPES[primitive] for primitive in STRUCT_CODES]
 """`fsw.codegen.fields.STRUCT_CODES`' primitives as `fsw.codegen.fields.form` gives them."""
@@ -320,7 +318,7 @@ def render(model: Model) -> dict[str, str]:
         `BusConverterPins.hpp`.
     """
     component = model.components[CONVERTER]
-    base = Path(os.path.relpath(component.file.parent, _REPOSITORY)) / "BusConverterComponentAc.hpp"
+    base = Path(os.path.relpath(component.file.parent, REPOSITORY)) / "BusConverterComponentAc.hpp"
     found = roles(model)
     conversions, declarations, definitions = [], [], []
     for role in found:

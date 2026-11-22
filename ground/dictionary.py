@@ -22,6 +22,7 @@ import numpy as np
 from fsw.codegen.deployment import (
     CLONE,
     CONTRACT,
+    REPOSITORY,
     Contract,
     algorithm_components,
     contract_files,
@@ -32,8 +33,7 @@ from fsw.codegen.fpp_model import Instance
 
 __all__ = ["Channel", "Command", "Dictionary", "Parameter", "Type"]
 
-_REPOSITORY = Path(__file__).resolve().parents[1]
-_INTERFACES = _REPOSITORY / "fsw" / "fpp" / "interfaces"
+_INTERFACES = REPOSITORY / "fsw" / "fpp" / "interfaces"
 
 _PRIMITIVES = {
     "F32": ">f4",

@@ -6,7 +6,6 @@ converted to the ICD struct field by field with `fsw.codegen.fpp_types.converter
 fresh copy. CDH-out, `fsw.python.cdh.outputs`, pairs the actuator roles with the same `Pair`.
 """
 
-import functools
 from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
@@ -47,20 +46,6 @@ def pairings(roles: Sequence[Role]) -> list[Pair]:
     ]
 
 
-@functools.cache
-def _conversion(bus: type, icd: type) -> Any:
-    """A bus struct's conversion to an ICD struct, planned once.
-
-    Args:
-        bus: the bus struct's tuple.
-        icd: the ICD struct's tuple.
-
-    Returns:
-        The conversion.
-    """
-    return fpp_types.converter(bus, icd)
-
-
 def convert(pairs: Sequence[Pair], messages: Mapping[str, Any]) -> dict[str, Any]:
     """Each pair's bus struct as its GNC port's value.
 
@@ -71,4 +56,6 @@ def convert(pairs: Sequence[Pair], messages: Mapping[str, Any]) -> dict[str, Any
     Returns:
         Each value, an ICD struct's tuple, by its GNC port.
     """
-    return {pair.port: _conversion(pair.bus, pair.icd)(messages[pair.role]) for pair in pairs}
+    return {
+        pair.port: fpp_types.converter(pair.bus, pair.icd)(messages[pair.role]) for pair in pairs
+    }

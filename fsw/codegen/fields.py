@@ -6,11 +6,9 @@ field that is itself a struct is refused. `fsw.codegen.fpp_types.converter` appl
 Python values, and `fsw.codegen.bus_converter` to the F´ build's generated C++.
 """
 
-from typing import Any
-
 import numpy as np
 
-from fsw.codegen.fpp_model import Array, Enum, Member, Struct
+from fsw.codegen.fpp_model import Array, Member, Struct, Types
 
 __all__ = ["DTYPES", "STRUCT_CODES", "Form", "form", "plan"]
 
@@ -42,7 +40,7 @@ Form = tuple[tuple[int, ...], np.dtype | str]
 is not a number."""
 
 
-def form(member: Member, types: dict[str, Struct | Enum | Array]) -> Form:
+def form(member: Member, types: Types) -> Form:
     """A struct member's shape and element type, through any arrays of arrays.
 
     Args:
@@ -62,7 +60,7 @@ def form(member: Member, types: dict[str, Struct | Enum | Array]) -> Form:
 
 def plan(
     target: Struct,
-    types: dict[str, Any],
+    types: Types,
     sources: dict[str, tuple[str, Form]],
     source_name: str,
 ) -> list[tuple[Member, str, Form]]:

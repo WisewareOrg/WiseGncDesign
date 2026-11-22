@@ -361,7 +361,7 @@ def test_every_algorithm_s_fpp_is_in_the_contract_with_or_without_an_f_prime_com
         (tmp_path / "algorithms" / name / f"{name}.fpp").touch()
         if fprime:
             (tmp_path / "algorithms" / name / "CMakeLists.txt").touch()
-    monkeypatch.setattr("fsw.codegen.deployment._REPOSITORY", tmp_path)
+    monkeypatch.setattr("fsw.codegen.deployment.REPOSITORY", tmp_path)
 
     assert algorithm_files() == (
         tmp_path / "algorithms" / "built" / "built.fpp",
