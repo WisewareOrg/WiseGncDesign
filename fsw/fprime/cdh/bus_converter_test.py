@@ -17,7 +17,7 @@ import numpy as np
 
 from fsw.codegen.deployment import contract_model
 from fsw.codegen.fields import form, plan
-from fsw.codegen.fpp_model import Struct
+from fsw.codegen.fpp_model import struct_named
 from fsw.codegen.roles import Role, roles
 from lab.bus_emulator import deserialize, serialize
 
@@ -44,8 +44,7 @@ def _planned(role: Role) -> list[Any]:
         Each GNC member, its bus field's name and its form.
     """
     model = contract_model()
-    bus, icd = model.types[role.bus], model.types[role.icd]
-    assert isinstance(bus, Struct) and isinstance(icd, Struct), f"{role.bus} and {role.icd} are structs"
+    bus, icd = struct_named(model.types, role.bus), struct_named(model.types, role.icd)
     sources = {m.name.lower(): (m.name, form(m, model.types)) for m in bus.members}
     return plan(icd, model.types, sources, role.bus)
 

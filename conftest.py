@@ -531,7 +531,7 @@ def icd_messages() -> dict[str, IcdMessage]:
     from fsw.codegen import fpp_types
     from fsw.codegen.deployment import contract_model
     from fsw.codegen.fields import form
-    from fsw.codegen.fpp_model import Struct
+    from fsw.codegen.fpp_model import struct_named
     from fsw.codegen.roles import roles
 
     model = contract_model()
@@ -539,9 +539,7 @@ def icd_messages() -> dict[str, IcdMessage]:
     messages = {}
     for name in dict.fromkeys(role.icd for role in roles(model)):
         values = {}
-        struct = model.types[name]
-        assert isinstance(struct, Struct), f"{name} is a struct"
-        for member in struct.members:
+        for member in struct_named(model.types, name).members:
             shape, element = form(member, model.types)
             count = int(np.prod(shape, dtype=int))
             elements = [next(counter) + 0.5 for _ in range(count)]

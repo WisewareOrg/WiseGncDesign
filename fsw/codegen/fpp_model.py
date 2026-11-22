@@ -34,6 +34,7 @@ __all__ = [
     "Types",
     "parse",
     "read",
+    "struct_named",
 ]
 
 _FPP = Path(fprime_fpp.__file__).with_name("fpp")
@@ -367,6 +368,25 @@ def parse(directory: Path) -> Model:
 
     annotations = {n.name: n.annotation for n in nodes.values() if n.kind in _ANNOTATED}
     return Model(instances, topologies, ports, constants, types, components, annotations)
+
+
+def struct_named(types: Types, name: str) -> Struct:
+    """The struct a qualified name names.
+
+    Args:
+        types: a model's types.
+        name: the struct's qualified name, such as `Gnc.WheelCommand`.
+
+    Returns:
+        The struct.
+
+    Raises:
+        ValueError: naming the type, when it is an enum or an array.
+    """
+    definition = types[name]
+    if not isinstance(definition, Struct):
+        raise ValueError(f"type {name}, which is not a struct")
+    return definition
 
 
 def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tuple[str, _Node]]:

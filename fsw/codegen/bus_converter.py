@@ -27,7 +27,7 @@ import numpy as np
 
 from fsw.codegen.deployment import REPOSITORY, contract_files
 from fsw.codegen.fields import DTYPES, STRUCT_CODES, form, plan
-from fsw.codegen.fpp_model import Component, Model, Struct, read
+from fsw.codegen.fpp_model import Component, Model, read, struct_named
 from fsw.codegen.roles import CONVERTER, Role, roles
 
 __all__ = ["main", "render"]
@@ -77,8 +77,7 @@ def _copies(model: Model, role: Role) -> list[str]:
             array of one of `fsw.codegen.fields.STRUCT_CODES`, naming it.
     """
     (source, source_var), (target, target_var) = _ends(role)
-    source_struct, target_struct = model.types[source], model.types[target]
-    assert isinstance(source_struct, Struct) and isinstance(target_struct, Struct), f"{source} and {target} are structs"
+    source_struct, target_struct = struct_named(model.types, source), struct_named(model.types, target)
     sources = {m.name.lower(): (m.name, form(m, model.types)) for m in source_struct.members}
     statements = []
     for member, name, (shape, element) in plan(target_struct, model.types, sources, source):
@@ -230,8 +229,7 @@ def _bus_pin(model: Model, qualified: str) -> str:
         ValueError: a member is not an inline array of one of `fsw.codegen.fields.STRUCT_CODES`,
             naming it.
     """
-    bus = model.types[qualified]
-    assert isinstance(bus, Struct), f"{qualified} is a struct"
+    bus = struct_named(model.types, qualified)
     parameters, fills, arguments = [], [], []
     for member in bus.members:
         if member.type not in STRUCT_CODES or member.size is None:
