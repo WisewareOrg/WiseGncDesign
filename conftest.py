@@ -319,7 +319,12 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
         Returns:
             Each write's channel name, time tag in ns and value, oldest first.
         """
-        return [(name, t_ns, edge.values(name, [raw])[0]) for name, t_ns, raw in edge.telemetry()]
+        writes = [
+            (name, int(t), value)
+            for name, (t_ns, raws) in edge.telemetry().items()
+            for t, value in zip(t_ns, edge.values(name, [raws]), strict=True)
+        ]
+        return sorted(writes, key=lambda write: write[1])
 
     return drain
 

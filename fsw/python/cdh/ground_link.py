@@ -11,7 +11,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, NamedTuple
 
-from fsw.python.cdh import commands, telemetry
+import numpy as np
+
+from fsw.python.cdh import commands
 
 __all__ = ["GroundLink"]
 
@@ -28,7 +30,8 @@ class GroundLink:
         self._handlers = handlers
         self._uplinked: list[tuple[str, Mapping[str, Any], int]] = []
         self._responses: list[tuple[int, str, str | None]] = []
-        self._log: list[tuple[str, int, Any]] = []
+        self._log: dict[str, tuple[list[int], list[Any]]] = {}
+        self._channels: dict[tuple[str, type], tuple[str, ...]] = {}
 
     def run_commands(self, t_ns: int) -> None:
         """Runs every command uplinked since the last call, logging what each handler wrote.
@@ -40,7 +43,8 @@ class GroundLink:
         for name, args, context in queued:
             dispatched = commands.dispatch(self._handlers, name, args)
             self._responses.append((context, dispatched.response, dispatched.reason))
-            self._log.extend((channel, t_ns, value) for channel, value in dispatched.writes)
+            for channel, value in dispatched.writes:
+                self._write(channel, t_ns, value)
 
     def log(self, instance: str, written: NamedTuple | None, t_ns: int) -> None:
         """Logs an algorithm's telemetry tuple, a write per field written.
@@ -50,9 +54,30 @@ class GroundLink:
             written: its `<Name>Telemetry` tuple, or `None`.
             t_ns: ns, the tick's time, which tags the writes.
         """
-        self._log.extend(
-            (channel, t_ns, value) for channel, value in telemetry.writes(instance, written)
-        )
+        if written is None:
+            return
+        key = (instance, type(written))
+        channels = self._channels.get(key)
+        if channels is None:
+            channels = tuple(f"{instance}.{field}" for field in written._fields)
+            self._channels[key] = channels
+        for channel, value in zip(channels, written, strict=True):
+            if value is not None:
+                self._write(channel, t_ns, value.copy() if isinstance(value, np.ndarray) else value)
+
+    def _write(self, channel: str, t_ns: int, value: Any) -> None:
+        """Logs one write.
+
+        Args:
+            channel: `<instance>.<channel>`.
+            t_ns: ns, its tick's time.
+            value: the value as written.
+        """
+        column = self._log.get(channel)
+        if column is None:
+            column = self._log[channel] = ([], [])
+        column[0].append(t_ns)
+        column[1].append(value)
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command, which runs at the next tick.
@@ -74,11 +99,12 @@ class GroundLink:
         drained, self._responses = self._responses, []
         return drained
 
-    def telemetry(self) -> list[tuple[str, int, Any]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> dict[str, tuple[np.ndarray, list[Any]]]:
+        """Every telemetry write since the last call, by channel.
 
         Returns:
-            `(<instance>.<channel>, time tag in ns, value)`, the value as the algorithm wrote it.
+            For each written channel, `<instance>.<channel>` to its writes' time tags in ns and
+            their values as the algorithm wrote them, oldest first.
         """
-        drained, self._log = self._log, []
-        return drained
+        drained, self._log = self._log, {}
+        return {name: (np.array(t, np.int64), values) for name, (t, values) in drained.items()}

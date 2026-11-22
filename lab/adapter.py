@@ -145,10 +145,11 @@ class Adapter:
         """
         return self._fsw.responses()
 
-    def telemetry(self) -> list[tuple[int, int, bytes]]:
-        """The loaded copy's telemetry writes since the last call, oldest first.
+    def telemetry(self) -> dict[int, tuple[bytes, bytes]]:
+        """The loaded copy's telemetry writes since the last call, by channel ID.
 
         Returns:
-            `(channel ID, F´ time tag in ns, serialized value)`.
+            Each written channel's F´ time tags in ns as native `U64` bytes, and its serialized
+            values concatenated, oldest first.
         """
         return self._fsw.telemetry()

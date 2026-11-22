@@ -7,7 +7,7 @@ software's time tag, and every command with its response, so one recorder serves
 are kept raw during the run and typed after it, each channel in one batch.
 """
 
-from collections.abc import Callable, Coroutine, Generator
+from collections.abc import Callable, Coroutine, Generator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -129,7 +129,7 @@ class Ground(sysModel.SysModel):
         self._context = 0
         self._answers: dict[int, tuple[str, str | None]] = {}
         self._waiting = _Tick("its first tick")
-        self._writes: list[tuple[str, int, Any]] = []
+        self._writes: dict[str, list[tuple[np.ndarray, Any]]] = {}
         self._latest: dict[str, Any] = {}
         self.failure = None
         self.command_log = []
@@ -233,7 +233,7 @@ class Ground(sysModel.SysModel):
         channel = self._edge.dictionary.channel(name)
         if channel.name not in self._latest:
             return None
-        return self._edge.values(channel.name, [self._latest[channel.name]])[0]
+        return self._edge.values(channel.name, [self._latest[channel.name]])[-1]
 
     def truth(self) -> dict[str, np.ndarray]:
         """The vehicle's true state now, the stand-in for tracking.
@@ -274,9 +274,7 @@ class Ground(sysModel.SysModel):
                 (context, (response, reason))
                 for context, response, reason in self._edge.responses()
             )
-            writes = self._edge.telemetry()
-            self._writes += writes
-            self._latest.update((name, raw) for name, _, raw in writes)
+            self._take(self._edge.telemetry())
             if self._coroutine is not None:
                 try:
                     self._waiting = self._coroutine.send(None)
@@ -309,18 +307,23 @@ class Ground(sysModel.SysModel):
             For each channel written at least once, `tlm/<instance>.<channel>` to its values and
             units, and `tlm_t/<instance>.<channel>` to each write's flight software time tag in s.
         """
-        self._writes += self._edge.telemetry()
-        by_channel: dict[str, tuple[list[int], list[Any]]] = {}
-        for name, t_ns, raw in self._writes:
-            times, raws = by_channel.setdefault(name, ([], []))
-            times.append(t_ns)
-            raws.append(raw)
+        self._take(self._edge.telemetry())
         datasets = {}
-        for name, (times, raws) in by_channel.items():
+        for name, chunks in self._writes.items():
             units = self._edge.dictionary.channel(name).units
-            datasets[f"tlm/{name}"] = (self._edge.values(name, raws), units)
+            datasets[f"tlm/{name}"] = (self._edge.values(name, [raws for _, raws in chunks]), units)
             datasets[f"tlm_t/{name}"] = (
-                np.array(times) / _NANOSECONDS_PER_SECOND,
+                np.concatenate([t_ns for t_ns, _ in chunks]) / _NANOSECONDS_PER_SECOND,
                 "s",
             )
         return datasets
+
+    def _take(self, channels: Mapping[str, tuple[np.ndarray, Any]]) -> None:
+        """Keeps a drain's chunk of each channel, and each channel's latest chunk for `tlm`.
+
+        Args:
+            channels: as the radio edge's `telemetry` gives them.
+        """
+        for name, chunk in channels.items():
+            self._writes.setdefault(name, []).append(chunk)
+            self._latest[name] = chunk[1]

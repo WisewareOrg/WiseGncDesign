@@ -3,6 +3,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -130,16 +131,22 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
     m.def(
         "telemetry",
         []() {
-            py::list writes;
+            std::map<FwChanIdType, std::pair<std::vector<U64>, std::string>> columns;
             for (const auto& write : WiseFsw::groundLink.takeWrites()) {
-                writes.append(py::make_tuple(
-                    write.id, write.ns,
-                    py::bytes(reinterpret_cast<const char*>(write.value.data()), write.value.size())));
+                auto& column = columns[write.id];
+                column.first.push_back(write.ns);
+                column.second.append(reinterpret_cast<const char*>(write.value.data()), write.value.size());
             }
-            return writes;
+            py::dict channels;
+            for (const auto& [id, column] : columns) {
+                channels[py::int_(id)] = py::make_tuple(
+                    py::bytes(reinterpret_cast<const char*>(column.first.data()), column.first.size() * sizeof(U64)),
+                    py::bytes(column.second));
+            }
+            return channels;
         },
-        "Every telemetry write since the last call, oldest first: (channel ID, F´ time tag in ns, serialized "
-        "value).");
+        "Every telemetry write since the last call, by channel ID: (F´ time tags in ns as native U64 bytes, the "
+        "serialized values concatenated), each channel's writes oldest first.");
 
     m.def(
         "responses",

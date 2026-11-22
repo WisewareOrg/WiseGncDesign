@@ -94,30 +94,35 @@ class FprimeStation:
         """
         return [(context, self._responses[code], None) for context, code in self._fsw.responses()]
 
-    def telemetry(self) -> list[tuple[str, int, bytes]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> dict[str, tuple[np.ndarray, bytes]]:
+        """Every telemetry write since the last call, by channel.
 
         Returns:
-            `(<instance>.<channel>, F´ time tag in ns, bytes)`, the value as F´ serialized it.
+            For each written channel, `<instance>.<channel>` to its writes' F´ time tags in ns and
+            their bytes as F´ serialized them, concatenated, oldest first.
         """
         channels = self.dictionary.channels_by_id
-        return [(channels[i].name, t_ns, raw) for i, t_ns, raw in self._fsw.telemetry()]
+        return {
+            channels[i].name: (np.frombuffer(t_ns, np.uint64).astype(np.int64), raw)
+            for i, (t_ns, raw) in self._fsw.telemetry().items()
+        }
 
     def values(self, name: str, raws: Sequence[bytes]) -> np.ndarray:
         """One channel's writes as values, in one batch.
 
         Args:
             name: `<instance>.<channel>`.
-            raws: each write's bytes, as `telemetry` gave them.
+            raws: chunks of its writes, as `telemetry` gave them.
 
         Returns:
             As `Channel.from_raw` gives them.
 
         Raises:
-            ValueError: naming the channel, for a write that is not bytes of one value of its type.
+            ValueError: naming the channel, for bytes that are not whole values of its type.
         """
         channel = self.dictionary.channel(name)
         size = channel.type.dtype.itemsize
-        if not all(isinstance(raw, bytes) and len(raw) == size for raw in raws):
+        data = b"".join(raws)
+        if len(data) % size:
             raise ValueError(f"channel {name} decodes {size}-byte writes only")
-        return channel.from_raw(np.frombuffer(b"".join(raws), channel.type.dtype))
+        return channel.from_raw(np.frombuffer(data, channel.type.dtype))

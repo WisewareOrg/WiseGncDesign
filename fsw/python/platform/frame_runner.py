@@ -134,22 +134,22 @@ class FrameRunner:
         """
         return self._link.responses()
 
-    def telemetry(self) -> list[tuple[str, int, Any]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> dict[str, tuple[np.ndarray, list[Any]]]:
+        """Every telemetry write since the last call, by channel.
 
         Returns:
             As `GroundLink.telemetry` gives them.
         """
         return self._link.telemetry()
 
-    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
+    def values(self, name: str, raws: Sequence[list[Any]]) -> np.ndarray:
         """The values written to one channel, packed in one batch.
 
         Args:
             name: `<instance>.<channel>`.
-            raws: its writes' values, as `telemetry` gave them.
+            raws: chunks of its writes' values, as `telemetry` gave them.
 
         Returns:
             As `Channel.pack_many` gives them.
         """
-        return self.dictionary.channel(name).pack_many(raws)
+        return self.dictionary.channel(name).pack_many([v for chunk in raws for v in chunk])

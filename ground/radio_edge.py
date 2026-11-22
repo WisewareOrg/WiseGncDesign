@@ -43,11 +43,12 @@ class RadioEdge(Protocol):
         """
         ...
 
-    def telemetry(self) -> list[tuple[str, int, Any]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> dict[str, tuple[np.ndarray, Any]]:
+        """Every telemetry write since the last call, by channel.
 
         Returns:
-            `(<instance>.<channel>, time tag in ns, raw)`, the raw write in the build's own form.
+            For each written channel, `<instance>.<channel>` to a chunk: its writes' time tags in
+            ns, and their raws in the build's own form, oldest first.
         """
         ...
 
@@ -56,7 +57,7 @@ class RadioEdge(Protocol):
 
         Args:
             name: `<instance>.<channel>`.
-            raws: its raw writes, as `telemetry` gave them.
+            raws: chunks of its raw writes, as `telemetry` gave them.
 
         Returns:
             As `Channel.from_raw` gives them.
