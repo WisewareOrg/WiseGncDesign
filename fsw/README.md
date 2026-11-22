@@ -55,22 +55,21 @@ exist only between it and the configuration's extension, `_wise_fsw_<configurati
 
 Each build also has `build`, its build identity, which the harness records in the flight's
 `flight.json`, as
-[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
+[ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
 records. How commands and telemetry travel between the ground and each build, and why every
 write is pushed rather than sampled, is in
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## Example: fly the dead reckoner against a simulated spacecraft
 
-This example runs in a notebook or at a prompt, with the `sim` group installed
-(`uv sync --group sim`). It builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft
-at its nominal configuration, writes the case's parameter record from the notebook's
-`parameters(scenario)` under nav's qualified instance, as the harness does beside each run file,
-and boots the `ImuDeadReckoning` configuration's Python build idle with the values it reads back
-from the record, hosted on that vehicle by WiseDynamics' `FswHost` as the harness hosts it. A
-ground procedure gives nav its state from tracking at t = 0, and the run lasts one minute, with the
-dynamics, the IMU and the dead reckoner all stepping at 1 Hz. The ground's record is then compared
-with the vehicle's truth:
+This example runs in a notebook or at a prompt, with the environment `just pinned` installs. It
+builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft at its nominal configuration,
+writes the case's parameter record from the notebook's `parameters(scenario)` under nav's qualified
+instance, as the harness does beside each run file, and boots the `ImuDeadReckoning` configuration's
+Python build idle with the values it reads back from the record, hosted on that vehicle by
+WiseDynamics' `FswHost` as the harness hosts it. A ground procedure gives nav its state from
+tracking at t = 0, and the run lasts one minute, with the dynamics, the IMU and the dead reckoner
+all stepping at 1 Hz. The ground's record is then compared with the vehicle's truth:
 
 ```python
 >>> import tempfile
@@ -245,7 +244,7 @@ stub `Os::RawTime`, so its cycle times read 0. Each case flies a fresh copy of t
 every case reproduces its rate-group datasets from the seed, as it does nav's.
 
 The reasoning is in
-[ADR 0003 rev 3](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
+[ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
 [ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md),
 [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
 and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).

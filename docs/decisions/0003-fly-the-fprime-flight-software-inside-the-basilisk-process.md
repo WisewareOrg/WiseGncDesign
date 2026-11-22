@@ -1,11 +1,14 @@
 # 0003 — Fly the F´ flight software inside the Basilisk process
 
 **Status:** accepted
-**Decided:** 2026-11-14 (issue 51 two edges design; issue 52 tooling checks)
-**Rev:** 3
+**Decided:** 2026-11-22 (issue 51 two edges design; issue 52 tooling checks; issue 116 one pin for the F´ toolchain)
+**Rev:** 4
 
 ## Revisions
 
+- **rev 4** — 2026-11-22 — the F´ toolchain is pinned once, by the F´ tag: the lock reads its
+  versions from the framework's `requirements.txt`, in place of a hand pin held to them by a test
+  (issue 116 one pin for the F´ toolchain).
 - **rev 3** — 2026-11-14 — each case flies a fresh copy of the extension, and an F´ assert raises
   in Python, with the checks that support them; corrects rev 2's "an `FW_ASSERT` aborts the
   process" (issue 52 tooling checks); the partitions are ADR 0005 rev 1; reverses rev 2's
@@ -77,6 +80,14 @@ returns. Not covered: an assert thrown through F´ into pybind11.
 - **A reset handler per stateful component, in place of a fresh copy.** Named as the fallback, not
   taken: the fresh copy passed with no state leak and no per-case cost, and needs no reset code in
   any component. Reopened if a measured campaign's peak RSS per worker threatens the host.
+- **Hand-pinning the toolchain in `pyproject.toml`, held to F´'s pins by a test.** Two pins that
+  drift: Renovate bumped `fprime-gds` past the version the F´ tag declares and left `main` red.
+  Rejected.
+- **A constraints file or `constraint-dependencies` read from F´'s `requirements.txt`.** uv takes no
+  constraints file for `uv lock`, and `constraint-dependencies` holds inline specifiers only, so
+  either restates the versions. Rejected.
+- **Locking the whole `requirements.txt`.** It pins the test runner below this repository's minimum.
+  Rejected, in favour of a local package that declares the five tools at the file's versions.
 - **One process per case.** Pays process start-up and import on every case. Rejected.
 - **`FW_ASSERTIONS_ALWAYS_ABORT`, in place of an assert that raises in Python.** It kills the worker
   and loses the case's failure, where a fault in an in-process F´ must fail the case. Rejected.
@@ -96,9 +107,11 @@ returns. Not covered: an assert thrown through F´ into pybind11.
 - The rate groups' health telemetry is recorded on F´'s stub raw time, so it repeats from the seed
   with cycle times of 0; the trade is on issue 57 GNC sub-topology, and its cost is issue 80
   telemetry recording cost.
-- F´ and Eigen are pinned by release tag, with no git submodule, and Renovate bumps both tags. F´'s
-  arrives with `fprime-tools`, `fprime-fpp` and `fprime-gds` as one update, and a test holds those
-  and `cmake` and `ninja` to F´'s pins.
+- F´ and Eigen are pinned by release tag, with no git submodule, and Renovate bumps both tags. The
+  F´ toolchain (`cmake`, `ninja`, `fprime-tools`, `fprime-fpp`, `fprime-gds`) has no pin of its own:
+  `uv.lock` holds the versions the F´ tag's `requirements.txt` declares, hashed, and a changed tag
+  fails the lock check until the lock is regenerated. The lock therefore needs the F´ clone present,
+  and every job that syncs or checks the lock clones first.
 - Each flight's `flight.json` records which FSW flew: `fsw` and `build` tell two builds of one
   commit apart, and the F´ build's `projectVersion` names the commit built from (`-dirty` when
   uncommitted), so a stale extension shows against the run file's `versions_caller_commit`.

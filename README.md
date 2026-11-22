@@ -40,7 +40,7 @@ system C++ compiler and git. The F´ framework and Eigen are fetched by tag into
 under `fsw/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
 GitLab only the first time, or when a tag changes. Each sync rebuilds the F´ build cache from
 scratch, which needs no network. Why by tag is in
-[ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+[ADR 0003 rev 4](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 `just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
 picked up. That rebuild reuses the existing cache, so after switching branches run `just pinned` or
@@ -49,7 +49,7 @@ kernel that loaded it refuses to fly once it is rebuilt; restart the kernel. A P
 no F´ build, and the F´ build's tests skip when it is absent; where a Python build's dictionary
 comes from is in [`fsw/README.md`](fsw/README.md#the-dictionary). Why the F´ build flies inside
 the simulation is in
-[ADR 0003 rev 3](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
+[ADR 0003 rev 4](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
 and how it meets the sim in
 [ADR 0006 rev 1](docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md);
 how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
