@@ -6,6 +6,8 @@ tick it was written at. CDH runs the queue through `cdh.commands` and logs what 
 through `cdh.telemetry`; the frame runner packs the values with the dictionary.
 """
 
+from __future__ import annotations
+
 from collections.abc import Mapping
 from typing import Any, NamedTuple
 

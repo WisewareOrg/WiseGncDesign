@@ -10,10 +10,6 @@ on:
 permissions:
   contents: read
 
-# Every job runs on requires-python's floor, not whatever Python the runner image ships.
-env:
-  UV_PYTHON: "3.12"
-
 concurrency:
   group: checks-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -22,6 +18,9 @@ jobs:
   ruff:
     name: ruff
     runs-on: ubuntu-latest
+    # requires-python's floor, not whatever Python the runner image ships.
+    env:
+      UV_PYTHON: "3.12"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,6 +37,9 @@ jobs:
   requirements:
     name: requirements
     runs-on: ubuntu-latest
+    # requires-python's floor, not whatever Python the runner image ships.
+    env:
+      UV_PYTHON: "3.12"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,6 +54,9 @@ jobs:
   pytest:
     name: pytest
     runs-on: ubuntu-latest
+    # requires-python's floor, not whatever Python the runner image ships.
+    env:
+      UV_PYTHON: "3.12"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,6 +93,9 @@ jobs:
   python-first:
     name: python-first
     runs-on: ubuntu-latest
+    # requires-python's floor, not whatever Python the runner image ships.
+    env:
+      UV_PYTHON: "3.12"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

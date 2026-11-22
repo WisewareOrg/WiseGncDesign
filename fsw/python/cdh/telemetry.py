@@ -5,6 +5,8 @@ A field is a channel of the algorithm's instance, and `None` is not written, whi
 dictionary.
 """
 
+from __future__ import annotations
+
 from typing import Any, NamedTuple
 
 import numpy as np
