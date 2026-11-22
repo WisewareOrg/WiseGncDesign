@@ -17,170 +17,132 @@ from packaging.utils import canonicalize_name
 HOOK = Path(__file__).parent / "toolchain_hook.py"
 """The hook module, beside this test."""
 
-
-def _requirements(root: Path, lines: list[str]) -> None:
-    """Writes the framework's requirements file where the hook reads it.
-
-    Args:
-        root: the directory holding `lib/fprime/requirements.txt`.
-        lines: the file's lines.
-    """
-    path = root / "lib" / "fprime" / "requirements.txt"
-    path.parent.mkdir(parents=True)
-    path.write_text("\n".join(lines) + "\n")
+PINNED = {
+    "cmake": "9.8.7",
+    "fprime-fpp": "1.2.3",
+    "fprime-gds": "5.6.7",
+    "fprime-tools": "5.6.8",
+    "ninja": "2.3.4.5",
+}
+"""The five tools at versions that are not the repository's real ones."""
 
 
-def _update(root: Path) -> dict[str, Any]:
-    """Runs the hook on a root, as the build backend does.
+def pin_lines(**spelled: str) -> list[str]:
+    """List the five tools' `==` lines, replacing the line of any tool given by its name.
 
     Args:
-        root: the directory holding `lib/fprime/requirements.txt`.
+        **spelled: replacement lines keyed by tool name with `-` written `_`.
 
     Returns:
-        The metadata the hook updated.
+        One line per tool in `PINNED`.
     """
-    spec = importlib.util.spec_from_file_location("toolchain_hook", HOOK)
-    assert spec is not None and spec.loader is not None
-    module = ModuleType(spec.name)
-    spec.loader.exec_module(module)
-    metadata: dict[str, Any] = {}
-    module.ToolchainHook(str(root), {}).update(metadata)
-    return metadata
+    return [spelled.get(tool.replace("-", "_"), f"{tool}=={ver}") for tool, ver in PINNED.items()]
 
 
-def test_the_hook_declares_the_five_tools_at_the_versions_the_file_pins_and_nothing_else(
-    tmp_path: Path,
-):
-    """Only the toolchain's lines become dependencies; other pins, comments and blanks are dropped.
+class TestToolchainHook:
+    """The hook run on a root holding a framework requirements file."""
 
-    Args:
-        tmp_path: the root holding a requirements file whose versions are not the repository's.
-    """
-    _requirements(
-        tmp_path,
-        [
-            "# the framework's pins",
-            "",
-            "cmake==9.8.7",
-            "fprime-fpy==0.0.1",
-            "fprime-fpp==1.2.3",
-            "fprime-gds==5.6.7",
-            "fprime-tools==5.6.8",
-            "fprime-yamcs==0.0.2",
-            "ninja==2.3.4.5",
-            "pytest==0.0.3",
-        ],
-    )
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path: Path):
+        """Keep the root and load the hook module.
 
-    metadata = _update(tmp_path)
+        Args:
+            tmp_path: the root the hook reads `lib/fprime/requirements.txt` from.
+        """
+        self.root = tmp_path
+        spec = importlib.util.spec_from_file_location("toolchain_hook", HOOK)
+        assert spec is not None, f"cannot load {HOOK}"
+        assert spec.loader is not None, f"{HOOK} has no loader"
+        self.module = ModuleType(spec.name)
+        spec.loader.exec_module(self.module)
 
-    assert sorted(metadata["dependencies"]) == [
-        "cmake==9.8.7",
-        "fprime-fpp==1.2.3",
-        "fprime-gds==5.6.7",
-        "fprime-tools==5.6.8",
-        "ninja==2.3.4.5",
-    ]
+    def write_requirements(self, lines: list[str]) -> None:
+        """Write the framework's requirements file where the hook reads it.
 
+        Args:
+            lines: the file's lines.
+        """
+        path = self.root / "lib" / "fprime" / "requirements.txt"
+        path.parent.mkdir(parents=True)
+        path.write_text("\n".join(lines) + "\n")
 
-def test_the_hook_refuses_a_file_missing_a_tool_naming_it(tmp_path: Path):
-    """A requirements file without one of the five raises, naming the missing tool.
+    def update(self) -> dict[str, Any]:
+        """Run the hook on the root, as the build backend does.
 
-    Args:
-        tmp_path: the root holding a requirements file without `fprime-gds`.
-    """
-    _requirements(
-        tmp_path,
-        [
-            "cmake==9.8.7",
-            "fprime-fpp==1.2.3",
-            "fprime-tools==5.6.8",
-            "ninja==2.3.4.5",
-            "fprime-gds-extra==0.0.1",
-        ],
-    )
+        Returns:
+            The metadata the hook updated.
+        """
+        metadata: dict[str, Any] = {}
+        self.module.ToolchainHook(str(self.root), {}).update(metadata)
+        return metadata
 
-    with pytest.raises(ValueError, match="fprime-gds"):
-        _update(tmp_path)
+    def test_only_the_five_tools_become_dependencies(self):
+        """Other pins, comments and blanks in the file are dropped."""
+        self.write_requirements(
+            ["# the framework's pins", "", "fprime-fpy==0.0.1", *pin_lines(), "pytest==0.0.3"]
+        )
 
+        dependencies = self.update()["dependencies"]
 
-def test_the_hook_names_every_missing_tool(tmp_path: Path):
-    """A file missing several of the five raises naming each of them.
+        assert sorted(dependencies) == sorted(f"{t}=={v}" for t, v in PINNED.items()), (
+            f"dependencies {dependencies} are not exactly the five tools at the file's versions"
+        )
 
-    Args:
-        tmp_path: the root holding a requirements file with only `cmake` and `ninja`.
-    """
-    _requirements(tmp_path, ["cmake==9.8.7", "ninja==2.3.4.5"])
+    def test_a_decoy_sharing_a_tools_prefix_is_not_that_tool(self):
+        """A missing tool raises naming it, though a longer name starts with it."""
+        self.write_requirements(
+            [line for line in pin_lines() if not line.startswith("fprime-gds")]
+            + ["fprime-gds-extra==0.0.1"]
+        )
 
-    with pytest.raises(ValueError) as raised:
-        _update(tmp_path)
+        with pytest.raises(ValueError, match="fprime-gds"):
+            self.update()
 
-    message = str(raised.value)
-    assert all(tool in message for tool in ("fprime-tools", "fprime-fpp", "fprime-gds"))
+    def test_every_missing_tool_is_named(self):
+        """A file missing several of the five names each of them, not only the first."""
+        self.write_requirements(["cmake==9.8.7", "ninja==2.3.4.5"])
 
+        with pytest.raises(ValueError) as raised:
+            self.update()
 
-def test_the_hook_declares_a_pin_spelled_otherwise_as_the_same_clean_requirement(tmp_path: Path):
-    """An inline comment, name case, `_` for `-` and spaces around `==` do not change the pin.
+        message = str(raised.value)
+        for tool in ("fprime-tools", "fprime-fpp", "fprime-gds"):
+            assert tool in message, f"the message {message!r} does not name the missing {tool}"
 
-    Args:
-        tmp_path: the root holding a requirements file whose pins are spelled in variant ways.
-    """
-    _requirements(
-        tmp_path,
-        [
-            "CMake == 9.8.7",
-            "ninja==2.3.4.5  # the generator",
-            "fprime_tools==5.6.8",
-            "FPRIME-FPP==1.2.3",
-            "fprime.gds==5.6.7",
-        ],
-    )
+    def test_a_pin_spelled_otherwise_is_the_same_clean_requirement(self):
+        """A comment, name case, `_` or `.` for `-`, and spaces around `==` do not change the pin."""
+        self.write_requirements(
+            pin_lines(
+                cmake="CMake == 9.8.7",
+                ninja="ninja==2.3.4.5  # the generator",
+                fprime_tools="fprime_tools==5.6.8",
+                fprime_fpp="FPRIME-FPP==1.2.3",
+                fprime_gds="fprime.gds==5.6.7",
+            )
+        )
 
-    metadata = _update(tmp_path)
+        dependencies = self.update()["dependencies"]
 
-    parsed = {
-        canonicalize_name(r.name): str(r.specifier)
-        for r in map(Requirement, metadata["dependencies"])
-    }
-    assert parsed == {
-        "cmake": "==9.8.7",
-        "ninja": "==2.3.4.5",
-        "fprime-tools": "==5.6.8",
-        "fprime-fpp": "==1.2.3",
-        "fprime-gds": "==5.6.7",
-    }
+        parsed = {
+            canonicalize_name(r.name): str(r.specifier) for r in map(Requirement, dependencies)
+        }
+        assert parsed == {tool: f"=={ver}" for tool, ver in PINNED.items()}, (
+            f"dependencies {dependencies} are not the five tools at the file's versions"
+        )
 
+    @pytest.mark.parametrize("unpinned", ["cmake>=9.8.7", "cmake~=9.8", "cmake"])
+    def test_a_tool_not_pinned_with_an_equals_sign_is_refused(self, unpinned: str):
+        """A range or a bare name for a tool is not a pin, so the hook raises naming the tool.
 
-@pytest.mark.parametrize("unpinned", ["cmake>=9.8.7", "cmake~=9.8", "cmake"])
-def test_the_hook_refuses_a_tool_that_is_not_pinned_with_an_equals_sign(
-    tmp_path: Path, unpinned: str
-):
-    """A range or a bare name for a tool is not a pin, so the hook raises naming the tool.
+        Args:
+            unpinned: the `cmake` line.
+        """
+        self.write_requirements(pin_lines(cmake=unpinned))
 
-    Args:
-        tmp_path: the root holding a requirements file whose `cmake` line is not an `==` pin.
-        unpinned: the `cmake` line.
-    """
-    _requirements(
-        tmp_path,
-        [
-            unpinned,
-            "fprime-fpp==1.2.3",
-            "fprime-gds==5.6.7",
-            "fprime-tools==5.6.8",
-            "ninja==2.3.4.5",
-        ],
-    )
+        with pytest.raises(ValueError, match="cmake"):
+            self.update()
 
-    with pytest.raises(ValueError, match="cmake"):
-        _update(tmp_path)
-
-
-def test_the_hook_tells_a_missing_requirements_file_to_run_just_sync(tmp_path: Path):
-    """A root without the framework clone raises a message naming `just _sync`, not a bare OS error.
-
-    Args:
-        tmp_path: a root with no `lib/fprime/requirements.txt`.
-    """
-    with pytest.raises(ValueError, match="just _sync"):
-        _update(tmp_path)
+    def test_a_missing_requirements_file_says_to_run_just_sync(self):
+        """A root without the framework clone raises a message naming `just _sync`."""
+        with pytest.raises(ValueError, match="just _sync"):
+            self.update()
