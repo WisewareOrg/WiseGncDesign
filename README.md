@@ -18,7 +18,8 @@ analysis/      one analyzer per metric: its limits, error math and plot
 scenarios/     how each scenario a TST item references is flown: its ground procedure and marks
 algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
                                     re-exporting the notebook
-algorithms/utils/    numba-compiled math the algorithms share: quaternions, the RK4 step
+algorithms/utils/    the math the algorithms share, a folder per utility; one with C++ for the
+                     F´ build has a pybind11 extension `just fsw` builds, for its tests
 missions/      notebooks that plan missions, and the test running them
 fsw/           the flight software: python/, the Python build's partitions; fprime/, the F´
                project; fpp/, the shared FPP contract and GNC sub-topologies; and a worked example
