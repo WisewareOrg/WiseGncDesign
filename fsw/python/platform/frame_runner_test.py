@@ -21,7 +21,7 @@ from fsw.codegen.deployment import Contract, configuration_model
 from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.fpp_types import named
 from fsw.codegen.roles import Role, roles
-from fsw.mock import MOCK, device_contract
+from fsw.mock import MOCK, device_contract, exposure
 from fsw.mock.mock_gnc import LOG, Sink, Source
 from fsw.payloads import payload_type
 from fsw.python import FrameRunner
@@ -241,7 +241,8 @@ def roles_contract(tmp_path_factory: pytest.TempPathFactory) -> tuple[Contract, 
     """
     declared = roles(configuration_model(CONFIGURATION, contract=MOCK))
     directory = tmp_path_factory.mktemp("roles")
-    contract = device_contract(directory, "MockRoles", declared, declared, component="MockDevice")
+    ports = [exposure(role) for role in declared]
+    contract = device_contract(directory, "MockRoles", declared, ports, component="MockDevice")
     return contract, declared
 
 

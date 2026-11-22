@@ -29,7 +29,7 @@ from fsw.codegen.deployment import (
 )
 from fsw.codegen.fpp_model import Model, read
 from fsw.codegen.roles import Role, roles
-from fsw.mock import MOCK, device, device_contract, edited, port, sub_topology
+from fsw.mock import MOCK, device, device_contract, edited, exposure, port, sub_topology
 
 DECLARED = roles(contract_model())
 """Every role the contract declares."""
@@ -133,7 +133,7 @@ def test_a_configuration_s_role_wiring_is_generated_from_the_roles_it_takes(
     """
     assert SENSORS and ACTUATORS
     name = "Wired"
-    contract = device_contract(tmp_path, name, DECLARED, exposed)
+    contract = device_contract(tmp_path, name, DECLARED, [exposure(r) for r in exposed])
     gnc = f"{name}.device"
 
     model = read(fpp_files(name, tmp_path, contract=contract))
@@ -206,7 +206,7 @@ def test_a_cdh_port_two_lab_bus_driver_ports_feed_is_refused_naming_both(
         monkeypatch: renders the deployment from that template.
     """
     name = "Twice"
-    contract = device_contract(tmp_path, name, DECLARED, SENSORS)
+    contract = device_contract(tmp_path, name, DECLARED, [exposure(r) for r in SENSORS])
     role = SENSORS[0]
     other = len(SENSORS)
     original = (REPOSITORY / "fsw" / "fprime" / "deployment" / "Fsw.fpp.in").read_text()

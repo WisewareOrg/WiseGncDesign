@@ -17,7 +17,16 @@ import numpy as np
 from fsw.codegen.deployment import Contract
 from fsw.codegen.roles import Role
 
-__all__ = ["ARGS", "MOCK", "device", "device_contract", "edited", "port", "sub_topology"]
+__all__ = [
+    "ARGS",
+    "MOCK",
+    "device",
+    "device_contract",
+    "edited",
+    "exposure",
+    "port",
+    "sub_topology",
+]
 
 _HERE = Path(__file__).resolve().parent
 
@@ -136,23 +145,35 @@ def port(role: Role) -> str:
     return role.input if role.sensor else role.output
 
 
+def exposure(role: Role) -> str:
+    """The sub-topology port declaration that exposes a role's device port.
+
+    Args:
+        role: the role.
+
+    Returns:
+        `port <port> = device.<port>`, as `sub_topology` takes it.
+    """
+    return f"port {port(role)} = device.{port(role)}"
+
+
 def device_contract(
     directory: Path,
     name: str,
     declared: Sequence[Role],
-    exposed: Sequence[Role],
+    ports: Sequence[str],
     component: str = "Device",
 ) -> Contract:
     """A test mock contract of one configuration: a device taking every declared role.
 
-    The device is written beside the configuration's GNC sub-topology, which exposes the ports of
-    the roles given.
+    The device is written beside the configuration's GNC sub-topology, which exposes the ports
+    given.
 
     Args:
         directory: where the device and the configuration are written.
         name: the configuration's name.
         declared: the roles the device's ports are of.
-        exposed: the roles whose ports the sub-topology exposes, in order.
+        ports: each further topology port's declaration, in order, as `sub_topology` takes them.
         component: the device component's name, in module `MockGnc`.
 
     Returns:
@@ -161,7 +182,6 @@ def device_contract(
     (directory / "gnc").mkdir(exist_ok=True)
     fpp = directory / f"{component}.fpp"
     fpp.write_text(device(component, declared))
-    ports = [f"port {port(role)} = device.{port(role)}" for role in exposed]
     (directory / "gnc" / f"{name}.fpp").write_text(
         sub_topology(name, [("device", f"MockGnc.{component}")], ports)
     )

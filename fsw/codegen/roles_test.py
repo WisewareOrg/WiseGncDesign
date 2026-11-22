@@ -4,15 +4,15 @@ The `roles` tests read a mock model of two roles, so none needs the F´ framewor
 tests render mock configurations of the contract's roles, on a mock device taking each.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import Contract, configuration_model, contract_model
+from fsw.codegen.deployment import configuration_model, contract_model
 from fsw.codegen.fpp_model import Model
 from fsw.codegen.roles import Role, roles, taken
-from fsw.mock import device, sub_topology
+from fsw.mock import device_contract, exposure
 
 DECLARED = roles(contract_model())
 """Every role the contract declares."""
@@ -92,40 +92,6 @@ def test_a_role_whose_ends_do_not_say_its_direction_is_refused_by_name(
         roles(converter_mock(edit))
 
 
-def _taking(directory: Path, name: str, ports: Sequence[str]) -> Model:
-    """A mock configuration's model: a device of every declared role, exposing the ports given.
-
-    Args:
-        directory: where the device and the configuration are written.
-        name: the configuration.
-        ports: each sub-topology port's declaration beside `tickIn`.
-
-    Returns:
-        The model.
-    """
-    (directory / "gnc").mkdir(exist_ok=True)
-    fpp = directory / "Device.fpp"
-    fpp.write_text(device("Device", DECLARED))
-    (directory / "gnc" / f"{name}.fpp").write_text(
-        sub_topology(name, [("device", "MockGnc.Device")], ports)
-    )
-    return configuration_model(name, contract=Contract((fpp,), directory / "gnc"))
-
-
-def _exposed(role: Role) -> str:
-    """The sub-topology port a configuration takes a role at.
-
-    Args:
-        role: the role.
-
-    Returns:
-        `port <role>In = device.<role>In` for a sensor, `port <role>Out = device.<role>Out` for an
-        actuator.
-    """
-    port = role.input if role.sensor else role.output
-    return f"port {port} = device.{port}"
-
-
 @pytest.mark.parametrize(
     "exposed",
     [DECLARED, SENSORS, ACTUATORS, []],
@@ -141,7 +107,10 @@ def test_a_configuration_takes_the_roles_its_sub_topology_exposes_in_converter_o
         exposed: the roles the sub-topology exposes.
     """
     assert SENSORS and ACTUATORS
-    model = _taking(tmp_path, "Taking", [_exposed(role) for role in reversed(exposed)])
+    ports = [exposure(role) for role in reversed(exposed)]
+    model = configuration_model(
+        "Taking", contract=device_contract(tmp_path, "Taking", DECLARED, ports)
+    )
 
     assert taken(model, "Taking") == tuple(exposed)
 
@@ -165,7 +134,9 @@ def test_a_port_that_names_no_role_in_its_direction_is_refused_naming_it(
         port: the port's declaration.
         named: the direction of the instance port it exposes, as the refusal names it.
     """
-    model = _taking(tmp_path, "Refused", [port])
+    model = configuration_model(
+        "Refused", contract=device_contract(tmp_path, "Refused", DECLARED, [port])
+    )
     short = port.split()[1]
 
     with pytest.raises(ValueError, match=rf"port {short}, an instance's .*, names no {named} role"):
