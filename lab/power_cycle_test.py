@@ -11,13 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from fsw.codegen.deployment import fprime_configurations
 from fsw.codegen.dictionary import Dictionary
 from ground.fprime_station import FprimeStation
-from lab.power_cycle import built, power_cycle, source
-
-if not all(built(c) for c in fprime_configurations()):
-    pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
+from lab.power_cycle import power_cycle, source
 
 NS = 1_000_000_000
 """ns per s."""

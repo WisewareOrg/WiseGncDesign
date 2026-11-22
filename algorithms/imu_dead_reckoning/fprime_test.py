@@ -13,15 +13,10 @@ from Basilisk.architecture import messaging
 from scipy.spatial.transform import Rotation
 
 from algorithms.imu_dead_reckoning.imu_dead_reckoning import ImuDeadReckoner
-from fsw.codegen.deployment import bus_port, configuration_model, contract_model
+from fsw.codegen.deployment import bus_port, configuration_model
 from fsw.codegen.fpp_types import Gnc
-from fsw.codegen.roles import roles
 from ground.fprime_station import FprimeStation
-from lab import built
 from lab.bus_emulator import serialize
-
-if not built("ImuDeadReckoning"):
-    pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
 
 MU = 3.986004360e14
 """m^3/s^2, Earth's gravitational parameter, as the scenarios set it."""
@@ -40,60 +35,24 @@ NAV = Gnc.ImuDeadReckonerParameters(mu=MU, dcm_PB=MOUNTING)
 """Nav's parameters."""
 
 
-@pytest.fixture(scope="session")
-def configuration() -> str:
-    """The dead reckoner's configuration, the only one this module's cases fly.
+CONFIGURATION = "ImuDeadReckoning"
+"""The dead reckoner's configuration, the only one this module's cases fly."""
 
-    Returns:
-        `ImuDeadReckoning`.
-    """
-    return "ImuDeadReckoning"
-
-
-@pytest.fixture
-def nav_parameters() -> Gnc.ImuDeadReckonerParameters:
-    """Nav's parameters for this module's cases: `NAV`, its mounting not the identity.
-
-    Returns:
-        `NAV`.
-    """
-    return NAV
-
-
-@pytest.fixture
-def case_parameters(
-    case_parameters: dict[str, Any], nav_parameters: Gnc.ImuDeadReckonerParameters
-) -> dict[str, Any]:
-    """The deployment's case parameters, nav's tuple replaced by `nav_parameters`.
-
-    Args:
-        case_parameters: the deployment's, each zero, as the root conftest gives them.
-        nav_parameters: nav's parameters.
-
-    Returns:
-        Each instance's tuple, by its qualified name.
-    """
-    return {
-        instance: nav_parameters if type(t) is type(nav_parameters) else t
-        for instance, t in case_parameters.items()
-    }
+NAV_INSTANCE = f"{CONFIGURATION}.nav"
+"""Nav's qualified instance name, which the record keys its parameters by."""
 
 
 @pytest.fixture(scope="module")
 def imu_bus() -> Callable[[Any, Any], list[tuple[int, bytes]]]:
-    """One IMU reading's bus for a step: nav's role's message bytes on its LabBusDriver port.
+    """One IMU reading's bus for a step: the IMU role's message bytes on its LabBusDriver port.
 
-    The role is the contract's `Cdh.BusConverter` role whose GNC struct nav's `imuIn` takes, and
-    its port the one the configuration's deployment wires to the role's CDH input.
+    The port is the one the configuration's deployment wires to the IMU role's CDH input, `imuIn`.
 
     Returns:
         A function of the angular velocity and the acceleration, each three values in the
         platform frame, giving `[(port, bytes)]`, the message's dv and dr zero.
     """
-    model = contract_model()
-    [imu_in] = [p for p in model.components["Gnc.ImuDeadReckoner"].inputs if p.name == "imuIn"]
-    [role] = [r for r in roles(model) if r.icd == imu_in.args[0].type]
-    port = bus_port("ImuDeadReckoning", role.input)
+    port = bus_port(CONFIGURATION, "imuIn")
 
     def bus(angVelPlatform: Any, accelPlatform: Any) -> list[tuple[int, bytes]]:
         """The bus for one reading.
@@ -153,9 +112,7 @@ def _state(epoch: float, attitude: np.ndarray = Q0) -> dict[str, Any]:
 
 
 def test_a_booted_reckoner_reports_idle_and_no_state(
-    configuration: str,
-    booted: ModuleType,
-    station: FprimeStation,
+    boot: Callable[..., tuple[ModuleType, FprimeStation]],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
 ):
@@ -165,15 +122,14 @@ def test_a_booted_reckoner_reports_idle_and_no_state(
     `test_each_rate_group_runs_once_every_divider_ticks`.
 
     Args:
-        configuration: the dead reckoner's configuration.
-        booted: the test's copy of the deployment, booted idle on the case's parameters.
-        station: the station on it.
+        boot: boots the configuration on the parameters given.
         decoded: drains the station's telemetry as values.
         imu_bus: the IMU message's bus for a reading.
     """
-    divider = configuration_model(configuration).constants[f"{configuration}.navDivider"]
+    fsw, station = boot(CONFIGURATION, {NAV_INSTANCE: NAV})
+    divider = configuration_model(CONFIGURATION).constants[f"{CONFIGURATION}.navDivider"]
     for tick in range(1, divider + 1):
-        booted.step(t_ns=tick * NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
+        fsw.step(t_ns=tick * NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
 
     assert [(n, v) for n, _, v in decoded(station) if n.startswith("nav.")] == [
         ("nav.navState", "idle")
@@ -182,8 +138,7 @@ def test_a_booted_reckoner_reports_idle_and_no_state(
 
 @pytest.mark.parametrize("sign", [-1.0], ids=["w-negative"])
 def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
-    booted: ModuleType,
-    station: FprimeStation,
+    boot: Callable[..., tuple[ModuleType, FprimeStation]],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     sign: float,
     imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
@@ -191,14 +146,14 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     """Commanded q or -q as of t = 0 and stepped 1 s at zero rate, the deployment writes q.
 
     Args:
-        booted: the test's copy of the deployment, booted idle on the case's parameters.
-        station: the station on it.
+        boot: boots the configuration on the parameters given.
         decoded: drains the station's telemetry as values.
         sign: the sign the initial quaternion is given with.
         imu_bus: the IMU message's bus for a reading.
     """
+    fsw, station = boot(CONFIGURATION, {NAV_INSTANCE: NAV})
     station.uplink("nav.initNavState", _state(0.0, sign * Q0), 1)
-    booted.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
+    fsw.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
 
     attitude = _latest(decoded(station))["nav.bodyEciAttitude"]
     np.testing.assert_allclose(attitude, Q0, rtol=0, atol=1e-15)
@@ -216,8 +171,7 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     ids=["slow", "past-a-half-turn", "at-10-Hz", "from-60-s", "moon-mu"],
 )
 def test_the_fprime_build_matches_the_notebook_reading_for_reading(
-    booted: ModuleType,
-    station: FprimeStation,
+    boot: Callable[..., tuple[ModuleType, FprimeStation]],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     rate_rad_s: float,
     step_ns: int,
@@ -236,8 +190,7 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
     of 81, so a nav flying any other mu than the record's fails.
 
     Args:
-        booted: the test's copy of the deployment, booted on the case's parameters.
-        station: the station on it.
+        boot: boots the configuration on the parameters given.
         decoded: drains the station's telemetry as values.
         rate_rad_s: rad/s, the gyro reading's magnitude.
         step_ns: ns between readings.
@@ -247,18 +200,19 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
         nav_parameters: nav's parameters, which the case's record holds.
         imu_bus: the IMU message's bus for a reading.
     """
+    fsw, station = boot(CONFIGURATION, {NAV_INSTANCE: nav_parameters})
     rng = np.random.default_rng(seed)
     readings = [(rate_rad_s * rng.normal(size=3), 1e-3 * rng.normal(size=3)) for _ in range(count)]
     python = ImuDeadReckoner(nav_parameters)
     python.initNavState(**_state(float(epoch_s)))
     before = epoch_s * NS // step_ns
     for k in range(1, before + 1):
-        booted.step(t_ns=k * step_ns, bus=imu_bus(np.zeros(3), np.zeros(3)))
+        fsw.step(t_ns=k * step_ns, bus=imu_bus(np.zeros(3), np.zeros(3)))
     station.uplink("nav.initNavState", _state(float(epoch_s)), 1)
 
     for k, (omega, accel) in enumerate(readings, start=before + 1):
         python.step(t=k * step_ns / NS, imu=Gnc.ImuReading(omega, accel))
-        booted.step(t_ns=k * step_ns, bus=imu_bus(omega, accel))
+        fsw.step(t_ns=k * step_ns, bus=imu_bus(omega, accel))
 
     assert station.responses() == [(1, "OK", None)]
     _assert_matches(_latest(decoded(station)), python)

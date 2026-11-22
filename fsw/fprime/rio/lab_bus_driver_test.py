@@ -18,10 +18,7 @@ import pytest
 from fsw.codegen.deployment import bus_port, configuration_model
 from fsw.codegen.roles import Role, taken
 from fsw.mock import MOCK
-from ground import parameters
-from lab import dictionary_path
 from lab.bus_emulator import serialize
-from lab.power_cycle import power_cycle
 
 NS = 1_000_000_000
 """ns per s."""
@@ -31,30 +28,6 @@ _DRIVER = r'^Assert: "[^"]*fsw/fprime/rio/LabBusDriver\.cpp:\d+"'
 
 _TOPOLOGY = r'^Assert: "[^"]*FswTopologyAc\.cpp:\d+"'
 """An assert the deployment's generated port calls raise: bytes too short."""
-
-
-def _stepped(
-    configuration: str, prm: str, parameter_ids: list[int], port: int, data: bytes
-) -> ModuleType:
-    """A fresh copy, booted and stepped once on a role's own message on its port.
-
-    A copy that raised is never reused, so each refused push flies its own copy, and the clean
-    step first shows the port delivers, so a later raise comes from the push under test.
-
-    Args:
-        configuration: the configuration power-cycled.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
-        port: the role's LabBusDriver port.
-        data: the role's message bytes.
-
-    Returns:
-        The copy.
-    """
-    fsw = power_cycle(configuration)
-    fsw.boot(prm, parameter_ids)
-    fsw.step(t_ns=NS, bus=[(port, data)])
-    return fsw
 
 
 @pytest.mark.parametrize(
@@ -67,8 +40,7 @@ def _stepped(
 )
 def test_a_push_lab_bus_driver_cannot_deliver_raises(
     configuration: str,
-    prm: str,
-    parameter_ids: list[int],
+    boot: Callable[..., tuple[ModuleType, Any]],
     bus_by_role: dict[str, tuple[int, bytes]],
     push: Callable[[int, bytes], tuple[int, bytes]],
     source: str,
@@ -76,12 +48,13 @@ def test_a_push_lab_bus_driver_cannot_deliver_raises(
     """Each role's push that LabBusDriver cannot deliver trips F´'s assert in Python.
 
     One short of the role's message fails the connected port's deserialization, and one over
-    fails LabBusDriver's check that the port consumed every byte.
+    fails LabBusDriver's check that the port consumed every byte. A copy that raised is never
+    reused, so each refused push flies a copy of its own, and the clean step first shows the port
+    delivers, so a later raise comes from the push under test.
 
     Args:
         configuration: the configuration.
-        prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
+        boot: boots the configuration.
         bus_by_role: each role's LabBusDriver port and message bytes.
         push: the push refused, from the role's port and bytes.
         source: the assert expected, by its file.
@@ -89,7 +62,8 @@ def test_a_push_lab_bus_driver_cannot_deliver_raises(
     if not bus_by_role:
         pytest.skip(f"{configuration} takes no sensor role")
     for port, data in bus_by_role.values():
-        fsw = _stepped(configuration, prm, parameter_ids, port, data)
+        fsw, _ = boot(configuration)
+        fsw.step(t_ns=NS, bus=[(port, data)])
 
         with pytest.raises(RuntimeError, match=source):
             fsw.step(t_ns=2 * NS, bus=[push(port, data)])
@@ -114,7 +88,7 @@ def test_a_step_in_which_gnc_sends_no_actuator_command_returns_none(
 
 
 def test_each_step_returns_the_bytes_its_gnc_sent_each_actuator_port_once(
-    mock_actuation: tuple[str, Role, Any, Path],
+    mock_actuation: tuple[str, Role, Any, Path], boot: Callable[..., tuple[ModuleType, Any]]
 ) -> None:
     """MockActuation's command reaches `busIn` each step, and each step returns that step's alone.
 
@@ -123,11 +97,11 @@ def test_each_step_returns_the_bytes_its_gnc_sent_each_actuator_port_once(
 
     Args:
         mock_actuation: the configuration, its role, the Python build's command and the record.
+        boot: boots the configuration.
     """
-    configuration, role, command, record = mock_actuation
+    configuration, role, command, _ = mock_actuation
     expected = [(bus_port(configuration, role.output, contract=MOCK), serialize(command))]
-    fsw = power_cycle(configuration)
-    fsw.boot(str(parameters.dat(record, dictionary_path(configuration)).resolve()), [])
+    fsw, _ = boot(configuration)
 
     assert fsw.step(t_ns=NS, bus=[]) == expected
     assert fsw.step(t_ns=2 * NS, bus=[]) == expected

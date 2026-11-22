@@ -14,14 +14,10 @@ from types import ModuleType
 
 import pytest
 
-from fsw.codegen.deployment import fprime_configurations
 from fsw.codegen.dictionary import Dictionary
 from ground import parameters
 from ground.fprime_station import FprimeStation
-from lab import built, dictionary_path
-
-if not all(built(c) for c in fprime_configurations()):
-    pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
+from lab import dictionary_path
 
 NS = 1_000_000_000
 """ns per s."""

@@ -16,7 +16,6 @@ from fsw.codegen.deployment import (
     REPOSITORY,
     bus_port,
     configuration_model,
-    fprime_configurations,
     tick_period,
 )
 from fsw.codegen.roles import Role, taken
@@ -25,10 +24,6 @@ from fsw.payloads import payload_type
 from ground.fprime_station import FprimeStation
 from lab import Adapter, built
 from lab.bus_emulator import serialize
-
-if not all(built(c) for c in fprime_configurations()):
-    pytest.skip("an F´ build is absent; run `just fsw`", allow_module_level=True)
-
 
 NS = 1_000_000_000
 """ns per s."""
@@ -45,6 +40,8 @@ def adapter(fprime_configuration: str, prm_record: Path) -> Adapter:
     Returns:
         The adapter.
     """
+    if not built(fprime_configuration):
+        pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
     adapter = Adapter(fprime_configuration, prm_record)
     adapter.boot()
     return adapter

@@ -7,18 +7,15 @@ from collections.abc import Callable
 from types import ModuleType
 from typing import Any
 
-import pytest
-
 from algorithms.wheel_spinner.wheel_spinner import WheelSpinner
 from fsw.codegen.deployment import bus_port, configuration_model
 from fsw.codegen.fpp_types import Gnc
 from fsw.codegen.roles import Role, taken
 from ground.fprime_station import FprimeStation
-from lab import built
 from lab.bus_emulator import serialize
 
-if not built("WheelSpinning"):
-    pytest.skip("the F´ build is absent; run `just fsw`", allow_module_level=True)
+CONFIGURATION = "WheelSpinning"
+"""The spinner's configuration, the only one this module's cases fly."""
 
 NS = 1_000_000_000
 """ns per s."""
@@ -27,36 +24,8 @@ SPINNER = Gnc.WheelSpinnerParameters(motorTorque=2.5e-3)
 """The spinner's parameter: a torque other than the notebook's case value."""
 
 
-@pytest.fixture(scope="session")
-def configuration() -> str:
-    """The spinner's configuration, the only one this module's cases fly.
-
-    Returns:
-        `WheelSpinning`.
-    """
-    return "WheelSpinning"
-
-
-@pytest.fixture
-def case_parameters(case_parameters: dict[str, Any]) -> dict[str, Any]:
-    """The deployment's case parameters, the spinner's tuple replaced by `SPINNER`.
-
-    Args:
-        case_parameters: the deployment's, each zero, as the root conftest gives them.
-
-    Returns:
-        Each instance's tuple, by its qualified name.
-    """
-    return {
-        instance: SPINNER if type(t) is type(SPINNER) else t
-        for instance, t in case_parameters.items()
-    }
-
-
 def test_each_step_sends_the_notebook_s_command_and_writes_its_torque(
-    configuration: str,
-    booted: ModuleType,
-    station: FprimeStation,
+    boot: Callable[..., tuple[ModuleType, FprimeStation]],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     python_command: Callable[[Role, Any], Any],
 ) -> None:
@@ -67,19 +36,18 @@ def test_each_step_sends_the_notebook_s_command_and_writes_its_torque(
     writes `spinner.wheelTorque`, the record's torque, at the step's time.
 
     Args:
-        configuration: the spinner's configuration.
-        booted: the test's copy of the deployment, booted on the case's parameters.
-        station: the station on it.
+        boot: boots the configuration on the parameters given.
         decoded: drains the station's telemetry as values.
         python_command: gives the Python build's command for a role.
     """
-    [role] = taken(configuration_model(configuration), configuration)
+    fsw, station = boot(CONFIGURATION, {f"{CONFIGURATION}.spinner": SPINNER})
+    [role] = taken(configuration_model(CONFIGURATION), CONFIGURATION)
     sent, _ = WheelSpinner(SPINNER).step(0.0)
     command = python_command(role, sent.wheelOut)
-    expected = [(bus_port(configuration, role.output), serialize(command))]
+    expected = [(bus_port(CONFIGURATION, role.output), serialize(command))]
 
     for k in (1, 2, 3):
-        assert booted.step(t_ns=k * NS, bus=[]) == expected
+        assert fsw.step(t_ns=k * NS, bus=[]) == expected
 
     writes = [(n, t, v) for n, t, v in decoded(station) if n.startswith("spinner.")]
     assert writes == [("spinner.wheelTorque", k * NS, SPINNER.motorTorque) for k in (1, 2, 3)]
