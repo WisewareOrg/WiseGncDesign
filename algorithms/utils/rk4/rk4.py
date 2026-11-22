@@ -23,7 +23,7 @@ from numba import njit
 __all__ = ["step"]
 
 
-@njit(cache=True)
+@njit
 def step(
     fun: Callable[..., np.ndarray], t: float, y: np.ndarray, h: float, *args: object
 ) -> np.ndarray:

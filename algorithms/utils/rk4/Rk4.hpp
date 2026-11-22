@@ -1,6 +1,6 @@
 // The classic fourth-order Runge–Kutta step: rk4.py's, for the F´ build.
-#ifndef UTILS_RK4_HPP
-#define UTILS_RK4_HPP
+#ifndef RK4_RK4_HPP
+#define RK4_RK4_HPP
 
 namespace Rk4 {
 
