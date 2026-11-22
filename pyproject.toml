@@ -57,7 +57,7 @@ markers = [
 # A coroutine never awaited, such as a ground procedure's forgotten `await`, fails its test.
 filterwarnings = [
     "error:coroutine .* was never awaited:RuntimeWarning",
-    "error:Exception ignored while finalizing coroutine:pytest.PytestUnraisableExceptionWarning",
+    "error:Exception ignored .*coroutine:pytest.PytestUnraisableExceptionWarning",
 ]
 # The F´ framework clone and the F´ build cache carry F´'s own tests, which are not this project's.
 addopts = [
