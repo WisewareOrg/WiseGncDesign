@@ -28,6 +28,7 @@ from fsw.codegen.fpp_model import (
     TopologyPort,
     parse,
     read,
+    struct_named,
 )
 from fsw.codegen.members import members
 from fsw.mock import edited
@@ -318,6 +319,25 @@ def test_types_are_read_with_struct_members_in_declaration_order(mock: Model):
         },
     )
     assert "Gnc.Seconds" not in mock.types
+
+
+def test_struct_named_gives_the_struct_the_name_names(mock: Model):
+    """A struct's qualified name gives that struct.
+
+    Args:
+        mock: the mock model.
+    """
+    assert struct_named(mock.types, "Gnc.Reading") is mock.types["Gnc.Reading"]
+
+
+def test_struct_named_refuses_an_enum_naming_it(mock: Model):
+    """An enum's qualified name raises, naming the type.
+
+    Args:
+        mock: the mock model.
+    """
+    with pytest.raises(ValueError, match="Gnc.Mode"):
+        struct_named(mock.types, "Gnc.Mode")
 
 
 def test_a_component_s_commands_channels_and_parameters_are_read(mock: Model):
