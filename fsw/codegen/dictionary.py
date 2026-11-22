@@ -172,7 +172,9 @@ class Channel:
         """Every write's value in one array, from the values a Python algorithm wrote.
 
         Each value is packed into the channel's type as F´ would serialize it: a float rounds
-        to the nearest value of its type, XX
+        to the nearest value of its type, one beyond an F32's range becoming inf, and a value of
+        another kind or shape, an integer outside the type's range, or an enum name that is no
+        constant fails.
 
         Args:
             written: each write's value.
