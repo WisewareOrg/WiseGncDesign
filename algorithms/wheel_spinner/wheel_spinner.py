@@ -18,12 +18,11 @@
 
 import numpy as np
 
-from fsw.codegen.deployment import contract_files
-from fsw.codegen.fpp_model import read
+from fsw.codegen.deployment import contract_model
 from fsw.codegen.fpp_types import Gnc
 from harness.mission import Mission, mission_tests
 
-__all__ = ["WheelSpinner"]
+__all__ = ["WheelSpinner", "parameters"]
 
 # %load_ext wise_dynamics.notebook
 
@@ -66,7 +65,7 @@ __all__ = ["WheelSpinner"]
 # %%
 WHEELS = next(
     member.size
-    for member in read(contract_files()).types["Gnc.WheelCommand"].members
+    for member in contract_model().types["Gnc.WheelCommand"].members
     if member.name == "motorTorque"
 )
 """The wheels a `Gnc.WheelCommand` commands: its `motorTorque` array's length in the contract."""

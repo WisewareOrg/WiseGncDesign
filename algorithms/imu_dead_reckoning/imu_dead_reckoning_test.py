@@ -259,6 +259,32 @@ def test_a_longer_step_lowers_each_sample_s_noise(monkeypatch: pytest.MonkeyPatc
     assert inputs["accel_noise_std_m_s2"] == ImuSpacecraft.accel_noise_density_m_s2_rthz / 2
 
 
+def test_the_bound_s_step_is_nav_s_integration_step_not_the_base_tick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With a 0.5 s tick and nav running every second tick, `dt` is 1 s and each sample is per tick.
+
+    Args:
+        monkeypatch: replaces the base tick and the configuration's `navDivider` for this test.
+    """
+    monkeypatch.setattr(gross_check, "tick_period", lambda _: 0.5)
+    monkeypatch.setattr(
+        gross_check,
+        "configuration_model",
+        lambda _: SimpleNamespace(constants={"ImuDeadReckoning.navDivider": 2}),
+    )
+
+    inputs = bound_inputs()
+
+    assert inputs["step_s"] == 1.0
+    assert inputs["gyro_noise_std_rad_s"] == (
+        ImuSpacecraft.gyro_noise_density_rad_s_rthz / np.sqrt(0.5)
+    )
+    assert inputs["accel_noise_std_m_s2"] == (
+        ImuSpacecraft.accel_noise_density_m_s2_rthz / np.sqrt(0.5)
+    )
+
+
 def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() -> None:
     """`mu` is the scenario's Earth's, and `dcm_PB` the vehicle's IMU mounting, as given."""
     mounting = [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]

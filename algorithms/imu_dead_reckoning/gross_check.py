@@ -25,7 +25,7 @@ import numpy as np
 from wise_dynamics.basilisk import ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
-from fsw.codegen.deployment import tick_period
+from fsw.codegen.deployment import configuration_model, tick_period
 from harness.runs import at, read_run
 from test_attitude_knowledge import attitude_error_rad
 from test_position_knowledge import position_error_m
@@ -54,7 +54,7 @@ def attitude_bound_rad(
         gyro_bias_rad_s: `b_g`, rad/s, the norm of the drawn gyro bias.
         omega_dot_max_rad_s2: `max|omega_dot|`, rad/s^2, the true body rate's largest change.
         gyro_noise_std_rad_s: `sigma_g`, rad/s, the gyro's per-sample 1-sigma noise.
-        step_s: `dt`, s, the flight software's step.
+        step_s: `dt`, s, nav's integration step.
 
     Returns:
         (N,) rad.
@@ -87,7 +87,7 @@ def velocity_bound_m_s(
         t_s: (N,) s, time since the epoch of the commanded state.
         accel_bias_m_s2: `b_a`, m/s^2, the norm of the drawn accelerometer bias.
         accel_noise_std_m_s2: `sigma_a`, m/s^2, the accelerometer's per-sample 1-sigma noise.
-        step_s: `dt`, s, the flight software's step.
+        step_s: `dt`, s, nav's integration step.
         mean_motion_rad_s: `n`, rad/s, the orbit's mean motion.
 
     Returns:
@@ -120,7 +120,7 @@ def position_bound_m(
         t_s: (N,) s, time since the epoch of the commanded state.
         accel_bias_m_s2: `b_a`, m/s^2, the norm of the drawn accelerometer bias.
         accel_noise_std_m_s2: `sigma_a`, m/s^2, the accelerometer's per-sample 1-sigma noise.
-        step_s: `dt`, s, the flight software's step.
+        step_s: `dt`, s, nav's integration step.
         mean_motion_rad_s: `n`, rad/s, the orbit's mean motion.
 
     Returns:
@@ -260,20 +260,22 @@ def violations(
 def bound_inputs() -> dict[str, float]:
     """The bound's inputs, for the Monte Carlo test and the analysis cell alike.
 
-    The IMU samples once per flight-software step, so each sample's noise is `ImuSpacecraft`'s
-    density over the square root of the step; WiseDynamics' `tests/test_imu_spacecraft.py` holds
-    its IMU to that.
+    The IMU samples once per base tick `tickPeriod`, so each sample's noise is `ImuSpacecraft`'s
+    density over the square root of the tick; WiseDynamics' `tests/test_imu_spacecraft.py` holds
+    its IMU to that. Nav integrates every `navDivider`-th tick on its latest sample, so `step_s`,
+    its integration step, is `tickPeriod` times `navDivider`.
 
     Returns:
         `gyro_noise_std_rad_s` (rad/s) and `accel_noise_std_m_s2` (m/s^2), the per-sample 1-sigma
-        noise; `step_s`, the flight software's step, its configuration's base tick `tickPeriod`
-        (s); and `mu`, Earth's gravitational parameter from `Leo500` (m^3/s^2).
+        noise; `step_s`, nav's integration step (s); and `mu`, Earth's gravitational parameter
+        from `Leo500` (m^3/s^2).
     """
-    step_s = tick_period("ImuDeadReckoning")
+    sample_s = tick_period("ImuDeadReckoning")
+    divider = configuration_model("ImuDeadReckoning").constants["ImuDeadReckoning.navDivider"]
     return {
-        "gyro_noise_std_rad_s": ImuSpacecraft.gyro_noise_density_rad_s_rthz / np.sqrt(step_s),
-        "accel_noise_std_m_s2": ImuSpacecraft.accel_noise_density_m_s2_rthz / np.sqrt(step_s),
-        "step_s": step_s,
+        "gyro_noise_std_rad_s": ImuSpacecraft.gyro_noise_density_rad_s_rthz / np.sqrt(sample_s),
+        "accel_noise_std_m_s2": ImuSpacecraft.accel_noise_density_m_s2_rthz / np.sqrt(sample_s),
+        "step_s": sample_s * divider,
         "mu": Leo500.mu_m3_s2["earth"],
     }
 

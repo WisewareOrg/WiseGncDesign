@@ -27,7 +27,7 @@ from algorithms.quaternion import dcm_NB, multiply
 from fsw.codegen.fpp_types import Gnc
 from harness.mission import Mission, mission_tests
 
-__all__ = ["ImuDeadReckoner"]
+__all__ = ["ImuDeadReckoner", "parameters"]
 
 # %load_ext wise_dynamics.notebook
 
@@ -159,8 +159,9 @@ def _translational_rates(
 # stage's rotated acceleration, the coupling between attitude and navigation error this module
 # demonstrates.
 #
-# In the flight software, the Python build's `FrameRunner` calls `step()` at every base tick,
-# `tickPeriod` = 1 s, so `dt` is 1 s and each step holds one IMU sample across the whole second.
+# In the flight software, the Python build's `FrameRunner` calls `step()` at every `navDivider`-th
+# base tick, `tickPeriod` × `navDivider` = 1 s, so `dt` is 1 s and each step holds its latest IMU
+# sample across the whole second.
 
 
 # %%
