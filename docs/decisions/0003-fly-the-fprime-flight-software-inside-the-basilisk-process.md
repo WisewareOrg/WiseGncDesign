@@ -114,8 +114,7 @@ returns. Not covered: an assert thrown through F´ into pybind11.
   `ninja`, `fprime-tools`, `fprime-fpp`, `fprime-gds`) has no pin of its own: `uv.lock` holds the
   versions the `requirements.txt` at that tag declares, hashed, which the lock reads from GitHub
   rather than from a clone, so every lock update works without one and needs network. A changed tag
-  fails the lock check only when F´ moved those pins, and Renovate's tag PR runs `uv lock` as a
-  post-upgrade task and commits the lock, so no manual step remains.
+  fails the lock check only when F´ moved those pins, and Renovate relocks on a tag bump.
 - Each flight's `flight.json` records which FSW flew: `fsw` and `build` tell two builds of one
   commit apart, and the F´ build's `projectVersion` names the commit built from (`-dirty` when
   uncommitted), so a stale extension shows against the run file's `versions_caller_commit`.
