@@ -19,11 +19,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "check-python",
     "check-reqs",
-    "interrogate>=1.7.0",
     "pytest-xdist>=3.6",
-    "ruff>=0.17.0",
-    "pydoclint>=0.12.0",
 ]
 sim = ["wise-dynamics[notebook]"]
 notebooks = ["ipykernel>=6.29", "ipython>=9.0", "jupyter-client", "jupyterlab>=4.4", "jupytext>=1.17", "nbclient", "notebook", "pip", "traitlets"]
@@ -38,9 +36,10 @@ override-dependencies = ["pillow>=13"]
 
 [tool.uv.sources]
 # The wise-ci commit docs/requirements pins, so ty resolves its validator's import.
+check-python = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-python", rev = "d2483ccf39ccce58ccfbaa75d3d1c6466ff6701e" }
 check-reqs = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-reqs", rev = "6f8840aacdd7eb0c431af64f7eaa7bf326b38e29" }
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "35ac40730c240ad793caee082169430e1d66242b" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "1fa02686fd94ffef929625ab06d1d0952556ef49" }
 
 [build-system]
 requires = ["hatchling"]
@@ -71,24 +70,9 @@ addopts = [
 [tool.ruff]
 line-length = 120
 src = [".", "analysis"]
-# The F´ framework clone and the F´ build cache carry third-party Python.
-extend-exclude = ["fsw/fprime/lib", "fsw/fprime/build-fprime-*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "D", "D417"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
-
-[tool.pydoclint]
-style = "google"
-arg-type-hints-in-signature = true
-arg-type-hints-in-docstring = false
-check-return-types = false
-skip-checking-short-docstrings = false
-allow-init-docstring = true
-# The F´ framework clone and the F´ build cache carry third-party Python.
-exclude = 'fsw/fprime/(lib|build-fprime-[^/]*)/'
-
-[tool.interrogate]
-exclude = ["fsw/fprime/lib", "fsw/fprime/build-fprime-automatic-native"]

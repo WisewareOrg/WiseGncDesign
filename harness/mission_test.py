@@ -30,6 +30,7 @@ import h5py
 import numpy as np
 import pytest
 from wise_dynamics.basilisk.vehicles import VEHICLES
+from wise_dynamics.basilisk.vehicles.imu_wheel_spacecraft import ImuWheelSpacecraft
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import (
@@ -1130,6 +1131,7 @@ def test_the_mock_actuator_s_command_spins_the_wheel_through_its_writer_alike_on
 
     result.assert_outcomes(passed=2 if built_fprime else 1, skipped=0 if built_fprime else 1)
     vehicle = VEHICLES["imu_wheel_spacecraft"]()
+    assert isinstance(vehicle, ImuWheelSpacecraft)
     [wheel] = vehicle.wheel.ReactionWheelData
     fpp_types.load(MOCK)
     [command] = Actuator(None).step(0.0)[0]

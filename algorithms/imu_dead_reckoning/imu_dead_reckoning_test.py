@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 from wise_dynamics.basilisk import ImuSpacecraft, Scenario
+from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from algorithms.imu_dead_reckoning import gross_check
 from algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
@@ -309,6 +310,7 @@ def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting(
     Args:
         sim_scenario: the case's dispersed scenario.
     """
+    assert isinstance(sim_scenario, Leo500)
     nav = parameters(sim_scenario)
 
     assert type(nav) is Gnc.ImuDeadReckonerParameters

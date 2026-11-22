@@ -21,6 +21,7 @@
 import numpy as np
 from numba import njit
 from wise_dynamics.basilisk import Scenario
+from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from algorithms.imu_dead_reckoning.gross_check import gross_check
 from algorithms.utils import rk4
@@ -348,6 +349,7 @@ def parameters(scenario: Scenario) -> Gnc.ImuDeadReckonerParameters:
     Returns:
         The parameters, which the ground writes as the case's record.
     """
+    assert isinstance(scenario, Leo500), "the notebook flies Leo500 and its subclasses"
     return Gnc.ImuDeadReckonerParameters(mu=scenario.mu_m3_s2["earth"], dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB))
 
 

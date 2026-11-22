@@ -62,3 +62,7 @@ reqs:
 # Fly a notebook's Monte Carlo tests headless at full count into the active session; extra arguments go to pytest.
 fly notebook *args: fsw
     uv run --no-sync pytest {{notebook}} --full-monte-carlo {{args}}
+
+# Run wise-ci's check-python, the org Python standard: lint, format, docstring coverage and types. Needs `just _sync` first.
+python:
+    uv run --locked check-python

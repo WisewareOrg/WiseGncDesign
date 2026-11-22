@@ -269,6 +269,9 @@ def _parameter_ids(configuration: str) -> list[int]:
 def boot(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., Booted]:
     """Boots a configuration's deployment on the parameters a test flies; skips without its build.
 
+    Args:
+        tmp_path_factory: makes each call's case directory.
+
     Returns:
         A function taking the configuration and, by an algorithm instance's qualified name, the
         `<Name>Parameters` tuples to fly, every other algorithm's zero, and giving the copy booted
