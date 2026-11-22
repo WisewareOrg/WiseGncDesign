@@ -18,7 +18,7 @@ analysis/      one analyzer per metric: its limits, error math and plot
 scenarios/     how each scenario a TST item references is flown: its ground procedure and marks
 algorithms/<name>/   notebook, its F´ component, gross check, tests, and an __init__
                                     re-exporting the notebook
-algorithms/quaternion.py   the quaternion math numba-compiled algorithms share
+algorithms/utils/    numba-compiled math the algorithms share: quaternions, the RK4 step
 missions/      notebooks that plan missions, and the test running them
 fsw/           the flight software: python/, the Python build's partitions; fprime/, the F´
                project; fpp/, the shared FPP contract and GNC sub-topologies; and a worked example

@@ -23,7 +23,8 @@ from numba import njit
 from wise_dynamics.basilisk import Scenario
 
 from algorithms.imu_dead_reckoning.gross_check import gross_check
-from algorithms.quaternion import dcm_NB, multiply
+from algorithms.utils import rk4
+from algorithms.utils.quaternion import dcm_NB, multiply
 from fsw.codegen.fpp_types import Gnc
 from harness.mission import Mission, mission_tests
 
@@ -72,7 +73,7 @@ def _gravity(r: np.ndarray, mu: float) -> np.ndarray:
 #
 # The integration drifts $q$ off unit norm at the order of its step error, so the step normalizes
 # it. Numba cannot call SciPy, so the step takes the Hamilton product $\otimes$, and the rotation
-# matrix below, from `algorithms.quaternion`, which tests them against SciPy; everything
+# matrix below, from `algorithms.utils.quaternion`, which tests them against SciPy; everything
 # outside the step uses SciPy.
 
 
@@ -143,8 +144,8 @@ def _translational_rates(
 #
 #    $$\omega = [PB]^T \omega_P \qquad a_B = [PB]^T a_P$$
 #
-# 2. RK4 over all three states at once, with $f$ the right-hand sides above and $\omega$, $a_B$
-#    held:
+# 2. RK4 over all three states at once, stacked as one $x$ and stepped by the shared
+#    `algorithms.utils.rk4.step`, with $f$ the right-hand sides above and $\omega$, $a_B$ held:
 #
 #    $$k_1 = f(x_n) \quad k_2 = f(x_n + \tfrac{h}{2} k_1) \quad k_3 = f(x_n + \tfrac{h}{2} k_2)
 #    \quad k_4 = f(x_n + h\,k_3)$$
@@ -166,6 +167,26 @@ def _translational_rates(
 
 # %%
 @njit(cache=True)
+def _derivs(t: float, x: np.ndarray, omega: np.ndarray, accel: np.ndarray, mu: float) -> np.ndarray:
+    """The state's time derivative, the readings held.
+
+    Args:
+        t: s; unused, the readings are held across the step.
+        x: (10,) the state (q, r, v): q W X Y Z of the body frame B with respect to the inertial
+            frame N, r (m) and v (m/s) in N.
+        omega: (3,) rad/s, the rate of B with respect to N, in B.
+        accel: (3,) m/s^2, the accelerometer reading a_B, non-gravitational acceleration in B.
+        mu: m^3/s^2, the central body's gravitational parameter.
+
+    Returns:
+        (10,) dx/dt: dq/dt (1/s), dr/dt (m/s, in N) and dv/dt (m/s^2, in N).
+    """
+    q, r, v = x[:4], x[4:7], x[7:]
+    r_dot, v_dot = _translational_rates(q, v, r, accel, mu)
+    return np.concatenate((_q_dot(q, omega), r_dot, v_dot))
+
+
+@njit
 def _step(
     q: np.ndarray,
     r: np.ndarray,
@@ -176,7 +197,7 @@ def _step(
     dt: float,
     mu: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """One RK4 step of the state over `dt`, compiled with numba on its first call and cached.
+    """One RK4 step of the state over `dt`, compiled with numba on its first call in each process.
 
     The readings are rotated into the body frame B and held across the step; q is normalized after
     it, with W >= 0.
@@ -197,35 +218,11 @@ def _step(
     """
     omega = dcm_BP @ omega_P
     accel = dcm_BP @ accel_P
-
-    def derivs(
-        q: np.ndarray, r: np.ndarray, v: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """The state's time derivative, the readings held.
-
-        Args:
-            q: (4,) quaternion W X Y Z of the body frame B with respect to the inertial frame N.
-            r: (3,) m, inertial position in N.
-            v: (3,) m/s, inertial velocity in N.
-
-        Returns:
-            dq/dt ((4,), 1/s), dr/dt ((3,) m/s, in N) and dv/dt ((3,) m/s^2, in N).
-        """
-        r_dot, v_dot = _translational_rates(q, v, r, accel, mu)
-        return _q_dot(q, omega), r_dot, v_dot
-
-    k1 = derivs(q, r, v)
-    k2 = derivs(q + 0.5 * dt * k1[0], r + 0.5 * dt * k1[1], v + 0.5 * dt * k1[2])
-    k3 = derivs(q + 0.5 * dt * k2[0], r + 0.5 * dt * k2[1], v + 0.5 * dt * k2[2])
-    k4 = derivs(q + dt * k3[0], r + dt * k3[1], v + dt * k3[2])
-
-    q_new = q + (dt / 6.0) * (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0])
-    r_new = r + (dt / 6.0) * (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1])
-    v_new = v + (dt / 6.0) * (k1[2] + 2.0 * k2[2] + 2.0 * k3[2] + k4[2])
-    q_new = q_new / np.linalg.norm(q_new)
+    x = rk4.step(_derivs, 0.0, np.concatenate((q, r, v)), dt, omega, accel, mu)
+    q_new = x[:4] / np.linalg.norm(x[:4])
     if q_new[0] < 0.0:
         q_new = -q_new
-    return q_new, r_new, v_new
+    return q_new, x[4:7], x[7:]
 
 
 # %% [markdown]

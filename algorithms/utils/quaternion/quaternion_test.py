@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from algorithms.quaternion import dcm_NB, multiply
+from algorithms.utils.quaternion import dcm_NB, multiply
 
 QUATERNIONS = Rotation.random(200, random_state=5).as_quat(scalar_first=True)
 """Unit quaternions, W X Y Z, of both signs of W."""
