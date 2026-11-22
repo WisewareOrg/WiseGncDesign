@@ -18,13 +18,23 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 import pytest
 
+import fsw.mock
 from fsw.codegen.deployment import configurations, fprime_configurations
+from fsw.codegen.fpp_model import Instance
+from fsw.mock import edited
 
 if TYPE_CHECKING:
     from fsw.codegen.dictionary import Dictionary
-    from fsw.codegen.fpp_model import Instance, Model
+    from fsw.codegen.fpp_model import Model
     from fsw.codegen.roles import Role
     from ground.fprime_station import FprimeStation
+
+
+_MOCK = Path(fsw.mock.__file__).with_name("Mock.fpp")
+"""The mock component's model, which includes `Extra.fppi` beside it."""
+
+_INSTANCE = Instance("Mock.mock", "Mock.Mock", 0x1000)
+"""The mock's instance."""
 
 
 @pytest.fixture(scope="session", params=configurations())
@@ -79,13 +89,9 @@ def mock_dictionary() -> Dictionary:
     Returns:
         The dictionary.
     """
-    import fsw.mock
     from fsw.codegen.dictionary import Dictionary
-    from fsw.codegen.fpp_model import Instance
 
-    return Dictionary.from_component(
-        [Path(fsw.mock.__file__).with_name("Mock.fpp")], Instance("Mock.mock", "Mock.Mock", 0x1000)
-    )
+    return Dictionary.from_component([_MOCK], _INSTANCE)
 
 
 @pytest.fixture
@@ -98,11 +104,7 @@ def render_mock() -> Callable[..., Dictionary]:
         each edit `(old, new)` as `fsw.mock.edited` applies it, and giving the dictionary
         `from_component` generates.
     """
-    import fsw.mock
     from fsw.codegen.dictionary import Dictionary
-    from fsw.codegen.fpp_model import Instance
-
-    mock = Path(fsw.mock.__file__).with_name("Mock.fpp")
 
     def render(
         directory: Path,
@@ -121,12 +123,12 @@ def render_mock() -> Callable[..., Dictionary]:
         Returns:
             The dictionary.
         """
-        (directory / "Mock.fpp").write_text(fsw.mock.edited(mock.read_text(), *edits))
+        (directory / "Mock.fpp").write_text(edited(_MOCK.read_text(), *edits))
         (directory / "Extra.fppi").write_text(
-            fsw.mock.edited(mock.with_name("Extra.fppi").read_text(), *extra)
+            edited(_MOCK.with_name("Extra.fppi").read_text(), *extra)
         )
         return Dictionary.from_component(
-            [directory / "Mock.fpp"], Instance("Mock.mock", "Mock.Mock", base_id)
+            [directory / "Mock.fpp"], _INSTANCE._replace(base_id=base_id)
         )
 
     return render
@@ -142,12 +144,7 @@ def fsw(fprime_configuration: str) -> ModuleType:
     Returns:
         The copy.
     """
-    from lab.power_cycle import built, power_cycle
-
-    if not built(fprime_configuration):
-        pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
-
-    return power_cycle(fprime_configuration)
+    return _copy(fprime_configuration)
 
 
 @pytest.fixture
@@ -194,37 +191,11 @@ class Booted(NamedTuple):
     station: FprimeStation
 
 
-def _record(
-    configuration: str,
-    parameters: Mapping[str, Any],
-    directory: Path,
-    algorithm_instances: Callable[[str], tuple[Instance, ...]],
-) -> Path:
-    """A case's parameter record: every algorithm instance's tuple zero, those given as given.
-
-    Args:
-        configuration: the configuration.
-        parameters: tuples to fly, by the instance's qualified name.
-        directory: where `run_0000.prm.json` is written.
-        algorithm_instances: gives a configuration's algorithm instances.
-
-    Returns:
-        The record.
-    """
-    from ground import parameters as ground_parameters
-
-    zero = _zero_parameters(configuration, algorithm_instances)
-    return ground_parameters.write({**zero, **parameters}, directory / "run_0000.prm.json")
-
-
-def _zero_parameters(
-    configuration: str, algorithm_instances: Callable[[str], tuple[Instance, ...]]
-) -> dict[str, Any]:
+def _zero_parameters(configuration: str) -> dict[str, Any]:
     """Each algorithm instance's parameters of a configuration, every value zero, of its FPP shape.
 
     Args:
         configuration: the configuration.
-        algorithm_instances: gives a configuration's algorithm instances.
 
     Returns:
         Each instance's `<Name>Parameters` tuple, by its qualified name.
@@ -234,14 +205,72 @@ def _zero_parameters(
     model = contract_model()
     return {
         instance.name: _parameters(model, instance.component, lambda count: [0.0] * count)
-        for instance in algorithm_instances(configuration)
+        for instance in _algorithm_instances(configuration)
     }
 
 
+def _write_record(parameters: Mapping[str, Any], directory: Path) -> Path:
+    """A case's parameter record, written as the ground writes it.
+
+    Args:
+        parameters: each instance's parameters tuple, by its qualified name.
+        directory: where `run_0000.prm.json` is written.
+
+    Returns:
+        The record.
+    """
+    from ground import parameters as ground_parameters
+
+    return ground_parameters.write(parameters, directory / "run_0000.prm.json")
+
+
+def _dat(record: Path, configuration: str) -> str:
+    """A record's `.dat`, made beside it as `lab.Adapter` makes it.
+
+    Args:
+        record: the case's record.
+        configuration: the configuration, whose dictionary the `.dat` is made against.
+
+    Returns:
+        The `.dat`'s path, as `boot` takes it.
+    """
+    from ground import parameters as ground_parameters
+
+    return str(ground_parameters.dat(record, _dictionary(configuration)))
+
+
+def _copy(configuration: str) -> ModuleType:
+    """A fresh copy of a configuration's deployment, not yet booted; skips without its build.
+
+    Args:
+        configuration: the configuration.
+
+    Returns:
+        The copy.
+    """
+    from lab.power_cycle import built, power_cycle
+
+    if not built(configuration):
+        pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
+    return power_cycle(configuration)
+
+
+def _parameter_ids(configuration: str) -> list[int]:
+    """Every parameter's ID in a configuration's dictionary, which `boot` holds valid.
+
+    Args:
+        configuration: the configuration.
+
+    Returns:
+        The IDs, sorted.
+    """
+    from fsw.codegen.dictionary import Dictionary
+
+    return sorted(Dictionary(_dictionary(configuration)).parameters_by_id)
+
+
 @pytest.fixture
-def boot(
-    tmp_path: Path, algorithm_instances: Callable[[str], tuple[Instance, ...]]
-) -> Callable[..., Booted]:
+def boot(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., Booted]:
     """Boots a configuration's deployment on the parameters a test flies; skips without its build.
 
     Returns:
@@ -250,9 +279,7 @@ def boot(
         on them with its station. Each call makes a copy and a case directory of its own.
     """
     from fsw.codegen.dictionary import Dictionary
-    from ground import parameters as ground_parameters
     from ground.fprime_station import FprimeStation
-    from lab.power_cycle import built, power_cycle
 
     def boot_on(configuration: str, parameters: Mapping[str, Any] = {}) -> Booted:
         """Powers a copy on, booted on the parameters.
@@ -264,16 +291,11 @@ def boot(
         Returns:
             The booted copy and its station.
         """
-        if not built(configuration):
-            pytest.skip(f"the F´ build of {configuration} is absent; run `just fsw`")
-        path = _dictionary(configuration)
-        dictionary = Dictionary(path)
-        case = tmp_path / f"case{len(list(tmp_path.glob('case*')))}"
-        case.mkdir()
-        record = _record(configuration, parameters, case, algorithm_instances)
-        fsw = power_cycle(configuration)
-        fsw.boot(str(ground_parameters.dat(record, path)), sorted(dictionary.parameters_by_id))
-        return Booted(fsw, FprimeStation(fsw, dictionary))
+        fsw = _copy(configuration)
+        case = tmp_path_factory.mktemp("case")
+        record = _write_record({**_zero_parameters(configuration), **parameters}, case)
+        fsw.boot(_dat(record, configuration), _parameter_ids(configuration))
+        return Booted(fsw, FprimeStation(fsw, Dictionary(_dictionary(configuration))))
 
     return boot_on
 
@@ -374,17 +396,12 @@ class MockActuationCase(NamedTuple):
 
 
 @pytest.fixture
-def mock_actuation(
-    tmp_path: Path,
-    python_command: Callable[[Role, Any], Any],
-    algorithm_instances: Callable[[str], tuple[Instance, ...]],
-) -> MockActuationCase:
+def mock_actuation(tmp_path: Path, python_command: Callable[[Role, Any], Any]) -> MockActuationCase:
     """`MockActuation`, whose one test mock sends a fixed command each step; skips unbuilt.
 
     Args:
         tmp_path: where the case's record is written.
         python_command: gives the Python build's command for a role.
-        algorithm_instances: gives a configuration's algorithm instances.
 
     Returns:
         The configuration, its role, the command and the record.
@@ -402,7 +419,7 @@ def mock_actuation(
     fpp_types.load(MOCK)
     [role] = taken(configuration_model(configuration, contract=MOCK), configuration)
     command = python_command(role, Actuator(None).step(0.0)[0][0])
-    record = _record(configuration, {}, tmp_path, algorithm_instances)
+    record = _write_record(_zero_parameters(configuration), tmp_path)
     return MockActuationCase(configuration, role, command, record)
 
 
@@ -587,6 +604,25 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
     return list(bus_by_role.values())
 
 
+def _algorithm_instances(configuration: str) -> tuple[Instance, ...]:
+    """The GNC instances of an algorithm's component that a configuration holds.
+
+    Args:
+        configuration: the configuration.
+
+    Returns:
+        The instances, in `fsw.codegen.deployment.gnc_instances`' order.
+    """
+    from fsw.codegen.deployment import algorithm_components, gnc_instances
+
+    algorithms = algorithm_components()
+    return tuple(
+        i
+        for i in gnc_instances()
+        if i.name.startswith(f"{configuration}.") and i.component in algorithms
+    )
+
+
 @pytest.fixture(scope="session")
 def algorithm_instances() -> Callable[[str], tuple[Instance, ...]]:
     """Each configuration's GNC instances of an algorithm's component.
@@ -595,45 +631,20 @@ def algorithm_instances() -> Callable[[str], tuple[Instance, ...]]:
         A function taking a configuration and giving its algorithm instances, in
         `fsw.codegen.deployment.gnc_instances`' order.
     """
-    from fsw.codegen.deployment import algorithm_components, gnc_instances
-
-    def of(configuration: str) -> tuple[Instance, ...]:
-        """The algorithm instances of one configuration.
-
-        Args:
-            configuration: the configuration.
-
-        Returns:
-            The instances.
-        """
-        algorithms = algorithm_components()
-        return tuple(
-            i
-            for i in gnc_instances()
-            if i.name.startswith(f"{configuration}.") and i.component in algorithms
-        )
-
-    return of
+    return _algorithm_instances
 
 
 @pytest.fixture(scope="module")
-def case_parameters(
-    fprime_configuration: str,
-    algorithm_instances: Callable[[str], tuple[Instance, ...]],
-) -> dict[str, Any]:
+def case_parameters(fprime_configuration: str) -> dict[str, Any]:
     """Each algorithm instance's parameters in the deployment, every value zero, of its FPP shape.
-
-    The instances are the configuration's algorithm instances. A test module flying an
-    algorithm's own values overrides this fixture, swapping that algorithm's tuple in.
 
     Args:
         fprime_configuration: the configuration.
-        algorithm_instances: gives a configuration's algorithm instances.
 
     Returns:
         Each instance's `<Name>Parameters` tuple, by its qualified name.
     """
-    return _zero_parameters(fprime_configuration, algorithm_instances)
+    return _zero_parameters(fprime_configuration)
 
 
 def _parameters(model: Model, component: str, elements: Callable[[int], list[float]]) -> Any:
@@ -717,11 +728,9 @@ def prm_record(case_parameters: dict[str, Any], tmp_path: Path) -> Path:
     Returns:
         The record, `case/run_0000.prm.json`.
     """
-    from ground import parameters
-
     case = tmp_path / "case"
     case.mkdir()
-    return parameters.write(case_parameters, case / "run_0000.prm.json")
+    return _write_record(case_parameters, case)
 
 
 @pytest.fixture
@@ -735,22 +744,20 @@ def prm(prm_record: Path, fprime_configuration: str) -> str:
     Returns:
         The `.dat`'s path, as `boot` takes it.
     """
-    from ground import parameters
-
-    return str(parameters.dat(prm_record, _dictionary(fprime_configuration)))
+    return _dat(prm_record, fprime_configuration)
 
 
 @pytest.fixture(scope="module")
-def parameter_ids(dictionary: Dictionary) -> list[int]:
+def parameter_ids(fprime_configuration: str) -> list[int]:
     """Every parameter's ID in the configuration's dictionary, which `boot` holds valid.
 
     Args:
-        dictionary: the configuration's dictionary.
+        fprime_configuration: the configuration.
 
     Returns:
         The IDs, sorted.
     """
-    return sorted(dictionary.parameters_by_id)
+    return _parameter_ids(fprime_configuration)
 
 
 def _dictionary(configuration: str) -> Path:
