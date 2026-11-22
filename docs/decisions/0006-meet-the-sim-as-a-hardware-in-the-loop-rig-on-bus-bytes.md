@@ -17,7 +17,7 @@
 
 ## Context
 
-The F´ build flies inside Basilisk's process (ADR 0003 rev 3). The lab is the test rig between that
+The F´ build flies inside Basilisk's process (ADR 0003 rev 4). The lab is the test rig between that
 build and the sim: the bus structs, the bus emulator, the stand-ins inside
 `_wise_fsw_<configuration>` and the pins that move bytes in and out of it. The sim this repository
 plugs into, WiseDynamics' FSW host, gives a build Basilisk messages by role and takes actuator
