@@ -10,7 +10,7 @@ import numpy as np
 
 from fsw.codegen.fpp_model import Array, Member, Struct, Types
 
-__all__ = ["DTYPES", "STRUCT_CODES", "Form", "form", "plan"]
+__all__ = ["DTYPES", "STRUCT_PRIMITIVES", "Form", "form", "plan"]
 
 DTYPES = {
     "F32": np.dtype("float32"),
@@ -27,13 +27,13 @@ DTYPES = {
 }
 """Each numeric FPP primitive as its native-endian numpy type."""
 
-STRUCT_CODES = {"F64": "d"}
-"""Each primitive a bus or GNC struct's array may hold, as its Python `struct` code: the primitives
-the contract's structs use. A bus struct's member is an inline array `[N] <primitive>`, and a GNC
-struct's may also be a named array type of one dimension. The F´ CDH generator's component and bus
-pins and the bus emulator take these alone and refuse anything else, a scalar among it, naming the
-member, so the first use of another type adds its code with a compiled test. F´ serializes `bool`
-unlike Python's `struct`, so it never joins."""
+STRUCT_PRIMITIVES = frozenset({"F64"})
+"""Each primitive a bus or GNC struct's array may hold: the primitives the contract's structs use. A
+bus struct's member is an inline array `[N] <primitive>`, and a GNC struct's may also be a named
+array type of one dimension. The F´ CDH generator's component and bus pins and the bus emulator
+take these alone and refuse anything else, a scalar among it, naming the member, so the first use
+of another type joins with a compiled test. F´ serializes `true` as 0xFF (`FW_SERIALIZE_TRUE_VALUE`)
+where numpy's `bool` holds 0x01, so a byte copy would not carry it, and `bool` never joins."""
 
 Form = tuple[tuple[int, ...], np.dtype | str]
 """A field's shape, and its element's numpy type, or the name of its element's FPP type when that

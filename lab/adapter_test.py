@@ -320,7 +320,8 @@ def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(
     """MockActuation's adapter returns, each tick, the role's payload the Python build makes.
 
     The test mock sends its command each tick; the adapter reads the bytes back into the role's
-    `messaging.<Name>Payload`, field for field the Python build's.
+    `messaging.<Name>Payload`, field for field the Python build's, and returns the same commands
+    each tick, a reuse `allocated` cannot see.
 
     Args:
         mock_actuation: the configuration, its role, the Python build's command and the record.
@@ -330,11 +331,14 @@ def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(
     adapter = Adapter(configuration, record, contract=MOCK)
     adapter.boot()
 
+    ticks = []
     for k in (1, 2):
         tick = adapter.tick(k * NS, {})
         assert list(tick) == [role.role]
         assert type(tick[role.role]) is type(python)
         holds(tick[role.role], {f: getattr(python, f) for f in type(python).__dtype__.names})
+        ticks.append(tick)
+    assert ticks[1] is ticks[0]
 
 
 def test_a_tick_allocates_nothing(messages_by_role: dict[str, Any], adapter: Adapter, allocated: Callable[..., int]):

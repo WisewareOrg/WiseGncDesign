@@ -608,6 +608,9 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
 def allocated() -> Callable[..., int]:
     """Measures what a call allocates each time it runs, as `tracemalloc` traces Python and numpy.
 
+    It counts calls into Python's allocators, so an object CPython serves from a free list, such as
+    a small tuple or a dict, does not show: hold such a reuse with an identity assertion.
+
     Returns:
         A function of the call and a count, by default 1000, giving the bytes the traced peak rose
         above its start over that many calls, made after ten untraced ones: 0 when no call

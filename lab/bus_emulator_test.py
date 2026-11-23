@@ -5,7 +5,9 @@ a message to its bytes, and bytes back to a message. The pin tests are skipped w
 deployment `just fsw` builds, as the `fsw` fixture skips.
 """
 
+import gc
 import re
+import weakref
 from collections.abc import Callable, Mapping
 from types import ModuleType
 from typing import Any
@@ -139,3 +141,20 @@ def test_bytes_of_another_length_than_the_struct_s_are_refused_naming_both(bus_m
         for length in (size(name) - 1, size(name) + 1):
             with pytest.raises(ValueError, match=rf"{name} is {size(name)} bytes on the bus, not {length}"):
                 deserialize(name, bytes(length))
+
+
+def test_a_bound_copy_keeps_its_payload_alive(bus_messages: dict[str, Any]) -> None:
+    """A payload the caller drops stays alive while a copy bound to it does.
+
+    Args:
+        bus_messages: a message of each bus struct.
+    """
+    for name, message in bus_messages.items():
+        payload = type(message.payload)()
+        alive = weakref.ref(payload)
+        copy = to_bus(payload, bytearray(size(name)))
+        del payload
+        gc.collect()
+
+        assert alive() is not None, name
+        copy()

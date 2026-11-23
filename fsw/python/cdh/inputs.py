@@ -3,7 +3,7 @@
 The pairing is FPP's, `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp`, read by
 `fsw.codegen.roles` as the F´ build's CDH reads it; a `Pair` names one role's. The bus struct is
 converted to the ICD struct field by field with `fsw.codegen.fpp_types.converter`, each array
-RIO-in's own, uncopied (ADR 0005 rev 3). CDH-out, `fsw.python.cdh.outputs`, pairs the actuator
+RIO-in's own, uncopied (ADR 0005 rev 2). CDH-out, `fsw.python.cdh.outputs`, pairs the actuator
 roles with the same `Pair`.
 """
 

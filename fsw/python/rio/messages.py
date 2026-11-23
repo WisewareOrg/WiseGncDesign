@@ -12,14 +12,13 @@ writes each actuator role's bus struct into the one payload of that class its wr
 field from the bus member of its name, ignoring case.
 """
 
-import ctypes
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
 
 from fsw.codegen.fpp_types import fields
-from fsw.payloads import payload_type
+from fsw.payloads import memory, payload_type
 from fsw.python.cdh.inputs import Pair
 
 __all__ = ["check", "reader", "writer"]
@@ -64,7 +63,7 @@ def reader(bus: type[Any]) -> Callable[[Any], Callable[[], Any]]:
 
     Returns:
         A function binding a payload, a SWIG proxy whose `this` is its C struct's address, which
-        must outlive the read, and returning its read: each call copies the payload's C struct
+        the read keeps alive, and returning its read: each call copies the payload's C struct
         into the buffer and returns the bus struct's tuple.
     """
     source: type[Any] = payload_type(bus.__qualname__)
@@ -80,7 +79,7 @@ def reader(bus: type[Any]) -> Callable[[Any], Callable[[], Any]]:
         Returns:
             Its read.
         """
-        memory = np.frombuffer((ctypes.c_char * layout.itemsize).from_address(int(value.this)), np.uint8)
+        source = memory(value, layout.itemsize)
         buffer = np.zeros(layout.itemsize, np.uint8)
         record = buffer.view(layout)
         views = {}
@@ -99,7 +98,7 @@ def reader(bus: type[Any]) -> Callable[[Any], Callable[[], Any]]:
                 Returns:
                     The bus struct, the same at every read.
                 """
-                np.copyto(buffer, memory)
+                np.copyto(buffer, source)
                 return struct
 
             return read
@@ -110,7 +109,7 @@ def reader(bus: type[Any]) -> Callable[[Any], Callable[[], Any]]:
             Returns:
                 A fresh bus struct holding the buffer's arrays and the scalars' values.
             """
-            np.copyto(buffer, memory)
+            np.copyto(buffer, source)
             return bus._make([views[name] if array else record[name][0].item() for name, array in taken])
 
         return read_with_scalars
@@ -134,9 +133,9 @@ def writer(bus: type[Any]) -> Callable[[Any], Any]:
     target: type[Any] = payload_type(bus.__qualname__)
     layout = target.__dtype__
     written = target()
-    record = np.frombuffer((ctypes.c_char * layout.itemsize).from_address(int(written.this)), layout)
+    record = memory(written, layout.itemsize).view(layout)
     taken = tuple(
-        (index, member.name, record[name], shape, len(shape), int(np.prod(shape, dtype=int)))
+        (index, member.name, record[name], shape)
         for index, (member, name, (shape, _)) in enumerate(fields(target, bus))
     )
 
@@ -155,13 +154,9 @@ def writer(bus: type[Any]) -> Callable[[Any], Any]:
         """
         if type(value) is not bus:
             raise TypeError(f"the value is a {type(value).__name__}, not the bus struct's tuple {bus.__qualname__}")
-        for index, member_name, view, shape, ndim, size in taken:
+        for index, member_name, view, shape in taken:
             field = value[index]
-            if isinstance(field, np.ndarray):
-                fits = field.ndim == ndim and field.size == size
-            else:
-                fits = np.shape(field) == shape
-            if not fits:
+            if np.shape(field) != shape:
                 raise ValueError(f"{bus.__name__}.{member_name} is {shape}, but its value is {np.shape(field)}")
             np.copyto(view, field, casting="unsafe")
         return written

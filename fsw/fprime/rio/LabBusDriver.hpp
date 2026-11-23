@@ -16,6 +16,7 @@ class LabBusDriver final : public LabBusDriverComponentBase {
     //! The serial ports each way, as LabBusDriver.fpp declares them.
     static constexpr FwIndexType PORTS = NUM_BUSOUT_OUTPUT_PORTS;
     static_assert(NUM_BUSOUT_OUTPUT_PORTS == NUM_BUSIN_INPUT_PORTS, "a port number names both directions");
+    static_assert(PORTS <= 32, "takeWritten gives each port a bit of a U32");
 
     explicit LabBusDriver(const char* compName);
 

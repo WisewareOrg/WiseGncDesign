@@ -5,7 +5,9 @@ The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's me
 """
 
 import functools
+import gc
 import re
+import weakref
 from collections import namedtuple
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -362,3 +364,20 @@ def test_a_bound_read_and_a_write_allocate_nothing(bus_messages: dict[str, Any],
         write = writer(pair.bus)
         value = pair.bus(**{m: np.array(v) for m, v in bus_messages[role.bus].values.items()})
         assert allocated(functools.partial(write, value)) == 0, role.role
+
+
+def test_a_bound_read_keeps_its_payload_alive(bus_messages: dict[str, Any]):
+    """A payload the caller drops stays alive while a read bound to it does.
+
+    Args:
+        bus_messages: a message of each bus struct.
+    """
+    for pair, role in zip(PAIRS, ROLES, strict=True):
+        payload = type(bus_messages[role.bus].payload)()
+        alive = weakref.ref(payload)
+        read = reader(pair.bus)(payload)
+        del payload
+        gc.collect()
+
+        assert alive() is not None, role.role
+        read()

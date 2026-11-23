@@ -22,13 +22,14 @@ Sim::Cooperative g_cooperative;
 bool g_booted = false;
 bool g_stepped = false;
 
-//! Refuses a buffer on a port LabBusDriver lacks, on one that has one, or after the first step.
-void checkBufferPort(FwIndexType port, bool made, const char* direction) {
+//! Refuses a buffer on a port LabBusDriver lacks, on one that has one, or after the first step; the
+//! range is checked before the driver is asked about the port.
+void checkBufferPort(FwIndexType port, bool (Bus::LabBusDriver::*has)(FwIndexType) const, const char* direction) {
     if (port < 0 || port >= Bus::LabBusDriver::PORTS) {
         throw py::index_error("port " + std::to_string(port) + " is past LabBusDriver's " +
                               std::to_string(Bus::LabBusDriver::PORTS) + " ports");
     }
-    if (made) {
+    if ((WiseFsw::labBusDriver.*has)(port)) {
         throw std::runtime_error("port " + std::to_string(port) + " already has a " + direction + " buffer");
     }
     if (g_stepped) {
@@ -114,7 +115,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
     m.def(
         "receive_buffer",
         [](FwIndexType port, FwSizeType size) {
-            checkBufferPort(port, WiseFsw::labBusDriver.hasReceiveBuffer(port), "receive");
+            checkBufferPort(port, &Bus::LabBusDriver::hasReceiveBuffer, "receive");
             return py::memoryview::from_memory(WiseFsw::labBusDriver.makeReceiveBuffer(port, size),
                                                static_cast<py::ssize_t>(size));
         },
@@ -126,7 +127,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
     m.def(
         "transmit_buffer",
         [](FwIndexType port, FwSizeType size) {
-            checkBufferPort(port, WiseFsw::labBusDriver.hasTransmitBuffer(port), "transmit");
+            checkBufferPort(port, &Bus::LabBusDriver::hasTransmitBuffer, "transmit");
             return py::memoryview::from_memory(static_cast<const void*>(WiseFsw::labBusDriver.makeTransmitBuffer(port, size)),
                                                static_cast<py::ssize_t>(size));
         },

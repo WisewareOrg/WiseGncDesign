@@ -5,13 +5,12 @@ Each bus struct in `fsw/fpp/interfaces/Bus.fpp`, `Bus.<Name>`, mirrors the Basil
 declaration order, big-endian, packed and unframed. A payload type's copy is planned once, from
 `Bus.fpp` read alone at import, as runs of elements cast between the payload's C struct and the
 bus bytes, a run per stretch of members contiguous and of one type in both; a member outside
-`fsw.codegen.fields.STRUCT_CODES` raises then. `to_bus` and `from_bus` bind a payload's memory to a
+`fsw.codegen.fields.STRUCT_PRIMITIVES` raises then. `to_bus` and `from_bus` bind a payload's memory to a
 buffer once, so each copy after is the planned casts alone; `serialize` and `deserialize` are the
 same copies into fresh bytes and a fresh payload. Lab equipment: a real vehicle's bus carries the
 bytes itself, and the Python build reads and writes messages without them.
 """
 
-import ctypes
 import functools
 from collections.abc import Callable
 from pathlib import Path
@@ -20,9 +19,9 @@ from typing import Any, NamedTuple
 import numpy as np
 from Basilisk.architecture import messaging
 
-from fsw.codegen.fields import DTYPES, STRUCT_CODES
+from fsw.codegen.fields import DTYPES, STRUCT_PRIMITIVES
 from fsw.codegen.fpp_model import Struct, read
-from fsw.payloads import Payload, payload_type
+from fsw.payloads import Payload, memory, payload_type
 
 __all__ = ["BUS", "deserialize", "from_bus", "serialize", "size", "to_bus"]
 
@@ -77,7 +76,7 @@ def _plan(payload: type[Payload]) -> _Plan:
 
     Raises:
         KeyError: no bus struct mirrors the payload, naming it; or a member is not an inline array
-            of one of `fsw.codegen.fields.STRUCT_CODES`, naming the member and the type.
+            of one of `fsw.codegen.fields.STRUCT_PRIMITIVES`, naming the member and the type.
     """
     if payload not in _STRUCTS:
         raise KeyError(f"no bus struct in {BUS.name} mirrors {payload.__name__}")
@@ -86,11 +85,11 @@ def _plan(payload: type[Payload]) -> _Plan:
     runs: list[_Run] = []
     offset = 0
     for member in bus.members:
-        if member.type not in STRUCT_CODES or member.size is None:
+        if member.type not in STRUCT_PRIMITIVES or member.size is None:
             size = "" if member.size is None else f"[{member.size}] "
             raise KeyError(
                 f"{bus.name}.{member.name} is {size}{member.type}, which the bus emulator does not"
-                " write: it writes inline arrays of fsw.codegen.fields.STRUCT_CODES' primitives"
+                " write: it writes inline arrays of fsw.codegen.fields.STRUCT_PRIMITIVES' primitives"
             )
         dtype = DTYPES[member.type]
         source = payload.__dtype__.fields[fields[member.name.lower()]][1]
@@ -130,14 +129,14 @@ def _pairs(payload: Any, buffer: Any) -> list[tuple[np.ndarray, np.ndarray]]:
     """
     payload_class = _payload_class(payload)
     plan = _plan(payload_class)
-    memory = np.frombuffer((ctypes.c_char * payload_class.__dtype__.itemsize).from_address(int(payload.this)), np.uint8)
+    struct = memory(payload, payload_class.__dtype__.itemsize)
     bus = np.frombuffer(buffer, np.uint8)
     if bus.size != plan.size:
         raise ValueError(f"{_STRUCTS[payload_class].name} is {plan.size} bytes on the bus, not {bus.size}")
     width = [run.count * run.dtype.itemsize for run in plan.runs]
     return [
         (
-            memory[run.payload : run.payload + n].view(run.dtype),
+            struct[run.payload : run.payload + n].view(run.dtype),
             bus[run.bus : run.bus + n].view(run.dtype.newbyteorder(">")),
         )
         for run, n in zip(plan.runs, width, strict=True)
@@ -160,18 +159,18 @@ def to_bus(payload: Any, buffer: Any) -> Callable[[], None]:
     """Binds a payload to the buffer its bus bytes go to.
 
     Args:
-        payload: the message's payload, which must outlive the copy.
+        payload: the message's payload, which the copy keeps alive.
         buffer: a writable buffer of the bus struct's length.
 
     Returns:
         The copy: each call writes the payload's values, as they stand, into the buffer.
     """
-    pairs = [(bus, memory) for memory, bus in _pairs(payload, buffer)]
+    pairs = [(bus, source) for source, bus in _pairs(payload, buffer)]
 
     def copy() -> None:
         """Writes the payload's values into the buffer."""
-        for bus, memory in pairs:
-            np.copyto(bus, memory)
+        for bus, source in pairs:
+            np.copyto(bus, source)
 
     return copy
 
@@ -181,7 +180,7 @@ def from_bus(buffer: Any, payload: Any) -> Callable[[], None]:
 
     Args:
         buffer: a buffer of the bus struct's length.
-        payload: the message's payload, which must outlive the copy.
+        payload: the message's payload, which the copy keeps alive.
 
     Returns:
         The copy: each call reads the buffer's bytes, as they stand, into the payload.
@@ -190,8 +189,8 @@ def from_bus(buffer: Any, payload: Any) -> Callable[[], None]:
 
     def copy() -> None:
         """Reads the buffer into the payload."""
-        for memory, bus in pairs:
-            np.copyto(memory, bus)
+        for target, bus in pairs:
+            np.copyto(target, bus)
 
     return copy
 
@@ -200,7 +199,7 @@ def serialize(message: Any) -> bytes:
     """A Basilisk message's bytes, as F´ serializes the bus struct that mirrors it.
 
     A message no bus struct mirrors, or whose bus struct has a member outside
-    `fsw.codegen.fields.STRUCT_CODES`, raises `KeyError` naming it.
+    `fsw.codegen.fields.STRUCT_PRIMITIVES`, raises `KeyError` naming it.
 
     Args:
         message: the message's payload.
@@ -217,7 +216,7 @@ def deserialize(bus: str, data: bytes) -> Any:
     """A bus struct's bytes, as F´ serializes it, as a fresh payload of the message it mirrors.
 
     Bytes of another length than the struct's raise `ValueError`; a struct with a member outside
-    `fsw.codegen.fields.STRUCT_CODES` raises `KeyError`, naming it.
+    `fsw.codegen.fields.STRUCT_PRIMITIVES` raises `KeyError`, naming it.
 
     Args:
         bus: the bus struct's qualified name, `Bus.<Name>`.

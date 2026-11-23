@@ -3,14 +3,14 @@
 Lab equipment, as a hardware-in-the-loop rig is: it powers the deployment on, writes each sensor's
 reading into the bus driver's receive buffer as the bytes the vehicle's bus would carry, reads the
 bytes the deployment sends each actuator out of its transmit buffer into its Basilisk message, and
-carries the bytes of the deployment's radio link, which the ground decodes. A tick only copies
-(ADR 0006 rev 2).
+carries the bytes of the deployment's radio link, which the ground decodes. Every buffer, payload
+and copy is made at boot or at the first tick; a tick after only copies.
 """
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from fsw.codegen.deployment import CONTRACT, Contract, bus_port, configuration_model, tick_period
 from fsw.codegen.dictionary import Dictionary
@@ -24,6 +24,23 @@ if TYPE_CHECKING:
     from lab.fsw_extension import FswExtension
 
 __all__ = ["Adapter"]
+
+
+class _Output(NamedTuple):
+    """An actuator role's path out of the deployment, made at boot.
+
+    Attributes:
+        bit: its LabBusDriver port's bit in what a step returns.
+        copy: the bus emulator's copy from its transmit buffer into its payload.
+        role: the role.
+        payload: its payload, the same at every tick.
+    """
+
+    bit: int
+    copy: Callable[[], None]
+    role: str
+    payload: Any
+
 
 _NANOSECONDS_PER_MICROSECOND = 1_000
 
@@ -59,9 +76,8 @@ class Adapter:
     """The copy the last `boot` powered on; unset before the first."""
     _receive: dict[str, memoryview]
     """Each sensor role's receive buffer in the copy."""
-    _outputs: tuple[tuple[int, Callable[[], None], str, Any], ...]
-    """Each actuator role's port bit, the copy from its transmit buffer into its payload, the role
-    and the payload."""
+    _outputs: tuple[_Output, ...]
+    """Each actuator role's path out."""
     _commands: dict[int, Mapping[str, Any]]
     """Each set of written port bits' commands, by role, made on its first tick."""
     _bound: Mapping[str, Any] | None
@@ -112,7 +128,7 @@ class Adapter:
         for role, port in self._actuators:
             payload = payload_type(role.bus)()
             transmit = fsw.transmit_buffer(port, size(role.bus))
-            outputs.append((1 << port, from_bus(transmit, payload), role.role, payload))
+            outputs.append(_Output(1 << port, from_bus(transmit, payload), role.role, payload))
         self._outputs = tuple(outputs)
         self._commands = {}
         self._bound = None
@@ -151,12 +167,12 @@ class Adapter:
         written = self._fsw.step(t_ns)
         if not written:
             return _NO_COMMANDS
-        for bit, copy, _, _ in self._outputs:
-            if bit & written:
-                copy()
+        for output in self._outputs:
+            if output.bit & written:
+                output.copy()
         if written not in self._commands:
             self._commands[written] = MappingProxyType(
-                {role: payload for bit, _, role, payload in self._outputs if bit & written}
+                {output.role: output.payload for output in self._outputs if output.bit & written}
             )
         return self._commands[written]
 
