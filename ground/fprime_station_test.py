@@ -182,7 +182,7 @@ def test_a_channel_written_twice_with_one_tag_keeps_both_values_in_order(
 def test_a_downlinked_packet_that_is_not_telemetry_is_refused(
     mock: FprimeStation, mock_dictionary: Dictionary, descriptor: str
 ):
-    """A packet whose descriptor is not `FW_PACKET_TELEM` raises `ValueError`, among good packets too.
+    """A packet whose descriptor is not `FW_PACKET_TELEM` raises `ValueError` saying so, among good packets too.
 
     Args:
         mock: the mock's station.
@@ -192,8 +192,24 @@ def test_a_downlinked_packet_that_is_not_telemetry_is_refused(
     good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
     bad = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)], descriptor)
 
-    with pytest.raises(ValueError, match="FW_PACKET_TELEM"):
+    with pytest.raises(ValueError, match="not FW_PACKET_TELEM"):
         mock.decode([_downlink([good, bad])])
+
+
+def test_an_entry_of_a_channel_the_dictionary_lacks_is_refused_naming_its_id(
+    mock: FprimeStation, mock_dictionary: Dictionary
+):
+    """A channel ID not in the dictionary raises `ValueError` rather than misreading later entries.
+
+    Args:
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
+    """
+    good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
+    unknown = good[:2] + (0x7FFF).to_bytes(4, "big") + good[6:]
+
+    with pytest.raises(ValueError, match=r"channel ID 0x7fff .*not in the dictionary"):
+        mock.decode([_downlink([unknown])])
 
 
 def test_decode_takes_the_named_channels_only(mock: FprimeStation, mock_dictionary: Dictionary):
