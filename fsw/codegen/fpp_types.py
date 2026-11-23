@@ -56,12 +56,12 @@ def converter(source: type[Any], target: type[Any], *, copy: bool = True) -> Cal
     """A function converting a `source` value to a `target` value, each field taken by name.
 
     Fields are taken by `fsw.codegen.fields.plan`'s rule, and a conversion is planned once per
-    argument set, so a call does no lookup. Between structs' tuples, an array field becomes a fresh
-    array of the FPP type, or, with `copy` false, is the source's array itself; a scalar or an enum
-    name passes as it is. A Basilisk payload is read as a bus driver reads a buffer: its C struct is
-    copied once and viewed as its `__dtype__`, each array field a read-only array over that copy and
-    each scalar a number. A struct's tuple is written to a fresh payload the same way, each field
-    copied into the payload's C struct at its `__dtype__` offset.
+    argument set. Between structs' tuples, an array field becomes a fresh array of the FPP type, or,
+    with `copy` false, is the source's array itself; a scalar or an enum name passes as it is. A
+    Basilisk payload is read as a bus driver reads a buffer: its C struct is copied once and viewed
+    as its `__dtype__`, each array field a read-only array over that copy and each scalar a number.
+    A struct's tuple is written to a fresh payload the same way, each field copied into the
+    payload's C struct at its `__dtype__` offset.
 
     Args:
         source: a struct's tuple, or a Basilisk message payload's type.
@@ -124,6 +124,8 @@ def _payload_reader(
 def _payload_writer(source: type[Any], target: type[Any]) -> Callable[[Any], Any]:
     """A converter from a struct's tuple to a fresh Basilisk payload, written into its memory.
 
+    A value of another shape than its field's is refused rather than broadcast into it.
+
     Args:
         source: a struct's tuple.
         target: the Basilisk message payload's type.
@@ -133,7 +135,10 @@ def _payload_writer(source: type[Any], target: type[Any]) -> Callable[[Any], Any
     """
     struct, types = _STRUCTS[source]
     layout = target.__dtype__
-    fields = [name for _, name, _ in plan(struct, types, _source_forms(target), target.__name__)]
+    fields = [
+        (member.name, name, shape)
+        for member, name, (shape, _) in plan(struct, types, _source_forms(target), target.__name__)
+    ]
 
     def convert(value: Any) -> Any:
         """A fresh `target` payload holding a `source` tuple.
@@ -143,10 +148,15 @@ def _payload_writer(source: type[Any], target: type[Any]) -> Callable[[Any], Any
 
         Returns:
             The payload.
+
+        Raises:
+            ValueError: a field's value is of another shape than the field, naming it.
         """
         payload = target()
         record = np.frombuffer((ctypes.c_char * layout.itemsize).from_address(int(payload.this)), layout)
-        for name, field in zip(fields, value, strict=True):
+        for (member, name, shape), field in zip(fields, value, strict=True):
+            if np.shape(field) != shape:
+                raise ValueError(f"{source.__name__}.{member} is {shape}, but its value is {np.shape(field)}")
             record[name][0] = field
         return payload
 

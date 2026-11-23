@@ -9,9 +9,9 @@ wiring and rates, the roles it takes, the dictionary and the base tick. The radi
 CDH's `GroundLink`, which the frame runner forwards to.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -19,7 +19,6 @@ from fsw.codegen import fpp_types
 from fsw.codegen.deployment import CONTRACT, Contract, configuration_model, tick_period
 from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.roles import taken
-from fsw.payloads import payload_type
 from fsw.python.cdh import commands, inputs, outputs, parameters
 from fsw.python.cdh.ground_link import GroundLink
 from fsw.python.gnc.partition import GncPartition
@@ -29,6 +28,38 @@ from fsw.python.rio import messages
 __all__ = ["FrameRunner"]
 
 _NANOSECONDS_PER_SECOND = 1e9
+
+
+class _Input(NamedTuple):
+    """A sensor role's path into GNC, planned once.
+
+    Attributes:
+        role: the role.
+        port: the GNC sub-topology's input port it writes.
+        read: RIO-in's reader of its payload.
+        convert: CDH-in's converter of its bus struct.
+    """
+
+    role: str
+    port: str
+    read: Callable[[Any], Any]
+    convert: Callable[[Any], Any]
+
+
+class _Output(NamedTuple):
+    """An actuator role's path out of GNC, planned once.
+
+    Attributes:
+        role: the role.
+        port: the GNC sub-topology's output port it reads.
+        convert: CDH-out's converter of its ICD struct.
+        write: RIO-out's writer of its payload.
+    """
+
+    role: str
+    port: str
+    convert: Callable[[Any], Any]
+    write: Callable[[Any], Any]
 
 
 class FrameRunner:
@@ -70,13 +101,12 @@ class FrameRunner:
         self._configuration = configuration
         self._gnc = GncPartition(model, configuration, components)
         roles = taken(model, configuration)
-        sensors = inputs.pairings([role for role in roles if role.sensor])
+        self._sensors = inputs.pairings([role for role in roles if role.sensor])
         self._inputs = tuple(
-            (pair.role, pair.port, messages.reader(pair), inputs.converter(pair), payload_type(pair.bus.__qualname__))
-            for pair in sensors
+            _Input(pair.role, pair.port, messages.reader(pair), inputs.converter(pair)) for pair in self._sensors
         )
         self._outputs = tuple(
-            (pair.role, pair.port, outputs.converter(pair), messages.writer(pair))
+            _Output(pair.role, pair.port, outputs.converter(pair), messages.writer(pair))
             for pair in outputs.pairings([role for role in roles if not role.sensor])
         )
         self._dividers = dividers(model, self._gnc.rate_groups)
@@ -115,40 +145,24 @@ class FrameRunner:
         Returns:
             The actuator commands, by role: each a fresh `messaging.<Name>Payload` of the message
             the role's bus struct mirrors, for each actuator output GNC wrote this frame.
+
+        Raises:
+            KeyError: at the first tick after a boot, a sensor role has no message, as
+                `fsw.python.rio.messages.check` says.
+            TypeError: at the first tick after a boot, a sensor role's payload is of another
+                message, as `fsw.python.rio.messages.check` says.
         """
         if not self._checked:
-            self._check(messages_by_role)
+            messages.check(self._sensors, messages_by_role)
+            self._checked = True
         self._link.run_commands(t_ns)
-        for role, port, read, convert, _ in self._inputs:
+        for role, port, read, convert in self._inputs:
             self._gnc.write(port, convert(read(messages_by_role[role])))
         frame = self._gnc.run(t_ns / _NANOSECONDS_PER_SECOND, self._driver.tick())
         for member in frame.telemetry:
             self._link.log(member.instance, member.telemetry, t_ns)
         written = frame.outputs
         return {role: write(convert(written[port])) for role, port, convert, write in self._outputs if port in written}
-
-    def _check(self, messages_by_role: Mapping[str, Any]) -> None:
-        """Checks, at the first tick after a boot, that each sensor role's message is its bus struct's.
-
-        Args:
-            messages_by_role: each role's Basilisk message payload.
-
-        Raises:
-            KeyError: a sensor role has no message, naming it.
-            TypeError: a role's payload is not of the class its bus struct mirrors, naming both.
-        """
-        for role, _, _, _, payload in self._inputs:
-            if role not in messages_by_role:
-                raise KeyError(
-                    f"the configuration takes the role {role}, which the vehicle's messages"
-                    f" {sorted(messages_by_role)} lack"
-                )
-            given = type(messages_by_role[role]).__name__
-            if given != payload.__name__:
-                raise TypeError(
-                    f"the role {role}'s message is a {given}, but its bus struct mirrors {payload.__name__}"
-                )
-        self._checked = True
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command at the ground link, which runs it at the next tick.

@@ -4,6 +4,7 @@ The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's me
 `bus_messages`: RIO-in reads the sensor roles', and RIO-out builds the actuator roles' payloads.
 """
 
+import re
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -15,8 +16,9 @@ from fsw.codegen import fpp_types
 from fsw.codegen.deployment import contract_model
 from fsw.codegen.fields import DTYPES
 from fsw.codegen.roles import roles
+from fsw.payloads import payload_type
 from fsw.python.cdh import inputs, outputs
-from fsw.python.rio.messages import reader, writer
+from fsw.python.rio.messages import check, reader, writer
 
 DECLARED = roles(contract_model())
 """Every role of the contract's `Cdh.BusConverter`."""
@@ -151,6 +153,15 @@ def test_a_read_message_s_arrays_are_read_only(bus_messages: dict[str, Any]):
         for value in (v for v in read_ if isinstance(v, np.ndarray)):
             with pytest.raises(ValueError, match="read-only"):
                 value[...] = 0
+
+
+def test_a_paired_role_without_its_message_is_refused_naming_it_and_another_role_is_not_read():
+    """`check` refuses a vehicle lacking a paired role's message, and passes one with an extra role."""
+    messages = {pair.role: payload_type(pair.bus.__qualname__)() for pair in PAIRS}
+
+    check(PAIRS, {**messages, "other": object()})
+    with pytest.raises(KeyError, match=re.escape(f"the role {PAIRS[0].role},")):
+        check(PAIRS, {"other": object()})
 
 
 def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_message(

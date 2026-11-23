@@ -5,12 +5,12 @@ The sub-topology is `<configuration>.Gnc`. Its one `Svc.RateGroupDriver` drives 
 `RateGroupMemberOut` order; every other connection between its instances carries data. An algorithm
 is a class named as its member's FPP component, built at `boot` on its parameters. Its `step` takes
 `t`, in s, and a keyword per data input, named as the input port without its trailing `In`, and
-returns its `<Name>Outputs` and `<Name>Telemetry` tuples, read by field name; it must not change a
-returned output in place, since the member it is routed to holds it as written. A connection
-`A.X -> B.Y` routes `A`'s output `X` to `B`'s input `Y`, as an F´ sync port does: an output reaches
-a later member in the same frame, and a `None` output writes nothing, so an input holds the latest
-value written to it. A backward edge, into a member that runs no later than `A` in the frame, `A`
-itself included, is refused, as is an output feeding more than one input.
+returns its `<Name>Outputs` and `<Name>Telemetry` tuples, the generated ones, whose fields are read
+by position; it must not change a returned output in place, since the member it is routed to holds
+it as written. A connection `A.X -> B.Y` routes `A`'s output `X` to `B`'s input `Y`, as an F´ sync
+port does: an output reaches a later member in the same frame, and a `None` output writes nothing,
+so an input holds the latest value written to it. A backward edge, into a member that runs no later
+than `A` in the frame, `A` itself included, is refused, as is an output feeding more than one input.
 A sub-topology `port` other than the driver's exposes an instance's port: an input the CDH writes,
 or an output the CDH reads, which a frame returns when a member wrote it. An output exposed and
 also routed to an input is refused.
@@ -208,7 +208,7 @@ class GncPartition:
         self._held = {m: {} for m in self._classes}
         self._plan = tuple(tuple(self._member(m) for m in group) for group in self._members)
 
-    def _member(self, member: str) -> "_Member":
+    def _member(self, member: str) -> _Member:
         """A member as a frame runs it, planned once per boot.
 
         Args:

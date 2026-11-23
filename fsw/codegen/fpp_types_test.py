@@ -13,6 +13,7 @@ import numba
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
+from Basilisk.architecture.messaging.IMUSensorMsgPayload import IMUSensorMsgPayload
 from Basilisk.architecture.messaging.STSensorMsgPayload import STSensorMsgPayload
 
 from fsw.codegen import fpp_types
@@ -308,6 +309,22 @@ def test_a_struct_converts_to_a_fresh_basilisk_payload_written_field_by_field(mo
     assert payload.timeTag == 2**40 + 7
     assert list(payload.qInrtl2Case) == [0.5, -0.5, 0.25, 1.0]
     assert write(source) is not payload
+
+
+def test_a_struct_is_written_to_a_payload_only_in_its_fields_shapes(mock: SimpleNamespace):
+    """A payload's field unlike the struct's is refused when planned, a value of another shape when written.
+
+    Each refusal names the field.
+
+    Args:
+        mock: the mock's namespace.
+    """
+    with pytest.raises(ValueError, match="angVelPlatform"):
+        converter(mock.QuaternionRate, IMUSensorMsgPayload)
+    write = converter(mock.StarTracker, STSensorMsgPayload)
+
+    with pytest.raises(ValueError, match=re.escape("StarTracker.qInrtl2Case is (4,), but its value is ()")):
+        write(mock.StarTracker(timeTag=1, qInrtl2Case=0.5))
 
 
 def test_a_converter_is_planned_once_per_source_and_target():

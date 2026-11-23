@@ -28,7 +28,7 @@ def writes(instance: str, telemetry: NamedTuple | None, t_ns: int) -> list[tuple
     if telemetry is None:
         return []
     return [
-        (channel, t_ns, value.copy() if type(value) is np.ndarray else value)
+        (channel, t_ns, value.copy() if isinstance(value, np.ndarray) else value)
         for channel, value in zip(_channels(instance, telemetry._fields), telemetry, strict=True)
         if value is not None
     ]
