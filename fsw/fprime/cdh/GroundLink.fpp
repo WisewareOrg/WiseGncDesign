@@ -1,6 +1,6 @@
 module Cdh {
 
-  @ The ground's side of the deployment: commands up, responses and every telemetry write down
+  @ The ground's side of the deployment: commands up, responses and every telemetry write down, packed in telemetry packets
   passive component GroundLink {
     @ Command packets to the dispatcher
     output port cmdOut: Fw.Com

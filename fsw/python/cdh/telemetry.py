@@ -1,7 +1,8 @@
-"""The Python build's raw telemetry: an algorithm's telemetry tuple as one write per field written.
+"""The Python build's raw telemetry: an algorithm's telemetry tuple, as one write per field written.
 
 A field is a channel of the algorithm's instance, and `None` is not written, which no FPP value is.
-Each write is tagged with its tick's time; the ground packs the values with the dictionary.
+Each write is tagged with its tick's time; the ground packs the values with the dictionary. A frame
+logs a telemetry tuple whole, as an `Entry`, which the frame runner expands to writes at decode.
 """
 
 from __future__ import annotations
@@ -11,7 +12,28 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
-__all__ = ["writes"]
+__all__ = ["Entry", "entry", "writes"]
+
+Entry = tuple[tuple[str, ...], int, tuple[Any, ...]]
+"""One telemetry tuple as logged: its channels `<instance>.<field>` in field order, the tick's time
+in ns, and its values in field order, each array copied and each unwritten field `None`."""
+
+
+def entry(instance: str, telemetry: NamedTuple | None, t_ns: int) -> Entry | None:
+    """The log entry of one telemetry tuple, each array copied as written.
+
+    Args:
+        instance: the instance's unqualified name.
+        telemetry: the `<Name>Telemetry` tuple a step or command returned, or `None`.
+        t_ns: ns, the tick's time, which tags each write.
+
+    Returns:
+        `(channels, t_ns, values)`, or `None` for a `None` tuple.
+    """
+    if telemetry is None:
+        return None
+    values = tuple(value.copy() if isinstance(value, np.ndarray) else value for value in telemetry)
+    return _channels(instance, telemetry._fields), t_ns, values
 
 
 def writes(instance: str, telemetry: NamedTuple | None, t_ns: int) -> list[tuple[str, int, Any]]:
