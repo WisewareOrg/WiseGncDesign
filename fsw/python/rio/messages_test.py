@@ -14,7 +14,6 @@ from typing import Any
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
-from Basilisk.architecture.messaging.NavAttMsgPayload import NavAttMsgPayload
 from Basilisk.architecture.messaging.STSensorMsgPayload import STSensorMsgPayload
 
 from fsw.codegen import fpp_types
@@ -41,21 +40,21 @@ COMMANDS = outputs.pairings(ACTUATORS)
 """A pair per actuator role: the GNC's struct, through its bus struct, to its message."""
 
 MOCK = """\
-module RioMock {
+module Bus {
 
-  struct StarTracker {
+  struct STSensorMsg {
     timeTag: U64
     qInrtl2Case: [4] F64
   }
 
-  struct Attitude {
+  struct NavAttMsg {
     sigma_BN: [4] F64
   }
 
 }
 """
-"""Structs mirroring Basilisk payloads no bus struct does: `STSensorMsgPayload`, a scalar beside an
-array, and a four-element attitude unlike `NavAttMsgPayload`'s three."""
+"""Bus structs of payloads the contract's do not mirror: `STSensorMsgPayload`, a scalar beside an
+array, and `NavAttMsgPayload`, whose three-element attitude its four-element one does not match."""
 
 
 @pytest.fixture(scope="module")
@@ -66,14 +65,14 @@ def mock(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
         tmp_path_factory: where the mock's contract is written.
 
     Returns:
-        Module `RioMock`'s tuples.
+        The mock's bus structs' tuples.
     """
     directory = tmp_path_factory.mktemp("rio")
-    path = directory / "RioMock.fpp"
+    path = directory / "MockBus.fpp"
     path.write_text(MOCK)
     (directory / "gnc").mkdir()
     fpp_types.load(Contract((path,), Path(directory / "gnc")))
-    return SimpleNamespace(**{name: fpp_types.named(f"RioMock.{name}") for name in ("StarTracker", "Attitude")})
+    return SimpleNamespace(**{name: fpp_types.named(f"Bus.{name}") for name in ("STSensorMsg", "NavAttMsg")})
 
 
 def _written(payload: Any) -> tuple[Any, Any]:
@@ -228,7 +227,7 @@ def test_a_payload_reads_as_read_only_arrays_and_plain_scalars(mock: SimpleNames
     payload.timeTag = 2**40 + 7
     payload.qInrtl2Case = [0.5, -0.5, 0.25, 1.0]
 
-    read_ = reader(mock.StarTracker, STSensorMsgPayload)(payload)
+    read_ = reader(mock.STSensorMsg)(payload)
     payload.qInrtl2Case = [0.0, 0.0, 0.0, 0.0]
 
     assert read_.timeTag == 2**40 + 7
@@ -247,8 +246,8 @@ def test_a_bus_struct_is_written_to_a_fresh_payload_field_by_field(mock: SimpleN
     Args:
         mock: the mock's tuples.
     """
-    source = mock.StarTracker(timeTag=2**40 + 7, qInrtl2Case=np.array([0.5, -0.5, 0.25, 1.0]))
-    write = writer(mock.StarTracker, STSensorMsgPayload)
+    source = mock.STSensorMsg(timeTag=2**40 + 7, qInrtl2Case=np.array([0.5, -0.5, 0.25, 1.0]))
+    write = writer(mock.STSensorMsg)
 
     payload = write(source)
     source.qInrtl2Case[...] = 0.0
@@ -266,9 +265,9 @@ def test_a_bus_struct_whose_field_differs_from_the_payload_s_is_refused_when_pla
         mock: the mock's tuples.
     """
     with pytest.raises(ValueError, match="sigma_BN"):
-        reader(mock.Attitude, NavAttMsgPayload)
+        reader(mock.NavAttMsg)
     with pytest.raises(ValueError, match="sigma_BN"):
-        writer(mock.Attitude, NavAttMsgPayload)
+        writer(mock.NavAttMsg)
 
 
 def test_a_value_of_another_shape_than_its_field_is_refused_when_written(mock: SimpleNamespace):
@@ -277,10 +276,10 @@ def test_a_value_of_another_shape_than_its_field_is_refused_when_written(mock: S
     Args:
         mock: the mock's tuples.
     """
-    write = writer(mock.StarTracker, STSensorMsgPayload)
+    write = writer(mock.STSensorMsg)
 
-    with pytest.raises(ValueError, match=re.escape("StarTracker.qInrtl2Case is (4,), but its value is ()")):
-        write(mock.StarTracker(timeTag=1, qInrtl2Case=0.5))
+    with pytest.raises(ValueError, match=re.escape("STSensorMsg.qInrtl2Case is (4,), but its value is ()")):
+        write(mock.STSensorMsg(timeTag=1, qInrtl2Case=0.5))
 
 
 def test_a_value_not_of_the_bus_struct_is_refused_when_written(mock: SimpleNamespace):
@@ -289,11 +288,11 @@ def test_a_value_not_of_the_bus_struct_is_refused_when_written(mock: SimpleNames
     Args:
         mock: the mock's tuples.
     """
-    StarTracker = namedtuple("StarTracker", ["qInrtl2Case", "timeTag"])
-    write = writer(mock.StarTracker, STSensorMsgPayload)
+    STSensorMsg = namedtuple("STSensorMsg", ["qInrtl2Case", "timeTag"])
+    write = writer(mock.STSensorMsg)
 
-    with pytest.raises(TypeError, match="a StarTracker, not the bus struct's tuple RioMock.StarTracker"):
-        write(StarTracker(np.zeros(4), 1))
+    with pytest.raises(TypeError, match="a STSensorMsg, not the bus struct's tuple Bus.STSensorMsg"):
+        write(STSensorMsg(np.zeros(4), 1))
 
 
 def test_a_paired_role_without_its_message_is_refused_naming_it_and_another_role_is_not_read():

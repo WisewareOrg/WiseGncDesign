@@ -49,7 +49,7 @@ def check(pairs: Sequence[Pair], messages_by_role: Mapping[str, Any]) -> None:
             raise TypeError(f"the role {pair.role}'s message is a {given}, but its bus struct mirrors {wanted}")
 
 
-def reader(bus: type[Any], payload: type[Any] | None = None) -> Callable[[Any], Any]:
+def reader(bus: type[Any]) -> Callable[[Any], Any]:
     """RIO-in for one bus struct: a payload, read as a bus driver reads a buffer.
 
     The payload's C struct is copied once and viewed as its class's `__dtype__`: each array field
@@ -57,15 +57,14 @@ def reader(bus: type[Any], payload: type[Any] | None = None) -> Callable[[Any], 
     matched by `fsw.codegen.fpp_types.fields`, once.
 
     Args:
-        bus: the bus struct's tuple.
-        payload: the payload class read, by default the one `bus` mirrors by
+        bus: the bus struct's tuple, which reads the payload class it mirrors by
             `fsw.payloads.payload_type`.
 
     Returns:
         A function of a payload, a SWIG proxy whose `this` is its C struct's address, returning the
         bus struct's tuple.
     """
-    source: type[Any] = payload_type(bus.__qualname__) if payload is None else payload
+    source: type[Any] = payload_type(bus.__qualname__)
     layout = source.__dtype__
     taken = [(name, bool(shape)) for _, name, (shape, _) in fields(source, bus)]
 
@@ -84,21 +83,20 @@ def reader(bus: type[Any], payload: type[Any] | None = None) -> Callable[[Any], 
     return read
 
 
-def writer(bus: type[Any], payload: type[Any] | None = None) -> Callable[[Any], Any]:
+def writer(bus: type[Any]) -> Callable[[Any], Any]:
     """RIO-out for one bus struct: written into a fresh payload's memory.
 
     Each field is copied into the payload's C struct at its class's `__dtype__` offset; a value of
     another shape than its field's is refused rather than broadcast into it.
 
     Args:
-        bus: the bus struct's tuple.
-        payload: the payload class written, by default the one `bus` mirrors by
+        bus: the bus struct's tuple, which writes the payload class it mirrors by
             `fsw.payloads.payload_type`.
 
     Returns:
         A function of the bus struct's tuple, returning a fresh payload.
     """
-    target: type[Any] = payload_type(bus.__qualname__) if payload is None else payload
+    target: type[Any] = payload_type(bus.__qualname__)
     layout = target.__dtype__
     taken = [(member.name, name, shape) for member, name, (shape, _) in fields(target, bus)]
 

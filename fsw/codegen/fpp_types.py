@@ -77,7 +77,7 @@ def converter(source: type[Any], target: type[Any], *, copy: bool = True) -> Cal
 
 
 @functools.cache
-def fields(source: type[Any], target: type[Any]) -> list[tuple[Member, str, Form]]:
+def fields(source: type[Any], target: type[Any]) -> tuple[tuple[Member, str, Form], ...]:
     """Each field of a struct's tuple `target`, with the `source` field it is taken from.
 
     Fields are matched by `fsw.codegen.fields.plan`'s rule: by name, ignoring case, of one shape and
@@ -96,7 +96,7 @@ def fields(source: type[Any], target: type[Any]) -> list[tuple[Member, str, Form
     if target not in _STRUCTS:
         raise ValueError(f"{target.__name__} is not a struct's tuple")
     struct, types = _STRUCTS[target]
-    return plan(struct, types, _source_forms(source), source.__name__)
+    return tuple(plan(struct, types, _source_forms(source), source.__name__))
 
 
 def _struct_converter(source: type[Any], target: type[Any], *, copy: bool) -> Callable[[Any], Any]:
