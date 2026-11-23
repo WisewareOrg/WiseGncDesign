@@ -333,6 +333,31 @@ def test_a_boot_drops_the_downlink_an_earlier_copy_left_undrained(messages_by_ro
     assert station.decode([adapter.telemetry()]) == {}
 
 
+def test_a_channel_written_twice_in_a_frame_keeps_both_writes(mock_actuation: tuple[str, Role, Any, Path]):
+    """`actuator.tally` comes down twice in the frame the mock steps in, and once in a command-only frame.
+
+    `actuator.mark` counts one, as a step does. A mark is uplinked before each of two ticks, and
+    the mock steps at the first only, so the first frame holds a mark and a step, and the second a
+    mark alone. The writes keep the order written: the tally counts 1, 2, 3.
+
+    Args:
+        mock_actuation: the configuration, its role, the Python build's command and the record.
+    """
+    configuration, _, _, record = mock_actuation
+    adapter = Adapter(configuration, record, contract=MOCK)
+    adapter.boot()
+    station = FprimeStation(adapter, adapter.dictionary)
+
+    for tick in (1, 2):
+        station.uplink("actuator.mark", {}, tick)
+        adapter.tick(tick * NS, {})
+
+    times, tallies = station.decode([adapter.telemetry()], ["actuator.tally"])["actuator.tally"]
+
+    assert times.tolist() == [NS, NS, 2 * NS]
+    assert tallies.tolist() == [1, 2, 3]
+
+
 def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(
     mock_actuation: tuple[str, Role, Any, Path], holds: Callable[[Any, Mapping[str, Any]], None]
 ):

@@ -1,4 +1,4 @@
-// A test mock both builds fly as an actuator: each step it sends one fixed wheel command.
+// A test mock both builds fly as an actuator: each step it sends one fixed wheel command and counts it.
 #ifndef MOCKGNC_ACTUATOR_HPP
 #define MOCKGNC_ACTUATOR_HPP
 
@@ -11,8 +11,13 @@ class Actuator final : public ActuatorComponentBase {
     explicit Actuator(const char* compName);
 
   private:
-    //! Sends the command, as actuator.py's.
+    //! Counts the step, then sends the command, as actuator.py's.
     void schedIn_handler(FwIndexType portNum, U32 context) override;
+
+    //! Counts the mark.
+    void mark_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) override;
+
+    U32 m_tally = 0;
 };
 
 }  // namespace MockGnc
