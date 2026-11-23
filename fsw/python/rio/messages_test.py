@@ -7,6 +7,7 @@ The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's me
 import functools
 import gc
 import re
+import sys
 import weakref
 from collections import namedtuple
 from collections.abc import Callable, Mapping
@@ -350,6 +351,7 @@ def test_each_actuator_role_s_bus_struct_is_written_as_a_payload_of_its_message(
         holds(payload, bus_messages[role.bus].values)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="before 3.14, CPython allocates in the call itself")
 def test_a_bound_read_and_a_write_allocate_nothing(bus_messages: dict[str, Any], allocated: Callable[..., int]):
     """Each sensor role's bound read, and each actuator role's write, allocate nothing per call.
 

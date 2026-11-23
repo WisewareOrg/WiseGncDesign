@@ -9,20 +9,24 @@ namespace Bus {
 LabBusDriver::LabBusDriver(const char* compName) : LabBusDriverComponentBase(compName) {}
 
 U8* LabBusDriver::makeReceiveBuffer(FwIndexType port, FwSizeType size) {
+    FW_ASSERT(port >= 0 && port < PORTS, static_cast<FwAssertArgType>(port));
     this->m_receive[port].assign(size, 0);
     return this->m_receive[port].data();
 }
 
 const U8* LabBusDriver::makeTransmitBuffer(FwIndexType port, FwSizeType size) {
+    FW_ASSERT(port >= 0 && port < PORTS, static_cast<FwAssertArgType>(port));
     this->m_transmit[port].assign(size, 0);
     return this->m_transmit[port].data();
 }
 
 bool LabBusDriver::hasReceiveBuffer(FwIndexType port) const {
+    FW_ASSERT(port >= 0 && port < PORTS, static_cast<FwAssertArgType>(port));
     return !this->m_receive[port].empty();
 }
 
 bool LabBusDriver::hasTransmitBuffer(FwIndexType port) const {
+    FW_ASSERT(port >= 0 && port < PORTS, static_cast<FwAssertArgType>(port));
     return !this->m_transmit[port].empty();
 }
 

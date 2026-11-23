@@ -79,7 +79,7 @@ def reader(bus: type[Any]) -> Callable[[Any], Callable[[], Any]]:
         Returns:
             Its read.
         """
-        source = memory(value, layout.itemsize)
+        payload_bytes = memory(value, layout.itemsize)
         buffer = np.zeros(layout.itemsize, np.uint8)
         record = buffer.view(layout)
         views = {}
@@ -98,7 +98,7 @@ def reader(bus: type[Any]) -> Callable[[Any], Callable[[], Any]]:
                 Returns:
                     The bus struct, the same at every read.
                 """
-                np.copyto(buffer, source)
+                np.copyto(buffer, payload_bytes)
                 return struct
 
             return read
@@ -109,7 +109,7 @@ def reader(bus: type[Any]) -> Callable[[Any], Callable[[], Any]]:
             Returns:
                 A fresh bus struct holding the buffer's arrays and the scalars' values.
             """
-            np.copyto(buffer, source)
+            np.copyto(buffer, payload_bytes)
             return bus._make([views[name] if array else record[name][0].item() for name, array in taken])
 
         return read_with_scalars
