@@ -3,8 +3,8 @@
 The procedure is an `async def` driven on simulated time by the module's own loop, with no event
 loop and no wall clock: each `await` yields, and each tick resumes the coroutine until it waits
 again. The module also records every telemetry write the radio edge reports, with the flight
-software's time tag, and every command with its response, so one recorder serves every build. Writes
-are kept raw during the run and typed after it, each channel in one batch.
+software's time tag, and every command with its response, so one recorder serves every build. Downlinks
+are kept raw during the run and decoded when a value is read, each channel in one batch.
 """
 
 from collections.abc import Callable, Coroutine, Generator

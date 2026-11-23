@@ -14,6 +14,9 @@ from fsw.codegen.dictionary import Dictionary
 
 __all__ = ["FprimeStation"]
 
+_SECONDS_AND_MICROSECONDS_SIZE = 8
+"""Bytes of an `Fw.TimeValue`'s seconds and microseconds, two U32, which end every entry's header."""
+
 
 class FprimeStation:
     """The ground's radio edge to an F´ deployment, through the deployment's pins.
@@ -47,11 +50,11 @@ class FprimeStation:
         self._sizes = np.array([c.type.dtype.itemsize for c in channels])
         self._id = dictionary.type("FwChanIdType")
         id_size = self._id.dtype.itemsize
-        time_size = (
-            sum(dictionary.type(t).dtype.itemsize for t in ("FwTimeBaseStoreType", "FwTimeContextStoreType")) + 8
+        time_base_and_context = sum(
+            dictionary.type(t).dtype.itemsize for t in ("FwTimeBaseStoreType", "FwTimeContextStoreType")
         )
-        self._entry_header = id_size + time_size
-        self._seconds_at = self._entry_header - 8
+        self._entry_header = id_size + time_base_and_context + _SECONDS_AND_MICROSECONDS_SIZE
+        self._seconds_at = self._entry_header - _SECONDS_AND_MICROSECONDS_SIZE
 
     @property
     def period_s(self) -> float:
@@ -122,7 +125,8 @@ class FprimeStation:
         """Downlinks as each channel's values, every channel decoded in one batch.
 
         Each packet is an F´ `TlmPacket`: a `FwPacketDescriptorType` holding `FW_PACKET_TELEM`, then
-        entries of a `FwChanIdType`, an `Fw.TimeValue` and the value's bytes, whose size the
+        entries of a `FwChanIdType`, an `Fw.TimeValue` (time base, time context, seconds and microseconds)
+        and the value's bytes, whose size the
         channel's type gives. Every entry is kept, in the order downlinked.
 
         Args:
