@@ -85,6 +85,7 @@ class _Member(NamedTuple):
         routed: for each output port routed to a later member, its position in the `<Name>Outputs`
             tuple, that member's inputs and its keyword.
         exposed: for each output port the sub-topology exposes, its position and the port's name.
+        ports: its output ports, in FPP's order, the fields its `<Name>Outputs` tuple must have.
     """
 
     member: str
@@ -94,6 +95,7 @@ class _Member(NamedTuple):
     wanted: int
     routed: tuple[tuple[int, dict[str, Any], str], ...]
     exposed: tuple[tuple[int, str], ...]
+    ports: tuple[str, ...]
 
 
 class Frame(NamedTuple):
@@ -229,7 +231,14 @@ class GncPartition:
         )
         name = _name(member)
         return _Member(
-            member, name, self.algorithms[name].step, self._held[member], len(self._keywords[member]), routed, exposed
+            member,
+            name,
+            self.algorithms[name].step,
+            self._held[member],
+            len(self._keywords[member]),
+            routed,
+            exposed,
+            tuple(self._outputs[member]),
         )
 
     def write(self, port: str, value: Any) -> None:
@@ -255,16 +264,20 @@ class GncPartition:
 
         Raises:
             RuntimeError: a member's input has never been written, naming its port.
+            TypeError: a member's outputs are not a tuple of its output ports, in FPP's order,
+                naming it.
         """
         telemetry = []
         exposed = {}
         for group in fired:
-            for member, name, step, inputs, wanted, routed, exposed_ports in self._plan[group]:
+            for member, name, step, inputs, wanted, routed, exposed_ports, ports in self._plan[group]:
                 if len(inputs) < wanted:
                     unwritten = sorted(self._keywords[member] - set(inputs))
                     names = [f"{name}.{k}In" for k in unwritten]
                     raise RuntimeError(f"inputs {names} have not been written at t = {t} s")
                 outputs, tlm = step(t, **inputs)
+                if outputs._fields != ports:
+                    raise TypeError(f"{name} returned outputs {outputs._fields}, not its ports {ports} in order")
                 for index, held, keyword in routed:
                     if outputs[index] is not None:
                         held[keyword] = outputs[index]

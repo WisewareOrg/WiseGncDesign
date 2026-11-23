@@ -373,7 +373,7 @@ def python_command() -> Callable[[Role, Any], Any]:
             The payload.
         """
         [pair] = outputs.pairings([role])
-        return writer(pair)(outputs.converter(pair)(icd_value))
+        return writer(pair.bus)(outputs.converter(pair)(icd_value))
 
     return command
 

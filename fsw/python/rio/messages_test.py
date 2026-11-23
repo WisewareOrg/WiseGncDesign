@@ -6,14 +6,18 @@ The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's me
 
 import re
 from collections.abc import Callable, Mapping
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
+from Basilisk.architecture.messaging.NavAttMsgPayload import NavAttMsgPayload
+from Basilisk.architecture.messaging.STSensorMsgPayload import STSensorMsgPayload
 
 from fsw.codegen import fpp_types
-from fsw.codegen.deployment import contract_model
+from fsw.codegen.deployment import Contract, contract_model
 from fsw.codegen.fields import DTYPES
 from fsw.codegen.roles import roles
 from fsw.payloads import payload_type
@@ -34,6 +38,41 @@ ACTUATORS = [role for role in DECLARED if not role.sensor]
 
 COMMANDS = outputs.pairings(ACTUATORS)
 """A pair per actuator role: the GNC's struct, through its bus struct, to its message."""
+
+MOCK = """\
+module RioMock {
+
+  struct StarTracker {
+    timeTag: U64
+    qInrtl2Case: [4] F64
+  }
+
+  struct Attitude {
+    sigma_BN: [4] F64
+  }
+
+}
+"""
+"""Structs mirroring Basilisk payloads no bus struct does: `STSensorMsgPayload`, a scalar beside an
+array, and a four-element attitude unlike `NavAttMsgPayload`'s three."""
+
+
+@pytest.fixture(scope="module")
+def mock(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
+    """The mock's struct tuples, loaded once.
+
+    Args:
+        tmp_path_factory: where the mock's contract is written.
+
+    Returns:
+        Module `RioMock`'s tuples.
+    """
+    directory = tmp_path_factory.mktemp("rio")
+    path = directory / "RioMock.fpp"
+    path.write_text(MOCK)
+    (directory / "gnc").mkdir()
+    fpp_types.load(Contract((path,), Path(directory / "gnc")))
+    return SimpleNamespace(**{name: fpp_types.named(f"RioMock.{name}") for name in ("StarTracker", "Attitude")})
 
 
 def _written(payload: Any) -> tuple[Any, Any]:
@@ -82,7 +121,7 @@ def test_each_paired_role_s_message_is_read_as_its_bus_struct(
     for pair, role in zip(PAIRS, ROLES, strict=True):
         _, subscribed = _written(bus_messages[role.bus].payload)
 
-        read_ = reader(pair)(subscribed())
+        read_ = reader(pair.bus)(subscribed())
 
         assert isinstance(read_, fpp_types.named(role.bus)), role.role
         _assert_holds(holds, read_, bus_messages[role.bus], role.role)
@@ -108,7 +147,7 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
         alias = type(type(payload).__name__, (), {n: getattr(payload, n) for n in [*names, "this"]})()
         assert not hasattr(alias, "__dtype__")
 
-        read_ = reader(pair)(alias)
+        read_ = reader(pair.bus)(alias)
 
         _assert_holds(holds, read_, bus_messages[role.bus], role.role)
 
@@ -128,7 +167,7 @@ def test_a_read_message_keeps_its_values_after_the_next_tick(
     for pair, role in zip(PAIRS, ROLES, strict=True):
         message, subscribed = _written(bus_messages[role.bus].payload)
         payload = subscribed()
-        read_ = reader(pair)(payload)
+        read_ = reader(pair.bus)(payload)
         later = type(bus_messages[role.bus].payload)()
         for field in type(later).__dtype__.names:
             setattr(later, field, [v + 100.0 for v in getattr(payload, field)])
@@ -148,13 +187,99 @@ def test_a_read_message_s_arrays_are_read_only(bus_messages: dict[str, Any]):
     """
     for pair, role in zip(PAIRS, ROLES, strict=True):
         _, subscribed = _written(bus_messages[role.bus].payload)
-        read_ = reader(pair)(subscribed())
+        read_ = reader(pair.bus)(subscribed())
 
         arrays = [v for v in read_ if isinstance(v, np.ndarray)]
         assert arrays, role.role
         for value in arrays:
             with pytest.raises(ValueError, match="read-only"):
                 value[...] = 0
+
+
+def test_each_basilisk_message_reads_as_its_bus_struct_member_for_member(
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
+):
+    """Each bus struct's payload reads as it, each member its values in its FPP type.
+
+    Args:
+        bus_messages: a message of each bus struct, its members' values distinct.
+        holds: asserts a tuple holds values.
+    """
+    assert bus_messages
+    for name, message in bus_messages.items():
+        bus = reader(fpp_types.named(name))(message.payload)
+
+        assert type(bus) is fpp_types.named(name), name
+        holds(bus, message.values)
+        for member in message.struct.members:
+            value = getattr(bus, member.name)
+            assert isinstance(value, np.ndarray), f"{name}.{member.name}"
+            assert value.dtype == DTYPES[member.type], f"{name}.{member.name}"
+
+
+def test_a_payload_reads_as_read_only_arrays_and_plain_scalars(mock: SimpleNamespace):
+    """A payload is read from one copy of its memory: arrays read-only, a scalar a plain number.
+
+    Args:
+        mock: the mock's tuples.
+    """
+    payload = STSensorMsgPayload()
+    payload.timeTag = 2**40 + 7
+    payload.qInrtl2Case = [0.5, -0.5, 0.25, 1.0]
+
+    read_ = reader(mock.StarTracker, STSensorMsgPayload)(payload)
+    payload.qInrtl2Case = [0.0, 0.0, 0.0, 0.0]
+
+    assert read_.timeTag == 2**40 + 7
+    assert type(read_.timeTag) is int
+    assert read_.qInrtl2Case.tolist() == [0.5, -0.5, 0.25, 1.0]
+    with pytest.raises(ValueError, match="read-only"):
+        read_.qInrtl2Case[0] = 1.0
+
+
+def test_a_bus_struct_is_written_to_a_fresh_payload_field_by_field(mock: SimpleNamespace):
+    """A bus struct is written into a fresh payload's memory, each field at its offset.
+
+    The struct changed afterwards leaves the payload as it was, and a second write gives another
+    payload.
+
+    Args:
+        mock: the mock's tuples.
+    """
+    source = mock.StarTracker(timeTag=2**40 + 7, qInrtl2Case=np.array([0.5, -0.5, 0.25, 1.0]))
+    write = writer(mock.StarTracker, STSensorMsgPayload)
+
+    payload = write(source)
+    source.qInrtl2Case[...] = 0.0
+
+    assert type(payload) is STSensorMsgPayload
+    assert payload.timeTag == 2**40 + 7
+    assert list(payload.qInrtl2Case) == [0.5, -0.5, 0.25, 1.0]
+    assert write(source) is not payload
+
+
+def test_a_bus_struct_whose_field_differs_from_the_payload_s_is_refused_when_planned(mock: SimpleNamespace):
+    """Neither a reader nor a writer is planned when a field's shape differs, naming the field.
+
+    Args:
+        mock: the mock's tuples.
+    """
+    with pytest.raises(ValueError, match="sigma_BN"):
+        reader(mock.Attitude, NavAttMsgPayload)
+    with pytest.raises(ValueError, match="sigma_BN"):
+        writer(mock.Attitude, NavAttMsgPayload)
+
+
+def test_a_value_of_another_shape_than_its_field_is_refused_when_written(mock: SimpleNamespace):
+    """A scalar written to an array field is refused, naming the field, rather than broadcast into it.
+
+    Args:
+        mock: the mock's tuples.
+    """
+    write = writer(mock.StarTracker, STSensorMsgPayload)
+
+    with pytest.raises(ValueError, match=re.escape("StarTracker.qInrtl2Case is (4,), but its value is ()")):
+        write(mock.StarTracker(timeTag=1, qInrtl2Case=0.5))
 
 
 def test_a_paired_role_without_its_message_is_refused_naming_it_and_another_role_is_not_read():
@@ -194,7 +319,7 @@ def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_me
         for pair, role in zip(COMMANDS, ACTUATORS, strict=True)
     }
 
-    written = {pair.role: writer(pair)(buses[pair.role]) for pair in COMMANDS}
+    written = {pair.role: writer(pair.bus)(buses[pair.role]) for pair in COMMANDS}
     for bus in buses.values():
         for value in bus:
             value[...] = 0

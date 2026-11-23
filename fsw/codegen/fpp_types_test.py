@@ -4,7 +4,8 @@ Needs the F´ framework clone `just _sync` fetches, not an F´ build.
 """
 
 import re
-from collections.abc import Callable, Mapping
+from collections import namedtuple
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -13,8 +14,6 @@ import numba
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
-from Basilisk.architecture.messaging.IMUSensorMsgPayload import IMUSensorMsgPayload
-from Basilisk.architecture.messaging.STSensorMsgPayload import STSensorMsgPayload
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import (
@@ -24,7 +23,6 @@ from fsw.codegen.deployment import (
     framework_files,
 )
 from fsw.codegen.dictionary import Dictionary
-from fsw.codegen.fields import DTYPES
 from fsw.codegen.fpp_model import Instance, read
 from fsw.codegen.fpp_types import Gnc, Svc, _build, converter, named, parameters_from
 from fsw.mock import edited
@@ -52,10 +50,6 @@ module Mock {
     counts: [2] U16
   }
 
-  struct QuaternionRate {
-    angVelPlatform: [4] F64
-  }
-
   struct Reordered {
     mode: Mode
     rate: Vector3
@@ -63,11 +57,6 @@ module Mock {
 
   struct ModeOnly {
     mode: Mode
-  }
-
-  struct StarTracker {
-    timeTag: U64
-    qInrtl2Case: [4] F64
   }
 
   port ReadingPort(reading: Reading)
@@ -126,27 +115,6 @@ def mock(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
         Module `Mock`'s namespace.
     """
     return _mock(tmp_path_factory.mktemp("mock"))["Mock"]
-
-
-def test_each_basilisk_message_converts_to_its_bus_struct_member_for_member(
-    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
-):
-    """Each Basilisk message becomes its bus struct, each member its values in its FPP type.
-
-    Args:
-        bus_messages: a message of each bus struct, its members' values distinct.
-        holds: asserts a tuple holds values.
-    """
-    assert bus_messages
-    for name, message in bus_messages.items():
-        bus = converter(type(message.payload), named(name))(message.payload)
-
-        assert type(bus) is named(name), name
-        holds(bus, message.values)
-        for member in message.struct.members:
-            value = getattr(bus, member.name)
-            assert isinstance(value, np.ndarray), f"{name}.{member.name}"
-            assert value.dtype == DTYPES[member.type], f"{name}.{member.name}"
 
 
 def test_a_struct_s_tuple_has_no_defaults(mock: SimpleNamespace):
@@ -277,71 +245,6 @@ def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(mock: Simpl
     assert shaped.counts.tolist() == [7, 8]
 
 
-def test_a_basilisk_payload_converts_to_read_only_arrays_and_plain_scalars(mock: SimpleNamespace):
-    """A payload is read from one copy of its memory: arrays read-only, a scalar a plain number.
-
-    `STSensorMsgPayload` carries a scalar, `timeTag`, beside an array, `qInrtl2Case`.
-
-    Args:
-        mock: the mock's namespace.
-    """
-    payload = STSensorMsgPayload()
-    payload.timeTag = 2**40 + 7
-    payload.qInrtl2Case = [0.5, -0.5, 0.25, 1.0]
-
-    converted = converter(STSensorMsgPayload, mock.StarTracker)(payload)
-    payload.qInrtl2Case = [0.0, 0.0, 0.0, 0.0]
-
-    assert converted.timeTag == 2**40 + 7
-    assert type(converted.timeTag) is int
-    assert converted.qInrtl2Case.tolist() == [0.5, -0.5, 0.25, 1.0]
-    with pytest.raises(ValueError, match="read-only"):
-        converted.qInrtl2Case[0] = 1.0
-
-
-def test_a_struct_converts_to_a_fresh_basilisk_payload_written_field_by_field(mock: SimpleNamespace):
-    """A struct's tuple is written into a fresh payload's memory, each field at its offset.
-
-    The struct changed afterwards leaves the payload as it was, and a second conversion gives
-    another payload.
-
-    Args:
-        mock: the mock's namespace.
-    """
-    source = mock.StarTracker(timeTag=2**40 + 7, qInrtl2Case=np.array([0.5, -0.5, 0.25, 1.0]))
-    write = converter(mock.StarTracker, STSensorMsgPayload)
-
-    payload = write(source)
-    source.qInrtl2Case[...] = 0.0
-
-    assert type(payload) is STSensorMsgPayload
-    assert payload.timeTag == 2**40 + 7
-    assert list(payload.qInrtl2Case) == [0.5, -0.5, 0.25, 1.0]
-    assert write(source) is not payload
-
-
-def test_a_struct_whose_field_differs_from_the_payload_s_is_refused_when_planned(mock: SimpleNamespace):
-    """No writer is planned from a struct whose field has another shape than the payload's, naming it.
-
-    Args:
-        mock: the mock's namespace.
-    """
-    with pytest.raises(ValueError, match="angVelPlatform"):
-        converter(mock.QuaternionRate, IMUSensorMsgPayload)
-
-
-def test_a_value_of_another_shape_than_its_field_is_refused_when_written(mock: SimpleNamespace):
-    """A scalar written to an array field is refused, naming the field, rather than broadcast into it.
-
-    Args:
-        mock: the mock's namespace.
-    """
-    write = converter(mock.StarTracker, STSensorMsgPayload)
-
-    with pytest.raises(ValueError, match=re.escape("StarTracker.qInrtl2Case is (4,), but its value is ()")):
-        write(mock.StarTracker(timeTag=1, qInrtl2Case=0.5))
-
-
 def test_an_uncopied_conversion_takes_each_field_s_own_value_by_name(mock: SimpleNamespace):
     """With `copy` false, each target field is its source namesake's value itself, whatever the order.
 
@@ -360,6 +263,18 @@ def test_an_uncopied_conversion_takes_each_field_s_own_value_by_name(mock: Simpl
     assert alone == mock.ModeOnly(mode="running"), alone
 
 
+def test_a_converter_refuses_a_value_of_another_tuple_naming_both(mock: SimpleNamespace):
+    """A struct's tuple is read by position, so a value not of the source tuple raises.
+
+    Args:
+        mock: the mock's namespace.
+    """
+    Reading = namedtuple("Reading", ["mode", "count", "rate"])
+
+    with pytest.raises(TypeError, match="a Reading, not the struct's tuple Mock.Reading"):
+        converter(mock.Reading, mock.Reordered, copy=False)(Reading("running", 4, np.zeros(3)))
+
+
 def test_a_converter_is_planned_once_per_source_and_target():
     """The same source and target give the same converter."""
     bus, icd = named("Bus.ImuSensorMsg"), named("Gnc.ImuReading")
@@ -371,18 +286,17 @@ def test_a_converter_is_planned_once_per_source_and_target():
     ("source", "target", "match"),
     [
         ("Reading", "SpinnerTelemetry", "SpinnerTelemetry"),
-        (messaging.IMUSensorMsgPayload, "QuaternionRate", "AngVelPlatform"),
+        (messaging.IMUSensorMsgPayload, "Reading", "IMUSensorMsgPayload"),
     ],
-    ids=["not-a-struct", "basilisk-shape"],
+    ids=["not-a-struct", "basilisk-payload"],
 )
-def test_a_converter_refuses_a_field_that_breaks_the_field_rule(
+def test_a_converter_is_only_between_structs_tuples_naming_what_is_not_one(
     mock: SimpleNamespace, source: str | type, target: str, match: str
 ):
-    """No converter is built from a source that cannot fill its target, naming what fails.
+    """No converter is built between other than structs' tuples, naming what is not one.
 
-    A target field must be in the source, of its shape and element type; Basilisk's
-    three-element rate does not fill a four-element field. The target must be a struct's tuple,
-    which telemetry is not, and a target field of struct type is not converted.
+    The target must be a struct's tuple, which telemetry is not; nor is a Basilisk payload, which
+    RIO reads, `fsw.python.rio.messages`.
 
     Args:
         mock: the mock's namespace.

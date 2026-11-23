@@ -189,14 +189,16 @@ compiler internals, so a key the module reads that is missing raises `KeyError`.
 
 `fsw.codegen.fpp_types` is FPP's types as named tuples, generated when it is imported and never
 written in the tree, with `converter` between them. Its docstrings say what each FPP type becomes,
-which tuples an algorithm's component gets, and how fields are converted:
+which tuples an algorithm's component gets, and how fields are converted; RIO reads a Basilisk
+payload as its bus struct:
 
 ```python
 >>> from Basilisk.architecture import messaging
 >>> from fsw.codegen.fpp_types import Bus, Gnc, converter
+>>> from fsw.python.rio.messages import reader
 >>> payload = messaging.IMUSensorMsgPayload()
 >>> payload.AngVelPlatform = [0.0, 0.0, 1.0e-3]
->>> bus = converter(messaging.IMUSensorMsgPayload, Bus.ImuSensorMsg)(payload)
+>>> bus = reader(Bus.ImuSensorMsg)(payload)
 >>> reading = converter(Bus.ImuSensorMsg, Gnc.ImuReading)(bus)
 >>> reading.angVelPlatform.tolist()
 [0.0, 0.0, 0.001]

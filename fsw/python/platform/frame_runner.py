@@ -103,10 +103,10 @@ class FrameRunner:
         roles = taken(model, configuration)
         self._sensors = inputs.pairings([role for role in roles if role.sensor])
         self._inputs = tuple(
-            _Input(pair.role, pair.port, messages.reader(pair), inputs.converter(pair)) for pair in self._sensors
+            _Input(pair.role, pair.port, messages.reader(pair.bus), inputs.converter(pair)) for pair in self._sensors
         )
         self._outputs = tuple(
-            _Output(pair.role, pair.port, outputs.converter(pair), messages.writer(pair))
+            _Output(pair.role, pair.port, outputs.converter(pair), messages.writer(pair.bus))
             for pair in outputs.pairings([role for role in roles if not role.sensor])
         )
         self._dividers = dividers(model, self._gnc.rate_groups)
