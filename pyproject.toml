@@ -45,7 +45,7 @@ check-python = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = 
 check-reqs = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-reqs", rev = "6f8840aacdd7eb0c431af64f7eaa7bf326b38e29" }
 fprime-toolchain = { workspace = true }
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "08aa3d39ec2dc928bb993267086c1ba844f03f95" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "a8c6acb21218f1dfb87b7e06a643c9f9c033dd57" }
 
 [build-system]
 requires = ["hatchling"]
