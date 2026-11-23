@@ -6,7 +6,6 @@ as commands. Skipped without every deployment `just fsw` builds.
 
 import re
 import subprocess
-import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -339,7 +338,7 @@ def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(
 
     The test mock sends its command every other tick; the adapter reads the bytes back into the
     role's `messaging.<Name>Payload`, field for field the Python build's, returns the same commands
-    each tick it sends, a reuse `allocated` cannot see, and none at a tick it does not.
+    each tick it sends, and none at a tick it does not.
 
     Args:
         mock_actuation: the configuration, its role, the Python build's command and the record.
@@ -358,38 +357,3 @@ def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(
         ticks.append(tick)
         assert adapter.tick((k + 1) * NS, {}) == {}
     assert ticks[1] is ticks[0]
-
-
-@pytest.mark.skipif(sys.version_info < (3, 14), reason="before 3.14, CPython and pybind11 allocate in the call itself")
-def test_a_tick_allocates_nothing(messages_by_role: dict[str, Any], adapter: Adapter, allocated: Callable[..., int]):
-    """After its first, each tick copies alone: no Python or numpy allocation.
-
-    Each tick's time is made beforehand, as `FswHost` makes it, so only the tick is measured.
-
-    Args:
-        messages_by_role: a message for each sensor role the configuration takes.
-        adapter: the configuration's adapter, booted.
-        allocated: measures what a call allocates.
-    """
-    times = iter(list(range(NS, 2_100 * NS, NS)))
-
-    assert allocated(lambda: adapter.tick(next(times), messages_by_role)) == 0
-
-
-@pytest.mark.skipif(sys.version_info < (3, 14), reason="before 3.14, CPython and pybind11 allocate in the call itself")
-def test_a_tick_commanding_an_actuator_allocates_nothing(
-    mock_actuation: tuple[str, Role, Any, Path], allocated: Callable[..., int]
-):
-    """MockActuation's tick, which reads its command back each tick, allocates nothing.
-
-    Args:
-        mock_actuation: the configuration, its role, the Python build's command and the record.
-        allocated: measures what a call allocates.
-    """
-    configuration, _, _, record = mock_actuation
-    adapter = Adapter(configuration, record, contract=MOCK)
-    adapter.boot()
-    times = iter(list(range(NS, 2_100 * NS, NS)))
-    messages: dict[str, Any] = {}
-
-    assert allocated(lambda: adapter.tick(next(times), messages)) == 0

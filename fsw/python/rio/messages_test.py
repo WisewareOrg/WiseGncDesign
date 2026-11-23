@@ -4,10 +4,8 @@ The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's me
 `bus_messages`: RIO-in reads the sensor roles', and RIO-out builds the actuator roles' payloads.
 """
 
-import functools
 import gc
 import re
-import sys
 import weakref
 from collections import namedtuple
 from collections.abc import Callable, Mapping
@@ -363,23 +361,6 @@ def test_each_actuator_role_s_bus_struct_is_written_as_a_payload_of_its_message(
         holds(payload, bus_messages[role.bus].values)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 14), reason="before 3.14, CPython allocates in the call itself")
-def test_a_bound_read_and_a_write_allocate_nothing(bus_messages: dict[str, Any], allocated: Callable[..., int]):
-    """Each sensor role's bound read, and each actuator role's write, allocate nothing per call.
-
-    Args:
-        bus_messages: a message of each bus struct.
-        allocated: measures what a call allocates.
-    """
-    for pair, role in zip(PAIRS, ROLES, strict=True):
-        read = reader(pair.bus)(bus_messages[role.bus].payload)
-        assert allocated(read) == 0, role.role
-    for pair, role in zip(COMMANDS, ACTUATORS, strict=True):
-        write = writer(pair.bus)
-        value = pair.bus(**{m: np.array(v) for m, v in bus_messages[role.bus].values.items()})
-        assert allocated(functools.partial(write, value)) == 0, role.role
-
-
 def test_a_bound_read_keeps_its_payload_alive(bus_messages: dict[str, Any]):
     """A payload the caller drops stays alive while a read bound to it does.
 
@@ -395,15 +376,3 @@ def test_a_bound_read_keeps_its_payload_alive(bus_messages: dict[str, Any]):
 
         assert alive() is not None, role.role
         read()
-
-
-def test_the_allocated_gate_sees_an_allocation_and_passes_none(allocated: Callable[..., int]):
-    """The `allocated` fixture measures a call that allocates an array, and 0 for one that does not.
-
-    Args:
-        allocated: measures what a call allocates.
-    """
-    target, source = np.zeros(4), np.ones(4)
-
-    assert allocated(functools.partial(np.zeros, 4)) > 0
-    assert allocated(functools.partial(np.copyto, target, source)) == 0

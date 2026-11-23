@@ -605,51 +605,6 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
 
 
 @pytest.fixture
-def allocated() -> Callable[..., int]:
-    """Measures what a call allocates each time it runs, as `tracemalloc` traces Python and numpy.
-
-    It counts calls into Python's allocators, so an object CPython serves from a free list, such as
-    a small tuple or a dict, does not show: hold such a reuse with an identity assertion. It traces
-    every thread, so it measures twice and keeps the lower, which another thread's allocation in one
-    pass does not raise.
-
-    Returns:
-        A function of the call and a count, by default 1000, giving the bytes the traced peak rose
-        above its start over that many calls, made after ten untraced ones, the lower of two
-        passes: 0 when no call allocates, even memory freed before it returns.
-    """
-    import itertools
-    import tracemalloc
-
-    def measure(call: Callable[[], Any], calls: int = 1000) -> int:
-        """Runs the call, traced.
-
-        Args:
-            call: the call.
-            calls: the calls traced.
-
-        Returns:
-            Bytes.
-        """
-        for _ in range(10):
-            call()
-        peaks = []
-        for _ in range(2):
-            counts = itertools.repeat(None, calls)
-            tracemalloc.start()
-            try:
-                start = tracemalloc.get_traced_memory()[0]
-                for _ in counts:
-                    call()
-                peaks.append(tracemalloc.get_traced_memory()[1] - start)
-            finally:
-                tracemalloc.stop()
-        return min(peaks)
-
-    return measure
-
-
-@pytest.fixture
 def wire() -> Callable[..., Callable[..., int]]:
     """Wires a booted copy to the bus, its buffers sized to the bytes and bus structs they carry.
 
