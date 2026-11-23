@@ -66,6 +66,9 @@ way through, partitioned as real flight software is.
   same FPP (ADR 0004 rev 3).
 - **F´ in a repository of its own.** Each algorithm and its F´ build are written side by side.
   Rejected.
+- **The Python build copying a message's data at every partition boundary, as F´ does.** Python
+  passes references, so a second copy at CDH protects only memory no one keeps, at a per-tick cost
+  that dominates the frame. Rejected for one copy each way, in RIO, with read-only sensor arrays.
 
 ## Consequences
 

@@ -385,7 +385,30 @@ def test_a_sensor_role_s_message_of_another_payload_fails_the_tick_naming_both(
     """
     messages = _sensor_messages(roles_contract[1], bus_messages)
     role = sorted(messages)[0]
+    wanted = type(messages[role]).__name__
+    assert wanted != "SCStatesMsgPayload"
     messages[role] = payload_type("Bus.SCStatesMsg")()
 
-    with pytest.raises(TypeError, match=f"the role {role}'s message is a SCStatesMsgPayload"):
+    with pytest.raises(TypeError, match=f"the role {role}'s message is a SCStatesMsgPayload, .* mirrors {wanted}"):
+        roles_runner.tick(NS, messages)
+
+
+def test_each_boot_checks_the_messages_again_at_its_first_tick(
+    roles_runner: FrameRunner, roles_contract: tuple[Contract, list[Role]], bus_messages: dict[str, Any]
+):
+    """A boot after ticks that passed the check checks the next tick's messages again.
+
+    Args:
+        roles_runner: the frame runner on the rendered mock.
+        roles_contract: the rendered contract and the roles.
+        bus_messages: a message of each bus struct.
+    """
+    messages = _sensor_messages(roles_contract[1], bus_messages)
+    roles_runner.tick(NS, messages)
+    missing = sorted(messages)[0]
+    del messages[missing]
+
+    roles_runner.boot()
+
+    with pytest.raises(KeyError, match=f"the role {missing},"):
         roles_runner.tick(NS, messages)

@@ -113,6 +113,27 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
         _assert_holds(holds, read_, bus_messages[role.bus], role.role)
 
 
+def test_a_payload_swig_returns_as_a_simulation_module_s_class_reads_alike(
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
+):
+    """Once `imuSensor` is imported, a reader's IMU payload is its class, a proxy of the same C struct.
+
+    Args:
+        bus_messages: a message of each bus struct.
+        holds: asserts a tuple or payload holds values.
+    """
+    from Basilisk.simulation import imuSensor
+
+    [(pair, role)] = [(p, r) for p, r in zip(PAIRS, ROLES, strict=True) if r.bus == "Bus.ImuSensorMsg"]
+    _, subscribed = _written(bus_messages[role.bus].payload)
+    payload = subscribed()
+    assert type(payload) is imuSensor.IMUSensorMsgPayload
+
+    read_ = reader(pair)(payload)
+
+    _assert_holds(holds, read_, bus_messages[role.bus], role.role)
+
+
 def test_a_read_message_keeps_its_values_after_the_next_tick(
     bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
@@ -150,7 +171,9 @@ def test_a_read_message_s_arrays_are_read_only(bus_messages: dict[str, Any]):
         _, subscribed = _written(bus_messages[role.bus].payload)
         read_ = reader(pair)(subscribed())
 
-        for value in (v for v in read_ if isinstance(v, np.ndarray)):
+        arrays = [v for v in read_ if isinstance(v, np.ndarray)]
+        assert arrays, role.role
+        for value in arrays:
             with pytest.raises(ValueError, match="read-only"):
                 value[...] = 0
 
@@ -162,6 +185,16 @@ def test_a_paired_role_without_its_message_is_refused_naming_it_and_another_role
     check(PAIRS, {**messages, "other": object()})
     with pytest.raises(KeyError, match=re.escape(f"the role {PAIRS[0].role},")):
         check(PAIRS, {"other": object()})
+
+
+def test_a_paired_role_s_message_of_another_payload_class_is_refused_naming_both():
+    """`check` refuses a payload whose class is not the one its role's bus struct mirrors."""
+    pair = PAIRS[0]
+    wanted = payload_type(pair.bus.__qualname__).__name__
+    assert wanted != "SCStatesMsgPayload"
+
+    with pytest.raises(TypeError, match=f"the role {pair.role}'s message is a SCStatesMsgPayload, .* mirrors {wanted}"):
+        check([pair], {pair.role: payload_type("Bus.SCStatesMsg")()})
 
 
 def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_message(

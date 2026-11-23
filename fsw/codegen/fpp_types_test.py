@@ -56,6 +56,15 @@ module Mock {
     angVelPlatform: [4] F64
   }
 
+  struct Reordered {
+    mode: Mode
+    rate: Vector3
+  }
+
+  struct ModeOnly {
+    mode: Mode
+  }
+
   struct StarTracker {
     timeTag: U64
     qInrtl2Case: [4] F64
@@ -311,20 +320,44 @@ def test_a_struct_converts_to_a_fresh_basilisk_payload_written_field_by_field(mo
     assert write(source) is not payload
 
 
-def test_a_struct_is_written_to_a_payload_only_in_its_fields_shapes(mock: SimpleNamespace):
-    """A payload's field unlike the struct's is refused when planned, a value of another shape when written.
-
-    Each refusal names the field.
+def test_a_struct_whose_field_differs_from_the_payload_s_is_refused_when_planned(mock: SimpleNamespace):
+    """No writer is planned from a struct whose field has another shape than the payload's, naming it.
 
     Args:
         mock: the mock's namespace.
     """
     with pytest.raises(ValueError, match="angVelPlatform"):
         converter(mock.QuaternionRate, IMUSensorMsgPayload)
+
+
+def test_a_value_of_another_shape_than_its_field_is_refused_when_written(mock: SimpleNamespace):
+    """A scalar written to an array field is refused, naming the field, rather than broadcast into it.
+
+    Args:
+        mock: the mock's namespace.
+    """
     write = converter(mock.StarTracker, STSensorMsgPayload)
 
     with pytest.raises(ValueError, match=re.escape("StarTracker.qInrtl2Case is (4,), but its value is ()")):
         write(mock.StarTracker(timeTag=1, qInrtl2Case=0.5))
+
+
+def test_an_uncopied_conversion_takes_each_field_s_own_value_by_name(mock: SimpleNamespace):
+    """With `copy` false, each target field is its source namesake's value itself, whatever the order.
+
+    `Reordered` takes `Reading`'s fields in another order, and `ModeOnly` its last one alone.
+
+    Args:
+        mock: the mock's namespace.
+    """
+    source = mock.Reading(rate=np.array([1.0, 2.0, 3.0]), count=4, mode="running")
+
+    reordered = converter(mock.Reading, mock.Reordered, copy=False)(source)
+    alone = converter(mock.Reading, mock.ModeOnly, copy=False)(source)
+
+    assert reordered == mock.Reordered(mode="running", rate=source.rate), reordered
+    assert reordered.rate is source.rate, "the array was copied"
+    assert alone == mock.ModeOnly(mode="running"), alone
 
 
 def test_a_converter_is_planned_once_per_source_and_target():
