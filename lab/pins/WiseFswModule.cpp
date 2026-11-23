@@ -166,7 +166,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
             py::tuple drained = py::make_tuple(
                 py::bytes(reinterpret_cast<const char*>(downlink.data()), downlink.size()),
                 py::bytes(reinterpret_cast<const char*>(sizes.data()), sizes.size() * sizeof(U32)));
-            WiseFsw::groundLink.drained();
+            WiseFsw::groundLink.clearDownlink();
             return drained;
         },
         "Every telemetry packet downlinked since the last call, oldest first: (the packets back to back, each "

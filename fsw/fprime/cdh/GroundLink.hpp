@@ -33,7 +33,7 @@ class GroundLink final : public GroundLinkComponentBase {
     const std::vector<U32>& packetSizes() const { return this->m_sizes; }
 
     //! Empties the downlink, keeping its storage.
-    void drained() {
+    void clearDownlink() {
         this->m_downlink.clear();
         this->m_sizes.clear();
     }
