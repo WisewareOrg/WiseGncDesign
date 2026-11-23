@@ -1,8 +1,8 @@
 # 0006 — Meet the sim as a hardware-in-the-loop rig, on bus bytes
 
 **Status:** accepted
-**Decided:** 2026-11-23 (issue 51 two edges design; issue 52 tooling checks; issue 106 Profile the
-F´ build's per-case time)
+**Decided:** 2026-11-23 (issue 51 two edges design; issue 52 tooling checks; issue 106 Make the
+hardware edge only copy at a tick, in both builds)
 **Rev:** 2
 
 ## Revisions
@@ -16,9 +16,8 @@ F´ build's per-case time)
   the emulator, and the role wiring generated (issue 95 Generate the actuator direction and each
   configuration's role wiring, in both builds).
 - **rev 2** — 2026-11-23 — the lab's half of the hardware edge only copies at a tick
-  (ADR 0005 rev 3): LabBusDriver holds a receive and a transmit buffer per port, made at boot, and
-  the bus emulator binds each payload to its buffer once (issue 106 Profile the F´ build's per-case
-  time).
+  (ADR 0005 rev 3), through bus buffers made at boot; bytes packed per step rejected (issue 106
+  Make the hardware edge only copy at a tick, in both builds).
 
 ## Context
 
@@ -61,10 +60,8 @@ The little-endian push is the failure the comparison would have shown.
 - **LabBusDriver takes the bytes on F´ `serial` ports** and delivers typed bus structs, and takes
   typed bus structs back as bytes on `serial` ports.
 - **No part of the lab, and no sim glue, names an algorithm.**
-- **The lab only copies at a tick** (ADR 0005 rev 3). LabBusDriver holds a receive buffer and a
-  transmit buffer per port, made at boot; the bus emulator binds each payload to its buffer once
-  and copies its fields there as one cast per stretch of like members, and the pins' step carries
-  no data.
+- **The lab only copies at a tick** (ADR 0005 rev 3): LabBusDriver's buffers are made at boot,
+  and the bus emulator binds each payload to its buffer once.
 
 ## Alternatives considered
 
@@ -77,16 +74,14 @@ The little-endian push is the failure the comparison would have shown.
   buffer manager, an allocator and its own hub-to-hub framing, and its source shows it would pass
   a long push silently and drop a wrong port silently. Rejected (the spike in the decision comment
   of 2026-11-16 on issue 63 The lab's bus driver carries bus data into the F´ build).
-
 - **Bytes handed to the pins per step, packed by `struct` from each field read through SWIG.**
-  Each tick builds Python lists, a bytes object and the pins' copies of it: about 35 ms of a
-  5,700-tick Leo500 case, and the bus driver allocated per actuator message. Rejected for fixed
-  buffers.
+  Each tick builds Python lists, a bytes object and the pins' copies of it, and the bus driver
+  allocated per actuator message: the lab's largest per-tick cost in the profile on issue 106.
+  Rejected for fixed buffers.
 
 ## Consequences
 
 - An added sensor or actuator is FPP declarations; its wiring is generated, and no sim glue is
   written for it.
 - The bus structs are a hand-kept mirror of Basilisk's messages; a test fails when one drifts.
-- A wrong-sized receive buffer still trips F´'s own assert at the push (ADR 0003 rev 4), and a
-  struct of another size than its transmit buffer trips LabBusDriver's.
+- A wrong-sized receive buffer trips F´'s own assert at the push (ADR 0003 rev 4).

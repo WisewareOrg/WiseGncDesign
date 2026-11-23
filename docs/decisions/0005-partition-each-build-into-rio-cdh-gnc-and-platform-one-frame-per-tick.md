@@ -2,7 +2,8 @@
 
 **Status:** accepted
 **Decided:** 2026-11-23 (issue 51 two edges design; issue 61 The Python frame runner, on
-WiseDynamics' host module; issue 106 Profile the F´ build's per-case time)
+WiseDynamics' host module; issue 106 Make the hardware edge only copy at a tick, in both
+builds)
 **Rev:** 3
 
 ## Revisions
@@ -19,8 +20,8 @@ WiseDynamics' host module; issue 106 Profile the F´ build's per-case time)
   build's frame overhead).
 - **rev 3** — 2026-11-23 — at the hardware edge a frame only copies: each build's RIO binds its
   buffers and payloads at boot or at the first tick, a tick allocates nothing there, and a sensor
-  input is valid for its tick, so GNC copies what it keeps (issue 106 Profile the F´ build's
-  per-case time).
+  input is valid for its tick, so GNC copies what it keeps (issue 106 Make the hardware edge
+  only copy at a tick, in both builds).
 
 ## Context
 
@@ -78,8 +79,8 @@ way through, partitioned as real flight software is.
   passes references, so a second copy at CDH protects only memory no one keeps, at a per-tick cost
   that dominates the frame. Rejected for one copy each way, in RIO, with read-only sensor arrays.
 - **A fresh read-only copy of each message every tick, as rev 2 had it.** Each tick allocates the
-  copy, its views and its tuple: RIO-in's largest per-tick cost, about 39 ms of a 5,700-tick Leo500
-  case. A held input that never changes also lets an algorithm keep what a real partition would
+  copy, its views and its tuple: RIO-in's largest per-tick cost in the profile on issue 106. A held
+  input that never changes also lets an algorithm keep what a real partition would
   have to copy. Rejected for a buffer per message, bound once and refreshed in place.
 
 ## Consequences

@@ -3,8 +3,8 @@
 Lab equipment, as a hardware-in-the-loop rig is: it powers the deployment on, writes each sensor's
 reading into the bus driver's receive buffer as the bytes the vehicle's bus would carry, reads the
 bytes the deployment sends each actuator out of its transmit buffer into its Basilisk message, and
-carries the bytes of the deployment's radio link, which the ground decodes. Every buffer, payload
-and copy is made at boot or at the first tick; a tick after only copies.
+carries the bytes of the deployment's radio link, which the ground decodes. A tick only copies
+(ADR 0006 rev 2).
 """
 
 from collections.abc import Callable, Mapping
