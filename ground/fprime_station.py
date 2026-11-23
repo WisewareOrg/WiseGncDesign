@@ -14,8 +14,10 @@ from fsw.codegen.dictionary import Dictionary
 
 __all__ = ["FprimeStation"]
 
-_SECONDS_AND_MICROSECONDS_SIZE = 8
-"""Bytes of an `Fw.TimeValue`'s seconds and microseconds, two U32, which end every entry's header."""
+_TIME_U32_SIZE = 4
+"""Bytes of one U32 of an `Fw.TimeValue`, its seconds or its microseconds."""
+_SECONDS_AND_MICROSECONDS_SIZE = 2 * _TIME_U32_SIZE
+"""Bytes of an `Fw.TimeValue`'s seconds and microseconds, which end every entry's header."""
 
 
 class FprimeStation:
@@ -47,9 +49,9 @@ class FprimeStation:
         self._telem_descriptor = apids["FW_PACKET_TELEM"]
         channels = sorted(dictionary.channels_by_id.values(), key=lambda c: c.id)
         self._ids = np.array([c.id for c in channels])
-        self._sizes = np.array([c.type.dtype.itemsize for c in channels])
-        self._id = dictionary.type("FwChanIdType")
-        id_size = self._id.dtype.itemsize
+        self._value_sizes = np.array([c.type.dtype.itemsize for c in channels])
+        self._id_type = dictionary.type("FwChanIdType")
+        id_size = self._id_type.dtype.itemsize
         time_base_and_context = sum(
             dictionary.type(t).dtype.itemsize for t in ("FwTimeBaseStoreType", "FwTimeContextStoreType")
         )
@@ -142,56 +144,35 @@ class FprimeStation:
                 `FW_PACKET_TELEM`, an entry whose channel ID is not in the dictionary, packet sizes
                 that do not sum to the bytes, and a packet cut short. Each message names the packet.
         """
-        data = np.frombuffer(b"".join(packets for packets, _ in downlinks), np.uint8)
-        sizes = np.concatenate([np.frombuffer(sizes, np.uint32) for _, sizes in downlinks] or [[]]).astype(np.int64)
-        if not sizes.size:
+        sizes = []
+        for packets, packet_sizes in downlinks:
+            drain_sizes = np.frombuffer(packet_sizes, np.uint32).astype(np.int64)
+            if drain_sizes.sum() != len(packets):
+                raise ValueError(f"a downlink's packet sizes sum to {drain_sizes.sum()} bytes, not its {len(packets)}")
+            sizes.append(drain_sizes)
+        if not sizes:
             return {}
-        if sizes.sum() != data.size:
-            raise ValueError(f"a downlink's packet sizes sum to {sizes.sum()} bytes, not its {data.size}")
+        sizes = np.concatenate(sizes)
+        data = np.frombuffer(b"".join(packets for packets, _ in downlinks), np.uint8)
         ends = np.cumsum(sizes)
         starts = ends - sizes
         head = self._descriptor.dtype.itemsize
         self._refuse_cut_short(sizes < head)
-        descriptors = self._read(data, starts, self._descriptor)
+        descriptors = _be_uint(data, starts, head)
         wrong = np.flatnonzero(descriptors != self._telem_descriptor)
         if wrong.size:
             found = int(descriptors[wrong[0]])
             name = next((n for n, value in self._apids.items() if value == found), found)
             raise ValueError(f"downlinked packet {wrong[0]} is {name}, not FW_PACKET_TELEM")
-        positions, ids = [], []
-        cursors = starts + head
-        id_size = self._id.dtype.itemsize
-        while True:
-            live = cursors < ends
-            if not live.any():
-                break
-            at = cursors[live]
-            self._refuse_cut_short(at + id_size > ends[live], live)
-            entry_ids = self._read(data, at, self._id)
-            known = np.searchsorted(self._ids, entry_ids)
-            unknown = (known >= self._ids.size) | (self._ids[np.minimum(known, self._ids.size - 1)] != entry_ids)
-            if unknown.any():
-                packet = np.flatnonzero(live)[unknown][0]
-                raise ValueError(
-                    f"downlinked packet {packet} holds channel ID {entry_ids[unknown][0]:#x}, not in the dictionary"
-                )
-            after = at + self._entry_header + self._sizes[known]
-            self._refuse_cut_short(after > ends[live], live)
-            positions.append(at)
-            ids.append(entry_ids)
-            cursors = cursors.copy()
-            cursors[live] = after
-        if not positions:
+        position, chan = self._entries(data, starts + head, ends)
+        if not position.size:
             return {}
-        position, chan = np.concatenate(positions), np.concatenate(ids)
         if names is not None:
             wanted = np.isin(chan, [self.dictionary.channel(name).id for name in names])
             position, chan = position[wanted], chan[wanted]
-        order = np.argsort(position, kind="stable")
-        position, chan = position[order], chan[order]
-        seconds = _be_u32(data, position + self._seconds_at)
-        useconds = _be_u32(data, position + self._seconds_at + 4)
-        t_ns = seconds.astype(np.int64) * 1_000_000_000 + useconds.astype(np.int64) * 1_000
+        seconds = _be_uint(data, position + self._seconds_at, _TIME_U32_SIZE)
+        useconds = _be_uint(data, position + self._seconds_at + _TIME_U32_SIZE, _TIME_U32_SIZE)
+        t_ns = seconds * 1_000_000_000 + useconds * 1_000
         unique, first = np.unique(chan, return_index=True)
         decoded = {}
         for cid in unique[np.argsort(first)].tolist():
@@ -202,6 +183,50 @@ class FprimeStation:
             raw = np.frombuffer(np.ascontiguousarray(value_bytes).tobytes(), channel.type.dtype)
             decoded[channel.name] = (t_ns[mine], channel.from_raw(raw))
         return decoded
+
+    def _entries(self, data: np.ndarray, cursors: np.ndarray, ends: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Where each entry of the packets starts and which channel it holds, in downlink order.
+
+        Round k reads every packet's k-th entry together, so no entry is read on its own.
+
+        Args:
+            data: every packet's bytes, back to back.
+            cursors: where each packet's first entry starts.
+            ends: where each packet ends.
+
+        Returns:
+            Each entry's offset and its channel ID, oldest first.
+
+        Raises:
+            ValueError: for an entry whose channel ID is not in the dictionary, or that overruns its
+                packet, naming the packet.
+        """
+        positions, ids = [], []
+        id_size = self._id_type.dtype.itemsize
+        while True:
+            live = cursors < ends
+            if not live.any():
+                break
+            at = cursors[live]
+            self._refuse_cut_short(at + id_size > ends[live], live)
+            entry_ids = _be_uint(data, at, id_size)
+            known = np.searchsorted(self._ids, entry_ids)
+            unknown = (known >= self._ids.size) | (self._ids[np.minimum(known, self._ids.size - 1)] != entry_ids)
+            if unknown.any():
+                packet = np.flatnonzero(live)[unknown][0]
+                raise ValueError(
+                    f"downlinked packet {packet} holds channel ID {entry_ids[unknown][0]:#x}, not in the dictionary"
+                )
+            after = at + self._entry_header + self._value_sizes[known]
+            self._refuse_cut_short(after > ends[live], live)
+            positions.append(at)
+            ids.append(entry_ids)
+            cursors[live] = after
+        if not positions:
+            return np.empty(0, np.int64), np.empty(0, np.int64)
+        position, chan = np.concatenate(positions), np.concatenate(ids)
+        order = np.argsort(position, kind="stable")
+        return position[order], chan[order]
 
     @staticmethod
     def _refuse_cut_short(cut: np.ndarray, live: np.ndarray | None = None) -> None:
@@ -218,30 +243,16 @@ class FprimeStation:
             packets = np.flatnonzero(cut) if live is None else np.flatnonzero(live)[cut]
             raise ValueError(f"downlinked packet {packets[0]} is cut short")
 
-    @staticmethod
-    def _read(data: np.ndarray, at: np.ndarray, ftype: Any) -> np.ndarray:
-        """The big-endian values of a type at each offset.
 
-        Args:
-            data: the bytes.
-            at: each value's offset.
-            ftype: the dictionary type of the values.
-
-        Returns:
-            (N,) of the type's integers.
-        """
-        size = ftype.dtype.itemsize
-        return np.ascontiguousarray(data[at[:, None] + np.arange(size)]).view(f">u{size}").ravel().astype(np.int64)
-
-
-def _be_u32(data: np.ndarray, at: np.ndarray) -> np.ndarray:
-    """The big-endian U32 at each offset.
+def _be_uint(data: np.ndarray, at: np.ndarray, size: int) -> np.ndarray:
+    """The big-endian unsigned integer of `size` bytes at each offset.
 
     Args:
         data: the bytes.
-        at: each U32's offset.
+        at: each integer's offset.
+        size: its width in bytes, 1, 2, 4 or 8.
 
     Returns:
-        (N,) uint32.
+        (N,) int64.
     """
-    return np.ascontiguousarray(data[at[:, None] + np.arange(4)]).view(">u4").ravel()
+    return np.ascontiguousarray(data[at[:, None] + np.arange(size)]).view(f">u{size}").ravel().astype(np.int64)

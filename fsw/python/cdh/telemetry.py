@@ -47,13 +47,11 @@ def writes(instance: str, telemetry: NamedTuple | None, t_ns: int) -> list[tuple
     Returns:
         `(<instance>.<channel>, t_ns, value)` for each field that is not `None`.
     """
-    if telemetry is None:
+    logged = entry(instance, telemetry, t_ns)
+    if logged is None:
         return []
-    return [
-        (channel, t_ns, value.copy() if isinstance(value, np.ndarray) else value)
-        for channel, value in zip(_channels(instance, telemetry._fields), telemetry, strict=True)
-        if value is not None
-    ]
+    channels, t_ns, values = logged
+    return [(channel, t_ns, value) for channel, value in zip(channels, values, strict=True) if value is not None]
 
 
 @functools.cache
