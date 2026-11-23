@@ -14,6 +14,9 @@ module WiseFsw {
     instance cdh
     instance cmdDisp
     instance prmDb
+    instance tlmSend
+    instance frameDriver
+    instance commRateGroup
 
     time connections instance simTime
 
@@ -21,10 +24,13 @@ module WiseFsw {
 
     param connections instance prmDb
 
-    telemetry connections instance groundLink
+    telemetry connections instance tlmSend
 
     connections RateGroups {
-      simTime.CycleOut -> @CONFIGURATION@.Gnc.tickIn
+      simTime.CycleOut -> frameDriver.CycleIn
+      frameDriver.CycleOut[0] -> @CONFIGURATION@.Gnc.tickIn
+      frameDriver.CycleOut[1] -> commRateGroup.CycleIn
+      commRateGroup.RateGroupMemberOut[0] -> tlmSend.Run
     }
 
     connections Simulation {
@@ -34,6 +40,7 @@ module WiseFsw {
     connections Ground {
       groundLink.cmdOut -> cmdDisp.seqCmdBuff[0]
       cmdDisp.seqCmdStatus[0] -> groundLink.cmdResponseIn
+      tlmSend.PktSend -> groundLink.downlinkIn
     }
 
   }

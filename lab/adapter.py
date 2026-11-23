@@ -215,10 +215,10 @@ class Adapter:
         """
         return self._fsw.responses()
 
-    def telemetry(self) -> list[tuple[int, int, bytes]]:
-        """The loaded copy's telemetry writes since the last call, oldest first.
+    def telemetry(self) -> bytes:
+        """The loaded copy's downlink since the last call: its telemetry packets, oldest first.
 
         Returns:
-            `(channel ID, F´ time tag in ns, serialized value)`.
+            Each packet as a big-endian U32 size, then the packet.
         """
         return self._fsw.telemetry()

@@ -144,6 +144,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
             g_cooperative.pump();
             WiseFsw::labBusDriver.push();
             WiseFsw::simTime.tick();
+            g_cooperative.pump();
             return WiseFsw::labBusDriver.takeWritten();
         },
         py::arg("t_ns"),
@@ -160,16 +161,13 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
     m.def(
         "telemetry",
         []() {
-            py::list writes;
-            for (const auto& write : WiseFsw::groundLink.takeWrites()) {
-                writes.append(py::make_tuple(
-                    write.id, write.ns,
-                    py::bytes(reinterpret_cast<const char*>(write.value.data()), write.value.size())));
-            }
-            return writes;
+            const std::vector<U8>& downlink = WiseFsw::groundLink.downlinked();
+            py::bytes drained(reinterpret_cast<const char*>(downlink.data()), downlink.size());
+            WiseFsw::groundLink.drained();
+            return drained;
         },
-        "Every telemetry write since the last call, oldest first: (channel ID, F´ time tag in ns, serialized "
-        "value).");
+        "Every telemetry packet downlinked since the last call, oldest first, each a big-endian U32 size and then "
+        "the packet the telemetry database sent.");
 
     m.def(
         "responses",

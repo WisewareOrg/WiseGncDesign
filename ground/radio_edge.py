@@ -1,6 +1,6 @@
 """The radio edge: the flight software as the ground sees it, in F´'s names and values."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any, Protocol
 
 import numpy as np
@@ -50,22 +50,11 @@ class RadioEdge(Protocol):
         """
         ...
 
-    def telemetry(self) -> list[tuple[str, int, Any]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """Every telemetry value downlinked since the last call, each channel in one batch.
 
         Returns:
-            `(<instance>.<channel>, time tag in ns, raw)`, the raw write in the build's own form.
-        """
-        ...
-
-    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
-        """One channel's raw writes as values, in one batch.
-
-        Args:
-            name: `<instance>.<channel>`.
-            raws: its raw writes, as `telemetry` gave them.
-
-        Returns:
-            As `Channel.from_raw` gives them.
+            For each channel downlinked, `<instance>.<channel>` to its flight software time tags in
+            ns, oldest first, and its values, as `Channel.from_raw` gives them.
         """
         ...

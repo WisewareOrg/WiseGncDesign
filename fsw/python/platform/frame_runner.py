@@ -192,6 +192,7 @@ class FrameRunner:
         frame = self._gnc.run(t_ns / _NANOSECONDS_PER_SECOND, self._driver.tick())
         for member in frame.telemetry:
             self._link.log(member.instance, member.telemetry, t_ns)
+        self._link.send(t_ns)
         written = frame.outputs
         return {role: write(convert(written[port])) for role, port, convert, write in self._outputs if port in written}
 
@@ -213,22 +214,14 @@ class FrameRunner:
         """
         return self._link.responses()
 
-    def telemetry(self) -> list[tuple[str, int, Any]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """Every value downlinked since the last call, each channel packed in one batch.
 
         Returns:
-            As `GroundLink.telemetry` gives them.
+            For each channel, `<instance>.<channel>` to its time tags in ns and its values, as
+            `Channel.pack_many` gives them.
         """
-        return self._link.telemetry()
-
-    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
-        """The values written to one channel, packed in one batch.
-
-        Args:
-            name: `<instance>.<channel>`.
-            raws: its writes' values, as `telemetry` gave them.
-
-        Returns:
-            As `Channel.pack_many` gives them.
-        """
-        return self.dictionary.channel(name).pack_many(raws)
+        return {
+            channel: (np.array(times, dtype=np.int64), self.dictionary.channel(channel).pack_many(values))
+            for channel, (times, values) in self._link.telemetry().items()
+        }

@@ -73,6 +73,7 @@ _FRAMEWORK = (
     "Svc/Ping/Ping.fpp",
     "Svc/RateGroupDriver/RateGroupDriver.fpp",
     "Svc/Sched/Sched.fpp",
+    "Svc/TlmChan/TlmChan.fpp",
     "cmake/platform/unix/Platform/PlatformTypes.fpp",
     "default/config/AcConstants.fpp",
     "default/config/ComCfg.fpp",

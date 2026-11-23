@@ -11,6 +11,9 @@ register_fprime_module(
     fsw_fprime_rio
     Svc_CmdDispatcher
     Svc_PrmDb
+    Svc_TlmChan
+    Svc_RateGroupDriver
+    Svc_PassiveRateGroup
 )
 
 execute_process(

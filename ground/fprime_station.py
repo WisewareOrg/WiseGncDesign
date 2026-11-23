@@ -40,6 +40,14 @@ class FprimeStation:
         assert apids is not None, "`ComCfg.Apid` is an enum"
         self._command_descriptor = apids["FW_PACKET_COMMAND"]
         self._responses = {value: name for name, value in dictionary.responses.items()}
+        self._telem_descriptor = apids["FW_PACKET_TELEM"]
+        channels = sorted(dictionary.channels_by_id.values(), key=lambda c: c.id)
+        self._ids = np.array([c.id for c in channels])
+        self._sizes = np.array([c.type.dtype.itemsize for c in channels])
+        id_size = dictionary.type("FwChanIdType").dtype.itemsize
+        time_size = sum(dictionary.type(t).dtype.itemsize for t in ("FwTimeBaseStoreType", "FwTimeContextStoreType")) + 8
+        self._entry_header = id_size + time_size
+        self._seconds_at = self._entry_header - 8
 
     @property
     def period_s(self) -> float:
@@ -96,30 +104,67 @@ class FprimeStation:
         """
         return [(context, self._responses[code], None) for context, code in self._fsw.responses()]
 
-    def telemetry(self) -> list[tuple[str, int, bytes]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """Every telemetry value downlinked since the last call, each channel decoded in one batch.
+
+        The deployment's downlink is its telemetry packets, each a big-endian U32 size and then an F´
+        `TlmPacket`: a `FwPacketDescriptorType` holding `FW_PACKET_TELEM`, then entries of a
+        `FwChanIdType`, an `Fw.TimeValue` and the value's bytes, whose size the channel's type gives.
 
         Returns:
-            `(<instance>.<channel>, F´ time tag in ns, bytes)`, the value as F´ serialized it.
+            For each channel downlinked, `<instance>.<channel>` to its F´ time tags in ns, oldest
+            first, and its values, as `Channel.from_raw` gives them.
         """
-        channels = self.dictionary.channels_by_id
-        return [(channels[i].name, t_ns, raw) for i, t_ns, raw in self._fsw.telemetry()]
+        data = np.frombuffer(self._fsw.telemetry(), np.uint8)
+        starts, ends = [], []
+        cursor = 0
+        while cursor < data.size:
+            size = int.from_bytes(data[cursor : cursor + 4].tobytes(), "big")
+            starts.append(cursor + 4)
+            ends.append(cursor + 4 + size)
+            cursor += 4 + size
+        if not starts:
+            return {}
+        starts_a, ends_a = np.array(starts), np.array(ends)
+        descriptors = (data[starts_a].astype(np.int64) << 8) | data[starts_a + 1]
+        assert (descriptors == self._telem_descriptor).all(), "a downlinked packet is not FW_PACKET_TELEM"
+        positions, ids = [], []
+        cursors = starts_a + self._descriptor.dtype.itemsize
+        while True:
+            live = cursors < ends_a
+            if not live.any():
+                break
+            at = cursors[live]
+            entry_ids = _be_u32(data, at)
+            positions.append(at)
+            ids.append(entry_ids)
+            cursors = cursors.copy()
+            cursors[live] = at + self._entry_header + self._sizes[np.searchsorted(self._ids, entry_ids)]
+        position, chan = np.concatenate(positions), np.concatenate(ids)
+        order = np.argsort(position, kind="stable")
+        position, chan = position[order], chan[order]
+        seconds = _be_u32(data, position + self._seconds_at)
+        useconds = _be_u32(data, position + self._seconds_at + 4)
+        t_ns = seconds.astype(np.int64) * 1_000_000_000 + useconds.astype(np.int64) * 1_000
+        decoded = {}
+        for cid in np.unique(chan).tolist():
+            channel = self.dictionary.channels_by_id[cid]
+            mine = chan == cid
+            size = channel.type.dtype.itemsize
+            value_bytes = data[(position[mine] + self._entry_header)[:, None] + np.arange(size)]
+            raw = np.frombuffer(np.ascontiguousarray(value_bytes).tobytes(), channel.type.dtype)
+            decoded[channel.name] = (t_ns[mine], channel.from_raw(raw))
+        return decoded
 
-    def values(self, name: str, raws: Sequence[bytes]) -> np.ndarray:
-        """One channel's writes as values, in one batch.
 
-        Args:
-            name: `<instance>.<channel>`.
-            raws: each write's bytes, as `telemetry` gave them.
+def _be_u32(data: np.ndarray, at: np.ndarray) -> np.ndarray:
+    """The big-endian U32 at each offset.
 
-        Returns:
-            As `Channel.from_raw` gives them.
+    Args:
+        data: the bytes.
+        at: each U32's offset.
 
-        Raises:
-            ValueError: naming the channel, for a write that is not bytes of one value of its type.
-        """
-        channel = self.dictionary.channel(name)
-        size = channel.type.dtype.itemsize
-        if not all(isinstance(raw, bytes) and len(raw) == size for raw in raws):
-            raise ValueError(f"channel {name} decodes {size}-byte writes only")
-        return channel.from_raw(np.frombuffer(b"".join(raws), channel.type.dtype))
+    Returns:
+        (N,) uint32.
+    """
+    return np.ascontiguousarray(data[at[:, None] + np.arange(4)]).view(">u4").ravel()

@@ -28,7 +28,9 @@ class GroundLink:
         self._handlers = handlers
         self._uplinked: list[tuple[str, Mapping[str, Any], int]] = []
         self._responses: list[tuple[int, str, str | None]] = []
-        self._log: list[tuple[str, int, Any]] = []
+        self._frame: dict[str, Any] = {}
+        self._times: dict[str, list[int]] = {}
+        self._values: dict[str, list[Any]] = {}
 
     def run_commands(self, t_ns: int) -> None:
         """Runs every command uplinked since the last call, logging what each handler wrote.
@@ -40,7 +42,7 @@ class GroundLink:
         for name, args, context in queued:
             dispatched = commands.dispatch(self._handlers, name, args, t_ns)
             self._responses.append((context, dispatched.response, dispatched.reason))
-            self._log += dispatched.writes
+            self._frame.update((channel, value) for channel, _, value in dispatched.writes)
 
     def log(self, instance: str, written: NamedTuple | None, t_ns: int) -> None:
         """Logs an algorithm's telemetry tuple, a write per field written.
@@ -50,7 +52,20 @@ class GroundLink:
             written: its `<Name>Telemetry` tuple, or `None`.
             t_ns: ns, the tick's time, which tags the writes.
         """
-        self._log += telemetry.writes(instance, written, t_ns)
+        self._frame.update((channel, value) for channel, _, value in telemetry.writes(instance, written, t_ns))
+
+    def send(self, t_ns: int) -> None:
+        """Downlinks each channel's latest write of the frame, as F´'s telemetry database does.
+
+        Args:
+            t_ns: ns, the frame's time, which tags each value.
+        """
+        for channel, value in self._frame.items():
+            if channel not in self._times:
+                self._times[channel], self._values[channel] = [], []
+            self._times[channel].append(t_ns)
+            self._values[channel].append(value)
+        self._frame.clear()
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command, which runs at the next tick.
@@ -72,11 +87,13 @@ class GroundLink:
         drained, self._responses = self._responses, []
         return drained
 
-    def telemetry(self) -> list[tuple[str, int, Any]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> dict[str, tuple[list[int], list[Any]]]:
+        """Every value downlinked since the last call.
 
         Returns:
-            `(<instance>.<channel>, time tag in ns, value)`, the value as the algorithm wrote it.
+            For each channel downlinked, `<instance>.<channel>` to its time tags in ns and its
+            values as the algorithm wrote them, oldest first.
         """
-        drained, self._log = self._log, []
+        drained = {channel: (self._times[channel], self._values[channel]) for channel in self._times}
+        self._times, self._values = {}, {}
         return drained

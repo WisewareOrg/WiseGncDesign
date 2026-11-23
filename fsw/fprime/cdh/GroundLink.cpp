@@ -4,21 +4,17 @@ namespace Cdh {
 
 namespace {
 
-constexpr U64 NS_PER_S = 1000000000U;
-constexpr U64 NS_PER_US = 1000U;
+//! The bytes reserved for the downlink at construction.
+constexpr std::size_t DOWNLINK_RESERVE = 1U << 20;
 
 }  // namespace
 
-GroundLink::GroundLink(const char* compName) : GroundLinkComponentBase(compName) {}
+GroundLink::GroundLink(const char* compName) : GroundLinkComponentBase(compName) {
+    this->m_downlink.reserve(DOWNLINK_RESERVE);
+}
 
 void GroundLink::uplink(Fw::ComBuffer& packet, U32 context) {
     this->cmdOut_out(0, packet, context);
-}
-
-std::vector<GroundLink::Write> GroundLink::takeWrites() {
-    std::vector<Write> writes;
-    writes.swap(this->m_writes);
-    return writes;
 }
 
 std::vector<GroundLink::Response> GroundLink::takeResponses() {
@@ -33,10 +29,12 @@ void GroundLink::cmdResponseIn_handler(FwIndexType portNum, FwOpcodeType opCode,
     this->m_responses.push_back({cmdSeq, static_cast<I32>(response.e)});
 }
 
-void GroundLink::tlmIn_handler(FwIndexType portNum, FwChanIdType id, Fw::Time& timeTag, Fw::TlmBuffer& val) {
-    const U64 ns = timeTag.getSeconds() * NS_PER_S + timeTag.getUSeconds() * NS_PER_US;
-    const U8* data = val.getBuffAddr();
-    this->m_writes.push_back({id, ns, std::vector<U8>(data, data + val.getSize())});
+void GroundLink::downlinkIn_handler(FwIndexType portNum, Fw::ComBuffer& data, U32 context) {
+    const FwSizeType size = data.getSize();
+    const U8 header[4] = {static_cast<U8>(size >> 24), static_cast<U8>(size >> 16), static_cast<U8>(size >> 8),
+                          static_cast<U8>(size)};
+    this->m_downlink.insert(this->m_downlink.end(), header, header + sizeof(header));
+    this->m_downlink.insert(this->m_downlink.end(), data.getBuffAddr(), data.getBuffAddr() + size);
 }
 
 }  // namespace Cdh

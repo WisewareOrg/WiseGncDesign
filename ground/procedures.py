@@ -130,7 +130,7 @@ class Ground(sysModel.SysModel):
         self._context = 0
         self._answers: dict[int, tuple[str, str | None]] = {}
         self._waiting = _Tick("its first tick")
-        self._writes: list[tuple[str, int, Any]] = []
+        self._downlinked: dict[str, list[tuple[np.ndarray, np.ndarray]]] = {}
         self._latest: dict[str, Any] = {}
         self.failure = None
         self.command_log = []
@@ -232,9 +232,7 @@ class Ground(sysModel.SysModel):
             The value, as the run file records it, or `None` before the channel is written.
         """
         channel = self._edge.dictionary.channel(name)
-        if channel.name not in self._latest:
-            return None
-        return self._edge.values(channel.name, [self._latest[channel.name]])[0]
+        return self._latest.get(channel.name)
 
     def truth(self) -> dict[str, np.ndarray]:
         """The vehicle's true state now, the stand-in for tracking.
@@ -272,9 +270,7 @@ class Ground(sysModel.SysModel):
         self._now_ns = CurrentSimNanos
         try:
             self._answers.update((context, (response, reason)) for context, response, reason in self._edge.responses())
-            writes = self._edge.telemetry()
-            self._writes += writes
-            self._latest.update((name, raw) for name, _, raw in writes)
+            self._record(self._edge.telemetry())
             if self._coroutine is not None:
                 try:
                     self._waiting = self._coroutine.send(None)
@@ -296,28 +292,33 @@ class Ground(sysModel.SysModel):
                 f"the flight ended at t = {self.now_s} s with the procedure waiting until {self._waiting.until}"
             )
 
-    def telemetry_datasets(self) -> dict[str, tuple[np.ndarray, str]]:
-        """Every telemetry write of the run, as run-file datasets, each channel typed in one batch.
+    def _record(self, downlinked: dict[str, tuple[np.ndarray, np.ndarray]]) -> None:
+        """Keeps a drain's telemetry, each channel's batch as it came, and each channel's latest value.
 
-        The writes the radio edge still holds are taken first, so a write after the module's last
-        tick is recorded too.
+        Args:
+            downlinked: as `RadioEdge.telemetry` gives it.
+        """
+        for name, (times, values) in downlinked.items():
+            self._downlinked.setdefault(name, []).append((times, values))
+            self._latest[name] = values[-1]
+
+    def telemetry_datasets(self) -> dict[str, tuple[np.ndarray, str]]:
+        """Every telemetry value of the run, as run-file datasets.
+
+        The telemetry the radio edge still holds is taken first, so a value downlinked after the
+        module's last tick is recorded too.
 
         Returns:
-            For each channel written at least once, `tlm/<instance>.<channel>` to its values and
-            units, and `tlm_t/<instance>.<channel>` to each write's flight software time tag in s.
+            For each channel downlinked at least once, `tlm/<instance>.<channel>` to its values and
+            units, and `tlm_t/<instance>.<channel>` to each value's flight software time tag in s.
         """
-        self._writes += self._edge.telemetry()
-        by_channel: dict[str, tuple[list[int], list[Any]]] = {}
-        for name, t_ns, raw in self._writes:
-            times, raws = by_channel.setdefault(name, ([], []))
-            times.append(t_ns)
-            raws.append(raw)
+        self._record(self._edge.telemetry())
         datasets = {}
-        for name, (times, raws) in by_channel.items():
+        for name, batches in self._downlinked.items():
             units = self._edge.dictionary.channel(name).units
-            datasets[f"tlm/{name}"] = (self._edge.values(name, raws), units)
+            datasets[f"tlm/{name}"] = (np.concatenate([values for _, values in batches]), units)
             datasets[f"tlm_t/{name}"] = (
-                np.array(times) / _NANOSECONDS_PER_SECOND,
+                np.concatenate([times for times, _ in batches]) / _NANOSECONDS_PER_SECOND,
                 "s",
             )
         return datasets
