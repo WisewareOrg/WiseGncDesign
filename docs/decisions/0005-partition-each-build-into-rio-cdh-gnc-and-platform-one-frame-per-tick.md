@@ -22,7 +22,7 @@ WiseDynamics' host module)
 
 The algorithms are written in Python first and flown with no F´ build, and F´ is good flight
 software in its own right, not a mirror of the Python build. Each build meets the world at two
-edges: the ground (ADR 0004 rev 3) and the sim (ADR 0006 rev 1).
+edges: the ground (ADR 0004 rev 4) and the sim (ADR 0006 rev 1).
 
 At `6f6276e`, one object per build did bus I/O, unit conversion, commands, telemetry and the
 algorithm, wired by hand for one algorithm. A second algorithm had no place to sit, and the glue grew
@@ -63,7 +63,7 @@ way through, partitioned as real flight software is.
   role's payload from, so it cannot supply the F´ CDH. Rejected for the CDH component's ports.
 - **One CDH converter shared by both builds.** One build would then run the other's internals, and
   a Python build must fly with no F´ build. Rejected for a CDH per build, each generated from the
-  same FPP (ADR 0004 rev 3).
+  same FPP (ADR 0004 rev 4).
 - **F´ in a repository of its own.** Each algorithm and its F´ build are written side by side.
   Rejected.
 - **The Python build copying a message's data at every partition boundary, as F´ does.** Python

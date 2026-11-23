@@ -160,7 +160,7 @@ was dirty. Run files carry no GNC attributes.
   referencing a component.** Rejected: the first restates what the components claim, the second
   fails because rungs are shared, and the third makes the tree know which FSWs exist.
 - **Claims on a Python builder function**, as rev 1 had them. Rejected: FPP is the contract both
-  builds are held to (ADR 0004 rev 3), so a claim in Python covers one build and not the other.
+  builds are held to (ADR 0004 rev 4), so a claim in Python covers one build and not the other.
 - **A mission name identifying a flight.** Rejected: the same flight under two names would fly
   twice into one folder.
 - **Algorithm notebooks flying campaigns the tree never judges.** Rejected: a campaign nobody judges

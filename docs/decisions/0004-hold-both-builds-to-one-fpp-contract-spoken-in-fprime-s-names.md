@@ -163,9 +163,11 @@ would have shown as equal values.
   Rejected.
 - **Telemetry sampled on the simulation's recording grid.** It lets the sim set the rate and lose
   writes. Rejected.
-- **A raw tuple per write across the edge.** Its cost showed in the per-case profile: over 460
-  Leo500 cases each, 35.7 ms per case in the F´ build's end-of-run drain and 25.6 ms in the Python
-  link's per-field logging. Rejected for a packed downlink.
+- **A raw tuple per write across the edge.** Its cost showed in the per-case profile: measured on
+  main at 3e5e95d (issue 122), the mean over 460 F´ and 460 Python Leo500 cases of the dead
+  reckoner's parity notebook, flown in one process, was 35.7 ms per case in the F´ build's
+  end-of-run drain and 25.6 ms in the Python link's per-field logging. Rejected for a packed
+  downlink.
 - **FSW telemetry in Basilisk message structs.** It limits the FSW to fields Basilisk defines.
   Rejected.
 
