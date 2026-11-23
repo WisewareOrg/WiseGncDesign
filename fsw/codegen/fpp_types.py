@@ -53,15 +53,16 @@ _LOADED: set[Contract] = set()
 
 @functools.cache
 def converter(source: type[Any], target: type[Any], *, copy: bool = True) -> Callable[[Any], Any]:
-    """A function converting a `source` value to a `target` value, each field taken by name.
+    """A function converting a `source` value to a `target` value, each field matched by name.
 
-    Fields are taken by `fsw.codegen.fields.plan`'s rule, and a conversion is planned once per
-    argument set. Between structs' tuples, an array field becomes a fresh array of the FPP type, or,
-    with `copy` false, is the source's array itself; a scalar or an enum name passes as it is. A
-    Basilisk payload is read as a bus driver reads a buffer: its C struct is copied once and viewed
-    as its `__dtype__`, each array field a read-only array over that copy and each scalar a number.
-    A struct's tuple is written to a fresh payload the same way, each field copied into the
-    payload's C struct at its `__dtype__` offset.
+    Fields are matched by `fsw.codegen.fields.plan`'s rule when a conversion is planned, once per
+    argument set; a struct's tuple is then read by position, so the value must be of `source`
+    itself. Between structs' tuples, an array field becomes a fresh array of the FPP type, or, with
+    `copy` false, is the source's array itself; a scalar or an enum name passes as it is. A Basilisk
+    payload is read as a bus driver reads a buffer: its C struct is copied once and viewed as its
+    `__dtype__`, each array field a read-only array over that copy and each scalar a number. A
+    struct's tuple is written to a fresh payload the same way, each field copied into the payload's
+    C struct at its `__dtype__` offset.
 
     Args:
         source: a struct's tuple, or a Basilisk message payload's type.
