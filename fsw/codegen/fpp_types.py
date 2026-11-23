@@ -21,6 +21,7 @@ group in FPP's order. A parameters tuple's `component` is its component's qualif
 """
 
 import functools
+import operator
 from collections import namedtuple
 from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
@@ -33,7 +34,7 @@ from fsw.codegen.deployment import CONTRACT, Contract, contract_files
 from fsw.codegen.fields import Form, form, plan
 from fsw.codegen.fpp_model import Component, Member, Model, Struct, Types, read
 
-__all__ = ["converter", "load", "named", "parameters_from"]
+__all__ = ["converter", "fields", "load", "named", "parameters_from"]
 
 _STRUCTS: dict[type, tuple[Struct, Types]] = {}
 """Each struct's tuple, to its struct and the model's types, for `converter`."""
@@ -50,19 +51,44 @@ _LOADED: set[Contract] = set()
 
 
 @functools.cache
-def converter(source: type[Any], target: type[Any]) -> Callable[[Any], Any]:
-    """A function converting a `source` value to a `target` tuple, each field taken by name.
+def converter(source: type[Any], target: type[Any], *, copy: bool = True) -> Callable[[Any], Any]:
+    """A function converting one struct's tuple to another's, each field matched by name.
 
-    Fields are taken by `fsw.codegen.fields.plan`'s rule. An array field becomes a fresh array of
-    the FPP type; a scalar or an enum name passes as it is. A conversion is planned once per
-    `(source, target)`.
+    Fields are matched by `fields`, once per argument set, and the source is then read by position,
+    so the value must be of `source` itself. An array field becomes a fresh array of the FPP type,
+    or, with `copy` false, is the source's array itself; a scalar or an enum name passes as it is.
+
+    Args:
+        source: a struct's tuple.
+        target: a struct's tuple.
+        copy: false to pass the source's arrays through uncopied.
+
+    Returns:
+        The converter.
+
+    Raises:
+        ValueError: `source` or `target` is not a struct's tuple, or a field breaks the rule, naming
+            it.
+    """
+    for given in (source, target):
+        if given not in _STRUCTS:
+            raise ValueError(f"{given.__name__} is not a struct's tuple")
+    return _struct_converter(source, target, copy=copy)
+
+
+@functools.cache
+def fields(source: type[Any], target: type[Any]) -> tuple[tuple[Member, str, Form], ...]:
+    """Each field of a struct's tuple `target`, with the `source` field it is taken from.
+
+    Fields are matched by `fsw.codegen.fields.plan`'s rule: by name, ignoring case, of one shape and
+    element type. A Basilisk payload's fields are read from its class's `__dtype__`.
 
     Args:
         source: a struct's tuple, or a Basilisk message payload's type.
         target: a struct's tuple.
 
     Returns:
-        The converter.
+        Each target member, the name of its source field and its form, in `target`'s order.
 
     Raises:
         ValueError: `target` is not a struct's tuple, or a field breaks the rule, naming it.
@@ -70,21 +96,42 @@ def converter(source: type[Any], target: type[Any]) -> Callable[[Any], Any]:
     if target not in _STRUCTS:
         raise ValueError(f"{target.__name__} is not a struct's tuple")
     struct, types = _STRUCTS[target]
-    steps = [
-        (name, functools.partial(np.array, dtype=element) if shape else _same)
-        for _, name, (shape, element) in plan(struct, types, _source_forms(source), source.__name__)
-    ]
+    return tuple(plan(struct, types, _source_forms(source), source.__name__))
+
+
+def _struct_converter(source: type[Any], target: type[Any], *, copy: bool) -> Callable[[Any], Any]:
+    """A converter between structs' tuples, reading the source by position.
+
+    Args:
+        source: a struct's tuple.
+        target: a struct's tuple.
+        copy: false to pass the source's arrays through uncopied.
+
+    Returns:
+        The converter.
+    """
+    planned = fields(source, target)
+    indices = [source._fields.index(name) for _, name, _ in planned]
+    pick = operator.itemgetter(*indices) if len(indices) > 1 else lambda value: (value[indices[0]],)
+    steps = [functools.partial(np.array, dtype=element) if shape else _same for _, _, (shape, element) in planned]
 
     def convert(value: Any) -> Any:
-        """The `target` tuple of a `source` value.
+        """The `target` tuple of a `source` tuple.
 
         Args:
-            value: the `source` value.
+            value: the `source` tuple.
 
         Returns:
             The tuple.
+
+        Raises:
+            TypeError: `value` is not of `source`, naming both.
         """
-        return target._make([to(getattr(value, field)) for field, to in steps])
+        if type(value) is not source:
+            raise TypeError(f"the value is a {type(value).__name__}, not the struct's tuple {_STRUCTS[source][0].name}")
+        if not copy:
+            return target._make(pick(value))
+        return target._make([to(field) for to, field in zip(steps, pick(value), strict=True)])
 
     return convert
 

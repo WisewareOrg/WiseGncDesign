@@ -16,7 +16,7 @@ from fsw.codegen.deployment import (
     contract_model,
 )
 from fsw.codegen.roles import roles, taken
-from fsw.python.cdh.inputs import convert, pairings
+from fsw.python.cdh.inputs import converter, pairings
 
 ROLES = [role for role in roles(contract_model()) if role.sensor]
 """Every sensor role of the contract's `Cdh.BusConverter`."""
@@ -48,10 +48,11 @@ def test_each_configuration_pairs_each_sensor_role_to_the_struct_its_gnc_port_ta
 def test_each_role_s_bus_struct_is_converted_to_its_icd_struct_at_its_gnc_port(
     bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
-    """Each role's bus struct reaches its port as a fresh ICD struct, each field its namesake's.
+    """Each role's bus struct reaches its port as an ICD struct holding the bus struct's arrays.
 
     The ICD struct takes each field from the bus member of its name, ignoring case, by
-    `fsw.codegen.fields`' rule; the bus struct changed afterwards leaves it as it was.
+    `fsw.codegen.fields`' rule. RIO-in's arrays are fresh and read-only, so CDH-in passes them
+    through, as `GncPartition` passes an output to the member it is routed to.
 
     Args:
         bus_messages: a message of each bus struct, its members' values distinct.
@@ -63,13 +64,12 @@ def test_each_role_s_bus_struct_is_converted_to_its_icd_struct_at_its_gnc_port(
         for pair, role in zip(pairs, ROLES, strict=True)
     }
 
-    converted = convert(pairs, messages)
-    for message in messages.values():
-        for value in message:
-            value[...] = 0
-
-    assert list(converted) == [pair.port for pair in pairs]
     for pair, role in zip(pairs, ROLES, strict=True):
-        reading = converted[pair.port]
+        reading = converter(pair)(messages[pair.role])
+
         assert isinstance(reading, pair.icd), pair.port
         holds(reading, bus_messages[role.bus].values)
+        bus = messages[pair.role]
+        for field in reading._fields:
+            same = next(m for m in bus._fields if m.lower() == field.lower())
+            assert getattr(reading, field) is getattr(bus, same), f"{pair.port}.{field} was copied"

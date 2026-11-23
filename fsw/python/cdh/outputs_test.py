@@ -9,7 +9,7 @@ from typing import Any
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import contract_model
 from fsw.codegen.roles import roles
-from fsw.python.cdh.outputs import convert, pairings
+from fsw.python.cdh.outputs import converter, pairings
 
 ACTUATORS = [role for role in roles(contract_model()) if not role.sensor]
 """Every actuator role of the contract's `Cdh.BusConverter`."""
@@ -18,11 +18,10 @@ ACTUATORS = [role for role in roles(contract_model()) if not role.sensor]
 def test_each_role_s_icd_struct_written_at_its_gnc_port_is_converted_to_its_bus_struct(
     icd_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
-    """Each written GNC output becomes a fresh bus struct, each field its ICD namesake's.
+    """Each GNC output becomes a bus struct holding the ICD struct's arrays, each its namesake's.
 
     The bus struct takes each field from the ICD member of its name, ignoring case, by
-    `fsw.codegen.fields`' rule; the ICD struct changed afterwards leaves it as it was. A port not
-    written is not converted.
+    `fsw.codegen.fields`' rule, uncopied: RIO-out copies it into the payload in the same tick.
 
     Args:
         icd_messages: a value of each ICD struct, its members' values distinct.
@@ -32,14 +31,12 @@ def test_each_role_s_icd_struct_written_at_its_gnc_port_is_converted_to_its_bus_
     pairs = pairings(ACTUATORS)
     written = {pair.port: icd_messages[role.icd].value for pair, role in zip(pairs, ACTUATORS, strict=True)}
 
-    converted = convert(pairs, written)
-    for value in written.values():
-        for member in value:
-            member[...] = 0
+    for pair, role in zip(pairs, ACTUATORS, strict=True):
+        bus = converter(pair)(written[pair.port])
 
-    assert list(converted) == [role.role for role in ACTUATORS]
-    assert convert(pairs, {}) == {}
-    for role in ACTUATORS:
-        bus = converted[role.role]
         assert isinstance(bus, fpp_types.named(role.bus)), role.role
         holds(bus, icd_messages[role.icd].values)
+        icd = written[pair.port]
+        for field in bus._fields:
+            same = next(m for m in icd._fields if m.lower() == field.lower())
+            assert getattr(bus, field) is getattr(icd, same), f"{role.role}.{field} was copied"

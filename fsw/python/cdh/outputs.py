@@ -3,17 +3,18 @@
 The pairing is FPP's, `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp`, read by
 `fsw.codegen.roles` as the F´ build's CDH reads it, each actuator role's a `Pair` as CDH-in's. The
 ICD struct is converted to the bus struct field by field with `fsw.codegen.fpp_types.converter`,
-every array a fresh copy: each bus field from the ICD field of its name, ignoring case.
+each bus field the ICD field of its name, ignoring case, uncopied: RIO-out copies it into the
+payload in the same tick.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from fsw.codegen import fpp_types
 from fsw.codegen.roles import Role
 from fsw.python.cdh.inputs import Pair
 
-__all__ = ["convert", "pairings"]
+__all__ = ["converter", "pairings"]
 
 
 def pairings(roles: Sequence[Role]) -> list[Pair]:
@@ -28,17 +29,14 @@ def pairings(roles: Sequence[Role]) -> list[Pair]:
     return [Pair(role.role, fpp_types.named(role.bus), fpp_types.named(role.icd), role.output) for role in roles]
 
 
-def convert(pairs: Sequence[Pair], values: Mapping[str, Any]) -> dict[str, Any]:
-    """Each written GNC output as its role's bus struct.
+def converter(pair: Pair) -> Callable[[Any], Any]:
+    """CDH-out for one actuator role: its GNC output's ICD struct, as its bus struct.
 
     Args:
-        pairs: the pairs.
-        values: each GNC output port's value written in the frame, by the port, as the frame
-            gives them; a port not written is absent.
+        pair: the role's pair.
 
     Returns:
-        Each bus struct's tuple, by its role, for the ports written.
+        A function of the ICD struct's tuple GNC wrote, returning the role's bus struct's tuple,
+        which holds the ICD struct's arrays: RIO-out copies them into the payload.
     """
-    return {
-        pair.role: fpp_types.converter(pair.icd, pair.bus)(values[pair.port]) for pair in pairs if pair.port in values
-    }
+    return fpp_types.converter(pair.icd, pair.bus, copy=False)

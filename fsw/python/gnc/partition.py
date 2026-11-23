@@ -5,18 +5,18 @@ The sub-topology is `<configuration>.Gnc`. Its one `Svc.RateGroupDriver` drives 
 `RateGroupMemberOut` order; every other connection between its instances carries data. An algorithm
 is a class named as its member's FPP component, built at `boot` on its parameters. Its `step` takes
 `t`, in s, and a keyword per data input, named as the input port without its trailing `In`, and
-returns its `<Name>Outputs` and `<Name>Telemetry` tuples, read by field name; it must not change a
-returned output in place, since the member it is routed to holds it as written. A connection
-`A.X -> B.Y` routes `A`'s output `X` to `B`'s input `Y`, as an F´ sync port does: an output reaches
-a later member in the same frame, and a `None` output writes nothing, so an input holds the latest
-value written to it. A backward edge, into a member that runs no later than `A` in the frame, `A`
-itself included, is refused, as is an output feeding more than one input.
+returns its `<Name>Outputs` and `<Name>Telemetry` tuples, the generated ones, whose fields are read
+by position; it must not change a returned output in place, since the member it is routed to holds
+it as written. A connection `A.X -> B.Y` routes `A`'s output `X` to `B`'s input `Y`, as an F´ sync
+port does: an output reaches a later member in the same frame, and a `None` output writes nothing,
+so an input holds the latest value written to it. A backward edge, into a member that runs no later
+than `A` in the frame, `A` itself included, is refused, as is an output feeding more than one input.
 A sub-topology `port` other than the driver's exposes an instance's port: an input the CDH writes,
 or an output the CDH reads, which a frame returns when a member wrote it. An output exposed and
 also routed to an input is refused.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, NamedTuple
 
 from fsw.codegen.fpp_model import Model
@@ -71,6 +71,31 @@ class MemberTelemetry(NamedTuple):
 
     instance: str
     telemetry: Any
+
+
+class _Member(NamedTuple):
+    """A member as a frame runs it, planned at boot.
+
+    Attributes:
+        member: its instance's qualified name.
+        name: its instance's unqualified name.
+        step: its algorithm's `step`.
+        inputs: the inputs it holds, by `step` keyword.
+        wanted: how many inputs it takes.
+        routed: for each output port routed to a later member, its position in the `<Name>Outputs`
+            tuple, that member's inputs and its keyword.
+        exposed: for each output port the sub-topology exposes, its position and the port's name.
+        ports: its output ports, in FPP's order, the fields its `<Name>Outputs` tuple must have.
+    """
+
+    member: str
+    name: str
+    step: Callable[..., tuple[Any, Any]]
+    inputs: dict[str, Any]
+    wanted: int
+    routed: tuple[tuple[int, dict[str, Any], str], ...]
+    exposed: tuple[tuple[int, str], ...]
+    ports: tuple[str, ...]
 
 
 class Frame(NamedTuple):
@@ -171,8 +196,10 @@ class GncPartition:
             keyword = _keyword(port.instance, port.port)
             self._ports[short] = port.instance, keyword
             self._keywords[port.instance].add(keyword)
+        self._outputs = {m: [p.name for p in model.components[model.instances[m].component].outputs] for m in members}
         self.algorithms = {}
         self._held: dict[str, dict[str, Any]] = {}
+        self._plan: tuple[tuple[_Member, ...], ...] = ()
 
     def boot(self, parameters: Mapping[str, Any]) -> None:
         """Builds every algorithm afresh on its parameters, with no input written.
@@ -182,6 +209,37 @@ class GncPartition:
         """
         self.algorithms = {_name(m): cls(parameters[_name(m)]) for m, cls in self._classes.items()}
         self._held = {m: {} for m in self._classes}
+        self._plan = tuple(tuple(self._member(m) for m in group) for group in self._members)
+
+    def _member(self, member: str) -> _Member:
+        """A member as a frame runs it, planned once per boot.
+
+        Args:
+            member: its qualified name.
+
+        Returns:
+            Its plan.
+        """
+        ports = list(enumerate(self._outputs[member]))
+        routed = tuple(
+            (index, self._held[self._routes[member, port][0]], self._routes[member, port][1])
+            for index, port in ports
+            if (member, port) in self._routes
+        )
+        exposed = tuple(
+            (index, self._exposed[member, port]) for index, port in ports if (member, port) in self._exposed
+        )
+        name = _name(member)
+        return _Member(
+            member,
+            name,
+            self.algorithms[name].step,
+            self._held[member],
+            len(self._keywords[member]),
+            routed,
+            exposed,
+            tuple(self._outputs[member]),
+        )
 
     def write(self, port: str, value: Any) -> None:
         """Writes a sub-topology input, which its instance holds until the next write.
@@ -206,24 +264,25 @@ class GncPartition:
 
         Raises:
             RuntimeError: a member's input has never been written, naming its port.
+            TypeError: a member's outputs are not a tuple of its output ports, in FPP's order,
+                naming it.
         """
         telemetry = []
         exposed = {}
         for group in fired:
-            for member in self._members[group]:
-                name, inputs = _name(member), self._held[member]
-                if len(inputs) < len(self._keywords[member]):
+            for member, name, step, inputs, wanted, routed, exposed_ports, ports in self._plan[group]:
+                if len(inputs) < wanted:
                     unwritten = sorted(self._keywords[member] - set(inputs))
                     names = [f"{name}.{k}In" for k in unwritten]
                     raise RuntimeError(f"inputs {names} have not been written at t = {t} s")
-                outputs, tlm = self.algorithms[name].step(t, **inputs)
-                for port, value in zip(outputs._fields, outputs, strict=True):
-                    if value is None:
-                        continue
-                    if (member, port) in self._routes:
-                        target, keyword = self._routes[member, port]
-                        self._held[target][keyword] = value
-                    elif (member, port) in self._exposed:
-                        exposed[self._exposed[member, port]] = value
+                outputs, tlm = step(t, **inputs)
+                if outputs._fields != ports:
+                    raise TypeError(f"{name} returned outputs {outputs._fields}, not its ports {ports} in order")
+                for index, held, keyword in routed:
+                    if outputs[index] is not None:
+                        held[keyword] = outputs[index]
+                for index, port in exposed_ports:
+                    if outputs[index] is not None:
+                        exposed[port] = outputs[index]
                 telemetry.append(MemberTelemetry(name, tlm))
         return Frame(telemetry, exposed)

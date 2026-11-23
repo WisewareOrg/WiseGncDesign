@@ -233,6 +233,61 @@ def test_members_run_in_rate_group_order_and_an_output_reaches_a_later_member_in
     assert telemetry == [("source", SourceTelemetry(count=1)), ("sink", Nothing())]
 
 
+def test_a_step_s_outputs_not_in_its_port_order_are_refused_naming_the_member(model: Model):
+    """Outputs are read by position, so a tuple whose fields are not the ports, in order, raises.
+
+    Args:
+        model: the mock's model.
+    """
+    SwappedOutputs = namedtuple("SwappedOutputs", ["echoOut", "valueOut"])
+
+    class Source:
+        """Writes its outputs in a tuple of its own, its ports swapped."""
+
+        def __init__(self, parameters: object) -> None:
+            """Ignores its parameters.
+
+            Args:
+                parameters: whatever boot gave it.
+            """
+
+        def step(self, t: float, seed: Value) -> tuple[Any, SourceTelemetry]:
+            """Returns the swapped tuple.
+
+            Args:
+                t: s, the time.
+                seed: the seed.
+
+            Returns:
+                Its outputs and its telemetry.
+            """
+            return SwappedOutputs(None, Value(2 * seed.x)), SourceTelemetry(count=1)
+
+    gnc = GncPartition(model, "Mock", (Sink, Slow, Source))
+    gnc.boot({"source": None, "sink": None, "slow": None})
+    gnc.write("seedIn", Value(3.0))
+
+    with pytest.raises(TypeError, match=r"source returned outputs \('echoOut', 'valueOut'\)"):
+        gnc.run(1.0, [0])
+
+
+def test_a_rebooted_partition_routes_its_new_algorithms_outputs(gnc: GncPartition):
+    """After a second boot, a written input and a routed output reach the algorithms that boot built.
+
+    Args:
+        gnc: the mock's partition.
+    """
+    gnc.write("seedIn", Value(3.0))
+    gnc.run(1.0, [0])
+    gnc.boot({"source": "p", "sink": None, "slow": None})
+    LOG.clear()
+
+    gnc.write("seedIn", Value(5.0))
+    gnc.run(2.0, [0])
+
+    assert [("source", 2.0, Value(5.0)), ("sink", 2.0, Value(10.0))] == LOG
+
+
 def test_frames_follow_the_fpp_rate_constants_and_return_the_outputs_their_members_wrote(
     gnc: GncPartition, model: Model
 ):

@@ -46,7 +46,7 @@ class Dispatched(NamedTuple):
 
     response: str
     reason: str | None
-    writes: list[tuple[str, Any]]
+    writes: list[tuple[str, int, Any]]
 
 
 Handlers = dict[str, Handler]
@@ -84,13 +84,14 @@ def handlers(dictionary: Dictionary, algorithms: Mapping[str, Any]) -> Handlers:
     return resolved
 
 
-def dispatch(table: Handlers, name: str, args: Mapping[str, Any]) -> Dispatched:
+def dispatch(table: Handlers, name: str, args: Mapping[str, Any], t_ns: int) -> Dispatched:
     """Runs a command's handler.
 
     Args:
         table: the handlers, as `handlers` gives them.
         name: `<instance>.<command>`.
         args: the arguments by parameter name, as `Dictionary.arguments` types them.
+        t_ns: ns, the tick's time, which tags the handler's writes.
 
     Returns:
         Its response, its reason and its writes.
@@ -102,4 +103,4 @@ def dispatch(table: Handlers, name: str, args: Mapping[str, Any]) -> Dispatched:
         written = handler.method(**args)
     except Refused as error:
         return Dispatched("VALIDATION_ERROR", str(error), [])
-    return Dispatched("OK", None, telemetry.writes(handler.instance, written))
+    return Dispatched("OK", None, telemetry.writes(handler.instance, written, t_ns))

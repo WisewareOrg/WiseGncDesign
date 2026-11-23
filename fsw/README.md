@@ -16,31 +16,33 @@ algorithms' classes, each named as its FPP component. A keyword-only `contract`,
 defaults to the repository's, `CONTRACT`; a test flies a mock contract through it, and
 `fsw.codegen.fpp_types.load(contract)` generates that contract's tuples beside the repository's.
 Each tick is one frame through the partitions
-of [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md),
+of [ADR 0005 rev 2](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md),
 in `fsw/python/<partition>/`, and FPP gives each its structure:
 
 - **platform** runs the frame. Its `period_s` is the sub-topology's base tick, the FPP constant
   `tickPeriod`, which `fsw.codegen.deployment.tick_period` reads, and `platform.rates` runs each
   rate group `<stem>RateGroup` every `<stem>Divider`-th tick, counting ticks as F´'s
   `Svc.RateGroupDriver` does.
-- **RIO** reads each sensor role's message as its bus struct, copying it within the tick, and
-  returns the actuator commands: for each actuator role GNC wrote in the frame, a fresh
-  `messaging.<Name>Payload` of the message its bus struct mirrors; a role GNC did not write is
-  absent, and keeps its last command on the vehicle.
+- **RIO** reads each sensor role's message as its bus struct, copying it within the tick into
+  read-only arrays, and returns the actuator commands: for each actuator role GNC wrote in the
+  frame, a fresh `messaging.<Name>Payload` of the message its bus struct mirrors; a role GNC did not
+  write is absent, and keeps its last command on the vehicle.
 - **CDH** dispatches each command by name to its algorithm's method of that name, with F´'s
   responses, converts each sensor role's bus struct to its GNC input and each actuator role's GNC
-  output to its bus struct, logs every telemetry write tagged with the tick's time, and reads each
-  algorithm's parameters from the case's record at boot. Its `GroundLink` holds what the ground
-  uplinks and drains, and the frame runner presents the radio edge through it.
-  `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each role, as its annotation states, and
-  a configuration takes the roles its sub-topology exposes (`fsw.codegen.roles.taken`).
+  output to its bus struct, passing the arrays through uncopied, logs every telemetry write tagged
+  with the tick's time, and reads each algorithm's parameters from the case's record at boot. Its
+  `GroundLink` holds what the ground uplinks and drains, and the frame runner presents the radio
+  edge through it. `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each role, as its
+  annotation states, and a configuration takes the roles its sub-topology exposes
+  (`fsw.codegen.roles.taken`).
 - **GNC** runs the sub-topology's algorithms in its rate groups' order, routing each output to the
   input it is wired to, and returns what its members wrote on the sub-topology's output ports.
 
-Each module's docstrings say what it refuses. An algorithm's `step(t, ...)` takes a keyword per
-data input, named as the input port without its `In`, in the input's FPP type, and returns its
-`<Name>Outputs` and `<Name>Telemetry` tuples; its command methods return its `<Name>Telemetry` or
-`None`, and raise `fsw.python.cdh.commands.Refused` to refuse the command. Frames and mountings belong to the algorithm.
+Each module's docstrings say what it refuses. An algorithm's `step(t, ...)` takes a keyword per data
+input, named as the input port without its `In`, in the input's FPP type, a sensor input's arrays
+read-only, and returns its `<Name>Outputs` and `<Name>Telemetry` tuples; its command methods return
+its `<Name>Telemetry` or `None`, and raise `fsw.python.cdh.commands.Refused` to refuse the command.
+Frames and mountings belong to the algorithm.
 
 ## RadioEdge
 
@@ -187,14 +189,16 @@ compiler internals, so a key the module reads that is missing raises `KeyError`.
 
 `fsw.codegen.fpp_types` is FPP's types as named tuples, generated when it is imported and never
 written in the tree, with `converter` between them. Its docstrings say what each FPP type becomes,
-which tuples an algorithm's component gets, and how fields are converted:
+which tuples an algorithm's component gets, and how fields are converted; RIO reads a Basilisk
+payload as its bus struct:
 
 ```python
 >>> from Basilisk.architecture import messaging
 >>> from fsw.codegen.fpp_types import Bus, Gnc, converter
+>>> from fsw.python.rio.messages import reader
 >>> payload = messaging.IMUSensorMsgPayload()
 >>> payload.AngVelPlatform = [0.0, 0.0, 1.0e-3]
->>> bus = converter(messaging.IMUSensorMsgPayload, Bus.ImuSensorMsg)(payload)
+>>> bus = reader(Bus.ImuSensorMsg)(payload)
 >>> reading = converter(Bus.ImuSensorMsg, Gnc.ImuReading)(bus)
 >>> reading.angVelPlatform.tolist()
 [0.0, 0.0, 0.001]
@@ -248,5 +252,5 @@ every case reproduces its rate-group datasets from the seed, as it does nav's.
 The reasoning is in
 [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
 [ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md),
-[ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
+[ADR 0005 rev 2](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
 and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).

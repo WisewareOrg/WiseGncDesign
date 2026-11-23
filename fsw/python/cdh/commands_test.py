@@ -31,28 +31,28 @@ def dictionary() -> Dictionary:
 def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
     """Each `Fw.CmdResponse` a command can get, by name, with the handler's telemetry.
 
-    A handler that returns answers `OK` with its telemetry's writes; one refusing answers
-    `VALIDATION_ERROR` with its reason; a name not the instance's, or a parameter's set or save
-    command, answers `INVALID_OPCODE`.
+    A handler that returns answers `OK` with its telemetry's writes, tagged with the time given; one
+    refusing answers `VALIDATION_ERROR` with its reason; a name not the instance's, or a parameter's
+    set or save command, answers `INVALID_OPCODE`.
 
     Args:
         dictionary: the mock's dictionary.
     """
     handlers = commands.handlers(dictionary, {"source": Source(PARAMETERS)})
 
-    assert commands.dispatch(handlers, "source.setLevel", {"level": 2.0}) == (
+    assert commands.dispatch(handlers, "source.setLevel", {"level": 2.0}, 7) == (
         "OK",
         None,
-        [("source.level", 2.0)],
+        [("source.level", 7, 2.0)],
     )
-    assert commands.dispatch(handlers, "source.reset", {}) == ("OK", None, [])
-    assert commands.dispatch(handlers, "source.setLevel", {"level": -1.0}) == (
+    assert commands.dispatch(handlers, "source.reset", {}, 7) == ("OK", None, [])
+    assert commands.dispatch(handlers, "source.setLevel", {"level": -1.0}, 7) == (
         "VALIDATION_ERROR",
         "level -1.0 is negative",
         [],
     )
     for name in ("source.setLevle", "source.GAIN_PRM_SET", "source.GAIN_PRM_SAVE", "other.reset"):
-        assert commands.dispatch(handlers, name, {}) == ("INVALID_OPCODE", None, [])
+        assert commands.dispatch(handlers, name, {}, 7) == ("INVALID_OPCODE", None, [])
 
 
 def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Dictionary):
@@ -76,7 +76,7 @@ def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Diction
     handlers = commands.handlers(dictionary, {"source": Broken(PARAMETERS)})
 
     with pytest.raises(ZeroDivisionError, match="broken"):
-        commands.dispatch(handlers, "source.reset", {})
+        commands.dispatch(handlers, "source.reset", {}, 7)
 
 
 def test_a_handler_s_value_error_is_a_bug_and_propagates_not_a_refusal(dictionary: Dictionary):
@@ -96,7 +96,7 @@ def test_a_handler_s_value_error_is_a_bug_and_propagates_not_a_refusal(dictionar
     handlers = commands.handlers(dictionary, {"source": Mismatched(PARAMETERS)})
 
     with pytest.raises(ValueError, match="broadcast"):
-        commands.dispatch(handlers, "source.reset", {})
+        commands.dispatch(handlers, "source.reset", {}, 7)
 
 
 @pytest.mark.parametrize(
