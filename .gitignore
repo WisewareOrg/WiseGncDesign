@@ -4,11 +4,14 @@ __pycache__/
 .ipynb_checkpoints/
 /monte_carlo/
 *.ipynb
-# F´ build products: the build cache, and the extension and dictionary `just fsw` places beside its host
+# F´ build products: the build cache, and the extension, its dictionary and the type stubs `just fsw` places beside its host
 build-fprime-*/
 /lab/_wise_fsw*.so
 /lab/*FswTopologyDictionary.json
 /algorithms/utils/*/*.so
+/algorithms/utils/*/*.pyi
+/fsw/codegen/fpp_types.pyi
+/lab/fsw_extension.pyi
 # Fetched sources: the F´ clone and Eigen's checkout
 /fsw/fprime/lib/fprime/
 /fsw/fprime/lib/fetchcontent/

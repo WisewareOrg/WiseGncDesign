@@ -9,6 +9,7 @@ are kept raw during the run and typed after it, each channel in one batch.
 
 from collections.abc import Callable, Coroutine, Generator
 from pathlib import Path
+from types import FunctionType
 from typing import Any
 
 import numpy as np
@@ -149,7 +150,7 @@ class Ground(sysModel.SysModel):
         while self._now_ns < wake_ns:
             await _Tick(f"t = {wake_ns / _NANOSECONDS_PER_SECOND} s")
 
-    async def until(self, condition: Callable[[], bool], *, timeout_s: float) -> None:
+    async def until(self, condition: FunctionType, *, timeout_s: float) -> None:
         """Waits until `condition` holds, checking now and then at each tick.
 
         A `TimeoutError` names the condition by its file and line, and the time when `condition`
@@ -201,7 +202,7 @@ class Ground(sysModel.SysModel):
         typed = self._edge.dictionary.arguments(name, args)
         self._context += 1
         context = self._context
-        entry = {
+        entry: dict[str, Any] = {
             "t_s": self.now_s,
             "name": name,
             "args": {param: np.asarray(value).tolist() for param, value in args.items()},
@@ -270,10 +271,7 @@ class Ground(sysModel.SysModel):
         """
         self._now_ns = CurrentSimNanos
         try:
-            self._answers.update(
-                (context, (response, reason))
-                for context, response, reason in self._edge.responses()
-            )
+            self._answers.update((context, (response, reason)) for context, response, reason in self._edge.responses())
             writes = self._edge.telemetry()
             self._writes += writes
             self._latest.update((name, raw) for name, _, raw in writes)
@@ -295,8 +293,7 @@ class Ground(sysModel.SysModel):
         """
         if self._coroutine is not None:
             raise TimeoutError(
-                f"the flight ended at t = {self.now_s} s with the procedure waiting until"
-                f" {self._waiting.until}"
+                f"the flight ended at t = {self.now_s} s with the procedure waiting until {self._waiting.until}"
             )
 
     def telemetry_datasets(self) -> dict[str, tuple[np.ndarray, str]]:

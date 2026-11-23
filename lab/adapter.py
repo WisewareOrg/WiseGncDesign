@@ -8,8 +8,7 @@ link, which the ground decodes.
 
 from collections.abc import Mapping
 from pathlib import Path
-from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fsw.codegen.deployment import CONTRACT, Contract, bus_port, configuration_model, tick_period
 from fsw.codegen.dictionary import Dictionary
@@ -17,6 +16,9 @@ from fsw.codegen.roles import Role, taken
 from ground import parameters
 from lab.bus_emulator import deserialize, serialize
 from lab.power_cycle import dictionary_path, power_cycle, source
+
+if TYPE_CHECKING:
+    from lab.fsw_extension import FswExtension
 
 __all__ = ["Adapter"]
 
@@ -45,12 +47,10 @@ class Adapter:
     period_s: float
     dictionary: Dictionary
     build: dict[str, str]
-    _fsw: ModuleType
+    _fsw: "FswExtension"
     """The copy the last `boot` powered on; unset before the first."""
 
-    def __init__(
-        self, configuration: str, prm_path: Path, *, contract: Contract = CONTRACT
-    ) -> None:
+    def __init__(self, configuration: str, prm_path: Path, *, contract: Contract = CONTRACT) -> None:
         """Makes the case's `.dat` beside its record, once `source` has checked the build.
 
         A deployment not built, or rebuilt since this process first checked it, raises as `source`
@@ -65,14 +65,10 @@ class Adapter:
         self._configuration = configuration
         roles = taken(configuration_model(configuration, contract=contract), configuration)
         self._ports = {
-            role.role: bus_port(configuration, role.input, contract=contract)
-            for role in roles
-            if role.sensor
+            role.role: bus_port(configuration, role.input, contract=contract) for role in roles if role.sensor
         }
         self._actuators: dict[int, Role] = {
-            bus_port(configuration, role.output, contract=contract): role
-            for role in roles
-            if not role.sensor
+            bus_port(configuration, role.output, contract=contract): role for role in roles if not role.sensor
         }
         self._dat = parameters.dat(prm_path, dictionary_path(configuration))
         self.period_s = tick_period(configuration, contract=contract)
@@ -110,8 +106,7 @@ class Adapter:
         """
         if t_ns % _NANOSECONDS_PER_MICROSECOND:
             raise RuntimeError(
-                f"the tick at {t_ns} ns is not a whole microsecond,"
-                " which the deployment's clock cannot hold"
+                f"the tick at {t_ns} ns is not a whole microsecond, which the deployment's clock cannot hold"
             )
         bus = []
         for role, port in self._ports.items():

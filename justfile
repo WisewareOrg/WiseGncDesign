@@ -15,7 +15,7 @@ _sync:
     rm -f fsw/fprime/build-fprime-automatic-native/CMakeCache.txt
     just fsw
 
-# Build each configuration's F´ deployment into lab: its Python extension and its dictionary.
+# Build each configuration's F´ deployment into lab: its Python extension and its dictionary, and the type stubs ty reads.
 fsw:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -62,3 +62,7 @@ reqs:
 # Fly a notebook's Monte Carlo tests headless at full count into the active session; extra arguments go to pytest.
 fly notebook *args: fsw
     uv run --no-sync pytest {{notebook}} --full-monte-carlo {{args}}
+
+# Run wise-ci's check-python, as CI does, on a fresh F´ build, whose stubs ty reads.
+python: fsw
+    uv run --locked check-python

@@ -262,7 +262,9 @@ class Dictionary:
         self._definitions = {t["qualifiedName"]: t for t in document["typeDefinitions"]}
         constants = {c["qualifiedName"]: c["value"] for c in document["constants"]}
         self._bools = (constants["FW_SERIALIZE_FALSE_VALUE"], constants["FW_SERIALIZE_TRUE_VALUE"])
-        self.responses = self.type("Fw.CmdResponse").constants
+        responses = self.type("Fw.CmdResponse").constants
+        assert responses is not None, "`Fw.CmdResponse` is an enum"
+        self.responses = responses
         self._commands: dict[str, Command] = {}
         for entry in document["commands"]:
             name = _unqualified(entry["name"])
@@ -271,9 +273,7 @@ class Dictionary:
                 types = tuple(self.type(p["type"]["name"]) for p in entry["formalParams"])
             except ValueError:
                 types = None
-            self._commands[name] = Command(
-                name, entry["opcode"], params, types, entry["commandKind"]
-            )
+            self._commands[name] = Command(name, entry["opcode"], params, types, entry["commandKind"])
         self._channels: dict[str, Channel] = {}
         for entry in document["telemetryChannels"]:
             name = _unqualified(entry["name"])
@@ -285,8 +285,7 @@ class Dictionary:
             self._channels[name] = Channel(entry["id"], name, units[1] if units else "", ftype)
         self.channels_by_id = {c.id: c for c in self._channels.values()}
         self.parameters_by_id = {
-            entry["id"]: Parameter(entry["id"], _unqualified(entry["name"]))
-            for entry in document["parameters"]
+            entry["id"]: Parameter(entry["id"], _unqualified(entry["name"])) for entry in document["parameters"]
         }
 
     @classmethod
@@ -328,9 +327,7 @@ class Dictionary:
         return cls._generate(name, deployment, files, includes, component)
 
     @classmethod
-    def from_sub_topology(
-        cls, configuration: str, *, contract: Contract = CONTRACT
-    ) -> "Dictionary":
+    def from_sub_topology(cls, configuration: str, *, contract: Contract = CONTRACT) -> "Dictionary":
         """A configuration's GNC sub-topology's dictionary, generated from FPP with `fpp-to-dict`.
 
         The deployment, `Py<configuration>`, imports the sub-topology `<configuration>.Gnc` of the
@@ -352,10 +349,7 @@ class Dictionary:
             The dictionary, as `_generate` gives it.
         """
         name = f"Py{configuration}"
-        deployment = (
-            f"module {name} {{\n"
-            f"  deployment topology {name} {{\n    import {configuration}.Gnc\n  }}\n}}\n"
-        )
+        deployment = f"module {name} {{\n  deployment topology {name} {{\n    import {configuration}.Gnc\n  }}\n}}\n"
         framework = set(framework_files())
         files = [p for p in contract_files(contract=contract) if p not in framework]
         files.append(contract.gnc / f"{configuration}.fpp")
@@ -512,6 +506,7 @@ class Dictionary:
             if ftype.bools:
                 value = value == ftype.bools[1]
             elif ftype.constants is not None:
+                assert not isinstance(value, np.ndarray), "`Dictionary.type` codes no array of enums"
                 value = {v: k for k, v in ftype.constants.items()}[value]
             typed[param] = value
         return typed

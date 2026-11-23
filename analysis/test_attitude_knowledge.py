@@ -29,7 +29,7 @@ def attitude_error_rad(q_truth_BN: np.ndarray, q_est_BN: np.ndarray) -> np.ndarr
     """
     truth = Rotation.from_quat(q_truth_BN, scalar_first=True)
     estimate = Rotation.from_quat(q_est_BN, scalar_first=True)
-    return (truth * estimate.inv()).magnitude()
+    return (truth * estimate.inv()).magnitude()  # ty: ignore[missing-union-attribute]
 
 
 @pytest.mark.parametrize("requirement_id", rungs(__file__))

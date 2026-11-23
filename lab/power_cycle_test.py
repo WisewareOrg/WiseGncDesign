@@ -124,15 +124,11 @@ def test_a_copy_boots_once(configuration: str, prm: str, parameter_ids: list[int
 
 def test_a_configuration_not_built_is_refused_naming_it():
     """A configuration with no extension names itself and the recipe that builds it."""
-    with pytest.raises(
-        ModuleNotFoundError, match=r"of NoSuchConfiguration is not built; run `just fsw`"
-    ):
+    with pytest.raises(ModuleNotFoundError, match=r"of NoSuchConfiguration is not built; run `just fsw`"):
         source("NoSuchConfiguration")
 
 
-def test_a_rebuilt_extension_is_refused_by_its_own_configuration_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_a_rebuilt_extension_is_refused_by_its_own_configuration_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Each configuration's extension is stamped apart: another's rebuild leaves it flying.
 
     The extensions are two stand-in modules in the test's directory, so no F´ build is touched.

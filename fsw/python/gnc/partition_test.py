@@ -7,6 +7,7 @@ its output `slowOut`.
 
 from collections import namedtuple
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -139,7 +140,7 @@ class Sink:
             parameters: whatever boot gave it.
         """
 
-    def step(self, t: float, value: Value) -> tuple[Nothing, Nothing]:
+    def step(self, t: float, value: Value) -> tuple[Any, Any]:
         """Logs the step.
 
         Args:
@@ -335,8 +336,7 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
                 ),
                 (
                     "    output port slowOut: Value\n  }\n\n  instance",
-                    "    output port slowOut: Value\n    output port backOut: Value\n"
-                    "  }\n\n  instance",
+                    "    output port slowOut: Value\n    output port backOut: Value\n  }\n\n  instance",
                 ),
                 (
                     "      source.echoOut -> slow.valueIn\n",
@@ -364,13 +364,11 @@ def test_a_class_missing_for_a_component_or_matching_none_is_refused_naming_it(
                 ("    output port valueOut: Value\n", "    output port valueOut: [2] Value\n"),
                 (
                     "      source.valueOut -> sink.valueIn\n",
-                    "      source.valueOut[0] -> sink.valueIn\n"
-                    "      source.valueOut[1] -> slow.doubleIn\n",
+                    "      source.valueOut[0] -> sink.valueIn\n      source.valueOut[1] -> slow.doubleIn\n",
                 ),
                 (
                     "    output port slowOut: Value\n  }\n\n  instance",
-                    "    output port slowOut: Value\n    sync input port doubleIn: Value\n  }\n\n"
-                    "  instance",
+                    "    output port slowOut: Value\n    sync input port doubleIn: Value\n  }\n\n  instance",
                 ),
             ),
             r"source\.valueOut routes to more than one input",

@@ -40,10 +40,7 @@ def pairings(roles: Sequence[Role]) -> list[Pair]:
     Returns:
         The pairs, in the roles' order.
     """
-    return [
-        Pair(role.role, fpp_types.named(role.bus), fpp_types.named(role.icd), role.input)
-        for role in roles
-    ]
+    return [Pair(role.role, fpp_types.named(role.bus), fpp_types.named(role.icd), role.input) for role in roles]
 
 
 def convert(pairs: Sequence[Pair], messages: Mapping[str, Any]) -> dict[str, Any]:
@@ -56,6 +53,4 @@ def convert(pairs: Sequence[Pair], messages: Mapping[str, Any]) -> dict[str, Any
     Returns:
         Each value, an ICD struct's tuple, by its GNC port.
     """
-    return {
-        pair.port: fpp_types.converter(pair.bus, pair.icd)(messages[pair.role]) for pair in pairs
-    }
+    return {pair.port: fpp_types.converter(pair.bus, pair.icd)(messages[pair.role]) for pair in pairs}

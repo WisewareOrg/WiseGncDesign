@@ -10,7 +10,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
-from wise_dynamics.basilisk import ImuSpacecraft, Scenario
+from wise_dynamics.basilisk import ImuSpacecraft
+from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from algorithms.imu_dead_reckoning import gross_check
 from algorithms.imu_dead_reckoning.gross_check import bound_inputs, violations
@@ -86,13 +87,12 @@ def test_the_command_writes_navstate_alone_and_the_next_step_propagates_from_its
     reckoner = ImuDeadReckoner(Gnc.ImuDeadReckonerParameters(mu=0.0, dcm_PB=_IDENTITY))
     velocity = np.array([1.0, 2.0, 3.0])
 
-    commanded = reckoner.initNavState(
-        epoch=60.0, attitude=_Q_IDENTITY, position=_AWAY_FROM_ORIGIN, velocity=velocity
-    )
+    commanded = reckoner.initNavState(epoch=60.0, attitude=_Q_IDENTITY, position=_AWAY_FROM_ORIGIN, velocity=velocity)
     _, stepped = reckoner.step(t=61.0, imu=Gnc.ImuReading(_ZERO3, _ZERO3))
 
     assert commanded == Gnc.ImuDeadReckonerTelemetry(navState="initialized")
     assert stepped.navState == "propagated"
+    assert stepped.bodyEciPos is not None
     np.testing.assert_allclose(stepped.bodyEciPos, _AWAY_FROM_ORIGIN + velocity, rtol=1e-15)
     np.testing.assert_array_equal(stepped.bodyEciVel, velocity)
     np.testing.assert_array_equal(stepped.bodyEciAttitude, _Q_IDENTITY)
@@ -114,7 +114,7 @@ def test_a_rotation_past_180_degrees_keeps_w_nonnegative_on_the_axis_angle_attit
 
     assert state.q_BN[0] >= 0.0
     estimate = Rotation.from_quat(state.q_BN, scalar_first=True)
-    assert (estimate * Rotation.from_rotvec(omega * total_t * axis).inv()).magnitude() <= 1e-5
+    assert (estimate * Rotation.from_rotvec(omega * total_t * axis).inv()).magnitude() <= 1e-5  # ty: ignore[missing-union-attribute]
 
 
 # RK4 on $\dot q = \tfrac12 q \otimes (0, \omega)$ drifts $|q|$ off 1 at sixth order in the step's
@@ -163,9 +163,7 @@ def test_gravity_alone_keeps_a_quarter_circular_orbit_on_the_analytic_position()
 
     theta = n * state.t
     expected_r = radius * np.array([np.cos(theta), np.sin(theta), 0.0])
-    np.testing.assert_allclose(
-        state.r_BN_N, expected_r, atol=1.0, err_msg="quarter-orbit position error exceeds 1 m"
-    )
+    np.testing.assert_allclose(state.r_BN_N, expected_r, atol=1.0, err_msg="quarter-orbit position error exceeds 1 m")
 
 
 # The quaternion kinematics agree with the direction cosine matrix derivative identity
@@ -210,12 +208,9 @@ def test_a_platform_rate_turns_the_body_by_the_mounting_s_transpose():
 
     _, state = reckoner.step(t=dt, imu=Gnc.ImuReading(omega_p, _ZERO3))
 
-    expected = Rotation.from_quat(q0, scalar_first=True) * Rotation.from_rotvec(
-        mounting.T @ omega_p * dt
-    )
-    np.testing.assert_allclose(
-        state.bodyEciAttitude, expected.as_quat(scalar_first=True), rtol=0, atol=1e-12
-    )
+    expected = Rotation.from_quat(q0, scalar_first=True) * Rotation.from_rotvec(mounting.T @ omega_p * dt)
+    assert state.bodyEciAttitude is not None
+    np.testing.assert_allclose(state.bodyEciAttitude, expected.as_quat(scalar_first=True), rtol=0, atol=1e-12)  # ty: ignore[missing-union-attribute]
 
 
 @pytest.mark.parametrize("dt", [1e-3, 1e-4])
@@ -228,7 +223,7 @@ def test_q_dot_steps_the_attitude_as_scipy_rotates_it(dt: float):
     omega = np.array([0.3, -0.2, 0.5])
     for q in Rotation.random(200, random_state=5).as_quat(scalar_first=True):
         rotated = Rotation.from_quat(q, scalar_first=True) * Rotation.from_rotvec(omega * dt)
-        expected = rotated.as_quat(scalar_first=True, canonical=False)
+        expected = rotated.as_quat(scalar_first=True, canonical=False)  # ty: ignore[missing-union-attribute]
         expected *= np.sign(expected @ q)
         np.testing.assert_allclose(q + _q_dot(q, omega) * dt, expected, rtol=0, atol=dt**2)
 
@@ -239,9 +234,7 @@ def test_a_nan_error_is_a_violation():
     n = len(t_s)
     identity = np.tile([1.0, 0.0, 0.0, 0.0], (n, 1))
     r_N = np.tile([7.0e6, 0.0, 0.0], (n, 1))
-    commands = [
-        {"name": "nav.initNavState", "args": {"epoch": 0.0}, "response": "OK", "context": 1}
-    ]
+    commands = [{"name": "nav.initNavState", "args": {"epoch": 0.0}, "response": "OK", "context": 1}]
     run = {
         "t_s": t_s,
         "commands": np.asarray(json.dumps(commands)),
@@ -299,33 +292,24 @@ def test_the_bound_s_step_is_nav_s_integration_step_not_the_base_tick(
     inputs = bound_inputs()
 
     assert inputs["step_s"] == 1.0
-    assert inputs["gyro_noise_std_rad_s"] == (
-        ImuSpacecraft.gyro_noise_density_rad_s_rthz / np.sqrt(0.5)
-    )
-    assert inputs["accel_noise_std_m_s2"] == (
-        ImuSpacecraft.accel_noise_density_m_s2_rthz / np.sqrt(0.5)
-    )
+    assert inputs["gyro_noise_std_rad_s"] == (ImuSpacecraft.gyro_noise_density_rad_s_rthz / np.sqrt(0.5))
+    assert inputs["accel_noise_std_m_s2"] == (ImuSpacecraft.accel_noise_density_m_s2_rthz / np.sqrt(0.5))
 
 
-@pytest.mark.sim_scenario("leo500")
-@pytest.mark.sim_vehicle("imu_spacecraft")
-@pytest.mark.sim_runs(1)
-def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting(
-    sim_scenario: Scenario,
-) -> None:
+def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() -> None:
     """`mu` is WiseDynamics' scenario's Earth's, and `dcm_PB` its vehicle's IMU mounting.
 
-    The scenario is the one the notebook's mission flies, as WiseDynamics' fixture gives it, so a
-    renamed field there fails this test.
-
-    Args:
-        sim_scenario: the case's dispersed scenario.
+    The scenario and the vehicle are the ones the notebook's mission flies, built directly, so a
+    renamed field in WiseDynamics fails this test.
     """
-    nav = parameters(sim_scenario)
+    vehicle = ImuSpacecraft()
+    scenario = Leo500(vehicle)
+
+    nav = parameters(scenario, vehicle)
 
     assert type(nav) is Gnc.ImuDeadReckonerParameters
-    assert nav.mu == sim_scenario.mu_m3_s2["earth"]
-    np.testing.assert_array_equal(nav.dcm_PB, sim_scenario.vehicle.imu.dcm_PB)
+    assert nav.mu == scenario.mu_m3_s2["earth"]
+    np.testing.assert_array_equal(nav.dcm_PB, vehicle.imu.dcm_PB)
 
 
 def test_the_notebook_runs_end_to_end() -> None:

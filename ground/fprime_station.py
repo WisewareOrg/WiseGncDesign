@@ -36,7 +36,9 @@ class FprimeStation:
         self.dictionary = dictionary
         self._descriptor = dictionary.type("FwPacketDescriptorType")
         self._opcode = dictionary.type("FwOpcodeType")
-        self._command_descriptor = dictionary.type("ComCfg.Apid").constants["FW_PACKET_COMMAND"]
+        apids = dictionary.type("ComCfg.Apid").constants
+        assert apids is not None, "`ComCfg.Apid` is an enum"
+        self._command_descriptor = apids["FW_PACKET_COMMAND"]
         self._responses = {value: name for name, value in dictionary.responses.items()}
 
     @property

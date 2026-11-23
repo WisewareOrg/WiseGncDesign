@@ -25,7 +25,7 @@ def toolchain(requirements: str) -> list[str]:
             other line that is not a PEP 508 requirement raises `packaging`'s
             `InvalidRequirement`, a `ValueError`.
     """
-    pins = {}
+    pins: dict[str, Requirement] = {}
     for line in requirements.splitlines():
         text = line.split("#", 1)[0].strip()
         if text:

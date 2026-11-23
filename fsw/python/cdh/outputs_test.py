@@ -30,9 +30,7 @@ def test_each_role_s_icd_struct_written_at_its_gnc_port_is_converted_to_its_bus_
     """
     assert ACTUATORS
     pairs = pairings(ACTUATORS)
-    written = {
-        pair.port: icd_messages[role.icd].value for pair, role in zip(pairs, ACTUATORS, strict=True)
-    }
+    written = {pair.port: icd_messages[role.icd].value for pair, role in zip(pairs, ACTUATORS, strict=True)}
 
     converted = convert(pairs, written)
     for value in written.values():

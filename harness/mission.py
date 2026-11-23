@@ -4,7 +4,7 @@ A mission lives outside the requirements tree. It names a configuration, a GNC s
 contract, and a build, `"python"` or `"fprime"`, which together are its FSW. Each algorithm
 component of the configuration claims the capabilities (SYS items) it provides with `@ provides`
 lines in its FPP, and the configuration claims their union; the mission picks the rungs (SRS items)
-to judge and the scenarios (TST items) to fly. A component's class and `parameters(scenario)` are
+to judge and the scenarios (TST items) to fly. A component's class and `parameters(scenario, vehicle)` are
 found in its algorithm's notebook, `<folder>/<folder>.py` beside its `.fpp`, by the component's
 name. `mission_tests` turns missions into Monte Carlo tests for a notebook's globals: a class per
 vehicle, holding a test per configuration, build and scenario, so each flight's runs have a folder
@@ -24,7 +24,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Protocol, cast
 
 import pytest
 from wise_dynamics.basilisk import FswHost
@@ -61,12 +61,12 @@ class _Member(NamedTuple):
     Attributes:
         instance: its instance's qualified name, `<configuration>.<instance>`.
         tuple_type: its component's `<Name>Parameters` tuple.
-        parameters: its notebook's `parameters(scenario)`, or None when the tuple has no field.
+        parameters: its notebook's `parameters(scenario, vehicle)`, or None when the tuple has no field.
     """
 
     instance: str
     tuple_type: type
-    parameters: Callable[[Any], Any] | None
+    parameters: Callable[[Any, Any], Any] | None
 
 
 class _Configuration(NamedTuple):
@@ -98,19 +98,13 @@ def _claims(model: Model, component: Component) -> list[str]:
             does not hold, naming the component.
     """
     claimed = [
-        line.removeprefix(_PROVIDES).strip()
-        for line in model.annotations[component.name]
-        if line.startswith(_PROVIDES)
+        line.removeprefix(_PROVIDES).strip() for line in model.annotations[component.name] if line.startswith(_PROVIDES)
     ]
     if not claimed:
-        raise ValueError(
-            f"{component.name} claims no capability: {component.file} has no `@ provides` line"
-        )
+        raise ValueError(f"{component.name} claims no capability: {component.file} has no `@ provides` line")
     unknown = [uid for uid in claimed if uid not in requirements_tree.items("SYS")]
     if unknown:
-        raise ValueError(
-            f"no capability {unknown} in the requirements tree, claimed by {component.name}"
-        )
+        raise ValueError(f"no capability {unknown} in the requirements tree, claimed by {component.name}")
     return claimed
 
 
@@ -139,7 +133,7 @@ def _notebook(component: Component) -> ModuleType:
 def _configuration(gnc: str, build: str, contract: Contract) -> _Configuration:
     """Finds a configuration's claims, its members' parameters and, for Python, their classes.
 
-    A component is instanced at most once, since its notebook's `parameters(scenario)` gives one
+    A component is instanced at most once, since its notebook's `parameters(scenario, vehicle)` gives one
     tuple per component and so cannot tell two instances apart.
 
     Args:
@@ -166,7 +160,7 @@ def _configuration(gnc: str, build: str, contract: Contract) -> _Configuration:
         if len(named) > 1:
             raise ValueError(
                 f"{name} is instanced more than once in {gnc}, as {named}, and its notebook's"
-                " `parameters(scenario)` gives one tuple per component"
+                " `parameters(scenario, vehicle)` gives one tuple per component"
             )
     capabilities = {uid for name in by_component for uid in _claims(model, model.components[name])}
     found = []
@@ -237,9 +231,7 @@ class Mission:
             raise ValueError(f"no vehicle {self.vehicle!r}; known: {sorted(VEHICLES)}")
         known = configurations(contract=self.contract)
         if self.gnc not in known:
-            raise ValueError(
-                f"no configuration {self.gnc!r} in {self.contract.gnc}; known: {list(known)}"
-            )
+            raise ValueError(f"no configuration {self.gnc!r} in {self.contract.gnc}; known: {list(known)}")
         if self.build not in BUILDS:
             raise ValueError(f"no build {self.build!r}; known: {list(BUILDS)}")
         if self.build == "fprime" and self.gnc not in fprime_configurations(contract=self.contract):
@@ -257,10 +249,7 @@ class Mission:
         for scenario_id in self.scenarios:
             rungs = requirements_tree.flight_rungs(scenario_id, capabilities)
             if not rungs:
-                raise ValueError(
-                    f"{scenario_id} judges no rung under {self.gnc}'s capabilities"
-                    f" {list(capabilities)}"
-                )
+                raise ValueError(f"{scenario_id} judges no rung under {self.gnc}'s capabilities {list(capabilities)}")
             reached.update(rungs)
         outside = sorted(set(self.rungs or ()) - reached)
         if outside:
@@ -279,6 +268,44 @@ class Mission:
             The new mission.
         """
         return replace(self, **changes)
+
+
+class _ScenarioDefinition(Protocol):
+    """A scenario's definition: its ground procedure, an `async def` carrying its `sim_` marks.
+
+    Attributes:
+        pytestmark: the marks pytest's decorators stored on it, its `sim_` marks among them.
+    """
+
+    __name__: str
+    pytestmark: list[pytest.Mark]
+
+    def __call__(self, ground: Ground, /) -> Coroutine[Any, Any, None]:
+        """The procedure, run on a ground.
+
+        Args:
+            ground: the ground the procedure runs on.
+
+        Returns:
+            The procedure's coroutine, which the ground runs to its end.
+        """
+        ...
+
+
+class _ScenarioTest(Protocol):
+    """A mission's test through one scenario, carrying what pytest and the judge read off it.
+
+    Attributes:
+        pytestmark: its marks: the vehicle's, then its definition's.
+        mission: the mission it flies.
+        scenario_id: the TST ID it flies.
+    """
+
+    __name__: str
+    __qualname__: str
+    pytestmark: list[pytest.Mark]
+    mission: Mission
+    scenario_id: str
 
 
 def mission_tests(*missions: Mission) -> dict[str, type]:
@@ -308,7 +335,7 @@ def mission_tests(*missions: Mission) -> dict[str, type]:
                     " in one mission"
                 )
             flown.add(flight)
-    classes: dict[str, dict[str, Callable[..., None]]] = {}
+    classes: dict[str, dict[str, _ScenarioTest]] = {}
     for mission in missions:
         name = f"Test_{mission.vehicle}"
         methods = classes.setdefault(name, {})
@@ -323,8 +350,7 @@ def mission_tests(*missions: Mission) -> dict[str, type]:
             test.__qualname__ = f"{name}.{test.__name__}"
             methods[test.__name__] = test
     return {
-        name: type(name, (), {"_write_flight_json": _write_flight_json, **methods})
-        for name, methods in classes.items()
+        name: type(name, (), {"_write_flight_json": _write_flight_json, **methods}) for name, methods in classes.items()
     }
 
 
@@ -339,7 +365,8 @@ def _write_flight_json(self: object, request: pytest.FixtureRequest, sim_test_di
         request: the fixture request, whose function carries the mission and scenario.
         sim_test_directory: the test's directory in the session.
     """
-    _record_flight(request.function.mission, request.function.scenario_id, sim_test_directory)
+    test: _ScenarioTest = request.function
+    _record_flight(test.mission, test.scenario_id, sim_test_directory)
 
 
 def _record_flight(mission: Mission, scenario_id: str, directory: Path) -> None:
@@ -393,7 +420,7 @@ def _merge_json(path: Path, mapping: dict[str, Any]) -> None:
         raise
 
 
-def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
+def _scenario_test(mission: Mission, scenario_id: str) -> _ScenarioTest:
     """The Monte Carlo test flying a mission through one scenario.
 
     The TST item's reference names the scenario's definition, its ground procedure, whose `sim_`
@@ -448,15 +475,13 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
             {
                 member.instance: member.tuple_type()
                 if member.parameters is None
-                else member.parameters(sim_scenario)
+                else member.parameters(sim_scenario, sim_scenario.vehicle)
                 for member in mission._found.members
             },
             record,
         )
         if mission.build == "python":
-            fsw = radio = FrameRunner(
-                mission.gnc, record, mission._found.classes, contract=mission.contract
-            )
+            fsw = radio = FrameRunner(mission.gnc, record, mission._found.classes, contract=mission.contract)
         else:
             fsw = Adapter(mission.gnc, record, contract=mission.contract)
             radio = FprimeStation(fsw, fsw.dictionary)
@@ -464,17 +489,16 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         host = FswHost(fsw, sim_scenario.vehicle)
         # The simulation holds the ground, so a strong reference back would keep every case.
         scenario = weakref.ref(sim_scenario)
-        ground = Ground(
-            definition,
-            radio,
-            sim_scenario.vehicle.tracking(),
-            lambda: scenario().stop_ground(),
-            period_s=ground_period_s,
-        )
+
+        def stop() -> None:
+            """Stops the simulation's ground, which the simulation still holds when the ground calls this."""
+            alive = scenario()
+            assert alive is not None, "the simulation holds the ground that stops it"
+            alive.stop_ground()
+
+        ground = Ground(definition, radio, sim_scenario.vehicle.tracking(), stop, period_s=ground_period_s)
         try:
-            datasets = sim_scenario.run(
-                host, fsw_fields={}, duration_s=sim_duration_s, ground=ground
-            )
+            datasets = sim_scenario.run(host, fsw_fields={}, duration_s=sim_duration_s, ground=ground)
         except BaseException:
             if ground.failure is None:
                 raise
@@ -486,17 +510,16 @@ def _scenario_test(mission: Mission, scenario_id: str) -> Callable[..., None]:
         if problems:
             pytest.fail("\n".join(problems), pytrace=False)
 
-    test.pytestmark = [*test.pytestmark, *definition.pytestmark]
-    test.__name__ = f"test_{mission.gnc}_{mission.build}_{definition.__name__}"
-    test.mission = mission
-    test.scenario_id = scenario_id
-    return test
+    scenario_test = cast(_ScenarioTest, test)
+    scenario_test.pytestmark = [*scenario_test.pytestmark, *definition.pytestmark]
+    scenario_test.__name__ = f"test_{mission.gnc}_{mission.build}_{definition.__name__}"
+    scenario_test.mission = mission
+    scenario_test.scenario_id = scenario_id
+    return scenario_test
 
 
 @functools.cache
-def _definition(
-    reference: tuple[tuple[str, str], ...], root: Path
-) -> Callable[[Ground], Coroutine[Any, Any, None]]:
+def _definition(reference: tuple[tuple[str, str], ...], root: Path) -> _ScenarioDefinition:
     """The scenario definition a TST item's reference names.
 
     A module already loaded, or loading, from the referenced file supplies it, so a notebook can
@@ -518,9 +541,11 @@ def _definition(
         BaseException: the file raised while importing; it is then not left registered, so a
             later lookup imports it afresh.
     """
-    reference = dict(reference)
-    path = (root / reference["path"]).resolve()
-    name = re.match(r"def (\w+)\(", reference["keyword"]).group(1)
+    fields = dict(reference)
+    path = (root / fields["path"]).resolve()
+    declaration = re.match(r"def (\w+)\(", fields["keyword"])
+    assert declaration is not None, f"{fields['keyword']} declares a definition"
+    name = declaration.group(1)
     for module in list(sys.modules.values()):
         file = getattr(module, "__file__", None)
         if file and Path(file).resolve() == path and hasattr(module, name):
@@ -530,8 +555,9 @@ def _definition(
         return getattr(main, name)
     module_name = f"_scenarios_{path}"
     if module_name in sys.modules:
-        raise ValueError(f"{reference['path']} flies {name} before it defines it")
+        raise ValueError(f"{fields['path']} flies {name} before it defines it")
     spec = importlib.util.spec_from_file_location(module_name, path)
+    assert spec is not None and spec.loader is not None, f"{path} is a Python file"
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     try:

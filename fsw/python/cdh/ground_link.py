@@ -50,9 +50,7 @@ class GroundLink:
             written: its `<Name>Telemetry` tuple, or `None`.
             t_ns: ns, the tick's time, which tags the writes.
         """
-        self._log.extend(
-            (channel, t_ns, value) for channel, value in telemetry.writes(instance, written)
-        )
+        self._log.extend((channel, t_ns, value) for channel, value in telemetry.writes(instance, written))
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command, which runs at the next tick.

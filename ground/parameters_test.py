@@ -32,9 +32,7 @@ def _entry(tuple_: Any) -> dict[str, Any]:
     return {name: np.asarray(value).tolist() for name, value in tuple_._asdict().items()}
 
 
-def _configuration_s(
-    algorithm_parameters: dict[str, Any], instances: tuple[Instance, ...]
-) -> dict[str, Any]:
+def _configuration_s(algorithm_parameters: dict[str, Any], instances: tuple[Instance, ...]) -> dict[str, Any]:
     """The tuples of a configuration's algorithm instances.
 
     Args:
@@ -56,18 +54,13 @@ def test_the_record_holds_every_field_under_the_instance_it_is_keyed_by(
         tmp_path: where the case's files are written.
         algorithm_parameters: each algorithm component's tuple.
     """
-    tuples = {
-        f"MockConfiguration.mock{n}": tuple_
-        for n, tuple_ in enumerate(algorithm_parameters.values())
-    }
+    tuples = {f"MockConfiguration.mock{n}": tuple_ for n, tuple_ in enumerate(algorithm_parameters.values())}
     assert tuples
 
     record = parameters.write(tuples, tmp_path / "run_0000.prm.json")
 
     assert record == tmp_path / "run_0000.prm.json"
-    assert json.loads(record.read_text()) == {
-        instance: _entry(tuple_) for instance, tuple_ in tuples.items()
-    }
+    assert json.loads(record.read_text()) == {instance: _entry(tuple_) for instance, tuple_ in tuples.items()}
 
 
 def test_f_prime_s_tool_makes_the_dat_beside_the_record_and_decodes_it_back(

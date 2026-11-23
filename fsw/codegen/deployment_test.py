@@ -41,9 +41,7 @@ ACTUATORS = [role for role in DECLARED if not role.sensor]
 """Every actuator role."""
 
 
-def test_a_deployment_s_files_are_the_contract_s_then_its_gnc_and_topology(
-    configuration: str, tmp_path: Path
-):
+def test_a_deployment_s_files_are_the_contract_s_then_its_gnc_and_topology(configuration: str, tmp_path: Path):
     """`fpp_files` extends `contract_files`, so both builds read one list.
 
     Args:
@@ -119,9 +117,7 @@ def _simulation(model: Model, name: str) -> set[tuple[str, str, int, str, str, i
     [DECLARED, SENSORS, ACTUATORS, []],
     ids=["every-role", "sensors-only", "actuators-only", "no-role"],
 )
-def test_a_configuration_s_role_wiring_is_generated_from_the_roles_it_takes(
-    tmp_path: Path, exposed: list[Role]
-):
+def test_a_configuration_s_role_wiring_is_generated_from_the_roles_it_takes(tmp_path: Path, exposed: list[Role]):
     """The k-th sensor is fed from `busOut[k]`, the k-th actuator feeds `busIn[k]`, through cdh.
 
     FPP's own analysis accepts each rendered deployment, so each end is type-checked; a
@@ -163,9 +159,7 @@ def test_a_configuration_s_role_wiring_is_generated_from_the_roles_it_takes(
             assert bus_port(name, port(role), contract=contract) == k, role.role
 
 
-def test_a_render_leaves_a_topology_whose_text_is_unchanged_untouched(
-    configuration: str, tmp_path: Path
-):
+def test_a_render_leaves_a_topology_whose_text_is_unchanged_untouched(configuration: str, tmp_path: Path):
     """A second render keeps the file, so the F´ build does not autocode it again; a stale one goes.
 
     Args:
@@ -190,9 +184,7 @@ def test_a_cdh_port_no_lab_bus_driver_port_feeds_is_refused_naming_it(configurat
     Args:
         configuration: the configuration.
     """
-    with pytest.raises(
-        ValueError, match=rf"{configuration}.*cdh\.notARoleIn.*LabBusDriver port\(s\) \[\]"
-    ):
+    with pytest.raises(ValueError, match=rf"{configuration}.*cdh\.notARoleIn.*LabBusDriver port\(s\) \[\]"):
         bus_port(configuration, "notARoleIn")
 
 
@@ -222,9 +214,7 @@ def test_a_cdh_port_two_lab_bus_driver_ports_feed_is_refused_naming_both(
     )
     monkeypatch.setattr("fsw.codegen.deployment._TEMPLATE", template)
 
-    with pytest.raises(
-        ValueError, match=rf"cdh\.{role.input} to LabBusDriver port\(s\) \[0, {other}\], not one"
-    ):
+    with pytest.raises(ValueError, match=rf"cdh\.{role.input} to LabBusDriver port\(s\) \[0, {other}\], not one"):
         bus_port(name, role.input, contract=contract)
 
 

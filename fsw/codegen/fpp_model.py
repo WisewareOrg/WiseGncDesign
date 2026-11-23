@@ -4,7 +4,7 @@ The binary is the native one inside the `fprime_fpp` package, run directly. A ke
 that is missing from the output raises `KeyError`. Every name is FPP's qualified name, such as
 `ImuDeadReckoning.nav` or `Gnc.Vector3`. A type reference is a primitive's name (`F64`, `U8`,
 `bool`), `string`, or a named type's qualified name; an alias reads as the type it names. Why one
-module reads `to-json` directly is in ADR 0004 rev 2.
+module reads `to-json` directly is in ADR 0004 rev 3.
 """
 
 import json
@@ -34,6 +34,7 @@ __all__ = [
     "Types",
     "parse",
     "read",
+    "struct_named",
 ]
 
 _FPP = Path(fprime_fpp.__file__).with_name("fpp")
@@ -337,8 +338,7 @@ def parse(directory: Path) -> Model:
         instances[qualified] = Instance(qualified, component, entry["baseId"])
 
     topologies = {
-        _qualified(topology): _connections(topology, instance_map)
-        for topology in analysis["topologyMap"].values()
+        _qualified(topology): _connections(topology, instance_map) for topology in analysis["topologyMap"].values()
     }
     ports = {
         f"{_qualified(topology)}.{name}": TopologyPort(*_port_end(port["pii"], instance_map))
@@ -368,6 +368,25 @@ def parse(directory: Path) -> Model:
 
     annotations = {n.name: n.annotation for n in nodes.values() if n.kind in _ANNOTATED}
     return Model(instances, topologies, ports, constants, types, components, annotations)
+
+
+def struct_named(types: Types, name: str) -> Struct:
+    """The struct a qualified name names.
+
+    Args:
+        types: a model's types.
+        name: the struct's qualified name, such as `Gnc.WheelCommand`.
+
+    Returns:
+        The struct.
+
+    Raises:
+        ValueError: naming the type, when it is an enum or an array.
+    """
+    definition = types[name]
+    if not isinstance(definition, Struct):
+        raise ValueError(f"type {name}, which is not a struct")
+    return definition
 
 
 def _definitions(members: list[Any], qualifier: tuple[str, ...]) -> Iterator[tuple[str, _Node]]:
@@ -424,9 +443,7 @@ def _connections(topology: dict[str, Any], instance_map: dict[str, Any]) -> tupl
             from_instance, from_port = _port_end(c["from"]["port"], instance_map)
             to_instance, to_port = _port_end(c["to"]["port"], instance_map)
             from_index, to_index = from_numbers[_key(c)], to_numbers[_key(c)]
-            connections.append(
-                Connection(from_instance, from_port, from_index, to_instance, to_port, to_index)
-            )
+            connections.append(Connection(from_instance, from_port, from_index, to_instance, to_port, to_index))
     return tuple(sorted(connections, key=lambda c: (c.from_instance, c.from_port, c.from_index)))
 
 
@@ -541,9 +558,7 @@ def _component(
     channels = []
     for channel in entry["tlmChannelMap"].values():
         position, data = spec(channel)
-        channels.append(
-            (position, Channel(data["name"], _type_name(channel["channelType"], nodes)))
-        )
+        channels.append((position, Channel(data["name"], _type_name(channel["channelType"], nodes))))
     parameters = []
     for parameter in entry["paramMap"].values():
         position, data = spec(parameter)

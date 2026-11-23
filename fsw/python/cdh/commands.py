@@ -75,7 +75,7 @@ def handlers(dictionary: Dictionary, algorithms: Mapping[str, Any]) -> Handlers:
             handler = getattr(algorithm, name, None)
             found = list(inspect.signature(handler).parameters) if callable(handler) else None
             wanted = list(command.params)
-            if found != wanted:
+            if not callable(handler) or found != wanted:
                 raise ValueError(
                     f"{instance}.{name} takes {wanted}; the algorithm has "
                     f"{'no such method' if found is None else found}"

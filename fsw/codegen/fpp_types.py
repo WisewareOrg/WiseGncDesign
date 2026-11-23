@@ -17,7 +17,7 @@ Each component an algorithm's `.fpp` defines has three tuples in its FPP module,
 An output or telemetry field defaults to `None`, not written, which no FPP value is. A parameter
 has a default only when its FPP declaration gives one, so the required parameters come first, each
 group in FPP's order. A parameters tuple's `component` is its component's qualified name, and
-`parameters_from` builds one from plain values. Why named tuples is in ADR 0004 rev 2.
+`parameters_from` builds one from plain values. Why named tuples is in ADR 0004 rev 3.
 """
 
 import functools
@@ -50,7 +50,7 @@ _LOADED: set[Contract] = set()
 
 
 @functools.cache
-def converter(source: type, target: type) -> Callable[[Any], Any]:
+def converter(source: type[Any], target: type[Any]) -> Callable[[Any], Any]:
     """A function converting a `source` value to a `target` tuple, each field taken by name.
 
     Fields are taken by `fsw.codegen.fields.plan`'s rule. An array field becomes a fresh array of
@@ -89,7 +89,7 @@ def converter(source: type, target: type) -> Callable[[Any], Any]:
     return convert
 
 
-def named(name: str) -> type:
+def named(name: str) -> type[Any]:
     """A struct's or a component's tuple, by its FPP qualified name.
 
     Args:
@@ -105,7 +105,7 @@ def named(name: str) -> type:
     return getattr(space, base)
 
 
-def parameters_from(tuple_type: type, values: Mapping[str, Any]) -> Any:
+def parameters_from(tuple_type: type[Any], values: Mapping[str, Any]) -> Any:
     """A component's parameters tuple from plain values, such as a JSON object's.
 
     An array field becomes a fresh array of its FPP shape and type; a scalar or an enum name passes
@@ -128,9 +128,7 @@ def parameters_from(tuple_type: type, values: Mapping[str, Any]) -> Any:
         if shape and parameter.name in converted:
             value = np.array(converted[parameter.name], dtype=element)
             if value.shape != shape:
-                raise ValueError(
-                    f"{component.name}.{parameter.name} is {shape}, but its value is {value.shape}"
-                )
+                raise ValueError(f"{component.name}.{parameter.name} is {shape}, but its value is {value.shape}")
             converted[parameter.name] = value
     return tuple_type(**converted)
 
@@ -147,7 +145,7 @@ def _same(value: Any) -> Any:
     return value
 
 
-def _source_forms(source: type) -> dict[str, tuple[str, Form]]:
+def _source_forms(source: type[Any]) -> dict[str, tuple[str, Form]]:
     """Each field of a converter's source, by its name in lower case.
 
     Args:
@@ -160,15 +158,10 @@ def _source_forms(source: type) -> dict[str, tuple[str, Form]]:
         struct, types = _STRUCTS[source]
         return {m.name.lower(): (m.name, form(m, types)) for m in struct.members}
     fields = source.__dtype__.fields
-    return {
-        name.lower(): (name, (fields[name][0].shape, fields[name][0].base))
-        for name in source.__dtype__.names
-    }
+    return {name.lower(): (name, (fields[name][0].shape, fields[name][0].base)) for name in source.__dtype__.names}
 
 
-def _build(
-    model: Model, algorithms: Collection[Path], kept: Collection[str] = ()
-) -> dict[str, SimpleNamespace]:
+def _build(model: Model, algorithms: Collection[Path], kept: Collection[str] = ()) -> dict[str, SimpleNamespace]:
     """The tuples of a model's structs and of its algorithms' components, by top-level FPP module.
 
     Each struct's tuple is recorded for `converter`, and each algorithm's component for
@@ -233,8 +226,7 @@ def _component_tuples(component: Component) -> dict[str, type]:
     for port in component.outputs:
         if port.size != 1 or len(port.args) != 1:
             raise ValueError(
-                f"{component.name}.{port.name}: an output port is a field only with one argument"
-                " and no port array"
+                f"{component.name}.{port.name}: an output port is a field only with one argument and no port array"
             )
     name = component.name.rsplit(".", 1)[-1]
     outputs = [p.name for p in component.outputs]
@@ -273,7 +265,7 @@ def load(contract: Contract) -> None:
         return
     model = read(contract_files(contract=contract))
     files = {Path(f).resolve() for f in contract.algorithms}
-    definitions = {name: t for name, t in model.types.items() if isinstance(t, Struct)}
+    definitions: dict[str, Struct | Component] = {name: t for name, t in model.types.items() if isinstance(t, Struct)}
     definitions |= {c.name: c for c in model.components.values() if c.file.resolve() in files}
     for name, definition in definitions.items():
         if _DEFINITIONS.get(name, definition) != definition:

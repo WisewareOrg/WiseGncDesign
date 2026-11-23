@@ -6,9 +6,7 @@ import pytest
 
 from harness.notebook import run_notebook
 
-NOTEBOOKS = sorted(
-    path for path in Path(__file__).parent.glob("*.py") if not path.name.endswith("_test.py")
-)
+NOTEBOOKS = sorted(path for path in Path(__file__).parent.glob("*.py") if not path.name.endswith("_test.py"))
 assert NOTEBOOKS, "no mission notebooks found beside this file"
 
 

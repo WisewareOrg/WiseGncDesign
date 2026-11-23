@@ -67,10 +67,7 @@ def _model(tmp_path: Path, drivers: int = 1) -> Model:
         MOCK.format(
             driver="  instance driver: Svc.RateGroupDriver base id 0x100\n" if drivers else "",
             driver_use="    instance driver\n" if drivers else "",
-            driver_wire=(
-                "      driver.CycleOut[1] -> slow.CycleIn\n"
-                "      driver.CycleOut[0] -> fast.CycleIn\n"
-            )
+            driver_wire=("      driver.CycleOut[1] -> slow.CycleIn\n      driver.CycleOut[0] -> fast.CycleIn\n")
             if drivers
             else "",
             extra="\n  instance other: Svc.RateGroupDriver base id 0x700\n" if drivers > 1 else "",
@@ -112,9 +109,7 @@ def test_each_rate_group_s_members_are_in_their_port_order_under_the_driver_s_or
     ],
     ids=["two", "none"],
 )
-def test_a_sub_topology_without_exactly_one_driver_is_refused_naming_them(
-    tmp_path: Path, drivers: int, match: str
-):
+def test_a_sub_topology_without_exactly_one_driver_is_refused_naming_them(tmp_path: Path, drivers: int, match: str):
     """Two drivers or none leave no one order of rate groups; the drivers there are named.
 
     Args:

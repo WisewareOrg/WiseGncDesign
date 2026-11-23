@@ -17,6 +17,7 @@ import numpy as np
 
 from fsw.codegen.deployment import contract_model
 from fsw.codegen.fields import form, plan
+from fsw.codegen.fpp_model import struct_named
 from fsw.codegen.roles import Role, roles
 from lab.bus_emulator import deserialize, serialize
 
@@ -43,9 +44,9 @@ def _planned(role: Role) -> list[Any]:
         Each GNC member, its bus field's name and its form.
     """
     model = contract_model()
-    bus = model.types[role.bus]
+    bus, icd = struct_named(model.types, role.bus), struct_named(model.types, role.icd)
     sources = {m.name.lower(): (m.name, form(m, model.types)) for m in bus.members}
-    return plan(model.types[role.icd], model.types, sources, role.bus)
+    return plan(icd, model.types, sources, role.bus)
 
 
 def _reading(role: Role, bus_values: dict[str, list[Any]]) -> bytes:
@@ -87,9 +88,7 @@ def _icd_bytes(message: Any) -> bytes:
     return _bytes([(np.asarray(v).dtype, v) for v in message.values.values()])
 
 
-def test_each_role_s_bus_struct_converts_to_its_gnc_struct(
-    fsw: ModuleType, bus_messages: dict[str, Any]
-) -> None:
+def test_each_role_s_bus_struct_converts_to_its_gnc_struct(fsw: ModuleType, bus_messages: dict[str, Any]) -> None:
     """Each role's pin gives the GNC struct the field rule takes from the emulator's bytes.
 
     Args:

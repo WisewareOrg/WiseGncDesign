@@ -19,6 +19,7 @@
 import numpy as np
 
 from fsw.codegen.deployment import contract_model
+from fsw.codegen.fpp_model import struct_named
 from fsw.codegen.fpp_types import Gnc
 from harness.mission import Mission, mission_tests
 
@@ -63,11 +64,10 @@ __all__ = ["WheelSpinner", "parameters"]
 
 
 # %%
-WHEELS = next(
-    member.size
-    for member in contract_model().types["Gnc.WheelCommand"].members
-    if member.name == "motorTorque"
-)
+_COMMAND = struct_named(contract_model().types, "Gnc.WheelCommand")
+_MOTOR_TORQUE = next(member for member in _COMMAND.members if member.name == "motorTorque")
+assert _MOTOR_TORQUE.size is not None, "`motorTorque` is an array"
+WHEELS = _MOTOR_TORQUE.size
 """The wheels a `Gnc.WheelCommand` commands: its `motorTorque` array's length in the contract."""
 
 
@@ -95,9 +95,7 @@ class WheelSpinner:
             The command on `wheelOut`, and the telemetry `wheelTorque`, N*m, the first wheel's
             torque.
         """
-        return Gnc.WheelSpinnerOutputs(wheelOut=self._command), Gnc.WheelSpinnerTelemetry(
-            wheelTorque=self._torque
-        )
+        return Gnc.WheelSpinnerOutputs(wheelOut=self._command), Gnc.WheelSpinnerTelemetry(wheelTorque=self._torque)
 
 
 # %% [markdown]
@@ -112,11 +110,12 @@ class WheelSpinner:
 
 
 # %%
-def parameters(scenario: object) -> Gnc.WheelSpinnerParameters:
+def parameters(scenario: object, vehicle: object) -> Gnc.WheelSpinnerParameters:
     """The spinner's parameter for one case: 1 mN*m on the first wheel.
 
     Args:
         scenario: the case's dispersed scenario, which does not change it.
+        vehicle: the case's dispersed vehicle, which does not change it.
 
     Returns:
         The parameter, which the ground writes as the case's record.

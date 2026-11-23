@@ -28,6 +28,7 @@ from fsw.codegen.fpp_model import (
     TopologyPort,
     parse,
     read,
+    struct_named,
 )
 from fsw.codegen.members import members
 from fsw.mock import edited
@@ -182,9 +183,7 @@ def mock(tmp_path_factory: pytest.TempPathFactory) -> Model:
     return read(_mock_files(tmp_path_factory.mktemp("mock")))
 
 
-def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
-    configuration: str, tmp_path: Path
-):
+def test_the_deployment_reads_back_with_every_connection_its_topology_declares(configuration: str, tmp_path: Path):
     """A configuration's deployment: every connection read, the pattern graphs' included.
 
     Every connection end is an instance of the model, of a component it defines. Each GNC member's
@@ -210,9 +209,7 @@ def test_the_deployment_reads_back_with_every_connection_its_topology_declares(
     assert flown
     for member in flown:
         component = model.components[member.component]
-        targets = {
-            (c.to_instance, c.to_port) for c in connections if c.from_instance == member.name
-        }
+        targets = {(c.to_instance, c.to_port) for c in connections if c.from_instance == member.name}
         sent = {(c.from_instance, c.from_port) for c in connections if c.to_instance == member.name}
         if component.commands:
             assert ("WiseFsw.cmdDisp", "compCmdReg") in targets, member.name
@@ -324,6 +321,25 @@ def test_types_are_read_with_struct_members_in_declaration_order(mock: Model):
     assert "Gnc.Seconds" not in mock.types
 
 
+def test_struct_named_gives_the_struct_the_name_names(mock: Model):
+    """A struct's qualified name gives that struct.
+
+    Args:
+        mock: the mock model.
+    """
+    assert struct_named(mock.types, "Gnc.Reading") is mock.types["Gnc.Reading"]
+
+
+def test_struct_named_refuses_an_enum_naming_it(mock: Model):
+    """An enum's qualified name raises, naming the type.
+
+    Args:
+        mock: the mock model.
+    """
+    with pytest.raises(ValueError, match="Gnc.Mode"):
+        struct_named(mock.types, "Gnc.Mode")
+
+
 def test_a_component_s_commands_channels_and_parameters_are_read(mock: Model):
     """Declared commands, channels and parameters, with defaults; F´'s PRM commands are not.
 
@@ -366,12 +382,8 @@ def test_a_component_s_general_ports_and_its_file_are_read(mock: Model):
         Port("RateGroupMemberOut", 3, (Argument("ctx", "U32"),), "Gnc.Sched"),
     )
     assert mock.components["Gnc.Nav"].outputs == ()
-    assert mock.components["Gnc.RateGroup"].inputs == (
-        Port("CycleIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
-    )
-    assert mock.components["Gnc.Nav"].inputs == (
-        Port("schedIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),
-    )
+    assert mock.components["Gnc.RateGroup"].inputs == (Port("CycleIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),)
+    assert mock.components["Gnc.Nav"].inputs == (Port("schedIn", 1, (Argument("ctx", "U32"),), "Gnc.Sched"),)
     assert mock.components["Gnc.Nav"].file.name == "Gnc.fpp"
     assert mock.components["Gnc.Nav"].file.is_absolute()
 
@@ -401,9 +413,7 @@ def test_a_parameter_with_a_non_scalar_default_fails_naming_it(tmp_path: Path):
     Args:
         tmp_path: where the mock's model is written.
     """
-    gnc = edited(
-        GNC, ("param mounting: Vector3", "param mounting: Vector3 default [1.0, 0.0, 0.0]")
-    )
+    gnc = edited(GNC, ("param mounting: Vector3", "param mounting: Vector3 default [1.0, 0.0, 0.0]"))
 
     with pytest.raises(ValueError, match="mounting"):
         read(_mock_files(tmp_path, gnc))
@@ -421,9 +431,7 @@ def test_a_model_fpp_rejects_fails_with_its_stderr(tmp_path: Path):
         read(_mock_files(tmp_path, gnc))
 
 
-@pytest.mark.parametrize(
-    "key", ["componentInstanceMap", "componentMap", "topologyMap", "typeMap", "valueMap"]
-)
+@pytest.mark.parametrize("key", ["componentInstanceMap", "componentMap", "topologyMap", "typeMap", "valueMap"])
 def test_a_renamed_analysis_key_fails_the_read(tmp_path: Path, key: str):
     """`parse` on output with a top-level analysis key it reads renamed raises, naming the key.
 

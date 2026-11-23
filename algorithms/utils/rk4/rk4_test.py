@@ -157,10 +157,7 @@ def test_the_global_error_shrinks_as_h_to_the_fourth(rk4: Callable[..., np.ndarr
     """
     t_end = 10.0
     exact = np.array([np.cos(t_end), -np.sin(t_end)])
-    errors = [
-        np.linalg.norm(fly(rk4, oscillator, np.array([1.0, 0.0]), t_end / n, n) - exact)
-        for n in (100, 200, 400)
-    ]
+    errors = [np.linalg.norm(fly(rk4, oscillator, np.array([1.0, 0.0]), t_end / n, n) - exact) for n in (100, 200, 400)]
     orders = np.log2(np.array(errors[:-1]) / np.array(errors[1:]))
     np.testing.assert_allclose(orders, 4.0, atol=0.05)
 
@@ -172,9 +169,7 @@ def test_each_stage_is_taken_at_its_own_time(rk4: Callable[..., np.ndarray]):
         rk4: the build's step.
     """
     t0, h = 1.0, 0.5
-    np.testing.assert_allclose(
-        rk4(cubic, t0, np.array([0.0]), h), [((t0 + h) ** 4 - t0**4) / 4], rtol=1e-15
-    )
+    np.testing.assert_allclose(rk4(cubic, t0, np.array([0.0]), h), [((t0 + h) ** 4 - t0**4) / 4], rtol=1e-15)
 
 
 def test_an_orbit_matches_solve_ivp(rk4: Callable[..., np.ndarray]):
@@ -184,9 +179,7 @@ def test_an_orbit_matches_solve_ivp(rk4: Callable[..., np.ndarray]):
         rk4: the build's step.
     """
     y = fly(rk4, kepler, Y0, PERIOD / 4000, 4000, MU)
-    expected = solve_ivp(
-        kepler, (0.0, PERIOD), Y0, method="DOP853", rtol=1e-13, atol=1e-13, args=(MU,)
-    ).y[:, -1]
+    expected = solve_ivp(kepler, (0.0, PERIOD), Y0, method="DOP853", rtol=1e-13, atol=1e-13, args=(MU,)).y[:, -1]
     np.testing.assert_allclose(y, expected, rtol=0, atol=1e-8)
     np.testing.assert_allclose(y, Y0, rtol=0, atol=1e-8)
 

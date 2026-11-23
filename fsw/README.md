@@ -58,13 +58,13 @@ Each build also has `build`, its build identity, which the harness records in th
 [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
 records. How commands and telemetry travel between the ground and each build, and why every
 write is pushed rather than sampled, is in
-[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## Example: fly the dead reckoner against a simulated spacecraft
 
 This example runs in a notebook or at a prompt, with the environment `just pinned` installs. It
-builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft at its nominal configuration,
-writes the case's parameter record from the notebook's `parameters(scenario)` under nav's qualified
+builds WiseDynamics' `Leo500` scenario on an IMU spacecraft at its nominal configuration,
+writes the case's parameter record from the notebook's `parameters(scenario, vehicle)` under nav's qualified
 instance, as the harness does beside each run file, and boots the `ImuDeadReckoning` configuration's
 Python build idle with the values it reads back from the record, hosted on that vehicle by
 WiseDynamics' `FswHost` as the harness hosts it. A ground procedure gives nav its state from
@@ -81,12 +81,13 @@ all stepping at 1 Hz. The ground's record is then compared with the vehicle's tr
 >>> from fsw.python import FrameRunner
 >>> from ground.parameters import write
 >>> from ground.procedures import Ground
->>> scenario = Leo500()
->>> isinstance(scenario.vehicle, ImuSpacecraft)
+>>> vehicle = ImuSpacecraft()
+>>> scenario = Leo500(vehicle)
+>>> scenario.vehicle is vehicle
 True
 >>> case = tempfile.TemporaryDirectory()
 >>> path = Path(case.name) / "run_0000.prm.json"
->>> record = write({"ImuDeadReckoning.nav": parameters(scenario)}, path)
+>>> record = write({"ImuDeadReckoning.nav": parameters(scenario, vehicle)}, path)
 >>> fsw = FrameRunner("ImuDeadReckoning", record, (ImuDeadReckoner,))
 >>> async def procedure(ground):
 ...     truth = ground.truth()
@@ -97,8 +98,8 @@ True
 ...         position=truth["r_N"],
 ...         velocity=truth["v_N"],
 ...     )
->>> ground = Ground(procedure, fsw, scenario.vehicle.tracking(), scenario.stop_ground)
->>> datasets = scenario.run(FswHost(fsw, scenario.vehicle), {}, duration_s=60.0, ground=ground)
+>>> ground = Ground(procedure, fsw, vehicle.tracking(), scenario.stop_ground)
+>>> datasets = scenario.run(FswHost(fsw, vehicle), {}, duration_s=60.0, ground=ground)
 >>> ground.command_log[0]["response"]
 'OK'
 >>> written = ground.telemetry_datasets()
@@ -123,7 +124,7 @@ model, `<Name>.fpp`, beside its notebook, `<folder>.py`: the ports its GNC sub-t
 commands and telemetry it implements, its parameters, and an `@ provides: SYS...` line per
 capability it claims. Its class, in the notebook, is named as the component and takes its
 `<Name>Parameters`; its `step` and command methods are as [the Python build](#the-python-build)
-says. Its notebook's `parameters(scenario)` gives its `<Name>Parameters` tuple for a case, which
+says. Its notebook's `parameters(scenario, vehicle)` gives its `<Name>Parameters` tuple for a case, which
 the ground writes as the case's record, keyed by the algorithm's instance in its GNC sub-topology;
 a component without parameters needs none. A mission flies a configuration by name,
 `Mission(gnc=…, build=…)`, and finds the class and `parameters` in the notebook by the
@@ -163,7 +164,7 @@ component's alike, instanced alone, for mocks and tests:
 `fsw/codegen/dictionary_test.py` asserts that every algorithm's GNC instance, in its configuration's
 generated dictionary, has WiseFsw's entries, IDs aside, and WiseFsw's parameter IDs, so the two
 builds are held to one contract. The reasoning is in
-[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 The bus structs are in `fsw/fpp/interfaces/Bus.fpp`, and `bus_test.py` beside it holds each to its
 Basilisk message. The reasoning is in
@@ -180,7 +181,7 @@ parameters and general output and input ports with the file that defines it, and
 needs no compiler, no Java and no F´ build, only the model's `.fpp` files, F´'s framework files
 among them from the clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned
 compiler internals, so a key the module reads that is missing raises `KeyError`. The reasoning is in
-[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## FPP types in Python
 
@@ -203,7 +204,7 @@ True
 ```
 
 The reasoning is in
-[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## The lab adapter
 
@@ -214,7 +215,8 @@ configuration `fsw.codegen.deployment.fprime_configurations` selects, of the rep
 and the test mocks', into `lab` as the extension `_wise_fsw_<configuration>`, with the JSON
 dictionary F´ generates for it alongside, `lab.dictionary_path(configuration)`; its CMake target
 `_wise_fsw` builds them all, and the extension each C++ utility under `algorithms/utils/` has for
-its tests, beside its source.
+its tests, beside its source. The same build writes the gitignored type stubs `fsw/codegen/fpp_types.pyi`,
+`lab/fsw_extension.pyi` and each utility's `_<name>.pyi`.
 `just pinned` and `just local` run it as part of their sync, and `just test`, `just fly` and
 `just lab` run it first; an adapter built without it says to run `just fsw`. The adapter's
 `period_s` is the configuration's `tickPeriod`, the Python build's, so the two builds fly at one
@@ -245,6 +247,6 @@ every case reproduces its rate-group datasets from the seed, as it does nav's.
 
 The reasoning is in
 [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
-[ADR 0004 rev 2](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md),
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md),
 [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
 and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).

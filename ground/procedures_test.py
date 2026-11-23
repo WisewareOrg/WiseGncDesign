@@ -5,12 +5,12 @@ what each test gives it; the tests that fly Leo500 host it, as a stub build, in 
 """
 
 import json
-from collections.abc import Callable, Coroutine, Sequence
-from typing import Any
+from collections.abc import Callable, Coroutine, Mapping, Sequence
+from typing import Any, cast
 
 import numpy as np
 import pytest
-from wise_dynamics.basilisk import FswHost
+from wise_dynamics.basilisk import FswHost, ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from fsw.codegen.dictionary import Dictionary
@@ -38,11 +38,11 @@ class StubEdge:
             dictionary: the mock's dictionary.
         """
         self.dictionary = dictionary
-        self.uplinked: list[tuple[str, dict[str, Any], int]] = []
+        self.uplinked: list[tuple[str, Mapping[str, Any], int]] = []
         self.answers: list[tuple[int, str, str | None]] = []
         self.writes: list[tuple[str, int, Any]] = []
 
-    def uplink(self, name: str, args: dict[str, Any], context: int) -> None:
+    def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Keeps the command, its arguments and its context.
 
         Args:
@@ -280,7 +280,7 @@ def test_send_types_the_arguments_into_the_command_s_fpp_types_and_logs_them_as_
     ids=["unknown-command", "misnamed-argument"],
 )
 def test_send_refuses_a_command_the_dictionary_cannot_type_before_uplink(
-    edge: StubEdge, name: str, args: dict, error: type, match: str
+    edge: StubEdge, name: str, args: dict, error: type[BaseException], match: str
 ):
     """An unknown command, or arguments that do not fit, raise at `send`, and nothing goes up.
 
@@ -344,9 +344,7 @@ def test_a_command_answered_other_than_ok_fails_the_procedure_naming_it(edge: St
     ground = _ground(edge, _sends("mock.setMode", mode="slow"))
     edge.answers.append((1, "VALIDATION_ERROR", "not in this mode"))
 
-    with pytest.raises(
-        CommandFailed, match="mock.setMode was answered VALIDATION_ERROR: not in this mode"
-    ) as raised:
+    with pytest.raises(CommandFailed, match="mock.setMode was answered VALIDATION_ERROR: not in this mode") as raised:
         _tick(ground, 1)
 
     assert raised.value.reason == "not in this mode"
@@ -362,9 +360,7 @@ def test_a_command_never_answered_times_out(edge: StubEdge):
     """
     ground = _ground(edge, _sends("mock.setMode", timeout_s=1.0, mode="fast"))
 
-    with pytest.raises(
-        TimeoutError, match=r"at t = 1.0 s waiting until mock.setMode is answered, by t = 1.0 s"
-    ):
+    with pytest.raises(TimeoutError, match=r"at t = 1.0 s waiting until mock.setMode is answered, by t = 1.0 s"):
         _tick(ground, 1)
 
 
@@ -452,7 +448,7 @@ class StubBuild(StubEdge):
     def boot(self) -> None:
         """Boots with nothing to do."""
 
-    def tick(self, t_ns: int, messages_by_role: dict[str, Any]) -> dict[str, Any]:
+    def tick(self, t_ns: int, messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
         """Runs the commands uplinked since the last tick, then writes the time.
 
         Args:
@@ -496,12 +492,13 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
     """
     flights = {}
     for period_s, stops in ((1.0, False), (1.0, True), (10.0, True)):
-        scenario = Leo500()
+        vehicle = ImuSpacecraft()
+        scenario = Leo500(vehicle)
         fsw = StubBuild(mock_dictionary)
         stop = scenario.stop_ground if stops else lambda: None
-        tracking = scenario.vehicle.tracking()
+        tracking = vehicle.tracking()
         ground = Ground(_commands_the_mock, fsw, tracking, stop, period_s=period_s)
-        host = FswHost(fsw, scenario.vehicle)
+        host = FswHost(fsw, vehicle)
         datasets = scenario.run(host, {}, duration_s=120.0, ground=ground)
         flights[period_s, stops] = (datasets | ground.telemetry_datasets(), ground.now_s)
 
@@ -550,7 +547,7 @@ def test_a_procedure_that_cannot_start_is_kept_whole(edge: StubEdge):
         """Takes no ground, so it cannot be started with one."""
         return None
 
-    ground = Ground(procedure, edge, dict, lambda: None)
+    ground = Ground(cast(Any, procedure), edge, dict, lambda: None)
 
     with pytest.raises(TypeError) as raised:
         ground.Reset(0)

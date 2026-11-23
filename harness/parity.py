@@ -1,6 +1,6 @@
 """Parity: the Python and F´ builds' flights of one configuration agree on what FPP declares.
 
-See ADR 0004 rev 2, "Parity is an analyzer whose spec is a minimum". Its unit is a twin: one
+See ADR 0004 rev 3, "Parity is an analyzer whose spec is a minimum". Its unit is a twin: one
 flight on each build of the same vehicle, configuration and scenario, case `k` against case `k`.
 Everything it compares is read from the contract, so an algorithm adds nothing here:
 
@@ -111,9 +111,7 @@ def _differ(python: Any, fprime: Any, scale: float) -> str | None:
     return None
 
 
-def _telemetry(
-    roles: list[tuple[str, Component]], python: dict[str, Any], fprime: dict[str, Any]
-) -> list[str]:
+def _telemetry(roles: list[tuple[str, Component]], python: dict[str, Any], fprime: dict[str, Any]) -> list[str]:
     """How one case's declared channels disagree.
 
     Args:
@@ -128,9 +126,7 @@ def _telemetry(
     for role, component in roles:
         for channel in component.channels:
             tlm, tlm_t = f"tlm/{role}.{channel.name}", f"tlm_t/{role}.{channel.name}"
-            written = [
-                build for build, run in (("python", python), ("fprime", fprime)) if tlm in run
-            ]
+            written = [build for build, run in (("python", python), ("fprime", fprime)) if tlm in run]
             if len(written) == 1:
                 problems.append(f"{tlm} is written by {written[0]} only")
             if len(written) < 2:
@@ -166,11 +162,7 @@ def _commands(
     fprime = [entry for entry in fprime if entry["name"] in declared]
     if len(python) != len(fprime):
         first = next(
-            (
-                i
-                for i, (p, f) in enumerate(zip(python, fprime, strict=False))
-                if p["name"] != f["name"]
-            ),
+            (i for i, (p, f) in enumerate(zip(python, fprime, strict=False)) if p["name"] != f["name"]),
             min(len(python), len(fprime)),
         )
         return [
@@ -223,8 +215,7 @@ def parity(gnc: str, python: Path, fprime: Path, *, contract: Contract = CONTRAC
     problems = []
     if results["python"].planned != results["fprime"].planned:
         problems.append(
-            f"planned {results['python'].planned} cases on python and"
-            f" {results['fprime'].planned} on fprime"
+            f"planned {results['python'].planned} cases on python and {results['fprime'].planned} on fprime"
         )
     cases = {case for r in results.values() for case in (*r.runs, *r.crashes)}
     for case in sorted(cases):

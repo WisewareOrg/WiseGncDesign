@@ -40,7 +40,8 @@ system C++ compiler and git. The F´ framework and Eigen are fetched by tag into
 under `fsw/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
 GitLab only the first time, or when a tag changes. A lock check or sync also needs GitHub whenever
 uv rebuilds the F´ toolchain's metadata: with a fresh uv cache or a changed tag. Each sync rebuilds
-the F´ build cache from scratch, which needs no network. The lock takes the F´ toolchain's versions
+the F´ build cache from scratch, which needs no network. The build also writes the gitignored type
+stubs ty reads. The lock takes the F´ toolchain's versions
 from the `requirements.txt` at the F´ tag over the network. Why by tag, and why one pin, is in
 [ADR 0003 rev 4](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
@@ -55,7 +56,7 @@ the simulation is in
 and how it meets the sim in
 [ADR 0006 rev 1](docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md);
 how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
-[ADR 0004 rev 2](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ### Requirements and missions
 
@@ -69,7 +70,7 @@ optional `rungs=…` and `check=…`. `gnc` names a configuration, a GNC sub-top
 `fsw/fpp/gnc/`, and `build` is `"python"` or `"fprime"`. Each algorithm component claims its
 capabilities with `@ provides: SYS...` lines in its `.fpp`, the configuration claims their union,
 and a flight is judged on the rungs its scenario links to that sit under those capabilities. The
-ground writes each case's parameters, from each algorithm notebook's `parameters(scenario)`, as a
+ground writes each case's parameters, from each algorithm notebook's `parameters(scenario, vehicle)`, as a
 record beside its run file, and the harness builds the configuration's build on it.
 `mission_tests` turns missions into Monte Carlo tests: a class per vehicle holding a test per
 configuration, build and scenario, such as `test_ImuDeadReckoning_python_leo500`. A flight's end
@@ -123,5 +124,7 @@ at `report/matrix.md`. How a verdict is reached is in
 ### Recipes and CI
 
 `just --list` shows every recipe with its description. `.github/workflows/checks.yml` is the
-authority on what CI runs: lint and docstring coverage, `just reqs`, the suite, and wise-ci's
-`check-adrs` over `docs/decisions/`.
+authority on what CI runs: `just reqs`, the suite, wise-ci's `check-python` (ruff, docstring
+coverage and ty; `just python` runs it locally, building the F´ stubs ty reads first) and
+`check-adrs` over `docs/decisions/`. `process-gates.yml` also runs `check-python-floor` on pull
+requests.

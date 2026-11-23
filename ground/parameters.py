@@ -3,7 +3,7 @@
 The record is JSON, `{"<qualified instance>": {"<parameter>": value}}`, written beside the case's
 run file; both builds fly from it. F´'s own `fprime-prm-write` conversion, called in-process,
 makes the `.dat` the F´ build's PrmDb loads, so nothing here parses or writes F´'s binary format.
-Why is in ADR 0004 rev 2.
+Why is in ADR 0004 rev 3.
 """
 
 import contextlib
@@ -34,8 +34,7 @@ def write(parameters: Mapping[str, Any], path: Path) -> Path:
     """
     record = {
         instance: {
-            name: value.tolist() if isinstance(value, np.ndarray) else value
-            for name, value in tuple_._asdict().items()
+            name: value.tolist() if isinstance(value, np.ndarray) else value for name, value in tuple_._asdict().items()
         }
         for instance, tuple_ in parameters.items()
     }

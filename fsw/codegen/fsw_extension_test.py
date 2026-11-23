@@ -1,0 +1,161 @@
+"""The `FswExtension` protocol `fsw_extension` emits declares the fixed functions of each built extension.
+
+Needs each configuration's F´ build, skipped without it.
+"""
+
+from __future__ import annotations
+
+import ast
+from collections.abc import Iterator
+from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
+
+import pytest
+
+import lab
+from fsw.codegen import fsw_extension
+from lab import power_cycle
+
+if TYPE_CHECKING:
+    from lab.fsw_extension import FswExtension
+
+FIXED = {"boot", "pump", "responses", "step", "telemetry", "uplink"}
+"""The six functions `lab/adapter.py` and `ground/fprime_station.py` call by name.
+
+The `bus_*` and `cdh_*` pins are reached only by computed name.
+"""
+
+
+class Built(NamedTuple):
+    """One configuration's extension, as loaded and as the emitter renders it.
+
+    Attributes:
+        copy: a loaded copy of the extension.
+        source: the stub the emitter renders for it.
+        protocol: the stub's `FswExtension` class.
+    """
+
+    copy: FswExtension
+    source: str
+    protocol: ast.ClassDef
+
+
+def _protocol(source: str) -> ast.ClassDef:
+    """The `FswExtension` class in a stub.
+
+    Args:
+        source: the stub's text.
+
+    Returns:
+        The class definition named `FswExtension`.
+    """
+    classes = [n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == "FswExtension"]
+    assert len(classes) == 1, "the stub must define `FswExtension` exactly once"
+    return classes[0]
+
+
+def _methods(node: ast.ClassDef) -> list[ast.FunctionDef]:
+    """A class's methods.
+
+    Args:
+        node: a class definition.
+
+    Returns:
+        The functions defined directly in it, in order.
+    """
+    return [n for n in node.body if isinstance(n, ast.FunctionDef)]
+
+
+def _functions(copy: FswExtension) -> set[str]:
+    """The extension's functions that are not `bus_*` or `cdh_*` contract pins.
+
+    Args:
+        copy: a loaded extension.
+
+    Returns:
+        Their names.
+    """
+    return {
+        name
+        for name in dir(copy)
+        if not name.startswith("_") and callable(getattr(copy, name)) and not name.startswith(("bus_", "cdh_"))
+    }
+
+
+@pytest.fixture(scope="module")
+def built(fprime_configuration: str) -> Iterator[Built]:
+    """A configuration's extension, loaded, and its rendered stub, once; skips without its build.
+
+    Args:
+        fprime_configuration: the configuration.
+
+    Yields:
+        Built: the extension, its rendered stub and the stub's protocol class.
+    """
+    if not lab.built(fprime_configuration):
+        pytest.skip(f"the F´ build of {fprime_configuration} is absent; run `just fsw`")
+    with pytest.MonkeyPatch.context() as patch:
+        patch.chdir(Path(__file__).parents[2])
+        source = fsw_extension.render(f"lab._wise_fsw_{fprime_configuration}")
+        yield Built(power_cycle.power_cycle(fprime_configuration), source, _protocol(source))
+
+
+def test_the_protocol_s_methods_are_the_extension_s_functions(built: Built):
+    """`FswExtension`'s method names equal the extension's function names that are not `bus_*` or `cdh_*`.
+
+    Args:
+        built: the configuration's extension and rendered stub.
+    """
+    methods = {m.name for m in _methods(built.protocol)}
+
+    assert methods == _functions(built.copy), "the protocol's methods differ from the extension's functions"
+
+
+def test_the_extension_has_exactly_the_six_fixed_functions(built: Built):
+    """The extension's functions that are not `bus_*` or `cdh_*` are the six the lab and ground call by name.
+
+    Args:
+        built: the configuration's extension and rendered stub.
+    """
+    functions = _functions(built.copy)
+
+    assert functions == FIXED, f"the extension has {sorted(functions)}, the lab and ground call {sorted(FIXED)}"
+
+
+def test_the_protocol_derives_from_protocol(built: Built):
+    """`FswExtension` derives only from `Protocol`.
+
+    Args:
+        built: the configuration's extension and rendered stub.
+    """
+    assert [ast.unparse(base) for base in built.protocol.bases] == ["Protocol"]
+
+
+def test_the_protocol_s_methods_take_self_first(built: Built):
+    """Each of the protocol's methods has `self` as its first parameter, and there is at least one.
+
+    Args:
+        built: the configuration's extension and rendered stub.
+    """
+    methods = _methods(built.protocol)
+
+    assert methods, "the protocol declares no method"
+    assert [m.name for m in methods if not (m.args.args and m.args.args[0].arg == "self")] == []
+
+
+def test_the_protocol_leaves_out_the_contract_pins(built: Built):
+    """No protocol method is a `bus_*` or `cdh_*` contract pin.
+
+    Args:
+        built: the configuration's extension and rendered stub.
+    """
+    assert [m.name for m in _methods(built.protocol) if m.name.startswith(("bus_", "cdh_"))] == []
+
+
+def test_the_stub_says_which_emitter_generated_it(built: Built):
+    """The stub's first line is the header `# Generated by fsw.codegen.fsw_extension; never committed.`.
+
+    Args:
+        built: the configuration's extension and rendered stub.
+    """
+    assert built.source.splitlines()[0] == "# Generated by fsw.codegen.fsw_extension; never committed."

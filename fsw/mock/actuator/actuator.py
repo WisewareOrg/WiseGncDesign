@@ -30,6 +30,4 @@ class Actuator:
             The command on `wheelOut`, element i (i + 1) mN*m, and no telemetry.
         """
         command = named("Gnc.WheelCommand")(motorTorque=np.arange(1, 37) * 1e-3)
-        return named("MockGnc.ActuatorOutputs")(wheelOut=command), named(
-            "MockGnc.ActuatorTelemetry"
-        )()
+        return named("MockGnc.ActuatorOutputs")(wheelOut=command), named("MockGnc.ActuatorTelemetry")()

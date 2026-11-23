@@ -21,9 +21,7 @@ NS = 1_000_000_000
 """ns per s."""
 
 
-def _health(
-    writes: list[tuple[str, int, Any]], rate_groups: list[str]
-) -> list[tuple[str, int, Any]]:
+def _health(writes: list[tuple[str, int, Any]], rate_groups: list[str]) -> list[tuple[str, int, Any]]:
     """The rate groups' writes among drained ones.
 
     Args:
@@ -112,7 +110,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     """
     constants = read(fpp_files(configuration, tmp_path)).constants
     dividers = {
-        name.removeprefix(f"{configuration}.").removesuffix("Divider") + "RateGroup": divider
+        name.removeprefix(f"{configuration}.").removesuffix("Divider") + "RateGroup": int(divider)
         for name, divider in constants.items()
         if name.startswith(f"{configuration}.") and name.endswith("Divider")
     }
@@ -143,9 +141,7 @@ def test_the_pump_raises_naming_a_queue_its_bound_leaves_holding_messages(
     """
     station.uplink("cmdDisp.CMD_NO_OP", {}, 3)
 
-    with pytest.raises(
-        RuntimeError, match=r"queue WiseFsw\.cmdDisp did not drain: messages left 1, rounds 1$"
-    ):
+    with pytest.raises(RuntimeError, match=r"queue WiseFsw\.cmdDisp did not drain: messages left 1, rounds 1$"):
         booted.pump(rounds=1)
     booted.pump()
 

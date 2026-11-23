@@ -182,9 +182,7 @@ def project(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> pytes
     pytester.makefile(".ini", pytest="[pytest]\n")
     files = {"analysis/conftest": "from harness.judging import *  # noqa: F403\n"}
     for name in KINDS:
-        files[f"analysis/test_{name}_knowledge"] = (
-            REPOSITORY / "analysis" / f"test_{name}_knowledge.py"
-        ).read_text()
+        files[f"analysis/test_{name}_knowledge"] = (REPOSITORY / "analysis" / f"test_{name}_knowledge.py").read_text()
     files["missions/nb"] = (
         f'from pathlib import Path\nPath(r"{pytester.path}/imported").write_text("")\n'
         'raise RuntimeError("the notebook was imported")\n'
@@ -257,9 +255,7 @@ def test_rule(allowed_failures, n, p, c, expected):
         }
     )
 
-    project.runpytest_subprocess("analysis/test_rule.py", "-p", "no:xdist").assert_outcomes(
-        passed=3
-    )
+    project.runpytest_subprocess("analysis/test_rule.py", "-p", "no:xdist").assert_outcomes(passed=3)
 
 
 @pytest.mark.parametrize(
@@ -385,11 +381,7 @@ def test_the_wheel_momentum_rung_is_judged_on_the_runs_found(
         outcomes: the judge's outcomes.
     """
     project.makepyfile(
-        **{
-            "analysis/test_wheel_momentum": (
-                REPOSITORY / "analysis" / "test_wheel_momentum.py"
-            ).read_text()
-        }
+        **{"analysis/test_wheel_momentum": (REPOSITORY / "analysis" / "test_wheel_momentum.py").read_text()}
     )
     write_item(
         project.path,
@@ -407,9 +399,7 @@ def test_the_wheel_momentum_rung_is_judged_on_the_runs_found(
         p=0.8,
         c=0.5,
     )
-    write_item(
-        project.path, "tst", "TST901", links=[{uid: "stamp"} for uid in (*KINDS.values(), "SRS904")]
-    )
+    write_item(project.path, "tst", "TST901", links=[{uid: "stamp"} for uid in (*KINDS.values(), "SRS904")])
     write_cases(session(project), bad=bad, kind="wheel", flight=only("SRS904"))
 
     judge(project).assert_outcomes(**outcomes)
@@ -650,18 +640,14 @@ globals().update(
     fly_in_a_subprocess(project, "test_flights.py", "--full-monte-carlo").assert_outcomes(passed=4)
     node = "test_flights/Test_imu_spacecraft/test_MockFlight_python_alpha"
     flown = session(project) / node
-    assert sorted(path.name for path in flown.glob("run_*.h5")) == [
-        f"run_000{case}.h5" for case in range(4)
-    ]
+    assert sorted(path.name for path in flown.glob("run_*.h5")) == [f"run_000{case}.h5" for case in range(4)]
 
     judge(project).assert_outcomes(passed=3)
 
     matrix = (session(project) / "report" / node / "matrix.md").read_text()
     for uid in KINDS.values():
         assert f"| {uid} | pass | 0/4/4 | 0 |" in matrix
-        assert (
-            (session(project) / "report" / node / f"{uid}.png").read_bytes().startswith(b"\x89PNG")
-        )
+        assert (session(project) / "report" / node / f"{uid}.png").read_bytes().startswith(b"\x89PNG")
 
 
 def test_the_notebook_judge_raises_when_the_analysis_run_itself_fails(

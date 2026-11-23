@@ -19,16 +19,16 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "interrogate>=1.7.0",
+    "check-python",
+    "check-reqs",
+    "hatchling",
     "pytest-xdist>=3.6",
-    "ruff>=0.17.0",
-    "pydoclint>=0.12.0",
 ]
 sim = ["wise-dynamics[notebook]"]
 notebooks = ["ipykernel>=6.29", "ipython>=9.0", "jupyter-client", "jupyterlab>=4.4", "jupytext>=1.17", "nbclient", "notebook", "pip", "traitlets"]
-# The F´ toolchain, whose versions fsw/fprime reads from the F´ tag's requirements.txt, and pybind11
-# for the deployment's Python module.
-fprime = ["fprime-toolchain", "pybind11>=2.13"]
+# The F´ toolchain, whose versions fsw/fprime reads from the F´ tag's requirements.txt, pybind11 for
+# the deployment's Python module and pybind11-stubgen for its type stubs.
+fprime = ["fprime-toolchain", "pybind11>=2.13", "pybind11-stubgen==3.0.0"]
 
 [tool.uv]
 # bsk caps Pillow at 12.2.0, below its security fixes. Basilisk never imports Pillow; matplotlib
@@ -39,9 +39,13 @@ override-dependencies = ["pillow>=13"]
 members = ["fsw/fprime"]
 
 [tool.uv.sources]
+# The wise-ci commit CI's `check-python` and `check-python-floor` use.
+check-python = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-python", rev = "491858538bf01b19cfb86aab1195ad3822b59903" }
+# The wise-ci commit docs/requirements pins, so ty resolves its validator's import.
+check-reqs = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-reqs", rev = "6f8840aacdd7eb0c431af64f7eaa7bf326b38e29" }
 fprime-toolchain = { workspace = true }
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "35ac40730c240ad793caee082169430e1d66242b" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "91a2aee3dbd0239804fd0ac37bab3c8ea54062e2" }
 
 [build-system]
 requires = ["hatchling"]
@@ -70,26 +74,11 @@ addopts = [
 ]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 src = [".", "analysis"]
-# The F´ framework clone and the F´ build cache carry third-party Python.
-extend-exclude = ["fsw/fprime/lib", "fsw/fprime/build-fprime-*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "D", "D417"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
-
-[tool.pydoclint]
-style = "google"
-arg-type-hints-in-signature = true
-arg-type-hints-in-docstring = false
-check-return-types = false
-skip-checking-short-docstrings = false
-allow-init-docstring = true
-# The F´ framework clone and the F´ build cache carry third-party Python.
-exclude = 'fsw/fprime/(lib|build-fprime-[^/]*)/'
-
-[tool.interrogate]
-exclude = ["fsw/fprime/lib", "fsw/fprime/build-fprime-automatic-native"]

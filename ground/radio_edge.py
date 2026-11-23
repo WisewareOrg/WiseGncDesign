@@ -17,12 +17,19 @@ class RadioEdge(Protocol):
     dictionary's types, and responses by their `Fw.CmdResponse` name, on either build.
 
     Attributes:
-        period_s: s, the period the build's flight software ticks at.
         dictionary: the dictionary the build is held to.
     """
 
-    period_s: float
     dictionary: Dictionary
+
+    @property
+    def period_s(self) -> float:
+        """s, the period the build's flight software ticks at.
+
+        Returns:
+            The period.
+        """
+        ...
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command, which runs at the build's next tick.

@@ -12,7 +12,6 @@ from __future__ import annotations
 import itertools
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
-from types import ModuleType
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
@@ -28,6 +27,7 @@ if TYPE_CHECKING:
     from fsw.codegen.fpp_model import Model
     from fsw.codegen.roles import Role
     from ground.fprime_station import FprimeStation
+    from lab.fsw_extension import FswExtension
 
 
 _MOCK = Path(fsw.mock.__file__).with_name("Mock.fpp")
@@ -124,18 +124,14 @@ def render_mock() -> Callable[..., Dictionary]:
             The dictionary.
         """
         (directory / "Mock.fpp").write_text(edited(_MOCK.read_text(), *edits))
-        (directory / "Extra.fppi").write_text(
-            edited(_MOCK.with_name("Extra.fppi").read_text(), *extra)
-        )
-        return Dictionary.from_component(
-            [directory / "Mock.fpp"], _INSTANCE._replace(base_id=base_id)
-        )
+        (directory / "Extra.fppi").write_text(edited(_MOCK.with_name("Extra.fppi").read_text(), *extra))
+        return Dictionary.from_component([directory / "Mock.fpp"], _INSTANCE._replace(base_id=base_id))
 
     return render
 
 
 @pytest.fixture
-def fsw(fprime_configuration: str) -> ModuleType:
+def fsw(fprime_configuration: str) -> FswExtension:
     """A fresh copy of the configuration's deployment, not yet booted; skips without its build.
 
     Args:
@@ -148,7 +144,7 @@ def fsw(fprime_configuration: str) -> ModuleType:
 
 
 @pytest.fixture
-def booted(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> ModuleType:
+def booted(fsw: FswExtension, prm: str, parameter_ids: list[int]) -> FswExtension:
     """The test's copy of the deployment, booted idle on the case's parameters.
 
     Args:
@@ -164,7 +160,7 @@ def booted(fsw: ModuleType, prm: str, parameter_ids: list[int]) -> ModuleType:
 
 
 @pytest.fixture
-def station(fsw: ModuleType, dictionary: Dictionary) -> FprimeStation:
+def station(fsw: FswExtension, dictionary: Dictionary) -> FprimeStation:
     """The ground station on the test's copy, on the dictionary the build generated.
 
     Args:
@@ -187,7 +183,7 @@ class Booted(NamedTuple):
         station: the station on it, on the dictionary the build generated.
     """
 
-    fsw: ModuleType
+    fsw: FswExtension
     station: FprimeStation
 
 
@@ -239,7 +235,7 @@ def _dat(record: Path, configuration: str) -> str:
     return str(ground_parameters.dat(record, _dictionary(configuration)))
 
 
-def _copy(configuration: str) -> ModuleType:
+def _copy(configuration: str) -> FswExtension:
     """A fresh copy of a configuration's deployment, not yet booted; skips without its build.
 
     Args:
@@ -272,6 +268,9 @@ def _parameter_ids(configuration: str) -> list[int]:
 @pytest.fixture
 def boot(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., Booted]:
     """Boots a configuration's deployment on the parameters a test flies; skips without its build.
+
+    Args:
+        tmp_path_factory: makes each call's case directory.
 
     Returns:
         A function taking the configuration and, by an algorithm instance's qualified name, the
@@ -532,6 +531,7 @@ def icd_messages() -> dict[str, IcdMessage]:
     from fsw.codegen import fpp_types
     from fsw.codegen.deployment import contract_model
     from fsw.codegen.fields import form
+    from fsw.codegen.fpp_model import struct_named
     from fsw.codegen.roles import roles
 
     model = contract_model()
@@ -539,7 +539,7 @@ def icd_messages() -> dict[str, IcdMessage]:
     messages = {}
     for name in dict.fromkeys(role.icd for role in roles(model)):
         values = {}
-        for member in model.types[name].members:
+        for member in struct_named(model.types, name).members:
             shape, element = form(member, model.types)
             count = int(np.prod(shape, dtype=int))
             elements = [next(counter) + 0.5 for _ in range(count)]
@@ -616,11 +616,7 @@ def _algorithm_instances(configuration: str) -> tuple[Instance, ...]:
     from fsw.codegen.deployment import algorithm_components, gnc_instances
 
     algorithms = algorithm_components()
-    return tuple(
-        i
-        for i in gnc_instances()
-        if i.name.startswith(f"{configuration}.") and i.component in algorithms
-    )
+    return tuple(i for i in gnc_instances() if i.name.startswith(f"{configuration}.") and i.component in algorithms)
 
 
 @pytest.fixture(scope="session")
