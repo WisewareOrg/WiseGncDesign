@@ -1110,7 +1110,8 @@ def test_the_mock_actuator_s_command_spins_the_wheel_through_its_writer_alike_on
 ) -> None:
     """MockActuation's wheel command reaches the wheel vehicle's writer from each build.
 
-    The test mock sends one constant command each 1 s tick from the first, so the wheel's spin
+    The test mock sends one constant command every other 1 s tick from the first, which the wheel
+    keeps between, so the wheel's spin
     momentum, Js (Omega + gsHat . omega_BN_B), gains the command's torque on the wheel times the
     time since then, as Basilisk's balanced-wheel model says, from the vehicle's own wheel. The two
     builds' recorded wheel speeds are bit-identical, so the F´ build's bytes carry the same

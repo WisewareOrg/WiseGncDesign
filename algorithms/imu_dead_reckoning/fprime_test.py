@@ -115,6 +115,7 @@ def test_a_booted_reckoner_reports_idle_and_no_state(
     boot: Callable[..., tuple[ModuleType, FprimeStation]],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    wire: Callable[..., Callable[..., int]],
 ):
     """Booted and ticked for one run of nav, nav writes `navState` idle, once, and nothing else.
 
@@ -125,11 +126,13 @@ def test_a_booted_reckoner_reports_idle_and_no_state(
         boot: boots the configuration on the parameters given.
         decoded: drains the station's telemetry as values.
         imu_bus: the IMU message's bus for a reading.
+        wire: wires the copy to the bus.
     """
     fsw, station = boot(CONFIGURATION, {NAV_INSTANCE: NAV})
     divider = int(configuration_model(CONFIGURATION).constants[f"{CONFIGURATION}.navDivider"])
+    step = wire(fsw, CONFIGURATION, imu_bus(np.zeros(3), np.zeros(3)))
     for tick in range(1, divider + 1):
-        fsw.step(t_ns=tick * NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
+        step(tick * NS)
 
     assert [(n, v) for n, _, v in decoded(station) if n.startswith("nav.")] == [("nav.navState", "idle")]
 
@@ -138,6 +141,7 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     boot: Callable[..., tuple[ModuleType, FprimeStation]],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
     imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    wire: Callable[..., Callable[..., int]],
 ):
     """Commanded -q as of t = 0 and stepped 1 s at zero rate, the deployment writes q.
 
@@ -145,10 +149,11 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
         boot: boots the configuration on the parameters given.
         decoded: drains the station's telemetry as values.
         imu_bus: the IMU message's bus for a reading.
+        wire: wires the copy to the bus.
     """
     fsw, station = boot(CONFIGURATION, {NAV_INSTANCE: NAV})
     station.uplink("nav.initNavState", _state(0.0, -Q0), 1)
-    fsw.step(t_ns=NS, bus=imu_bus(np.zeros(3), np.zeros(3)))
+    wire(fsw, CONFIGURATION, imu_bus(np.zeros(3), np.zeros(3)))(NS)
 
     attitude = _latest(decoded(station))["nav.bodyEciAttitude"]
     np.testing.assert_allclose(attitude, Q0, rtol=0, atol=1e-15)
@@ -175,6 +180,7 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
     seed: int,
     nav_parameters: Gnc.ImuDeadReckonerParameters,
     imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    wire: Callable[..., Callable[..., int]],
 ):
     """Commanded a state as of its epoch and fed the same readings, the builds agree to rounding.
 
@@ -194,6 +200,7 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
         seed: the readings' random seed.
         nav_parameters: nav's parameters, which the case's record holds.
         imu_bus: the IMU message's bus for a reading.
+        wire: wires the copy to the bus.
     """
     fsw, station = boot(CONFIGURATION, {NAV_INSTANCE: nav_parameters})
     rng = np.random.default_rng(seed)
@@ -201,13 +208,14 @@ def test_the_fprime_build_matches_the_notebook_reading_for_reading(
     python = ImuDeadReckoner(nav_parameters)
     python.initNavState(**_state(float(epoch_s)))
     before = epoch_s * NS // step_ns
+    step = wire(fsw, CONFIGURATION, imu_bus(np.zeros(3), np.zeros(3)))
     for k in range(1, before + 1):
-        fsw.step(t_ns=k * step_ns, bus=imu_bus(np.zeros(3), np.zeros(3)))
+        step(k * step_ns)
     station.uplink("nav.initNavState", _state(float(epoch_s)), 1)
 
     for k, (omega, accel) in enumerate(readings, start=before + 1):
         python.step(t=k * step_ns / NS, imu=Gnc.ImuReading(omega, accel))
-        fsw.step(t_ns=k * step_ns, bus=imu_bus(omega, accel))
+        step(k * step_ns, imu_bus(omega, accel))
 
     assert station.responses() == [(1, "OK", None)]
     _assert_matches(_latest(decoded(station)), python)

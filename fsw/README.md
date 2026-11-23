@@ -23,10 +23,12 @@ in `fsw/python/<partition>/`, and FPP gives each its structure:
   `tickPeriod`, which `fsw.codegen.deployment.tick_period` reads, and `platform.rates` runs each
   rate group `<stem>RateGroup` every `<stem>Divider`-th tick, counting ticks as F´'s
   `Svc.RateGroupDriver` does.
-- **RIO** reads each sensor role's message as its bus struct, copying it within the tick into
-  read-only arrays, and returns the actuator commands: for each actuator role GNC wrote in the
-  frame, a fresh `messaging.<Name>Payload` of the message its bus struct mirrors; a role GNC did not
-  write is absent, and keeps its last command on the vehicle.
+- **RIO** reads each sensor role's message as its bus struct, copying it each tick into a buffer
+  bound to the message at the first tick, whose read-only arrays GNC gets: an input is valid for
+  its tick, so GNC copies what it keeps. It returns the actuator commands: for each actuator role
+  GNC wrote in the frame, the role's `messaging.<Name>Payload` of the message its bus struct
+  mirrors, made once and written each tick; a role GNC did not write is absent, and keeps its last
+  command on the vehicle. Neither direction allocates per tick.
 - **CDH** dispatches each command by name to its algorithm's method of that name, with F´'s
   responses, converts each sensor role's bus struct to its GNC input and each actuator role's GNC
   output to its bus struct, passing the arrays through uncopied, logs every telemetry write tagged
@@ -189,8 +191,8 @@ compiler internals, so a key the module reads that is missing raises `KeyError`.
 
 `fsw.codegen.fpp_types` is FPP's types as named tuples, generated when it is imported and never
 written in the tree, with `converter` between them. Its docstrings say what each FPP type becomes,
-which tuples an algorithm's component gets, and how fields are converted; RIO reads a Basilisk
-payload as its bus struct:
+which tuples an algorithm's component gets, and how fields are converted; RIO binds a Basilisk
+payload once and reads it as its bus struct:
 
 ```python
 >>> from Basilisk.architecture import messaging
@@ -198,7 +200,8 @@ payload as its bus struct:
 >>> from fsw.python.rio.messages import reader
 >>> payload = messaging.IMUSensorMsgPayload()
 >>> payload.AngVelPlatform = [0.0, 0.0, 1.0e-3]
->>> bus = reader(Bus.ImuSensorMsg)(payload)
+>>> read = reader(Bus.ImuSensorMsg)(payload)
+>>> bus = read()
 >>> reading = converter(Bus.ImuSensorMsg, Gnc.ImuReading)(bus)
 >>> reading.angVelPlatform.tolist()
 [0.0, 0.0, 0.001]
@@ -233,8 +236,11 @@ it works:
   adapter's `boot` boots on the case's `.dat`, made by `ground.parameters.dat` when the adapter is
   constructed.
 - `lab.bus_emulator` writes a sensor's Basilisk message as the bytes F´ serializes its bus struct
-  to, and reads an actuator's bytes back, from `fsw/fpp/interfaces/Bus.fpp`.
-- `LabBusDriver`, in `fsw/fprime/rio/`, takes those bytes into the deployment and out of it.
+  to, and reads an actuator's bytes back, from `fsw/fpp/interfaces/Bus.fpp`: each payload type's
+  copy is planned once, and each payload is bound to its buffer once, so a tick only copies.
+- `LabBusDriver`, in `fsw/fprime/rio/`, takes those bytes into the deployment and out of it,
+  through a fixed receive and transmit buffer per bus port that the adapter's `boot` makes: nothing
+  on the bus is allocated after boot.
 - `Cdh.BusConverter`, which `fsw.codegen.bus_converter` generates, converts each bus struct to its
   GNC struct and back, by the field rule the Python build's converter follows.
 - `fsw.codegen.deployment.render` renders each configuration's deployment, `WiseFsw.<Cfg>Fsw`, from

@@ -3,8 +3,9 @@ module MockActuation {
   @ s, the base tick's period
   constant tickPeriod = 1.0
 
-  @ The ticks per run of the actuation rate group: every tick
-  constant actuationDivider = 1
+  @ The ticks per run of the actuation rate group: every other tick, so a tick commanding nothing
+  @ follows one commanding
+  constant actuationDivider = 2
 
   instance rateGroupDriver: Svc.RateGroupDriver base id 0x7000 \
   {

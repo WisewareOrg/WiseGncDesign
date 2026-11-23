@@ -4,7 +4,7 @@ For each role `fsw.codegen.roles` reads, `render` emits a conversion `convert_<r
 the header, building the struct the role's `<role>Out` sends from the one its `<role>In` takes by
 `fsw.codegen.fields.plan`: a sensor's GNC struct from its bus struct, an actuator's bus struct from
 its GNC struct. It also emits a handler sending the conversion's result on `<role>Out`. A field
-outside `fsw.codegen.fields.STRUCT_CODES` raises when the code is generated.
+outside `fsw.codegen.fields.STRUCT_PRIMITIVES` raises when the code is generated.
 
 It also emits the lab's test pins, `BusConverterPins.hpp`, which each configuration's extension,
 `_wise_fsw_<configuration>`, includes once: `bus_<Struct>(<member>=...)` returns F´'s
@@ -26,14 +26,14 @@ from pathlib import Path
 import numpy as np
 
 from fsw.codegen.deployment import REPOSITORY, contract_files
-from fsw.codegen.fields import DTYPES, STRUCT_CODES, form, plan
+from fsw.codegen.fields import DTYPES, STRUCT_PRIMITIVES, form, plan
 from fsw.codegen.fpp_model import Component, Model, read, struct_named
 from fsw.codegen.roles import CONVERTER, Role, roles
 
 __all__ = ["main", "render"]
 
-_NUMBERS = [DTYPES[primitive] for primitive in STRUCT_CODES]
-"""`fsw.codegen.fields.STRUCT_CODES`' primitives as `fsw.codegen.fields.form` gives them."""
+_NUMBERS = [DTYPES[primitive] for primitive in STRUCT_PRIMITIVES]
+"""`fsw.codegen.fields.STRUCT_PRIMITIVES`' primitives as `fsw.codegen.fields.form` gives them."""
 
 
 def _cpp(name: str) -> str:
@@ -74,7 +74,7 @@ def _copies(model: Model, role: Role) -> list[str]:
 
     Raises:
         ValueError: a field breaks `fsw.codegen.fields.plan`'s rule, or is not a one-dimensional
-            array of one of `fsw.codegen.fields.STRUCT_CODES`, naming it.
+            array of one of `fsw.codegen.fields.STRUCT_PRIMITIVES`, naming it.
     """
     (source, source_var), (target, target_var) = _ends(role)
     source_struct, target_struct = struct_named(model.types, source), struct_named(model.types, target)
@@ -84,7 +84,7 @@ def _copies(model: Model, role: Role) -> list[str]:
         if len(shape) != 1 or not isinstance(element, np.dtype) or element not in _NUMBERS:
             raise ValueError(
                 f"{target}.{member.name} is {shape} {element}, which the F´ CDH does not copy:"
-                " it copies one-dimensional arrays of fsw.codegen.fields.STRUCT_CODES' primitives"
+                " it copies one-dimensional arrays of fsw.codegen.fields.STRUCT_PRIMITIVES' primitives"
             )
         statements.append(
             f"        for (FwSizeType i = 0; i < {shape[0]}; i++) {{\n"
@@ -226,17 +226,17 @@ def _bus_pin(model: Model, qualified: str) -> str:
         The pin's `m.def` statement.
 
     Raises:
-        ValueError: a member is not an inline array of one of `fsw.codegen.fields.STRUCT_CODES`,
+        ValueError: a member is not an inline array of one of `fsw.codegen.fields.STRUCT_PRIMITIVES`,
             naming it.
     """
     bus = struct_named(model.types, qualified)
     parameters, fills, arguments = [], [], []
     for member in bus.members:
-        if member.type not in STRUCT_CODES or member.size is None:
+        if member.type not in STRUCT_PRIMITIVES or member.size is None:
             size = "" if member.size is None else f"[{member.size}] "
             raise ValueError(
                 f"{qualified}.{member.name} is {size}{member.type}, which the bus pin does not"
-                " take: it takes inline arrays of fsw.codegen.fields.STRUCT_CODES' primitives"
+                " take: it takes inline arrays of fsw.codegen.fields.STRUCT_PRIMITIVES' primitives"
             )
         parameters.append(f"const std::array<{member.type}, {member.size}>& {member.name}")
         fills.append(

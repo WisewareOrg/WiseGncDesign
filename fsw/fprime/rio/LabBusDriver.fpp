@@ -1,8 +1,9 @@
 module Bus {
 
-  @ The RIO bus driver the lab uses: it receives raw bus bytes from the bus emulator and delivers
-  @ them on serial ports to the typed bus ports they connect to, and takes typed bus structs back
-  @ as bytes on serial ports, which the lab drains. It is in module Bus because F´'s topology
+  @ The RIO bus driver the lab uses: it receives raw bus bytes from the bus emulator in a fixed
+  @ buffer per port and delivers them on serial ports to the typed bus ports they connect to, and
+  @ takes typed bus structs back as bytes on serial ports into a fixed buffer per port, which the
+  @ lab reads. It is in module Bus because F´'s topology
   @ autocoder names a connected port's serializer in the component's own namespace, and every bus
   @ port is declared in Bus.
   passive component LabBusDriver {

@@ -604,6 +604,57 @@ def bus(bus_by_role: dict[str, tuple[int, bytes]]) -> list[tuple[int, bytes]]:
     return list(bus_by_role.values())
 
 
+@pytest.fixture
+def wire() -> Callable[..., Callable[..., int]]:
+    """Wires a booted copy to the bus, its buffers sized to the bytes and bus structs they carry.
+
+    Each port of a bus gets a receive buffer sized to its bytes, and each actuator role of the
+    configuration a transmit buffer sized to its bus struct.
+
+    Returns:
+        A function of the copy, its configuration and a bus, `[(port, bytes)]`, giving its step:
+        `step(t_ns, bus)` writes a bus of the same ports, by default the one wired, into the
+        receive buffers and steps the copy, returning what the copy's `step` returns.
+    """
+    from fsw.codegen.deployment import bus_port, configuration_model
+    from fsw.codegen.roles import taken
+    from lab.bus_emulator import size
+
+    def wire_to(fsw: FswExtension, configuration: str, bus: list[tuple[int, bytes]]) -> Callable[..., int]:
+        """Makes the copy's buffers.
+
+        Args:
+            fsw: the copy, booted and not yet stepped.
+            configuration: the copy's configuration.
+            bus: each port and the bytes its receive buffer is sized to.
+
+        Returns:
+            The step.
+        """
+        buffers = {port: fsw.receive_buffer(port, len(data)) for port, data in bus}
+        for role in taken(configuration_model(configuration), configuration):
+            if not role.sensor:
+                fsw.transmit_buffer(bus_port(configuration, role.output), size(role.bus))
+
+        def step(t_ns: int, bus: list[tuple[int, bytes]] = bus) -> int:
+            """Writes the bus into the receive buffers, then steps.
+
+            Args:
+                t_ns: ns, the step's time.
+                bus: each port's bytes.
+
+            Returns:
+                The transmit buffers the step wrote, a bit per port.
+            """
+            for port, data in bus:
+                buffers[port][:] = data
+            return fsw.step(t_ns)
+
+        return step
+
+    return wire_to
+
+
 def _algorithm_instances(configuration: str) -> tuple[Instance, ...]:
     """The GNC instances of an algorithm's component that a configuration holds.
 
