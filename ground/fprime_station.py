@@ -181,6 +181,8 @@ class FprimeStation:
             ids.append(entry_ids)
             cursors = cursors.copy()
             cursors[live] = after
+        if not positions:
+            return {}
         position, chan = np.concatenate(positions), np.concatenate(ids)
         if names is not None:
             wanted = np.isin(chan, [self.dictionary.channel(name).id for name in names])
