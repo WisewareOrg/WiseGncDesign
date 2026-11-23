@@ -16,7 +16,7 @@ or an output the CDH reads, which a frame returns when a member wrote it. An out
 also routed to an input is refused.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, NamedTuple
 
 from fsw.codegen.fpp_model import Model
@@ -82,17 +82,18 @@ class _Member(NamedTuple):
         step: its algorithm's `step`.
         inputs: the inputs it holds, by `step` keyword.
         wanted: how many inputs it takes.
-        routes: for each output port routed or exposed, its position in the `<Name>Outputs` tuple,
-            the inputs of the member it is routed to, `None` when exposed, and that member's
-            keyword or the exposed port's name.
+        routed: for each output port routed to a later member, its position in the `<Name>Outputs`
+            tuple, that member's inputs and its keyword.
+        exposed: for each output port the sub-topology exposes, its position and the port's name.
     """
 
     member: str
     name: str
-    step: Any
+    step: Callable[..., tuple[Any, Any]]
     inputs: dict[str, Any]
     wanted: int
-    routes: tuple[tuple[int, dict[str, Any] | None, str], ...]
+    routed: tuple[tuple[int, dict[str, Any], str], ...]
+    exposed: tuple[tuple[int, str], ...]
 
 
 class Frame(NamedTuple):
@@ -217,16 +218,18 @@ class GncPartition:
         Returns:
             Its plan.
         """
-        routes = []
-        for index, port in enumerate(self._outputs[member]):
-            if (member, port) in self._routes:
-                target, keyword = self._routes[member, port]
-                routes.append((index, self._held[target], keyword))
-            elif (member, port) in self._exposed:
-                routes.append((index, None, self._exposed[member, port]))
+        ports = list(enumerate(self._outputs[member]))
+        routed = tuple(
+            (index, self._held[self._routes[member, port][0]], self._routes[member, port][1])
+            for index, port in ports
+            if (member, port) in self._routes
+        )
+        exposed = tuple(
+            (index, self._exposed[member, port]) for index, port in ports if (member, port) in self._exposed
+        )
         name = _name(member)
         return _Member(
-            member, name, self.algorithms[name].step, self._held[member], len(self._keywords[member]), tuple(routes)
+            member, name, self.algorithms[name].step, self._held[member], len(self._keywords[member]), routed, exposed
         )
 
     def write(self, port: str, value: Any) -> None:
@@ -256,19 +259,17 @@ class GncPartition:
         telemetry = []
         exposed = {}
         for group in fired:
-            for member, name, step, inputs, wanted, routes in self._plan[group]:
+            for member, name, step, inputs, wanted, routed, exposed_ports in self._plan[group]:
                 if len(inputs) < wanted:
                     unwritten = sorted(self._keywords[member] - set(inputs))
                     names = [f"{name}.{k}In" for k in unwritten]
                     raise RuntimeError(f"inputs {names} have not been written at t = {t} s")
                 outputs, tlm = step(t, **inputs)
-                for index, held, key in routes:
-                    value = outputs[index]
-                    if value is None:
-                        continue
-                    if held is None:
-                        exposed[key] = value
-                    else:
-                        held[key] = value
+                for index, held, keyword in routed:
+                    if outputs[index] is not None:
+                        held[keyword] = outputs[index]
+                for index, port in exposed_ports:
+                    if outputs[index] is not None:
+                        exposed[port] = outputs[index]
                 telemetry.append(MemberTelemetry(name, tlm))
         return Frame(telemetry, exposed)

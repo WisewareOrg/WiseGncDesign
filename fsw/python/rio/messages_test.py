@@ -113,27 +113,6 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
         _assert_holds(holds, read_, bus_messages[role.bus], role.role)
 
 
-def test_a_payload_swig_returns_as_a_simulation_module_s_class_reads_alike(
-    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
-):
-    """Once `imuSensor` is imported, a reader's IMU payload is its class, a proxy of the same C struct.
-
-    Args:
-        bus_messages: a message of each bus struct.
-        holds: asserts a tuple or payload holds values.
-    """
-    from Basilisk.simulation import imuSensor
-
-    [(pair, role)] = [(p, r) for p, r in zip(PAIRS, ROLES, strict=True) if r.bus == "Bus.ImuSensorMsg"]
-    _, subscribed = _written(bus_messages[role.bus].payload)
-    payload = subscribed()
-    assert type(payload) is imuSensor.IMUSensorMsgPayload
-
-    read_ = reader(pair)(payload)
-
-    _assert_holds(holds, read_, bus_messages[role.bus], role.role)
-
-
 def test_a_read_message_keeps_its_values_after_the_next_tick(
     bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):

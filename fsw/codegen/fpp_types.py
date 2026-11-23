@@ -75,14 +75,41 @@ def converter(source: type[Any], target: type[Any], *, copy: bool = True) -> Cal
     Raises:
         ValueError: `target` is neither, or a field breaks the rule, naming it.
     """
-    if target not in _STRUCTS:
-        if source in _STRUCTS and hasattr(target, "__dtype__"):
-            return _payload_writer(source, target)
+    if target not in _STRUCTS and not (source in _STRUCTS and hasattr(target, "__dtype__")):
         raise ValueError(f"{target.__name__} is not a struct's tuple")
-    struct, types = _STRUCTS[target]
-    planned = plan(struct, types, _source_forms(source), source.__name__)
+    if hasattr(target, "__dtype__"):
+        return _payload_writer(source, target)
     if source not in _STRUCTS:
-        return _payload_reader(source, target, planned)
+        return _payload_reader(source, target)
+    return _struct_converter(source, target, copy=copy)
+
+
+def _planned(source: type[Any], target: type[Any]) -> list[tuple[Member, str, Form]]:
+    """`fsw.codegen.fields.plan`'s fields of a struct's tuple `target`, each from its `source` field.
+
+    Args:
+        source: a struct's tuple, or a Basilisk message payload's type.
+        target: a struct's tuple.
+
+    Returns:
+        Each target member, the name of its source field and its form, in `target`'s order.
+    """
+    struct, types = _STRUCTS[target]
+    return plan(struct, types, _source_forms(source), source.__name__)
+
+
+def _struct_converter(source: type[Any], target: type[Any], *, copy: bool) -> Callable[[Any], Any]:
+    """A converter between structs' tuples, reading the source by position.
+
+    Args:
+        source: a struct's tuple.
+        target: a struct's tuple.
+        copy: false to pass the source's arrays through uncopied.
+
+    Returns:
+        The converter.
+    """
+    planned = _planned(source, target)
     indices = [source._fields.index(name) for _, name, _ in planned]
     pick = operator.itemgetter(*indices) if len(indices) > 1 else lambda value: (value[indices[0]],)
     if not copy:
@@ -91,21 +118,18 @@ def converter(source: type[Any], target: type[Any], *, copy: bool = True) -> Cal
     return lambda value: target._make([to(field) for to, field in zip(steps, pick(value), strict=True)])
 
 
-def _payload_reader(
-    source: type[Any], target: type[Any], planned: list[tuple[Member, str, Form]]
-) -> Callable[[Any], Any]:
+def _payload_reader(source: type[Any], target: type[Any]) -> Callable[[Any], Any]:
     """A converter from a Basilisk payload, read from one copy of its memory as its `__dtype__`.
 
     Args:
         source: the Basilisk message payload's type.
         target: a struct's tuple.
-        planned: `fsw.codegen.fields.plan`'s fields.
 
     Returns:
         The converter.
     """
     layout = source.__dtype__
-    fields = [(name, bool(shape)) for _, name, (shape, _) in planned]
+    fields = [(name, bool(shape)) for _, name, (shape, _) in _planned(source, target)]
 
     def convert(value: Any) -> Any:
         """The `target` tuple of a `source` payload: its arrays read-only over one copy, its scalars numbers.
@@ -134,12 +158,8 @@ def _payload_writer(source: type[Any], target: type[Any]) -> Callable[[Any], Any
     Returns:
         The converter.
     """
-    struct, types = _STRUCTS[source]
     layout = target.__dtype__
-    fields = [
-        (member.name, name, shape)
-        for member, name, (shape, _) in plan(struct, types, _source_forms(target), target.__name__)
-    ]
+    fields = [(member.name, name, shape) for member, name, (shape, _) in _planned(target, source)]
 
     def convert(value: Any) -> Any:
         """A fresh `target` payload holding a `source` tuple.
@@ -155,9 +175,9 @@ def _payload_writer(source: type[Any], target: type[Any]) -> Callable[[Any], Any
         """
         payload = target()
         record = np.frombuffer((ctypes.c_char * layout.itemsize).from_address(int(payload.this)), layout)
-        for (member, name, shape), field in zip(fields, value, strict=True):
+        for (member_name, name, shape), field in zip(fields, value, strict=True):
             if np.shape(field) != shape:
-                raise ValueError(f"{source.__name__}.{member} is {shape}, but its value is {np.shape(field)}")
+                raise ValueError(f"{source.__name__}.{member_name} is {shape}, but its value is {np.shape(field)}")
             record[name][0] = field
         return payload
 

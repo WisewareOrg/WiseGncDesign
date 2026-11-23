@@ -137,6 +137,9 @@ class FrameRunner:
     def tick(self, t_ns: int, messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
         """Runs one frame.
 
+        The first tick after a boot checks each sensor role's message with
+        `fsw.python.rio.messages.check`, which raises what it refuses.
+
         Args:
             t_ns: ns, the tick's time.
             messages_by_role: each role's Basilisk message payload, a live view of its message, as
@@ -145,12 +148,6 @@ class FrameRunner:
         Returns:
             The actuator commands, by role: each a fresh `messaging.<Name>Payload` of the message
             the role's bus struct mirrors, for each actuator output GNC wrote this frame.
-
-        Raises:
-            KeyError: at the first tick after a boot, a sensor role has no message, as
-                `fsw.python.rio.messages.check` says.
-            TypeError: at the first tick after a boot, a sensor role's payload is of another
-                message, as `fsw.python.rio.messages.check` says.
         """
         if not self._checked:
             messages.check(self._sensors, messages_by_role)
