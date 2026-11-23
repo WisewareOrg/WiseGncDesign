@@ -7,7 +7,7 @@ namespace Cdh {
 namespace {
 
 //! The packets reserved for the downlink at construction: a performance hint, not a limit.
-constexpr std::size_t PACKETS_RESERVE = 2048;
+constexpr std::size_t PACKETS_RESERVE = 4096;
 
 }  // namespace
 
