@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import numpy as np
 import pytest
-from wise_dynamics.basilisk import FswHost
+from wise_dynamics.basilisk import FswHost, ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from fsw.codegen.dictionary import Dictionary
@@ -492,12 +492,13 @@ def test_the_record_is_the_same_whatever_the_ground_s_period_and_whether_it_stop
     """
     flights = {}
     for period_s, stops in ((1.0, False), (1.0, True), (10.0, True)):
-        scenario = Leo500()
+        vehicle = ImuSpacecraft()
+        scenario = Leo500(vehicle)
         fsw = StubBuild(mock_dictionary)
         stop = scenario.stop_ground if stops else lambda: None
-        tracking = scenario.vehicle.tracking()
+        tracking = vehicle.tracking()
         ground = Ground(_commands_the_mock, fsw, tracking, stop, period_s=period_s)
-        host = FswHost(fsw, scenario.vehicle)
+        host = FswHost(fsw, vehicle)
         datasets = scenario.run(host, {}, duration_s=120.0, ground=ground)
         flights[period_s, stops] = (datasets | ground.telemetry_datasets(), ground.now_s)
 

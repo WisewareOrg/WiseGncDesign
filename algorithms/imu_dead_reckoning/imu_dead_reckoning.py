@@ -20,6 +20,7 @@
 
 import numpy as np
 from numba import njit
+from wise_dynamics.basilisk import ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
 from algorithms.imu_dead_reckoning.gross_check import gross_check
@@ -339,16 +340,17 @@ class ImuDeadReckoner:
 
 
 # %%
-def parameters(scenario: Leo500) -> Gnc.ImuDeadReckonerParameters:
+def parameters(scenario: Leo500, vehicle: ImuSpacecraft) -> Gnc.ImuDeadReckonerParameters:
     """Nav's parameters for one case: `mu` from the scenario, the mounting from its vehicle.
 
     Args:
         scenario: the case's dispersed scenario.
+        vehicle: the case's dispersed vehicle.
 
     Returns:
         The parameters, which the ground writes as the case's record.
     """
-    return Gnc.ImuDeadReckonerParameters(mu=scenario.mu_m3_s2["earth"], dcm_PB=np.asarray(scenario.vehicle.imu.dcm_PB))
+    return Gnc.ImuDeadReckonerParameters(mu=scenario.mu_m3_s2["earth"], dcm_PB=np.asarray(vehicle.imu.dcm_PB))
 
 
 # %% [markdown]

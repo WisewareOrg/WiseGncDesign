@@ -4,7 +4,7 @@ A mission lives outside the requirements tree. It names a configuration, a GNC s
 contract, and a build, `"python"` or `"fprime"`, which together are its FSW. Each algorithm
 component of the configuration claims the capabilities (SYS items) it provides with `@ provides`
 lines in its FPP, and the configuration claims their union; the mission picks the rungs (SRS items)
-to judge and the scenarios (TST items) to fly. A component's class and `parameters(scenario)` are
+to judge and the scenarios (TST items) to fly. A component's class and `parameters(scenario, vehicle)` are
 found in its algorithm's notebook, `<folder>/<folder>.py` beside its `.fpp`, by the component's
 name. `mission_tests` turns missions into Monte Carlo tests for a notebook's globals: a class per
 vehicle, holding a test per configuration, build and scenario, so each flight's runs have a folder
@@ -61,12 +61,12 @@ class _Member(NamedTuple):
     Attributes:
         instance: its instance's qualified name, `<configuration>.<instance>`.
         tuple_type: its component's `<Name>Parameters` tuple.
-        parameters: its notebook's `parameters(scenario)`, or None when the tuple has no field.
+        parameters: its notebook's `parameters(scenario, vehicle)`, or None when the tuple has no field.
     """
 
     instance: str
     tuple_type: type
-    parameters: Callable[[Any], Any] | None
+    parameters: Callable[[Any, Any], Any] | None
 
 
 class _Configuration(NamedTuple):
@@ -133,7 +133,7 @@ def _notebook(component: Component) -> ModuleType:
 def _configuration(gnc: str, build: str, contract: Contract) -> _Configuration:
     """Finds a configuration's claims, its members' parameters and, for Python, their classes.
 
-    A component is instanced at most once, since its notebook's `parameters(scenario)` gives one
+    A component is instanced at most once, since its notebook's `parameters(scenario, vehicle)` gives one
     tuple per component and so cannot tell two instances apart.
 
     Args:
@@ -160,7 +160,7 @@ def _configuration(gnc: str, build: str, contract: Contract) -> _Configuration:
         if len(named) > 1:
             raise ValueError(
                 f"{name} is instanced more than once in {gnc}, as {named}, and its notebook's"
-                " `parameters(scenario)` gives one tuple per component"
+                " `parameters(scenario, vehicle)` gives one tuple per component"
             )
     capabilities = {uid for name in by_component for uid in _claims(model, model.components[name])}
     found = []
@@ -473,7 +473,9 @@ def _scenario_test(mission: Mission, scenario_id: str) -> _ScenarioTest:
         record = run_path(sim_test_directory, sim_case_index).with_suffix(".prm.json")
         parameters.write(
             {
-                member.instance: member.tuple_type() if member.parameters is None else member.parameters(sim_scenario)
+                member.instance: member.tuple_type()
+                if member.parameters is None
+                else member.parameters(sim_scenario, sim_scenario.vehicle)
                 for member in mission._found.members
             },
             record,

@@ -296,25 +296,20 @@ def test_the_bound_s_step_is_nav_s_integration_step_not_the_base_tick(
     assert inputs["accel_noise_std_m_s2"] == (ImuSpacecraft.accel_noise_density_m_s2_rthz / np.sqrt(0.5))
 
 
-@pytest.mark.sim_scenario("leo500")
-@pytest.mark.sim_vehicle("imu_spacecraft")
-@pytest.mark.sim_runs(1)
-def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting(
-    sim_scenario: Leo500,
-) -> None:
+def test_a_case_s_parameters_are_the_scenario_s_mu_and_its_vehicle_s_mounting() -> None:
     """`mu` is WiseDynamics' scenario's Earth's, and `dcm_PB` its vehicle's IMU mounting.
 
-    The scenario is the one the notebook's mission flies, as WiseDynamics' fixture gives it, so a
-    renamed field there fails this test.
-
-    Args:
-        sim_scenario: the case's dispersed scenario.
+    The scenario and the vehicle are the ones the notebook's mission flies, built directly, so a
+    renamed field in WiseDynamics fails this test.
     """
-    nav = parameters(sim_scenario)
+    vehicle = ImuSpacecraft()
+    scenario = Leo500(vehicle)
+
+    nav = parameters(scenario, vehicle)
 
     assert type(nav) is Gnc.ImuDeadReckonerParameters
-    assert nav.mu == sim_scenario.mu_m3_s2["earth"]
-    np.testing.assert_array_equal(nav.dcm_PB, sim_scenario.vehicle.imu.dcm_PB)
+    assert nav.mu == scenario.mu_m3_s2["earth"]
+    np.testing.assert_array_equal(nav.dcm_PB, vehicle.imu.dcm_PB)
 
 
 def test_the_notebook_runs_end_to_end() -> None:

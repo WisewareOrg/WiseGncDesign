@@ -110,11 +110,12 @@ class WheelSpinner:
 
 
 # %%
-def parameters(scenario: object) -> Gnc.WheelSpinnerParameters:
+def parameters(scenario: object, vehicle: object) -> Gnc.WheelSpinnerParameters:
     """The spinner's parameter for one case: 1 mN*m on the first wheel.
 
     Args:
         scenario: the case's dispersed scenario, which does not change it.
+        vehicle: the case's dispersed vehicle, which does not change it.
 
     Returns:
         The parameter, which the ground writes as the case's record.

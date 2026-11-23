@@ -12,7 +12,7 @@
 - **rev 3** — 2026-11-14 — each case flies a fresh copy of the extension, and an F´ assert raises
   in Python, with the checks that support them; corrects rev 2's "an `FW_ASSERT` aborts the
   process" (issue 52 tooling checks); the partitions are ADR 0005 rev 1; reverses rev 2's
-  configuration on an F´ port for F´ parameters (ADR 0004 rev 2), which also takes the rejected FSW
+  configuration on an F´ port for F´ parameters (ADR 0004 rev 3), which also takes the rejected FSW
   telemetry in Basilisk message structs and the boot(prm_path) check; the lab is ADR 0006 rev 1;
   fetching by tag and the flight's record become consequences, their rejected alternatives standing
   in rev 2, and a flight's end belonging to the scenario moves to the README (issue 85 one decision

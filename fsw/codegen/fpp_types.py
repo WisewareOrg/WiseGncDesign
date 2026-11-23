@@ -17,7 +17,7 @@ Each component an algorithm's `.fpp` defines has three tuples in its FPP module,
 An output or telemetry field defaults to `None`, not written, which no FPP value is. A parameter
 has a default only when its FPP declaration gives one, so the required parameters come first, each
 group in FPP's order. A parameters tuple's `component` is its component's qualified name, and
-`parameters_from` builds one from plain values. Why named tuples is in ADR 0004 rev 2.
+`parameters_from` builds one from plain values. Why named tuples is in ADR 0004 rev 3.
 """
 
 import functools

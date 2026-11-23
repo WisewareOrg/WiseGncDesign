@@ -389,7 +389,7 @@ def test_each_lookup_that_fails_is_refused_naming_what_it_looked_for(
     An unknown configuration names the contract's; an unknown build names both builds; the F´ build
     of a configuration it does not build, one whose member has no F´ component, names the
     configuration; a component instanced more than
-    once names it and its instances, since `parameters(scenario)` gives one tuple per component; a
+    once names it and its instances, since `parameters(scenario, vehicle)` gives one tuple per component; a
     component with no `@ provides` names it and its file; a claim the tree lacks names the claim and
     the component; a class missing from its notebook names the notebook and the class; and a
     component with parameters and no `parameters` names the notebook. A vehicle missing a role the

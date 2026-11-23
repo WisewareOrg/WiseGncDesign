@@ -31,7 +31,7 @@ templates, CMake, Python, C++ and docs. Anything rendered or generated (rendered
 autocoder output, generated converters, dictionaries, built extensions, type stubs) is produced at build or
 import time into a build or temp directory and stays untracked. A Python build's dictionary is one
 case, generated into a temp dir as
-[ADR 0004 rev 2](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md)
+[ADR 0004 rev 3](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md)
 records.
 
 ## Running tests beside other sessions

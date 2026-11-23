@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from wise_dynamics.basilisk.scenarios.leo500 import Leo500
+from wise_dynamics.basilisk import ImuSpacecraft
 
 from harness.runs import at, read_run
 
@@ -42,7 +42,7 @@ def test_read_run_gives_the_command_log_as_json(tmp_path: Path):
     """
     path = tmp_path / "run.h5"
     commands = [{"name": "nav.initNavState", "response": "OK"}]
-    Leo500().vehicle.write_run_file(
+    ImuSpacecraft().write_run_file(
         path,
         {"t_s": (RUN["t_s"], "s")},
         attrs={"commands": json.dumps(commands)},

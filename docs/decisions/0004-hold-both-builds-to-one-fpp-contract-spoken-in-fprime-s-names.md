@@ -2,10 +2,13 @@
 
 **Status:** accepted
 **Decided:** 2026-11-13 (issue 51 two edges design; issue 52 tooling checks)
-**Rev:** 2
+**Rev:** 3
 
 ## Revisions
 
+- **rev 3** — 2026-11-22 — `parameters` also takes the case's vehicle, `parameters(scenario, vehicle)`,
+  since WiseDynamics' scenario no longer builds the vehicle a notebook reads (issue 19 the org Python
+  standard).
 - **rev 2** — 2026-11-13 — retitled from "Carry commands and telemetry in F´'s form, from one FPP
   dictionary" and rewritten to two edges: RadioEdge in F´'s names, the F´ ground station, typing
   after the run, FPP as the contract read through the native `fpp to-json`, generated named tuples,
@@ -113,7 +116,7 @@ would have shown as equal values.
 ### Parameters: JSON per case, F´'s tool makes the `.dat`
 
 - **The case's parameter record is JSON**, written by the ground from each algorithm's
-  `parameters(scenario)`. The Python build reads it.
+  `parameters(scenario, vehicle)`. The Python build reads it.
 - **F´'s `fprime-prm-write` makes the `.dat` from it**, which stock PrmDb loads at boot. None of
   this repository's code parses or writes F´'s binary parameter format.
 - **A load that leaves any parameter invalid fails the case.**
@@ -136,7 +139,7 @@ would have shown as equal values.
 - **`to-json` through F´'s wrapper.** It needs Java 25. Rejected for the native binary.
 - **A Python writer and reader for F´'s binary parameter format.** It brings F´'s codec back into the
   Python build and duplicates F´'s own tool. Rejected for JSON plus `fprime-prm-write`.
-- **The Python build taking `parameters(scenario)` directly, with a file only for F´.** The two
+- **The Python build taking `parameters(scenario, vehicle)` directly, with a file only for F´.** The two
   builds would then not read one case record. Rejected.
 - **An algorithm's configuration on an F´ port, sent at boot by the sim glue.** It is per-algorithm
   glue outside the FPP contract, and parity cannot see it. Rejected for F´ parameters.

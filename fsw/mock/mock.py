@@ -56,11 +56,12 @@ class Mock:
         )
 
 
-def parameters(scenario: Any) -> Any:
+def parameters(scenario: Any, vehicle: Any) -> Any:
     """The mock's parameters for one case: its gain is the scenario's Earth `mu`.
 
     Args:
         scenario: the case's dispersed scenario.
+        vehicle: the case's dispersed vehicle, which does not change it.
 
     Returns:
         The parameters, which the ground writes as the case's record.

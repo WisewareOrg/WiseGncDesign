@@ -56,7 +56,7 @@ the simulation is in
 and how it meets the sim in
 [ADR 0006 rev 1](docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md);
 how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
-[ADR 0004 rev 2](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ### Requirements and missions
 
@@ -70,7 +70,7 @@ optional `rungs=…` and `check=…`. `gnc` names a configuration, a GNC sub-top
 `fsw/fpp/gnc/`, and `build` is `"python"` or `"fprime"`. Each algorithm component claims its
 capabilities with `@ provides: SYS...` lines in its `.fpp`, the configuration claims their union,
 and a flight is judged on the rungs its scenario links to that sit under those capabilities. The
-ground writes each case's parameters, from each algorithm notebook's `parameters(scenario)`, as a
+ground writes each case's parameters, from each algorithm notebook's `parameters(scenario, vehicle)`, as a
 record beside its run file, and the harness builds the configuration's build on it.
 `mission_tests` turns missions into Monte Carlo tests: a class per vehicle holding a test per
 configuration, build and scenario, such as `test_ImuDeadReckoning_python_leo500`. A flight's end

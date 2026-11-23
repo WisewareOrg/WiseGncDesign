@@ -31,7 +31,7 @@ def test_each_step_commands_the_parameter_s_torque_on_the_first_wheel_alone_and_
 
 def test_a_case_s_parameters_command_one_millinewton_metre() -> None:
     """`parameters` gives `motorTorque` 1e-3 N*m whatever the scenario."""
-    assert parameters(None) == Gnc.WheelSpinnerParameters(motorTorque=1e-3)
+    assert parameters(None, None) == Gnc.WheelSpinnerParameters(motorTorque=1e-3)
 
 
 def test_the_notebook_runs_end_to_end() -> None:
