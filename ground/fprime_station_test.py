@@ -270,6 +270,7 @@ def test_an_entry_of_a_channel_the_dictionary_lacks_is_refused_naming_its_id(
         above: whether the ID is above every ID the dictionary holds, or below.
     """
     ids = [channel.id for channel in mock_dictionary.channels_by_id.values()]
+    assert min(ids) > 0, "an ID below the smallest exists only while the smallest is above 0"
     unknown_id = max(ids) + 1 if above else min(ids) - 1
     good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
     unknown = _with_channel_id(mock_dictionary, good, unknown_id)
