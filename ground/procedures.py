@@ -131,6 +131,7 @@ class Ground(sysModel.SysModel):
         self._answers: dict[int, tuple[str, str | None]] = {}
         self._waiting = _Tick("its first tick")
         self._downlinks: list[Any] = []
+        self._latest: dict[str, tuple[int, Any]] = {}
         self.failure = None
         self.command_log = []
 
@@ -222,7 +223,8 @@ class Ground(sysModel.SysModel):
         """One channel's latest write.
 
         A name the dictionary lacks raises `KeyError`, as `Dictionary.channel` does, so a mistyped
-        channel fails rather than reading `None` forever.
+        channel fails rather than reading `None` forever. Each drain is decoded at most once per
+        channel read.
 
         Args:
             name: `<instance>.<channel>`.
@@ -231,11 +233,14 @@ class Ground(sysModel.SysModel):
             The value, as the run file records it, or `None` before the channel is written.
         """
         channel = self._edge.dictionary.channel(name)
-        for downlink in reversed(self._downlinks):
-            decoded = self._edge.decode([downlink], [channel.name])
+        searched, value = self._latest.get(channel.name, (0, None))
+        fresh = self._downlinks[searched:]
+        if fresh:
+            decoded = self._edge.decode(fresh, [channel.name])
             if channel.name in decoded:
-                return decoded[channel.name].values[-1]
-        return None
+                value = decoded[channel.name].values[-1]
+            self._latest[channel.name] = (len(self._downlinks), value)
+        return value
 
     def truth(self) -> dict[str, np.ndarray]:
         """The vehicle's true state now, the stand-in for tracking.

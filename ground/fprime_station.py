@@ -191,7 +191,7 @@ class FprimeStation:
 
         Args:
             data: every packet's bytes, back to back.
-            cursors: where each packet's first entry starts.
+            cursors: where each packet's first entry starts; advanced in place, so consumed.
             ends: where each packet ends.
 
         Returns:
