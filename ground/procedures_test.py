@@ -13,7 +13,7 @@ import pytest
 from wise_dynamics.basilisk import FswHost, ImuSpacecraft
 from wise_dynamics.basilisk.scenarios.leo500 import Leo500
 
-from fsw.codegen.dictionary import Dictionary
+from fsw.codegen.dictionary import ChannelWrites, Dictionary
 from ground.procedures import CommandFailed, Ground
 
 NS = 1_000_000_000
@@ -41,6 +41,7 @@ class StubEdge:
         self.uplinked: list[tuple[str, Mapping[str, Any], int]] = []
         self.answers: list[tuple[int, str, str | None]] = []
         self.writes: list[tuple[str, int, Any]] = []
+        self.drains_decoded = 0
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Keeps the command, its arguments and its context.
@@ -72,7 +73,7 @@ class StubEdge:
 
     def decode(
         self, downlinks: Sequence[list[tuple[str, int, Any]]], names: Collection[str] | None = None
-    ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    ) -> dict[str, ChannelWrites]:
         """Decodes downlinks as the Python build does, packing each channel's values in one batch.
 
         Args:
@@ -82,6 +83,7 @@ class StubEdge:
         Returns:
             For each channel downlinked, its time tags in ns and its values.
         """
+        self.drains_decoded += len(downlinks)
         merged: dict[str, tuple[list[int], list[Any]]] = {}
         for downlink in downlinks:
             for name, t_ns, value in downlink:
@@ -90,7 +92,7 @@ class StubEdge:
                     times.append(t_ns)
                     values.append(value)
         return {
-            name: (np.array(times, dtype=np.int64), self.dictionary.channel(name).pack_many(values))
+            name: ChannelWrites(np.array(times, dtype=np.int64), self.dictionary.channel(name).pack_many(values))
             for name, (times, values) in merged.items()
         }
 
@@ -477,6 +479,37 @@ def test_tlm_reads_the_last_value_written_of_a_channel_written_twice_in_one_down
 
     assert seen == [None, 0.25], "tlm reads the later of the two writes"
     np.testing.assert_array_equal(values, np.array([0.5, 0.25], np.float32), err_msg="both writes are recorded")
+
+
+def test_polling_tlm_decodes_each_downlink_at_most_once_per_channel(edge: StubEdge):
+    """A channel written once and polled every tick has each drain decoded once, not once per poll.
+
+    The poll after the write reads the value, and every later poll reads it again without decoding
+    the drains it has already searched.
+
+    Args:
+        edge: the stub edge.
+    """
+    ticks = 20
+    seen = []
+
+    async def procedure(ground: Ground) -> None:
+        """Polls `mock.gain` at every tick.
+
+        Args:
+            ground: the ground running it.
+        """
+        while True:
+            seen.append(ground.tlm("mock.gain"))
+            await ground.sleep(1.0)
+
+    ground = _ground(edge, procedure)
+    edge.writes.append(("mock.gain", NS, 0.5))
+    _tick(ground, *range(1, ticks + 1))
+
+    assert seen == [None] + [0.5] * ticks
+    drains = ticks + 1
+    assert edge.drains_decoded <= drains, f"{edge.drains_decoded} drains decoded over {drains} drains polled"
 
 
 def test_a_period_that_is_not_a_whole_multiple_of_the_flight_software_s_is_refused(edge: StubEdge):
