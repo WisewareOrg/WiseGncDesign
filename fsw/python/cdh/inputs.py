@@ -7,13 +7,13 @@ RIO-in's own: RIO-in's arrays are fresh and read-only, so a copy guards nothing.
 `fsw.python.cdh.outputs`, pairs the actuator roles with the same `Pair`.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, NamedTuple
 
 from fsw.codegen import fpp_types
 from fsw.codegen.roles import Role
 
-__all__ = ["Pair", "convert", "pairings"]
+__all__ = ["Pair", "converter", "pairings"]
 
 
 class Pair(NamedTuple):
@@ -44,14 +44,14 @@ def pairings(roles: Sequence[Role]) -> list[Pair]:
     return [Pair(role.role, fpp_types.named(role.bus), fpp_types.named(role.icd), role.input) for role in roles]
 
 
-def convert(pairs: Sequence[Pair], messages: Mapping[str, Any]) -> dict[str, Any]:
-    """Each pair's bus struct as its GNC port's value.
+def converter(pair: Pair) -> Callable[[Any], Any]:
+    """CDH-in for one sensor role: its bus struct, as its GNC port's ICD struct.
 
     Args:
-        pairs: the pairs.
-        messages: each role's bus struct, as RIO-in reads it.
+        pair: the role's pair.
 
     Returns:
-        Each value, an ICD struct's tuple, by its GNC port.
+        A function of the role's bus struct's tuple, as RIO-in reads it, returning its ICD struct's
+        tuple, which holds the bus struct's arrays.
     """
-    return {pair.port: fpp_types.converter(pair.bus, pair.icd, copy=False)(messages[pair.role]) for pair in pairs}
+    return fpp_types.converter(pair.bus, pair.icd, copy=False)

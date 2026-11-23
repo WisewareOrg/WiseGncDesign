@@ -22,14 +22,14 @@ class Telemetry(NamedTuple):
 
 
 def test_each_field_written_is_one_write_named_for_its_instance_in_field_order():
-    """A `None` field is not written; an array is copied as written."""
+    """Each write is tagged with the time given; a `None` field is not written; an array is copied."""
     position = np.array([1.0, 2.0, 3.0])
 
-    writes = telemetry.writes("mock", Telemetry(position=position, count=0, mode="fast"))
+    writes = telemetry.writes("mock", Telemetry(position=position, count=0, mode="fast"), 7)
     position[0] = 9.0
 
-    assert [name for name, _ in writes] == ["mock.mode", "mock.position", "mock.count"]
-    assert writes[0][1] == "fast"
-    np.testing.assert_array_equal(writes[1][1], [1.0, 2.0, 3.0])
-    assert writes[2][1] == 0
-    assert [name for name, _ in telemetry.writes("mock", Telemetry(count=1))] == ["mock.count"]
+    assert [(name, t) for name, t, _ in writes] == [("mock.mode", 7), ("mock.position", 7), ("mock.count", 7)]
+    assert writes[0][2] == "fast"
+    np.testing.assert_array_equal(writes[1][2], [1.0, 2.0, 3.0])
+    assert writes[2][2] == 0
+    assert [name for name, _, _ in telemetry.writes("mock", Telemetry(count=1), 7)] == ["mock.count"]

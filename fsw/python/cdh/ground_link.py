@@ -38,9 +38,9 @@ class GroundLink:
         """
         queued, self._uplinked = self._uplinked, []
         for name, args, context in queued:
-            dispatched = commands.dispatch(self._handlers, name, args)
+            dispatched = commands.dispatch(self._handlers, name, args, t_ns)
             self._responses.append((context, dispatched.response, dispatched.reason))
-            self._log.extend((channel, t_ns, value) for channel, value in dispatched.writes)
+            self._log += dispatched.writes
 
     def log(self, instance: str, written: NamedTuple | None, t_ns: int) -> None:
         """Logs an algorithm's telemetry tuple, a write per field written.
@@ -50,7 +50,7 @@ class GroundLink:
             written: its `<Name>Telemetry` tuple, or `None`.
             t_ns: ns, the tick's time, which tags the writes.
         """
-        self._log.extend((channel, t_ns, value) for channel, value in telemetry.writes(instance, written))
+        self._log += telemetry.writes(instance, written, t_ns)
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command, which runs at the next tick.

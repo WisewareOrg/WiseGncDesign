@@ -4,7 +4,6 @@ The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's me
 `bus_messages`: RIO-in reads the sensor roles', and RIO-out builds the actuator roles' payloads.
 """
 
-import re
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -17,7 +16,7 @@ from fsw.codegen.deployment import contract_model
 from fsw.codegen.fields import DTYPES
 from fsw.codegen.roles import roles
 from fsw.python.cdh import inputs, outputs
-from fsw.python.rio.messages import commands, read
+from fsw.python.rio.messages import reader, writer
 
 DECLARED = roles(contract_model())
 """Every role of the contract's `Cdh.BusConverter`."""
@@ -71,23 +70,20 @@ def _assert_holds(holds: Callable[[Any, Mapping[str, Any]], None], bus: Any, mes
 def test_each_paired_role_s_message_is_read_as_its_bus_struct(
     bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
-    """Each role's payload is read as its bus struct; a role no pair names is not read.
+    """Each role's payload, as its reader gives it, is read as its bus struct.
 
     Args:
         bus_messages: a message of each bus struct.
         holds: asserts a tuple or payload holds values.
     """
     assert PAIRS
-    readers = {}
-    for role in ROLES:
-        _, readers[role.role] = _written(bus_messages[role.bus].payload)
+    for pair, role in zip(PAIRS, ROLES, strict=True):
+        _, subscribed = _written(bus_messages[role.bus].payload)
 
-    read_ = read(PAIRS, {**{r: reader() for r, reader in readers.items()}, "other": object()})
+        read_ = reader(pair)(subscribed())
 
-    assert list(read_) == [role.role for role in ROLES]
-    for role in ROLES:
-        assert isinstance(read_[role.role], fpp_types.named(role.bus)), role.role
-        _assert_holds(holds, read_[role.role], bus_messages[role.bus], role.role)
+        assert isinstance(read_, fpp_types.named(role.bus)), role.role
+        _assert_holds(holds, read_, bus_messages[role.bus], role.role)
 
 
 def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
@@ -110,7 +106,7 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
         alias = type(type(payload).__name__, (), {n: getattr(payload, n) for n in [*names, "this"]})()
         assert not hasattr(alias, "__dtype__")
 
-        read_ = read([pair], {role.role: alias})[role.role]
+        read_ = reader(pair)(alias)
 
         _assert_holds(holds, read_, bus_messages[role.bus], role.role)
 
@@ -128,9 +124,9 @@ def test_a_read_message_keeps_its_values_after_the_next_tick(
         holds: asserts a tuple or payload holds values.
     """
     for pair, role in zip(PAIRS, ROLES, strict=True):
-        message, reader = _written(bus_messages[role.bus].payload)
-        payload = reader()
-        read_ = read([pair], {role.role: payload})[role.role]
+        message, subscribed = _written(bus_messages[role.bus].payload)
+        payload = subscribed()
+        read_ = reader(pair)(payload)
         later = type(bus_messages[role.bus].payload)()
         for field in type(later).__dtype__.names:
             setattr(later, field, [v + 100.0 for v in getattr(payload, field)])
@@ -149,18 +145,12 @@ def test_a_read_message_s_arrays_are_read_only(bus_messages: dict[str, Any]):
         bus_messages: a message of each bus struct.
     """
     for pair, role in zip(PAIRS, ROLES, strict=True):
-        _, reader = _written(bus_messages[role.bus].payload)
-        read_ = read([pair], {role.role: reader()})[role.role]
+        _, subscribed = _written(bus_messages[role.bus].payload)
+        read_ = reader(pair)(subscribed())
 
         for value in (v for v in read_ if isinstance(v, np.ndarray)):
             with pytest.raises(ValueError, match="read-only"):
                 value[...] = 0
-
-
-def test_a_paired_role_the_vehicle_does_not_have_is_refused_naming_it():
-    """A vehicle without a paired role's message fails the tick, naming the role."""
-    with pytest.raises(KeyError, match=re.escape(f"the role {PAIRS[0].role}")):
-        read(PAIRS, {"notARole": object()})
 
 
 def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_message(
@@ -181,12 +171,11 @@ def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_me
         for pair, role in zip(COMMANDS, ACTUATORS, strict=True)
     }
 
-    written = commands(COMMANDS, buses)
+    written = {pair.role: writer(pair)(buses[pair.role]) for pair in COMMANDS}
     for bus in buses.values():
         for value in bus:
             value[...] = 0
 
-    assert list(written) == [role.role for role in ACTUATORS]
     for role in ACTUATORS:
         payload = written[role.role]
         name = role.bus.removeprefix("Bus.")

@@ -73,6 +73,28 @@ class MemberTelemetry(NamedTuple):
     telemetry: Any
 
 
+class _Member(NamedTuple):
+    """A member as a frame runs it, planned at boot.
+
+    Attributes:
+        member: its instance's qualified name.
+        name: its instance's unqualified name.
+        step: its algorithm's `step`.
+        inputs: the inputs it holds, by `step` keyword.
+        wanted: how many inputs it takes.
+        routes: for each output port routed or exposed, its position in the `<Name>Outputs` tuple,
+            the inputs of the member it is routed to, `None` when exposed, and that member's
+            keyword or the exposed port's name.
+    """
+
+    member: str
+    name: str
+    step: Any
+    inputs: dict[str, Any]
+    wanted: int
+    routes: tuple[tuple[int, dict[str, Any] | None, str], ...]
+
+
 class Frame(NamedTuple):
     """What one frame's members wrote.
 
@@ -171,8 +193,10 @@ class GncPartition:
             keyword = _keyword(port.instance, port.port)
             self._ports[short] = port.instance, keyword
             self._keywords[port.instance].add(keyword)
+        self._outputs = {m: [p.name for p in model.components[model.instances[m].component].outputs] for m in members}
         self.algorithms = {}
         self._held: dict[str, dict[str, Any]] = {}
+        self._plan: tuple[tuple[_Member, ...], ...] = ()
 
     def boot(self, parameters: Mapping[str, Any]) -> None:
         """Builds every algorithm afresh on its parameters, with no input written.
@@ -182,6 +206,28 @@ class GncPartition:
         """
         self.algorithms = {_name(m): cls(parameters[_name(m)]) for m, cls in self._classes.items()}
         self._held = {m: {} for m in self._classes}
+        self._plan = tuple(tuple(self._member(m) for m in group) for group in self._members)
+
+    def _member(self, member: str) -> "_Member":
+        """A member as a frame runs it, planned once per boot.
+
+        Args:
+            member: its qualified name.
+
+        Returns:
+            Its plan.
+        """
+        routes = []
+        for index, port in enumerate(self._outputs[member]):
+            if (member, port) in self._routes:
+                target, keyword = self._routes[member, port]
+                routes.append((index, self._held[target], keyword))
+            elif (member, port) in self._exposed:
+                routes.append((index, None, self._exposed[member, port]))
+        name = _name(member)
+        return _Member(
+            member, name, self.algorithms[name].step, self._held[member], len(self._keywords[member]), tuple(routes)
+        )
 
     def write(self, port: str, value: Any) -> None:
         """Writes a sub-topology input, which its instance holds until the next write.
@@ -210,20 +256,19 @@ class GncPartition:
         telemetry = []
         exposed = {}
         for group in fired:
-            for member in self._members[group]:
-                name, inputs = _name(member), self._held[member]
-                if len(inputs) < len(self._keywords[member]):
+            for member, name, step, inputs, wanted, routes in self._plan[group]:
+                if len(inputs) < wanted:
                     unwritten = sorted(self._keywords[member] - set(inputs))
                     names = [f"{name}.{k}In" for k in unwritten]
                     raise RuntimeError(f"inputs {names} have not been written at t = {t} s")
-                outputs, tlm = self.algorithms[name].step(t, **inputs)
-                for port, value in zip(outputs._fields, outputs, strict=True):
+                outputs, tlm = step(t, **inputs)
+                for index, held, key in routes:
+                    value = outputs[index]
                     if value is None:
                         continue
-                    if (member, port) in self._routes:
-                        target, keyword = self._routes[member, port]
-                        self._held[target][keyword] = value
-                    elif (member, port) in self._exposed:
-                        exposed[self._exposed[member, port]] = value
+                    if held is None:
+                        exposed[key] = value
+                    else:
+                        held[key] = value
                 telemetry.append(MemberTelemetry(name, tlm))
         return Frame(telemetry, exposed)

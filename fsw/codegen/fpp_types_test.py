@@ -289,6 +289,27 @@ def test_a_basilisk_payload_converts_to_read_only_arrays_and_plain_scalars(mock:
         converted.qInrtl2Case[0] = 1.0
 
 
+def test_a_struct_converts_to_a_fresh_basilisk_payload_written_field_by_field(mock: SimpleNamespace):
+    """A struct's tuple is written into a fresh payload's memory, each field at its offset.
+
+    The struct changed afterwards leaves the payload as it was, and a second conversion gives
+    another payload.
+
+    Args:
+        mock: the mock's namespace.
+    """
+    source = mock.StarTracker(timeTag=2**40 + 7, qInrtl2Case=np.array([0.5, -0.5, 0.25, 1.0]))
+    write = converter(mock.StarTracker, STSensorMsgPayload)
+
+    payload = write(source)
+    source.qInrtl2Case[...] = 0.0
+
+    assert type(payload) is STSensorMsgPayload
+    assert payload.timeTag == 2**40 + 7
+    assert list(payload.qInrtl2Case) == [0.5, -0.5, 0.25, 1.0]
+    assert write(source) is not payload
+
+
 def test_a_converter_is_planned_once_per_source_and_target():
     """The same source and target give the same converter."""
     bus, icd = named("Bus.ImuSensorMsg"), named("Gnc.ImuReading")

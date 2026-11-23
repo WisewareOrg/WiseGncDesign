@@ -1,80 +1,46 @@
 """The Python build's RIO: each sensor role's Basilisk message read as its bus struct, and back.
 
-A message is read with `fsw.codegen.fpp_types.converter` into a fresh, read-only copy: the host's
-payload is a live view of its message, which the next dynamics step overwrites, and CDH-in passes
-the copy's arrays to GNC uncopied. Its layout is read through `Basilisk.architecture.messaging`'s
-class of its name, which declares it: SWIG can return the payload as another module's class of that
-name, such as a simulation module's once that module is imported, which does not. Each actuator
-role's bus struct is written as a fresh payload of the class `fsw.payloads.payload_type` gives, each
-field from the bus member of its name, ignoring case.
+Each role's reading is planned once, from the payload class its bus struct mirrors by
+`fsw.payloads.payload_type`, through `fsw.codegen.fpp_types.converter`. RIO-in reads a payload
+into a fresh, read-only copy: the host's payload is a live view of its message, which the next
+dynamics step overwrites, and CDH-in passes the copy's arrays to GNC uncopied. SWIG can return the
+payload as another module's class of the same name, such as a simulation module's once that module
+is imported, a proxy of the same C struct, which reads alike. RIO-out writes each actuator role's
+bus struct into a fresh payload of that class, each field from the bus member of its name, ignoring
+case.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable
 from typing import Any
-
-import numpy as np
-from Basilisk.architecture import messaging
 
 from fsw.codegen.fpp_types import converter
 from fsw.payloads import payload_type
 from fsw.python.cdh.inputs import Pair
 
-__all__ = ["commands", "read"]
+__all__ = ["reader", "writer"]
 
 
-def read(pairs: Sequence[Pair], messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
-    """Each paired role's message, as its bus struct.
-
-    Args:
-        pairs: the pairs.
-        messages_by_role: each role's Basilisk message payload, as the host gives it; a role no
-            pair names is not read.
-
-    Returns:
-        Each bus struct's tuple, by its role, its arrays fresh and read-only: CDH-in passes them to
-        GNC uncopied.
-
-    Raises:
-        KeyError: a paired role has no message, naming it.
-    """
-    read_ = {}
-    for pair in pairs:
-        if pair.role not in messages_by_role:
-            raise KeyError(
-                f"the configuration takes the role {pair.role}, which the vehicle's messages"
-                f" {sorted(messages_by_role)} lack"
-            )
-        message = messages_by_role[pair.role]
-        read_[pair.role] = converter(getattr(messaging, type(message).__name__), pair.bus)(message)
-    return read_
-
-
-def commands(pairs: Sequence[Pair], buses: Mapping[str, Any]) -> dict[str, Any]:
-    """Each commanded actuator role's bus struct, as a fresh payload of the message it mirrors.
+def reader(pair: Pair) -> Callable[[Any], Any]:
+    """RIO-in for one sensor role: its message's payload, read as its bus struct.
 
     Args:
-        pairs: the actuator roles' pairs.
-        buses: each commanded role's bus struct's tuple, as CDH-out gives them; a role absent is
-            not commanded this tick.
+        pair: the role's pair.
 
     Returns:
-        Each role's `messaging.<Name>Payload`, by the role, for the roles commanded.
+        A function of the role's payload, as the host gives it, returning its bus struct's tuple,
+        its arrays fresh and read-only.
     """
-    return {pair.role: _payload(buses[pair.role]) for pair in pairs if pair.role in buses}
+    return converter(payload_type(pair.bus.__qualname__), pair.bus)
 
 
-def _payload(bus: Any) -> Any:
-    """A bus struct as a fresh payload of the Basilisk message it mirrors.
+def writer(pair: Pair) -> Callable[[Any], Any]:
+    """RIO-out for one actuator role: its bus struct, written as a fresh payload of its message.
 
     Args:
-        bus: the bus struct's tuple, `Bus.<Name>`.
+        pair: the role's pair.
 
     Returns:
-        The `messaging.<Name>Payload` it mirrors, by `fsw.payloads.payload_type`, each field the
-        bus member of its name, ignoring case.
+        A function of the role's bus struct's tuple, as CDH-out gives it, returning a fresh
+        `messaging.<Name>Payload` of the message it mirrors.
     """
-    payload = payload_type(type(bus).__qualname__)()
-    fields = {name.lower(): name for name in type(payload).__dtype__.names}
-    for member, value in zip(bus._fields, bus, strict=True):
-        setattr(payload, fields[member.lower()], np.asarray(value).tolist())
-    return payload
+    return converter(pair.bus, payload_type(pair.bus.__qualname__))

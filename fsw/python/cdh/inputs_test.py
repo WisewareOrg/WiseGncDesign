@@ -16,7 +16,7 @@ from fsw.codegen.deployment import (
     contract_model,
 )
 from fsw.codegen.roles import roles, taken
-from fsw.python.cdh.inputs import convert, pairings
+from fsw.python.cdh.inputs import converter, pairings
 
 ROLES = [role for role in roles(contract_model()) if role.sensor]
 """Every sensor role of the contract's `Cdh.BusConverter`."""
@@ -64,11 +64,9 @@ def test_each_role_s_bus_struct_is_converted_to_its_icd_struct_at_its_gnc_port(
         for pair, role in zip(pairs, ROLES, strict=True)
     }
 
-    converted = convert(pairs, messages)
-
-    assert list(converted) == [pair.port for pair in pairs]
     for pair, role in zip(pairs, ROLES, strict=True):
-        reading = converted[pair.port]
+        reading = converter(pair)(messages[pair.role])
+
         assert isinstance(reading, pair.icd), pair.port
         holds(reading, bus_messages[role.bus].values)
         bus = messages[pair.role]

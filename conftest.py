@@ -360,7 +360,7 @@ def python_command() -> Callable[[Role, Any], Any]:
         `messaging.<Name>Payload` the Python build's CDH-out and RIO-out make of it.
     """
     from fsw.python.cdh import outputs
-    from fsw.python.rio.messages import commands
+    from fsw.python.rio.messages import writer
 
     def command(role: Role, icd_value: Any) -> Any:
         """The role's command, as the Python build makes it.
@@ -372,8 +372,8 @@ def python_command() -> Callable[[Role, Any], Any]:
         Returns:
             The payload.
         """
-        pairs = outputs.pairings([role])
-        return commands(pairs, outputs.convert(pairs, {role.output: icd_value}))[role.role]
+        [pair] = outputs.pairings([role])
+        return writer(pair)(outputs.converter(pair)(icd_value))
 
     return command
 

@@ -19,6 +19,7 @@ from fsw.codegen import fpp_types
 from fsw.codegen.deployment import CONTRACT, Contract, configuration_model, tick_period
 from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.roles import taken
+from fsw.payloads import payload_type
 from fsw.python.cdh import commands, inputs, outputs, parameters
 from fsw.python.cdh.ground_link import GroundLink
 from fsw.python.gnc.partition import GncPartition
@@ -69,8 +70,15 @@ class FrameRunner:
         self._configuration = configuration
         self._gnc = GncPartition(model, configuration, components)
         roles = taken(model, configuration)
-        self._sensors = inputs.pairings([role for role in roles if role.sensor])
-        self._actuators = outputs.pairings([role for role in roles if not role.sensor])
+        sensors = inputs.pairings([role for role in roles if role.sensor])
+        self._inputs = tuple(
+            (pair.role, pair.port, messages.reader(pair), inputs.converter(pair), payload_type(pair.bus.__qualname__))
+            for pair in sensors
+        )
+        self._outputs = tuple(
+            (pair.role, pair.port, outputs.converter(pair), messages.writer(pair))
+            for pair in outputs.pairings([role for role in roles if not role.sensor])
+        )
         self._dividers = dividers(model, self._gnc.rate_groups)
         self._prm_path = Path(prm_path)
         self.period_s = tick_period(configuration, contract=contract)
@@ -94,6 +102,7 @@ class FrameRunner:
         )
         self._link = GroundLink(commands.handlers(self.dictionary, self._gnc.algorithms))
         self._driver = RateGroupDriver(self._dividers)
+        self._checked = False
 
     def tick(self, t_ns: int, messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
         """Runs one frame.
@@ -107,15 +116,39 @@ class FrameRunner:
             The actuator commands, by role: each a fresh `messaging.<Name>Payload` of the message
             the role's bus struct mirrors, for each actuator output GNC wrote this frame.
         """
+        if not self._checked:
+            self._check(messages_by_role)
         self._link.run_commands(t_ns)
-        read = messages.read(self._sensors, messages_by_role)
-        for port, value in inputs.convert(self._sensors, read).items():
-            self._gnc.write(port, value)
-        t = t_ns / _NANOSECONDS_PER_SECOND
-        frame = self._gnc.run(t, self._driver.tick())
+        for role, port, read, convert, _ in self._inputs:
+            self._gnc.write(port, convert(read(messages_by_role[role])))
+        frame = self._gnc.run(t_ns / _NANOSECONDS_PER_SECOND, self._driver.tick())
         for member in frame.telemetry:
             self._link.log(member.instance, member.telemetry, t_ns)
-        return messages.commands(self._actuators, outputs.convert(self._actuators, frame.outputs))
+        written = frame.outputs
+        return {role: write(convert(written[port])) for role, port, convert, write in self._outputs if port in written}
+
+    def _check(self, messages_by_role: Mapping[str, Any]) -> None:
+        """Checks, at the first tick after a boot, that each sensor role's message is its bus struct's.
+
+        Args:
+            messages_by_role: each role's Basilisk message payload.
+
+        Raises:
+            KeyError: a sensor role has no message, naming it.
+            TypeError: a role's payload is not of the class its bus struct mirrors, naming both.
+        """
+        for role, _, _, _, payload in self._inputs:
+            if role not in messages_by_role:
+                raise KeyError(
+                    f"the configuration takes the role {role}, which the vehicle's messages"
+                    f" {sorted(messages_by_role)} lack"
+                )
+            given = type(messages_by_role[role]).__name__
+            if given != payload.__name__:
+                raise TypeError(
+                    f"the role {role}'s message is a {given}, but its bus struct mirrors {payload.__name__}"
+                )
+        self._checked = True
 
     def uplink(self, name: str, args: Mapping[str, Any], context: int) -> None:
         """Queues a command at the ground link, which runs it at the next tick.

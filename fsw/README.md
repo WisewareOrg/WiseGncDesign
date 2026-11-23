@@ -28,13 +28,13 @@ in `fsw/python/<partition>/`, and FPP gives each its structure:
   frame, a fresh `messaging.<Name>Payload` of the message its bus struct mirrors; a role GNC did not
   write is absent, and keeps its last command on the vehicle.
 - **CDH** dispatches each command by name to its algorithm's method of that name, with F´'s
-  responses, converts each sensor role's bus struct to its GNC input, passing RIO's read-only arrays
-  through uncopied, and each actuator role's GNC output to its bus struct, logs every telemetry
-  write tagged with the tick's time, and reads each algorithm's parameters from the case's record at
-  boot. Its `GroundLink` holds what the ground uplinks and drains, and the frame runner presents the
-  radio edge through it. `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp` pairs each role, as its
-  annotation states, and a configuration takes the roles its sub-topology exposes
-  (`fsw.codegen.roles.taken`).
+  responses, converts each sensor role's bus struct to its GNC input and each actuator role's GNC
+  output to its bus struct, passing the arrays through uncopied, since RIO copies each way, logs
+  every telemetry write tagged with the tick's time, and reads each algorithm's parameters from the
+  case's record at boot. Its `GroundLink` holds what the ground uplinks and drains, and the frame
+  runner presents the radio edge through it. `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp`
+  pairs each role, as its annotation states, and a configuration takes the roles its sub-topology
+  exposes (`fsw.codegen.roles.taken`).
 - **GNC** runs the sub-topology's algorithms in its rate groups' order, routing each output to the
   input it is wired to, and returns what its members wrote on the sub-topology's output ports.
 

@@ -22,6 +22,7 @@ group in FPP's order. A parameters tuple's `component` is its component's qualif
 
 import ctypes
 import functools
+import operator
 from collections import namedtuple
 from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
@@ -52,51 +53,44 @@ _LOADED: set[Contract] = set()
 
 @functools.cache
 def converter(source: type[Any], target: type[Any], *, copy: bool = True) -> Callable[[Any], Any]:
-    """A function converting a `source` value to a `target` tuple, each field taken by name.
+    """A function converting a `source` value to a `target` value, each field taken by name.
 
     Fields are taken by `fsw.codegen.fields.plan`'s rule, and a conversion is planned once per
-    argument set. From a struct's tuple, an array field becomes a fresh array of the FPP type, or,
-    with `copy` false, is the source's array itself; a scalar or an enum name passes as it is. A
-    Basilisk payload is read as a bus driver reads a buffer: its C struct is copied once and viewed
-    as its `__dtype__`, each array field a read-only array over that copy and each scalar a number.
+    argument set, so a call does no lookup. Between structs' tuples, an array field becomes a fresh
+    array of the FPP type, or, with `copy` false, is the source's array itself; a scalar or an enum
+    name passes as it is. A Basilisk payload is read as a bus driver reads a buffer: its C struct is
+    copied once and viewed as its `__dtype__`, each array field a read-only array over that copy and
+    each scalar a number. A struct's tuple is written to a fresh payload the same way, each field
+    copied into the payload's C struct at its `__dtype__` offset.
 
     Args:
         source: a struct's tuple, or a Basilisk message payload's type.
-        target: a struct's tuple.
+        target: a struct's tuple, or, from a struct's tuple, a Basilisk message payload's type.
         copy: false to pass a struct's arrays through uncopied; a payload's are always copied.
 
     Returns:
         The converter.
 
     Raises:
-        ValueError: `target` is not a struct's tuple, or a field breaks the rule, naming it.
+        ValueError: `target` is neither, or a field breaks the rule, naming it.
     """
     if target not in _STRUCTS:
+        if source in _STRUCTS and hasattr(target, "__dtype__"):
+            return _payload_writer(source, target)
         raise ValueError(f"{target.__name__} is not a struct's tuple")
     struct, types = _STRUCTS[target]
     planned = plan(struct, types, _source_forms(source), source.__name__)
     if source not in _STRUCTS:
-        return _payload_converter(source, target, planned)
-    steps = [
-        (name, functools.partial(np.array, dtype=element) if shape and copy else _same)
-        for _, name, (shape, element) in planned
-    ]
-
-    def convert(value: Any) -> Any:
-        """The `target` tuple of a `source` value.
-
-        Args:
-            value: the `source` value.
-
-        Returns:
-            The tuple.
-        """
-        return target._make([to(getattr(value, field)) for field, to in steps])
-
-    return convert
+        return _payload_reader(source, target, planned)
+    indices = [source._fields.index(name) for _, name, _ in planned]
+    pick = operator.itemgetter(*indices) if len(indices) > 1 else lambda value: (value[indices[0]],)
+    if not copy:
+        return lambda value: target._make(pick(value))
+    steps = [functools.partial(np.array, dtype=element) if shape else _same for _, _, (shape, element) in planned]
+    return lambda value: target._make([to(field) for to, field in zip(steps, pick(value), strict=True)])
 
 
-def _payload_converter(
+def _payload_reader(
     source: type[Any], target: type[Any], planned: list[tuple[Member, str, Form]]
 ) -> Callable[[Any], Any]:
     """A converter from a Basilisk payload, read from one copy of its memory as its `__dtype__`.
@@ -123,6 +117,38 @@ def _payload_converter(
         """
         record = np.frombuffer(ctypes.string_at(int(value.this), layout.itemsize), layout)[0]
         return target._make([record[name] if array else record[name].item() for name, array in fields])
+
+    return convert
+
+
+def _payload_writer(source: type[Any], target: type[Any]) -> Callable[[Any], Any]:
+    """A converter from a struct's tuple to a fresh Basilisk payload, written into its memory.
+
+    Args:
+        source: a struct's tuple.
+        target: the Basilisk message payload's type.
+
+    Returns:
+        The converter.
+    """
+    struct, types = _STRUCTS[source]
+    layout = target.__dtype__
+    fields = [name for _, name, _ in plan(struct, types, _source_forms(target), target.__name__)]
+
+    def convert(value: Any) -> Any:
+        """A fresh `target` payload holding a `source` tuple.
+
+        Args:
+            value: the tuple.
+
+        Returns:
+            The payload.
+        """
+        payload = target()
+        record = np.frombuffer((ctypes.c_char * layout.itemsize).from_address(int(payload.this)), layout)
+        for name, field in zip(fields, value, strict=True):
+            record[name][0] = field
+        return payload
 
     return convert
 
