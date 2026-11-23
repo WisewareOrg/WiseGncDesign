@@ -23,10 +23,12 @@ in `fsw/python/<partition>/`, and FPP gives each its structure:
   `tickPeriod`, which `fsw.codegen.deployment.tick_period` reads, and `platform.rates` runs each
   rate group `<stem>RateGroup` every `<stem>Divider`-th tick, counting ticks as F´'s
   `Svc.RateGroupDriver` does.
-- **RIO** reads each sensor role's message as its bus struct, copying it within the tick into
-  read-only arrays, and returns the actuator commands: for each actuator role GNC wrote in the
-  frame, a fresh `messaging.<Name>Payload` of the message its bus struct mirrors; a role GNC did not
-  write is absent, and keeps its last command on the vehicle.
+- **RIO** reads each sensor role's message as its bus struct, copying it each tick into a buffer
+  bound to the message at the first tick, whose read-only arrays GNC gets: an input is valid for
+  its tick, so GNC copies what it keeps. It returns the actuator commands: for each actuator role
+  GNC wrote in the frame, the role's `messaging.<Name>Payload` of the message its bus struct
+  mirrors, made once and written each tick; a role GNC did not write is absent, and keeps its last
+  command on the vehicle. Neither direction allocates per tick.
 - **CDH** dispatches each command by name to its algorithm's method of that name, with F´'s
   responses, converts each sensor role's bus struct to its GNC input and each actuator role's GNC
   output to its bus struct, passing the arrays through uncopied, logs every telemetry write tagged
