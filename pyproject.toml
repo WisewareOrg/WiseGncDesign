@@ -40,12 +40,12 @@ members = ["fsw/fprime"]
 
 [tool.uv.sources]
 # The wise-ci commit CI's `check-python` and `check-python-floor` use.
-check-python = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-python", rev = "d2483ccf39ccce58ccfbaa75d3d1c6466ff6701e" }
+check-python = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-python", rev = "491858538bf01b19cfb86aab1195ad3822b59903" }
 # The wise-ci commit docs/requirements pins, so ty resolves its validator's import.
 check-reqs = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-reqs", rev = "6f8840aacdd7eb0c431af64f7eaa7bf326b38e29" }
 fprime-toolchain = { workspace = true }
 # The WiseDynamics commit this repository's scenario tests verify against.
-wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "1fa02686fd94ffef929625ab06d1d0952556ef49" }
+wise-dynamics = { git = "https://github.com/WisewareOrg/WiseDynamics", rev = "91a2aee3dbd0239804fd0ac37bab3c8ea54062e2" }
 
 [build-system]
 requires = ["hatchling"]
