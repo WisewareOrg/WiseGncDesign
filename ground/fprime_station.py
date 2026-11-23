@@ -126,8 +126,8 @@ class FprimeStation:
 
         Each packet is an F´ `TlmPacket`: a `FwPacketDescriptorType` holding `FW_PACKET_TELEM`, then
         entries of a `FwChanIdType`, an `Fw.TimeValue` (time base, time context, seconds and microseconds)
-        and the value's bytes, whose size the
-        channel's type gives. Every entry is kept, in the order downlinked.
+        and the value's bytes, whose size the channel's type gives. Every entry is kept, in the order
+        downlinked.
 
         Args:
             downlinks: as `telemetry` gave them, oldest first.
