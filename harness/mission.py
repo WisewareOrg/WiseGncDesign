@@ -19,7 +19,6 @@ import os
 import re
 import sys
 import tempfile
-import weakref
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -487,16 +486,9 @@ def _scenario_test(mission: Mission, scenario_id: str) -> _ScenarioTest:
             radio = FprimeStation(fsw, fsw.dictionary)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
         host = FswHost(fsw, sim_scenario.vehicle)
-        # The simulation holds the ground, so a strong reference back would keep every case.
-        scenario = weakref.ref(sim_scenario)
-
-        def stop() -> None:
-            """Stops the simulation's ground, which the simulation still holds when the ground calls this."""
-            alive = scenario()
-            assert alive is not None, "the simulation holds the ground that stops it"
-            alive.stop_ground()
-
-        ground = Ground(definition, radio, sim_scenario.vehicle.tracking(), stop, period_s=ground_period_s)
+        ground = Ground(
+            definition, radio, sim_scenario.vehicle.tracking(), sim_scenario.stop_ground, period_s=ground_period_s
+        )
         try:
             datasets = sim_scenario.run(host, fsw_fields={}, duration_s=sim_duration_s, ground=ground)
         except BaseException:
