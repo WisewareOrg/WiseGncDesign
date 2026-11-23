@@ -17,7 +17,7 @@ import numpy as np
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import CONTRACT, Contract, configuration_model, tick_period
-from fsw.codegen.dictionary import Dictionary
+from fsw.codegen.dictionary import ChannelWrites, Dictionary
 from fsw.codegen.roles import taken
 from fsw.python.cdh import commands, inputs, outputs, parameters
 from fsw.python.cdh.ground_link import GroundLink
@@ -224,7 +224,7 @@ class FrameRunner:
 
     def decode(
         self, downlinks: Sequence[list[Entry]], names: Collection[str] | None = None
-    ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    ) -> dict[str, ChannelWrites]:
         """Downlinks as each channel's values, each channel packed in one batch.
 
         Every write is kept, in the order written.
@@ -234,8 +234,8 @@ class FrameRunner:
             names: the channels to decode, `<instance>.<channel>`; every channel when `None`.
 
         Returns:
-            For each channel downlinked, `<instance>.<channel>` to its time tags in ns as int64 and
-            its values, as `Channel.pack_many` gives them, keyed in the order of first write.
+            For each channel downlinked, `<instance>.<channel>` to its `ChannelWrites`: time tags in ns as
+            int64 and values, as `Channel.pack_many` gives them, keyed in the order of first write.
         """
         merged: dict[str, tuple[list[int], list[Any]]] = {}
         for downlink in downlinks:
@@ -246,6 +246,6 @@ class FrameRunner:
                         times.append(t_ns)
                         written.append(value)
         return {
-            channel: (np.array(times, dtype=np.int64), self.dictionary.channel(channel).pack_many(written))
+            channel: ChannelWrites(np.array(times, dtype=np.int64), self.dictionary.channel(channel).pack_many(written))
             for channel, (times, written) in merged.items()
         }

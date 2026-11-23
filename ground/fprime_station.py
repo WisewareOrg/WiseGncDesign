@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from fsw.codegen.dictionary import Dictionary
+from fsw.codegen.dictionary import ChannelWrites, Dictionary
 
 __all__ = ["FprimeStation"]
 
@@ -123,7 +123,7 @@ class FprimeStation:
 
     def decode(
         self, downlinks: Sequence[tuple[bytes, bytes]], names: Collection[str] | None = None
-    ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    ) -> dict[str, ChannelWrites]:
         """Downlinks as each channel's values, every channel decoded in one batch.
 
         Each packet is an F´ `TlmPacket`: a `FwPacketDescriptorType` holding `FW_PACKET_TELEM`, then
@@ -136,8 +136,8 @@ class FprimeStation:
             names: the channels to decode, `<instance>.<channel>`; every channel when `None`.
 
         Returns:
-            For each channel downlinked, `<instance>.<channel>` to its F´ time tags in ns as int64,
-            oldest first, and its values, as `Channel.from_raw` gives them.
+            For each channel downlinked, `<instance>.<channel>` to its `ChannelWrites`: F´ time tags in
+            ns as int64, oldest first, and values, as `Channel.from_raw` gives them.
 
         Raises:
             ValueError: for bytes that are not `TlmPacket`s: a packet whose descriptor is not
@@ -181,7 +181,7 @@ class FprimeStation:
             size = channel.type.dtype.itemsize
             value_bytes = data[(position[mine] + self._entry_header)[:, None] + np.arange(size)]
             raw = np.frombuffer(np.ascontiguousarray(value_bytes).tobytes(), channel.type.dtype)
-            decoded[channel.name] = (t_ns[mine], channel.from_raw(raw))
+            decoded[channel.name] = ChannelWrites(t_ns[mine], channel.from_raw(raw))
         return decoded
 
     def _entries(self, data: np.ndarray, cursors: np.ndarray, ends: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

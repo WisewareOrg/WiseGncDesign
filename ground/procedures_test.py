@@ -81,7 +81,7 @@ class StubEdge:
             names: the channels to decode; every channel when `None`.
 
         Returns:
-            For each channel downlinked, its time tags in ns and its values.
+            For each channel downlinked, its `ChannelWrites`.
         """
         self.drains_decoded += len(downlinks)
         merged: dict[str, tuple[list[int], list[Any]]] = {}

@@ -3,9 +3,7 @@
 from collections.abc import Collection, Mapping, Sequence
 from typing import Any, Protocol
 
-import numpy as np
-
-from fsw.codegen.dictionary import Dictionary
+from fsw.codegen.dictionary import ChannelWrites, Dictionary
 
 __all__ = ["RadioEdge"]
 
@@ -58,9 +56,7 @@ class RadioEdge(Protocol):
         """
         ...
 
-    def decode(
-        self, downlinks: Sequence[Any], names: Collection[str] | None = None
-    ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    def decode(self, downlinks: Sequence[Any], names: Collection[str] | None = None) -> dict[str, ChannelWrites]:
         """Downlinks as each channel's values, each channel decoded in one batch.
 
         Every write is kept, in the order written.
@@ -70,7 +66,7 @@ class RadioEdge(Protocol):
             names: the channels to decode, `<instance>.<channel>`; every channel when `None`.
 
         Returns:
-            For each channel downlinked, `<instance>.<channel>` to its flight software time tags in
-            ns as int64, oldest first, and its values, as `Channel.from_raw` gives them.
+            For each channel downlinked, `<instance>.<channel>` to its `ChannelWrites`: flight software
+            time tags in ns as int64, oldest first, and values, as `Channel.from_raw` gives them.
         """
         ...

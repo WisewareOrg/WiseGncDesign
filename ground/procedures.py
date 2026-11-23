@@ -234,7 +234,7 @@ class Ground(sysModel.SysModel):
         for downlink in reversed(self._downlinks):
             decoded = self._edge.decode([downlink], [channel.name])
             if channel.name in decoded:
-                return decoded[channel.name][1][-1]
+                return decoded[channel.name].values[-1]
         return None
 
     def truth(self) -> dict[str, np.ndarray]:
