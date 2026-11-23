@@ -83,8 +83,10 @@ def test_a_command_the_station_cannot_encode_is_refused_naming_what(
         mock.encode_command(name, args)
 
 
-def _packet(dictionary: Dictionary, entries: list[tuple[str, tuple[int, int], Any]], descriptor: str = "FW_PACKET_TELEM") -> bytes:
-    """An F´ `TlmPacket` as `Svc.TlmChan` sends it.
+def _packet(
+    dictionary: Dictionary, entries: list[tuple[str, tuple[int, int], Any]], descriptor: str = "FW_PACKET_TELEM"
+) -> bytes:
+    """An F´ `TlmPacket`, as the deployment's ground link downlinks it.
 
     Args:
         dictionary: the dictionary that types the packet's fields and its channels.
@@ -156,6 +158,42 @@ def test_telemetry_packets_become_each_channel_s_tags_and_values_in_one_batch(
     assert decoded["mock.mode"][1].tolist() == ["fast"]
     assert decoded["mock.gain"][1].tolist() == [float(np.float32(0.1))]
     np.testing.assert_array_equal(decoded["mock.mounting"][1], [np.arange(9.0).reshape(3, 3)])
+
+
+def test_a_channel_written_twice_with_one_tag_keeps_both_values_in_order(
+    mock: FprimeStation, mock_dictionary: Dictionary
+):
+    """Two entries of one channel at one time tag, in one packet or two, both come back in order.
+
+    Args:
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
+    """
+    first = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5), ("mock.gain", (1, 0), 0.25)])
+    second = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.125)])
+
+    times, gains = mock.decode([_downlink([first, second])])["mock.gain"]
+
+    assert times.tolist() == [1_000_000_000] * 3
+    assert gains.tolist() == [0.5, 0.25, 0.125]
+
+
+@pytest.mark.parametrize("descriptor", ["FW_PACKET_LOG", "FW_PACKET_COMMAND", "FW_PACKET_FILE"])
+def test_a_downlinked_packet_that_is_not_telemetry_is_refused(
+    mock: FprimeStation, mock_dictionary: Dictionary, descriptor: str
+):
+    """A packet whose descriptor is not `FW_PACKET_TELEM` raises `ValueError`, among good packets too.
+
+    Args:
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
+        descriptor: the `ComCfg.Apid` constant the bad packet holds.
+    """
+    good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
+    bad = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)], descriptor)
+
+    with pytest.raises(ValueError, match="FW_PACKET_TELEM"):
+        mock.decode([_downlink([good, bad])])
 
 
 def test_decode_takes_the_named_channels_only(mock: FprimeStation, mock_dictionary: Dictionary):

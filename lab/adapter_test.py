@@ -313,9 +313,7 @@ def test_the_telemetry_is_the_downlink_of_the_ticks_drained_since_the_last_call(
     assert station.decode([adapter.telemetry()]) == {}
 
 
-def test_a_boot_drops_the_downlink_an_earlier_copy_left_undrained(
-    messages_by_role: dict[str, Any], adapter: Adapter
-):
+def test_a_boot_drops_the_downlink_an_earlier_copy_left_undrained(messages_by_role: dict[str, Any], adapter: Adapter):
     """A power cycle keeps no packet of the copy before it.
 
     The first tick's packets are drained, which shows a tick downlinks; the second tick's are left

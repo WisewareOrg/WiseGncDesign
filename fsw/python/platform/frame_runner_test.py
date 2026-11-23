@@ -141,12 +141,12 @@ def test_commands_run_by_name_before_the_step_and_answer_with_f_prime_s_response
     ]
     assert runner.responses() == []
     times, levels = runner.decode([runner.telemetry()], ["source.level"])["source.level"]
-    assert times.tolist() == [NS // 2]
-    assert levels.tolist() == [1.5]
+    assert times.tolist() == [NS // 2, NS // 2]
+    assert levels.tolist() == [1.5, 1.5]
 
 
 def test_the_telemetry_decodes_to_each_channel_s_time_tags_and_values(runner: FrameRunner):
-    """Each tick's channels decode to int64 time tags in ns and values, per channel, in order.
+    """Each tick's writes decode to int64 time tags in ns and values, per channel, in order.
 
     Args:
         runner: the frame runner.
@@ -160,18 +160,18 @@ def test_the_telemetry_decodes_to_each_channel_s_time_tags_and_values(runner: Fr
     assert set(decoded) == {"source.level", "sink.received"}
     times, levels = decoded["source.level"]
     assert times.dtype == np.int64
-    assert times.tolist() == [NS // 2, NS]
-    assert levels.tolist() == [2.0, 2.0]
+    assert times.tolist() == [NS // 2, NS // 2, NS]
+    assert levels.tolist() == [2.0, 2.0, 2.0]
     [t_ns], received = decoded["sink.received"]
     assert t_ns in (NS // 2, NS)
     np.testing.assert_array_equal(received, [2.5 * 2.0 + t_ns / NS + 0.25])
     assert runner.decode([runner.telemetry()]) == {}
 
 
-def test_a_channel_written_twice_in_a_frame_decodes_once_with_its_last_value_and_the_frame_s_tag(runner: FrameRunner):
-    """Three writes of one channel in a frame, two commands and the step, come down as the last.
+def test_a_channel_written_twice_in_a_frame_keeps_both_writes_in_write_order(runner: FrameRunner):
+    """Two commands and the step write one channel three times in a frame; all three come down.
 
-    The next frame's commands and step write it again, so each frame keeps its own last write.
+    Each write carries its frame's time tag, and the next frame's writes follow.
 
     Args:
         runner: the frame runner.
@@ -184,8 +184,8 @@ def test_a_channel_written_twice_in_a_frame_decodes_once_with_its_last_value_and
 
     times, levels = runner.decode([runner.telemetry()])["source.level"]
 
-    assert times.tolist() == [NS // 2, NS]
-    assert levels.tolist() == [2.0, 3.0]
+    assert times.tolist() == [NS // 2] * 3 + [NS] * 2
+    assert levels.tolist() == [1.0, 2.0, 2.0, 3.0, 3.0]
 
 
 def test_decode_takes_the_named_channels_and_several_drains_in_order(runner: FrameRunner):
@@ -206,8 +206,8 @@ def test_decode_takes_the_named_channels_and_several_drains_in_order(runner: Fra
 
     assert list(decoded) == ["source.level"]
     times, levels = decoded["source.level"]
-    assert times.tolist() == [NS // 2, NS]
-    assert levels.tolist() == [1.0, 4.0]
+    assert times.tolist() == [NS // 2, NS // 2, NS, NS]
+    assert levels.tolist() == [1.0, 1.0, 4.0, 4.0]
     assert runner.decode([empty, empty]) == {}
     assert runner.decode([]) == {}
 

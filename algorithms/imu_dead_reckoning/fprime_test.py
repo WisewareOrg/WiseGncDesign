@@ -159,6 +159,31 @@ def test_initialization_writes_the_initial_quaternion_with_w_nonnegative(
     np.testing.assert_allclose(attitude, Q0, rtol=0, atol=1e-15)
 
 
+def test_a_state_commanded_and_stepped_in_one_frame_writes_both_nav_states(
+    boot: Callable[..., tuple[ModuleType, FprimeStation]],
+    decoded: Callable[[Any], list[tuple[str, int, Any]]],
+    imu_bus: Callable[[Any, Any], list[tuple[int, bytes]]],
+    wire: Callable[..., Callable[..., int]],
+):
+    """The command's `initialized` and the step's `propagated` come down, in that order, at one tag.
+
+    A channel written twice in a frame keeps both writes.
+
+    Args:
+        boot: boots the configuration on the parameters given.
+        decoded: drains the station's telemetry as values.
+        imu_bus: the IMU message's bus for a reading.
+        wire: wires the copy to the bus.
+    """
+    fsw, station = boot(CONFIGURATION, {NAV_INSTANCE: NAV})
+    station.uplink("nav.initNavState", _state(0.0), 1)
+    wire(fsw, CONFIGURATION, imu_bus(np.zeros(3), np.zeros(3)))(NS)
+
+    states = [(t, v) for n, t, v in decoded(station) if n == "nav.navState"]
+
+    assert states == [(NS, "initialized"), (NS, "propagated")]
+
+
 @pytest.mark.parametrize(
     ("rate_rad_s", "step_ns", "epoch_s", "count", "seed", "nav_parameters"),
     [
