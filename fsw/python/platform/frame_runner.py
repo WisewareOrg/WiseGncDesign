@@ -192,7 +192,6 @@ class FrameRunner:
         frame = self._gnc.run(t_ns / _NANOSECONDS_PER_SECOND, self._driver.tick())
         for member in frame.telemetry:
             self._link.log(member.instance, member.telemetry, t_ns)
-        self._link.send(t_ns)
         written = frame.outputs
         return {role: write(convert(written[port])) for role, port, convert, write in self._outputs if port in written}
 
@@ -214,8 +213,8 @@ class FrameRunner:
         """
         return self._link.responses()
 
-    def telemetry(self) -> dict[str, tuple[list[int], list[Any]]]:
-        """The values downlinked since the last call, as the link drains them.
+    def telemetry(self) -> list[tuple[str, int, Any]]:
+        """Every telemetry write since the last call, in the order written.
 
         Returns:
             As `GroundLink.telemetry` gives them.
@@ -223,9 +222,12 @@ class FrameRunner:
         return self._link.telemetry()
 
     def decode(
-        self, downlinks: Sequence[dict[str, tuple[list[int], list[Any]]]], names: Collection[str] | None = None
+        self, downlinks: Sequence[list[tuple[str, int, Any]]], names: Collection[str] | None = None
     ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
         """Downlinks as each channel's values, each channel packed in one batch.
+
+        A channel's writes are tagged with their frame's time, so a channel written twice in a frame
+        keeps only its last write: the one F´'s telemetry database would send down.
 
         Args:
             downlinks: as `telemetry` gave them, oldest first.
@@ -237,12 +239,15 @@ class FrameRunner:
         """
         merged: dict[str, tuple[list[int], list[Any]]] = {}
         for downlink in downlinks:
-            for channel, (times, values) in downlink.items():
+            for channel, t_ns, value in downlink:
                 if names is None or channel in names:
-                    into = merged.setdefault(channel, ([], []))
-                    into[0].extend(times)
-                    into[1].extend(values)
-        return {
-            channel: (np.array(times, dtype=np.int64), self.dictionary.channel(channel).pack_many(values))
-            for channel, (times, values) in merged.items()
-        }
+                    times, values = merged.setdefault(channel, ([], []))
+                    times.append(t_ns)
+                    values.append(value)
+        decoded = {}
+        for channel, (times, values) in merged.items():
+            t_ns = np.array(times, dtype=np.int64)
+            last = np.append(t_ns[1:] != t_ns[:-1], True)
+            kept = [value for value, keep in zip(values, last.tolist(), strict=True) if keep]
+            decoded[channel] = (t_ns[last], self.dictionary.channel(channel).pack_many(kept))
+        return decoded
