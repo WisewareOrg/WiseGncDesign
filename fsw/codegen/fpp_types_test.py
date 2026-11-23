@@ -13,6 +13,7 @@ import numba
 import numpy as np
 import pytest
 from Basilisk.architecture import messaging
+from Basilisk.architecture.messaging.STSensorMsgPayload import STSensorMsgPayload
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import (
@@ -52,6 +53,11 @@ module Mock {
 
   struct QuaternionRate {
     angVelPlatform: [4] F64
+  }
+
+  struct StarTracker {
+    timeTag: U64
+    qInrtl2Case: [4] F64
   }
 
   port ReadingPort(reading: Reading)
@@ -259,6 +265,28 @@ def test_a_converter_copies_arrays_and_passes_scalars_and_enum_names(mock: Simpl
     assert shaped.rows.dtype == np.dtype("float64")
     assert shaped.counts.dtype == np.dtype("uint16")
     assert shaped.counts.tolist() == [7, 8]
+
+
+def test_a_basilisk_payload_converts_to_read_only_arrays_and_plain_scalars(mock: SimpleNamespace):
+    """A payload is read from one copy of its memory: arrays read-only, a scalar a plain number.
+
+    `STSensorMsgPayload` carries a scalar, `timeTag`, beside an array, `qInrtl2Case`.
+
+    Args:
+        mock: the mock's namespace.
+    """
+    payload = STSensorMsgPayload()
+    payload.timeTag = 2**40 + 7
+    payload.qInrtl2Case = [0.5, -0.5, 0.25, 1.0]
+
+    converted = converter(STSensorMsgPayload, mock.StarTracker)(payload)
+    payload.qInrtl2Case = [0.0, 0.0, 0.0, 0.0]
+
+    assert converted.timeTag == 2**40 + 7
+    assert type(converted.timeTag) is int
+    assert converted.qInrtl2Case.tolist() == [0.5, -0.5, 0.25, 1.0]
+    with pytest.raises(ValueError, match="read-only"):
+        converted.qInrtl2Case[0] = 1.0
 
 
 def test_a_converter_is_planned_once_per_source_and_target():

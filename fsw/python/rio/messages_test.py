@@ -97,7 +97,8 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
 
     The Basilisk fact it rests on: once a simulation module that declares a message's payload is
     imported, SWIG returns a reader's payload as that module's class of the same name, which has no
-    `__dtype__`. This mock class is one such class, carrying the payload's fields.
+    `__dtype__` but is a proxy of the same C struct, its `this`. This mock class is one such class,
+    carrying the payload's fields and its `this`.
 
     Args:
         bus_messages: a message of each bus struct.
@@ -106,7 +107,7 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
     for pair, role in zip(PAIRS, ROLES, strict=True):
         payload = bus_messages[role.bus].payload
         names = type(payload).__dtype__.names
-        alias = type(type(payload).__name__, (), {n: getattr(payload, n) for n in names})()
+        alias = type(type(payload).__name__, (), {n: getattr(payload, n) for n in [*names, "this"]})()
         assert not hasattr(alias, "__dtype__")
 
         read_ = read([pair], {role.role: alias})[role.role]
@@ -117,7 +118,7 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
 def test_a_read_message_keeps_its_values_after_the_next_tick(
     bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
-    """The host's payload is a live view of the reader's buffer; the conversion copies it.
+    """The host's payload is a live view of its message; the conversion copies it.
 
     Each role's message is read, and written again with other values, as the next tick's sensor
     task does: the bus struct still holds the first tick's values.
@@ -139,6 +140,21 @@ def test_a_read_message_keeps_its_values_after_the_next_tick(
         field = type(later).__dtype__.names[0]
         assert list(getattr(payload, field)) == list(getattr(later, field)), role.role
         _assert_holds(holds, read_, bus_messages[role.bus], role.role)
+
+
+def test_a_read_message_s_arrays_are_read_only(bus_messages: dict[str, Any]):
+    """Each array RIO-in reads cannot be changed in place, so CDH-in can pass it on uncopied.
+
+    Args:
+        bus_messages: a message of each bus struct.
+    """
+    for pair, role in zip(PAIRS, ROLES, strict=True):
+        _, reader = _written(bus_messages[role.bus].payload)
+        read_ = read([pair], {role.role: reader()})[role.role]
+
+        for value in (v for v in read_ if isinstance(v, np.ndarray)):
+            with pytest.raises(ValueError, match="read-only"):
+                value[...] = 0
 
 
 def test_a_paired_role_the_vehicle_does_not_have_is_refused_naming_it():

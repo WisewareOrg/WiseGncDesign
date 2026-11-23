@@ -100,7 +100,8 @@ class FrameRunner:
 
         Args:
             t_ns: ns, the tick's time.
-            messages_by_role: each role's Basilisk message payload, valid during this call only.
+            messages_by_role: each role's Basilisk message payload, a live view of its message, as
+                `FswHost` gives it.
 
         Returns:
             The actuator commands, by role: each a fresh `messaging.<Name>Payload` of the message

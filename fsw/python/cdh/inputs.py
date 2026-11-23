@@ -2,8 +2,9 @@
 
 The pairing is FPP's, `Cdh.BusConverter` in `fsw/fpp/interfaces/Cdh.fpp`, read by
 `fsw.codegen.roles` as the F´ build's CDH reads it; a `Pair` names one role's. The bus struct is
-converted to the ICD struct field by field with `fsw.codegen.fpp_types.converter`, every array a
-fresh copy. CDH-out, `fsw.python.cdh.outputs`, pairs the actuator roles with the same `Pair`.
+converted to the ICD struct field by field with `fsw.codegen.fpp_types.converter`, each array
+RIO-in's own: RIO-in's arrays are fresh and read-only, so a copy guards nothing. CDH-out,
+`fsw.python.cdh.outputs`, pairs the actuator roles with the same `Pair`.
 """
 
 from collections.abc import Mapping, Sequence
@@ -53,4 +54,4 @@ def convert(pairs: Sequence[Pair], messages: Mapping[str, Any]) -> dict[str, Any
     Returns:
         Each value, an ICD struct's tuple, by its GNC port.
     """
-    return {pair.port: fpp_types.converter(pair.bus, pair.icd)(messages[pair.role]) for pair in pairs}
+    return {pair.port: fpp_types.converter(pair.bus, pair.icd, copy=False)(messages[pair.role]) for pair in pairs}

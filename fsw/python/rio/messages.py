@@ -1,12 +1,12 @@
 """The Python build's RIO: each sensor role's Basilisk message read as its bus struct, and back.
 
-A message is read field by field with `fsw.codegen.fpp_types.converter`, so every array is a fresh
-copy: the host's payload is a view of its reader's buffer, valid only during its tick. Its fields
-are read through `Basilisk.architecture.messaging`'s class of its name, which declares them: SWIG
-can return the payload as another module's class of that name, such as a simulation module's
-once that module is imported, which does not. Each actuator role's bus struct is written as a
-fresh payload of the class `fsw.payloads.payload_type` gives, each field from the bus member of
-its name, ignoring case.
+A message is read with `fsw.codegen.fpp_types.converter` into a fresh, read-only copy: the host's
+payload is a live view of its message, which the next dynamics step overwrites, and CDH-in passes
+the copy's arrays to GNC uncopied. Its layout is read through `Basilisk.architecture.messaging`'s
+class of its name, which declares it: SWIG can return the payload as another module's class of that
+name, such as a simulation module's once that module is imported, which does not. Each actuator
+role's bus struct is written as a fresh payload of the class `fsw.payloads.payload_type` gives, each
+field from the bus member of its name, ignoring case.
 """
 
 from collections.abc import Mapping, Sequence
@@ -31,7 +31,8 @@ def read(pairs: Sequence[Pair], messages_by_role: Mapping[str, Any]) -> dict[str
             pair names is not read.
 
     Returns:
-        Each bus struct's tuple, by its role.
+        Each bus struct's tuple, by its role, its arrays fresh and read-only: CDH-in passes them to
+        GNC uncopied.
 
     Raises:
         KeyError: a paired role has no message, naming it.

@@ -7,6 +7,7 @@ dictionary.
 
 from __future__ import annotations
 
+import functools
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -27,7 +28,21 @@ def writes(instance: str, telemetry: NamedTuple | None) -> list[tuple[str, Any]]
     if telemetry is None:
         return []
     return [
-        (f"{instance}.{channel}", value.copy() if isinstance(value, np.ndarray) else value)
-        for channel, value in zip(telemetry._fields, telemetry, strict=True)
+        (channel, value.copy() if isinstance(value, np.ndarray) else value)
+        for channel, value in zip(_channels(instance, telemetry._fields), telemetry, strict=True)
         if value is not None
     ]
+
+
+@functools.cache
+def _channels(instance: str, fields: tuple[str, ...]) -> tuple[str, ...]:
+    """Each field's channel, `<instance>.<field>`, named once per instance and telemetry tuple.
+
+    Args:
+        instance: the instance's unqualified name.
+        fields: the telemetry tuple's fields.
+
+    Returns:
+        The channels, in the fields' order.
+    """
+    return tuple(f"{instance}.{field}" for field in fields)
