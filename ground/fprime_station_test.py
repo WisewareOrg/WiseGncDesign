@@ -84,14 +84,14 @@ def test_a_command_the_station_cannot_encode_is_refused_naming_what(
 
 
 def _packet(
-    dictionary: Dictionary, entries: list[tuple[str, tuple[int, int], Any]], descriptor: str = "FW_PACKET_TELEM"
+    dictionary: Dictionary, entries: list[tuple[str, tuple[int, int], Any]], descriptor: str | int = "FW_PACKET_TELEM"
 ) -> bytes:
     """An F´ `TlmPacket`, as the deployment's ground link downlinks it.
 
     Args:
         dictionary: the dictionary that types the packet's fields and its channels.
         entries: each entry's channel name, its time as seconds and microseconds, and its value.
-        descriptor: the `ComCfg.Apid` constant the packet's descriptor holds.
+        descriptor: the `ComCfg.Apid` constant the packet's descriptor holds, or its number.
 
     Returns:
         A big-endian descriptor, then each entry's channel ID, `Fw.TimeValue` (time base, context,
@@ -99,7 +99,8 @@ def _packet(
     """
     constants = dictionary.type("ComCfg.Apid").constants
     assert constants is not None
-    packet = np.array(constants[descriptor], dictionary.type("FwPacketDescriptorType").dtype).tobytes()
+    number = constants[descriptor] if isinstance(descriptor, str) else descriptor
+    packet = np.array(number, dictionary.type("FwPacketDescriptorType").dtype).tobytes()
     for name, (seconds, microseconds), value in entries:
         channel = dictionary.channel(name)
         packet += np.array(channel.id, dictionary.type("FwChanIdType").dtype).tobytes()
@@ -196,19 +197,86 @@ def test_a_downlinked_packet_that_is_not_telemetry_is_refused(
         mock.decode([_downlink([good, bad])])
 
 
-def test_an_entry_of_a_channel_the_dictionary_lacks_is_refused_naming_its_id(
+def test_a_packet_whose_descriptor_is_no_apid_constant_is_refused_naming_its_number(
     mock: FprimeStation, mock_dictionary: Dictionary
 ):
-    """A channel ID not in the dictionary raises `ValueError` rather than misreading later entries.
+    """A descriptor that no `ComCfg.Apid` constant has raises `ValueError` naming the number.
 
     Args:
         mock: the mock's station.
         mock_dictionary: the mock's dictionary.
     """
+    constants = mock_dictionary.type("ComCfg.Apid").constants
+    assert constants is not None
+    number = max(constants.values()) + 1
     good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
-    unknown = good[:2] + (0x7FFF).to_bytes(4, "big") + good[6:]
+    bad = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)], number)
 
-    with pytest.raises(ValueError, match=r"downlinked packet 1 holds channel ID 0x7fff, not in the dictionary"):
+    with pytest.raises(ValueError, match=rf"downlinked packet 1 is {number}, not FW_PACKET_TELEM"):
+        mock.decode([_downlink([good, bad])])
+
+
+def test_a_telemetry_packet_holding_no_entry_decodes_to_nothing_alone_and_among_good_packets(
+    mock: FprimeStation, mock_dictionary: Dictionary
+):
+    """A descriptor with no entry after it adds no value, and leaves the packets around it intact.
+
+    Args:
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
+    """
+    empty = _packet(mock_dictionary, [])
+    first = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
+    last = _packet(mock_dictionary, [("mock.gain", (2, 0), 0.25)])
+
+    assert mock.decode([_downlink([empty])]) == {}
+    decoded = mock.decode([_downlink([first, empty, last])])
+
+    assert list(decoded) == ["mock.gain"]
+    times, gains = decoded["mock.gain"]
+    assert times.tolist() == [1_000_000_000, 2_000_000_000]
+    assert gains.tolist() == [0.5, 0.25]
+
+
+def _with_channel_id(dictionary: Dictionary, packet: bytes, channel_id: int) -> bytes:
+    """A one-entry packet with its entry's channel ID replaced.
+
+    Args:
+        dictionary: the dictionary that types the packet's fields.
+        packet: a packet of one entry.
+        channel_id: the ID to hold.
+
+    Returns:
+        The packet, the same size.
+    """
+    head = len(_packet(dictionary, []))
+    id_type = dictionary.type("FwChanIdType")
+    id_end = head + id_type.dtype.itemsize
+    return packet[:head] + np.array(channel_id, id_type.dtype).tobytes() + packet[id_end:]
+
+
+@pytest.mark.parametrize("above", [True, False], ids=["above-every-id", "below-every-id"])
+def test_an_entry_of_a_channel_the_dictionary_lacks_is_refused_naming_its_id(
+    mock: FprimeStation, mock_dictionary: Dictionary, above: bool
+):
+    """A channel ID not in the dictionary raises `ValueError` rather than misreading later entries.
+
+    The ID lies beyond the largest ID or short of the smallest, which the search for it finds by
+    different routes.
+
+    Args:
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
+        above: whether the ID is above every ID the dictionary holds, or below.
+    """
+    ids = [channel.id for channel in mock_dictionary.channels_by_id.values()]
+    unknown_id = max(ids) + 1 if above else min(ids) - 1
+    good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
+    unknown = _with_channel_id(mock_dictionary, good, unknown_id)
+
+    with pytest.raises(
+        ValueError, match=rf"downlinked packet 1 holds channel ID {unknown_id:#x}, not in the dictionary"
+    ):
         mock.decode([_downlink([good, unknown])])
 
 
@@ -229,26 +297,41 @@ def test_a_downlink_whose_packet_sizes_disagree_with_its_bytes_is_refused(
 
 
 @pytest.mark.parametrize(
-    "cut",
-    [lambda packet: packet[:1], lambda packet: packet[:-1], lambda packet: packet[:-4]],
-    ids=["shorter-than-a-descriptor", "entry-overruns-by-a-byte", "entry-overruns-by-a-field"],
+    "length",
+    [
+        lambda empty, one, two: empty - 1,
+        lambda empty, one, two: empty + 1,
+        lambda empty, one, two: two - 4,
+        lambda empty, one, two: two - 1,
+        lambda empty, one, two: one + 1,
+    ],
+    ids=[
+        "inside-the-descriptor",
+        "inside-the-first-channel-id",
+        "second-entry-overruns-by-a-field",
+        "second-entry-overruns-by-a-byte",
+        "inside-the-second-channel-id",
+    ],
 )
 def test_a_packet_cut_short_is_refused_naming_its_index(
-    mock: FprimeStation, mock_dictionary: Dictionary, cut: Callable[[bytes], bytes]
+    mock: FprimeStation, mock_dictionary: Dictionary, length: Callable[[int, int, int], int]
 ):
-    """A packet shorter than a descriptor, or whose last entry overruns its size, raises `ValueError`.
+    """A packet cut inside its descriptor, a channel ID, or an entry's value raises `ValueError`.
 
-    The packet is the second of two, so the message names index 1.
+    The packet holds two entries and is the second of two, so the message names index 1.
 
     Args:
         mock: the mock's station.
         mock_dictionary: the mock's dictionary.
-        cut: cuts a good packet short.
+        length: the length to cut to, from the sizes of a packet of no entry, one and two.
     """
-    good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
+    entries = [("mock.gain", (1, 0), 0.5), ("mock.gain", (1, 0), 0.25)]
+    good = _packet(mock_dictionary, entries[:1])
+    two = _packet(mock_dictionary, entries)
+    sizes = (len(_packet(mock_dictionary, [])), len(good), len(two))
 
     with pytest.raises(ValueError, match=r"downlinked packet 1 is cut short"):
-        mock.decode([_downlink([good, cut(good)])])
+        mock.decode([_downlink([good, two[: length(*sizes)]])])
 
 
 def test_the_channels_come_back_keyed_in_the_order_of_their_first_write(

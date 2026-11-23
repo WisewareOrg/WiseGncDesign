@@ -22,6 +22,7 @@ from fsw.codegen.dictionary import Dictionary
 from fsw.codegen.fpp_types import named
 from fsw.codegen.roles import Role, roles
 from fsw.mock import MOCK, device_contract, exposure
+from fsw.mock.actuator.actuator import Actuator
 from fsw.mock.mock_gnc import LOG, Sink, Source
 from fsw.payloads import payload_type
 from fsw.python import FrameRunner
@@ -186,6 +187,31 @@ def test_a_channel_written_twice_in_a_frame_keeps_both_writes_in_write_order(run
 
     assert times.tolist() == [NS // 2] * 3 + [NS] * 2
     assert levels.tolist() == [1.0, 2.0, 2.0, 3.0, 3.0]
+
+
+def test_the_actuator_mock_tallies_a_mark_and_a_step_in_one_frame_as_its_cpp_does(tmp_path: Path):
+    """`actuator.tally` comes down twice in the frame the mock steps in, and once in a mark-only frame.
+
+    `actuator.mark` counts one, as a step does. A mark is uplinked before each of two ticks, and
+    the mock steps at the first only, so the first frame holds a mark and a step, and the second a
+    mark alone. The tally counts 1, 2, 3, as the F´ build's does.
+
+    Args:
+        tmp_path: where the case's record is written.
+    """
+    record = tmp_path / "run_0000.prm.json"
+    record.write_text(json.dumps({"MockActuation.actuator": {}}))
+    runner = FrameRunner("MockActuation", record, (Actuator,), contract=MOCK)
+    runner.boot()
+
+    for tick in (1, 2):
+        runner.uplink("actuator.mark", {}, tick)
+        runner.tick(tick * NS, {})
+
+    times, tallies = runner.decode([runner.telemetry()], ["actuator.tally"])["actuator.tally"]
+
+    assert times.tolist() == [NS, NS, 2 * NS], "each write keeps its frame's time tag"
+    assert tallies.tolist() == [1, 2, 3], "every write comes down, in write order"
 
 
 def test_decode_takes_the_named_channels_and_several_drains_in_order(runner: FrameRunner):

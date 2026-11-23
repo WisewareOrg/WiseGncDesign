@@ -450,6 +450,35 @@ def test_tlm_reads_a_channel_from_the_newest_downlink_holding_it(edge: StubEdge)
     assert seen == [(None, None), (0.5, "fast"), (0.25, "fast"), (0.25, "fast")]
 
 
+def test_tlm_reads_the_last_value_written_of_a_channel_written_twice_in_one_downlink(edge: StubEdge):
+    """Two writes of one channel in one downlink read as the second, and both are recorded.
+
+    Args:
+        edge: the stub edge.
+    """
+    seen = []
+
+    async def procedure(ground: Ground) -> None:
+        """Records the channel at every tick.
+
+        Args:
+            ground: the ground running it.
+        """
+        while True:
+            seen.append(ground.tlm("mock.gain"))
+            await ground.sleep(1.0)
+
+    ground = _ground(edge, procedure)
+    edge.writes.append(("mock.gain", NS, 0.5))
+    edge.writes.append(("mock.gain", NS, 0.25))
+    _tick(ground, 1)
+
+    values, _ = ground.telemetry_datasets()["tlm/mock.gain"]
+
+    assert seen == [None, 0.25], "tlm reads the later of the two writes"
+    np.testing.assert_array_equal(values, np.array([0.5, 0.25], np.float32), err_msg="both writes are recorded")
+
+
 def test_a_period_that_is_not_a_whole_multiple_of_the_flight_software_s_is_refused(edge: StubEdge):
     """A ground period that would tick between flight software ticks is refused, naming both.
 
