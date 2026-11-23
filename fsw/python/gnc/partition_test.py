@@ -233,6 +233,23 @@ def test_members_run_in_rate_group_order_and_an_output_reaches_a_later_member_in
     assert telemetry == [("source", SourceTelemetry(count=1)), ("sink", Nothing())]
 
 
+def test_a_rebooted_partition_routes_its_new_algorithms_outputs(gnc: GncPartition):
+    """After a second boot, a written input and a routed output reach the algorithms that boot built.
+
+    Args:
+        gnc: the mock's partition.
+    """
+    gnc.write("seedIn", Value(3.0))
+    gnc.run(1.0, [0])
+    gnc.boot({"source": "p", "sink": None, "slow": None})
+    LOG.clear()
+
+    gnc.write("seedIn", Value(5.0))
+    gnc.run(2.0, [0])
+
+    assert [("source", 2.0, Value(5.0)), ("sink", 2.0, Value(10.0))] == LOG
+
+
 def test_frames_follow_the_fpp_rate_constants_and_return_the_outputs_their_members_wrote(
     gnc: GncPartition, model: Model
 ):
