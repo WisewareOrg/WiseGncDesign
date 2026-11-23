@@ -301,24 +301,29 @@ def boot(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., Booted]:
 
 @pytest.fixture
 def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
-    """A drain of an edge's telemetry, each write decoded to its value by the edge.
+    """A drain of an edge's telemetry, each downlinked value as the edge decodes it.
 
     Returns:
         A function taking an edge, such as an `FprimeStation` or a `FrameRunner`, and giving
-        each write since the edge's last drain as `(<instance>.<channel>, time tag in ns, value)`,
-        oldest first.
+        each value downlinked since the edge's last drain as `(<instance>.<channel>, time tag in
+        ns, value)`, oldest first by time tag.
     """
 
     def drain(edge: Any) -> list[tuple[str, int, Any]]:
-        """Drains the edge's telemetry writes, each as its value.
+        """Drains the edge's telemetry, each value decoded.
 
         Args:
             edge: the edge.
 
         Returns:
-            Each write's channel name, time tag in ns and value, oldest first.
+            Each value's channel name, time tag in ns and value, oldest first by time tag.
         """
-        return [(name, t_ns, edge.values(name, [raw])[0]) for name, t_ns, raw in edge.telemetry()]
+        flat = [
+            (name, int(t_ns), value)
+            for name, (times, values) in edge.decode([edge.telemetry()]).items()
+            for t_ns, value in zip(times, values, strict=True)
+        ]
+        return sorted(flat, key=lambda write: write[1])
 
     return drain
 

@@ -83,40 +83,119 @@ def test_a_command_the_station_cannot_encode_is_refused_naming_what(
         mock.encode_command(name, args)
 
 
-def test_serialized_writes_become_values_in_one_batch(mock: FprimeStation):
-    """Arrays come back (N, *shape), an enum as its name, an F32 as F32 holds it.
+def _packet(dictionary: Dictionary, entries: list[tuple[str, tuple[int, int], Any]], descriptor: str = "FW_PACKET_TELEM") -> bytes:
+    """An F´ `TlmPacket` as `Svc.TlmChan` sends it.
+
+    Args:
+        dictionary: the dictionary that types the packet's fields and its channels.
+        entries: each entry's channel name, its time as seconds and microseconds, and its value.
+        descriptor: the `ComCfg.Apid` constant the packet's descriptor holds.
+
+    Returns:
+        A big-endian descriptor, then each entry's channel ID, `Fw.TimeValue` (time base, context,
+        seconds, microseconds) and value bytes.
+    """
+    constants = dictionary.type("ComCfg.Apid").constants
+    assert constants is not None
+    packet = np.array(constants[descriptor], dictionary.type("FwPacketDescriptorType").dtype).tobytes()
+    for name, (seconds, microseconds), value in entries:
+        channel = dictionary.channel(name)
+        packet += np.array(channel.id, dictionary.type("FwChanIdType").dtype).tobytes()
+        packet += np.array(0, dictionary.type("FwTimeBaseStoreType").dtype).tobytes()
+        packet += np.array(0, dictionary.type("FwTimeContextStoreType").dtype).tobytes()
+        packet += np.array([seconds, microseconds], ">u4").tobytes()
+        packet += np.asarray(value, dtype=channel.type.dtype.base).tobytes()
+    return packet
+
+
+def _downlink(packets: list[bytes]) -> Any:
+    """What `FprimeStation.telemetry` gives for these packets, the one place its form is built.
+
+    Args:
+        packets: each packet's bytes, oldest first.
+
+    Returns:
+        The packets back to back, and each packet's size as native U32.
+    """
+    return b"".join(packets), np.array([len(packet) for packet in packets], np.uint32).tobytes()
+
+
+def test_telemetry_packets_become_each_channel_s_tags_and_values_in_one_batch(
+    mock: FprimeStation, mock_dictionary: Dictionary
+):
+    """Arrays come back (N, *shape), an enum as its name, an F32 as F32 holds it; tags are int64 ns.
+
+    The channels' sizes differ, so each entry's length is the channel's, and a channel's entries
+    in two packets come back in the order downlinked.
 
     Args:
         mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
     """
-    np.testing.assert_array_equal(
-        mock.values("mock.offset", [struct.pack(">3d", 1, 2, 3), struct.pack(">3d", 4, 5, 6)]),
-        [[1, 2, 3], [4, 5, 6]],
+    first = _packet(
+        mock_dictionary,
+        [
+            ("mock.gain", (10, 500_000), 0.1),
+            ("mock.offset", (10, 500_000), [1, 2, 3]),
+            ("mock.mode", (10, 500_001), 1),
+        ],
     )
-    assert mock.values("mock.mode", [struct.pack(">i", 1)]).tolist() == ["fast"]
-    assert mock.values("mock.gain", [struct.pack(">f", 0.1)]).tolist() == [float(np.float32(0.1))]
+    second = _packet(
+        mock_dictionary,
+        [("mock.offset", (11, 0), [4, 5, 6]), ("mock.mounting", (11, 0), np.arange(9.0).reshape(3, 3))],
+    )
+
+    decoded = mock.decode([_downlink([first, second])])
+
+    assert set(decoded) == {"mock.gain", "mock.offset", "mock.mode", "mock.mounting"}
+    times, offsets = decoded["mock.offset"]
+    assert times.dtype == np.int64
+    assert times.tolist() == [10_500_000_000, 11_000_000_000]
+    np.testing.assert_array_equal(offsets, [[1, 2, 3], [4, 5, 6]])
+    assert decoded["mock.mode"][0].tolist() == [10_500_001_000]
+    assert decoded["mock.mode"][1].tolist() == ["fast"]
+    assert decoded["mock.gain"][1].tolist() == [float(np.float32(0.1))]
+    np.testing.assert_array_equal(decoded["mock.mounting"][1], [np.arange(9.0).reshape(3, 3)])
 
 
-@pytest.mark.parametrize(
-    ("channel", "serialized"),
-    [
-        ("mock.gain", [0.5]),
-        ("mock.offset", [np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0, 6.0])]),
-        ("mock.offset", [struct.pack(">2d", 1.0, 2.0)]),
-        ("mock.offset", [struct.pack(">2d", 1.0, 2.0), struct.pack(">4d", 3.0, 4.0, 5.0, 6.0)]),
-    ],
-    ids=["number", "numpy-array", "wrong-length", "misaligned"],
-)
-def test_values_takes_whole_serialized_values_only(mock: FprimeStation, channel: str, serialized: list):
-    """Written values, numpy arrays included, or bytes of the wrong length fail, naming the channel.
+def test_decode_takes_the_named_channels_only(mock: FprimeStation, mock_dictionary: Dictionary):
+    """`names` keeps those channels, whatever their place in the packet, and no other.
 
     Args:
         mock: the mock's station.
-        channel: the channel decoded.
-        serialized: what is handed to `values`.
+        mock_dictionary: the mock's dictionary.
     """
-    with pytest.raises(ValueError, match=rf"channel {channel} "):
-        mock.values(channel, serialized)
+    packet = _packet(
+        mock_dictionary,
+        [("mock.gain", (1, 0), 0.5), ("mock.offset", (1, 0), [1, 2, 3]), ("mock.mode", (1, 0), 1)],
+    )
+
+    decoded = mock.decode([_downlink([packet])], ["mock.offset", "mock.mode"])
+
+    assert set(decoded) == {"mock.offset", "mock.mode"}
+    np.testing.assert_array_equal(decoded["mock.offset"][1], [[1, 2, 3]])
+    assert decoded["mock.mode"][1].tolist() == ["fast"]
+
+
+def test_several_drains_decode_together_in_order_and_an_empty_drain_adds_nothing(
+    mock: FprimeStation, mock_dictionary: Dictionary
+):
+    """A channel's values across drains come back oldest first; no drain decodes to nothing.
+
+    Args:
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
+    """
+    first = _downlink([_packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])])
+    second = _downlink([_packet(mock_dictionary, [("mock.gain", (2, 0), 0.25)])])
+    empty = _downlink([])
+
+    times, gains = mock.decode([first, empty, second])["mock.gain"]
+
+    assert times.tolist() == [1_000_000_000, 2_000_000_000]
+    assert gains.tolist() == [0.5, 0.25]
+    assert mock.decode([empty]) == {}
+    assert mock.decode([]) == {}
 
 
 def _test_command(dictionary: Dictionary) -> bytes:

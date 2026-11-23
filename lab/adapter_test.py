@@ -293,42 +293,46 @@ def test_a_command_goes_up_to_the_current_copy_and_its_response_comes_back(
     assert station.period_s == adapter.period_s
 
 
-def test_the_telemetry_is_every_write_the_ticks_drained_since_the_last_call(
+def test_the_telemetry_is_the_downlink_of_the_ticks_drained_since_the_last_call(
     messages_by_role: dict[str, Any], adapter: Adapter
 ):
-    """Two ticks' writes come down together, each tagged with its tick, then none until the next.
+    """Two ticks' downlink comes down together, each value tagged with its tick, then none.
 
     Args:
         messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
     """
+    station = FprimeStation(adapter, adapter.dictionary)
     adapter.tick(NS, messages_by_role)
     adapter.tick(2 * NS, messages_by_role)
-    writes = adapter.telemetry()
 
-    assert [t_ns for _, t_ns, _ in writes] == sorted(t_ns for _, t_ns, _ in writes)
-    assert {t_ns for _, t_ns, _ in writes} == {NS, 2 * NS}
-    assert all(isinstance(raw, bytes) for _, _, raw in writes)
-    assert adapter.telemetry() == []
+    downlink = adapter.telemetry()
+
+    tags = {t for times, _ in station.decode([downlink]).values() for t in times.tolist()}
+    assert tags == {NS, 2 * NS}
+    assert station.decode([adapter.telemetry()]) == {}
 
 
-def test_a_boot_drops_the_writes_an_earlier_copy_left_undrained(messages_by_role: dict[str, Any], adapter: Adapter):
-    """A power cycle keeps no write of the copy before it.
+def test_a_boot_drops_the_downlink_an_earlier_copy_left_undrained(
+    messages_by_role: dict[str, Any], adapter: Adapter
+):
+    """A power cycle keeps no packet of the copy before it.
 
-    The first tick's writes are drained, which shows a tick writes; the second tick's are left in
-    the copy that the boot replaces.
+    The first tick's packets are drained, which shows a tick downlinks; the second tick's are left
+    in the copy that the boot replaces.
 
     Args:
         messages_by_role: a message for each sensor role the configuration takes.
         adapter: the configuration's adapter, booted.
     """
+    station = FprimeStation(adapter, adapter.dictionary)
     adapter.tick(NS, messages_by_role)
-    assert adapter.telemetry()
+    assert station.decode([adapter.telemetry()])
     adapter.tick(2 * NS, messages_by_role)
 
     adapter.boot()
 
-    assert adapter.telemetry() == []
+    assert station.decode([adapter.telemetry()]) == {}
 
 
 def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(

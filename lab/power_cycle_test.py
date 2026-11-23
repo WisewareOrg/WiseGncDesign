@@ -22,6 +22,7 @@ NS = 1_000_000_000
 
 def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
     configuration: str,
+    dictionary: Dictionary,
     prm: str,
     parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
@@ -34,6 +35,7 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
 
     Args:
         configuration: the configuration power-cycled.
+        dictionary: its dictionary.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
@@ -48,7 +50,7 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
     assert fresh is not raised
     fresh.boot(prm, parameter_ids)
     wire(fresh, configuration, bus)(NS)
-    assert fresh.telemetry()
+    assert FprimeStation(fresh, dictionary).decode([fresh.telemetry()])
     assert raised not in sys.modules.values()
     assert fresh not in sys.modules.values()
 
@@ -99,12 +101,9 @@ def test_two_copies_in_one_process_share_no_state(
         Returns:
             Each rate group's counts, oldest first.
         """
-        writes = station.telemetry()
+        downlinked = station.decode([station.telemetry()])
         names = {group: f"{group}.CycleCount" for group in rate_groups}
-        return {
-            group: station.values(name, [raw for n, _, raw in writes if n == name]).tolist()
-            for group, name in names.items()
-        }
+        return {group: downlinked[name][1].tolist() if name in downlinked else [] for group, name in names.items()}
 
     later_counts, earlier_counts = counts(later_station), counts(earlier_station)
     assert any(later_counts.values())

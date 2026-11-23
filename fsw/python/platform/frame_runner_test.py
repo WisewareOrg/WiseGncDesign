@@ -140,14 +140,13 @@ def test_commands_run_by_name_before_the_step_and_answer_with_f_prime_s_response
         (8, "VALIDATION_ERROR", "level -1.0 is negative"),
     ]
     assert runner.responses() == []
-    assert [(name, t_ns) for name, t_ns, _ in runner.telemetry()][:2] == [
-        ("source.level", NS // 2),
-        ("source.level", NS // 2),
-    ]
+    times, levels = runner.decode([runner.telemetry()], ["source.level"])["source.level"]
+    assert times.tolist() == [NS // 2]
+    assert levels.tolist() == [1.5]
 
 
-def test_the_telemetry_is_each_write_of_the_frame_tagged_with_its_time(runner: FrameRunner):
-    """Each tick's writes come down tagged with its time, valued as written, once.
+def test_the_telemetry_decodes_to_each_channel_s_time_tags_and_values(runner: FrameRunner):
+    """Each tick's channels decode to int64 time tags in ns and values, per channel, in order.
 
     Args:
         runner: the frame runner.
@@ -156,14 +155,61 @@ def test_the_telemetry_is_each_write_of_the_frame_tagged_with_its_time(runner: F
     runner.tick(NS // 2, {})
     runner.tick(NS, {})
 
-    writes = runner.telemetry()
+    decoded = runner.decode([runner.telemetry()])
 
-    assert [t_ns for _, t_ns, _ in writes] == sorted(t_ns for _, t_ns, _ in writes)
-    assert {t_ns for _, t_ns, _ in writes} == {NS // 2, NS}
-    received = [(t_ns, raw) for name, t_ns, raw in writes if name == "sink.received"]
-    [(t_ns, raw)] = received
-    np.testing.assert_array_equal(runner.values("sink.received", [raw]), [2.5 * 2.0 + t_ns / NS + 0.25])
-    assert runner.telemetry() == []
+    assert set(decoded) == {"source.level", "sink.received"}
+    times, levels = decoded["source.level"]
+    assert times.dtype == np.int64
+    assert times.tolist() == [NS // 2, NS]
+    assert levels.tolist() == [2.0, 2.0]
+    [t_ns], received = decoded["sink.received"]
+    assert t_ns in (NS // 2, NS)
+    np.testing.assert_array_equal(received, [2.5 * 2.0 + t_ns / NS + 0.25])
+    assert runner.decode([runner.telemetry()]) == {}
+
+
+def test_a_channel_written_twice_in_a_frame_decodes_once_with_its_last_value_and_the_frame_s_tag(runner: FrameRunner):
+    """Three writes of one channel in a frame, two commands and the step, come down as the last.
+
+    The next frame's commands and step write it again, so each frame keeps its own last write.
+
+    Args:
+        runner: the frame runner.
+    """
+    runner.uplink("source.setLevel", {"level": 1.0}, 1)
+    runner.uplink("source.setLevel", {"level": 2.0}, 2)
+    runner.tick(NS // 2, {})
+    runner.uplink("source.setLevel", {"level": 3.0}, 3)
+    runner.tick(NS, {})
+
+    times, levels = runner.decode([runner.telemetry()])["source.level"]
+
+    assert times.tolist() == [NS // 2, NS]
+    assert levels.tolist() == [2.0, 3.0]
+
+
+def test_decode_takes_the_named_channels_and_several_drains_in_order(runner: FrameRunner):
+    """`names` keeps only those channels; drains decode as one, empty ones adding nothing.
+
+    Args:
+        runner: the frame runner.
+    """
+    runner.uplink("source.setLevel", {"level": 1.0}, 1)
+    runner.tick(NS // 2, {})
+    first = runner.telemetry()
+    empty = runner.telemetry()
+    runner.uplink("source.setLevel", {"level": 4.0}, 2)
+    runner.tick(NS, {})
+    second = runner.telemetry()
+
+    decoded = runner.decode([first, empty, second], ["source.level"])
+
+    assert list(decoded) == ["source.level"]
+    times, levels = decoded["source.level"]
+    assert times.tolist() == [NS // 2, NS]
+    assert levels.tolist() == [1.0, 4.0]
+    assert runner.decode([empty, empty]) == {}
+    assert runner.decode([]) == {}
 
 
 def test_boot_drops_every_command_response_and_write_not_yet_drained(runner: FrameRunner):
@@ -180,11 +226,11 @@ def test_boot_drops_every_command_response_and_write_not_yet_drained(runner: Fra
     runner.tick(NS // 2, {})
 
     assert runner.responses() == []
-    writes = runner.telemetry()
-    assert {t_ns for _, t_ns, _ in writes} == {NS // 2}
-    assert [name for name, _, _ in writes].count("source.level") == 1
-    [raw] = [raw for name, _, raw in writes if name == "source.level"]
-    assert runner.values("source.level", [raw]).tolist() == [0.0]
+    decoded = runner.decode([runner.telemetry()])
+    times, levels = decoded["source.level"]
+    assert times.tolist() == [NS // 2]
+    assert levels.tolist() == [0.0]
+    assert {t_ns for times, _ in decoded.values() for t_ns in times.tolist()} == {NS // 2}
 
 
 class MockDevice:

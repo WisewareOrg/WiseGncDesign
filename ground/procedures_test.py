@@ -5,7 +5,7 @@ what each test gives it; the tests that fly Leo500 host it, as a stub build, in 
 """
 
 import json
-from collections.abc import Callable, Coroutine, Mapping, Sequence
+from collections.abc import Callable, Collection, Coroutine, Mapping, Sequence
 from typing import Any, cast
 
 import numpy as np
@@ -62,7 +62,7 @@ class StubEdge:
         return drained
 
     def telemetry(self) -> list[tuple[str, int, Any]]:
-        """Drains the queued writes.
+        """Drains the queued downlink.
 
         Returns:
             `(channel name, time tag in ns, value)` triples.
@@ -70,17 +70,29 @@ class StubEdge:
         drained, self.writes = self.writes, []
         return drained
 
-    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
-        """Packs written values, as the Python build's `GroundLink` does.
+    def decode(
+        self, downlinks: Sequence[list[tuple[str, int, Any]]], names: Collection[str] | None = None
+    ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """Decodes downlinks as the Python build does, packing each channel's values in one batch.
 
         Args:
-            name: the channel's name.
-            raws: its values.
+            downlinks: as `telemetry` gave them, oldest first.
+            names: the channels to decode; every channel when `None`.
 
         Returns:
-            As `Channel.pack_many` gives them.
+            For each channel downlinked, its time tags in ns and its values.
         """
-        return self.dictionary.channel(name).pack_many(raws)
+        merged: dict[str, tuple[list[int], list[Any]]] = {}
+        for downlink in downlinks:
+            for name, t_ns, value in downlink:
+                if names is None or name in names:
+                    times, values = merged.setdefault(name, ([], []))
+                    times.append(t_ns)
+                    values.append(value)
+        return {
+            name: (np.array(times, dtype=np.int64), self.dictionary.channel(name).pack_many(values))
+            for name, (times, values) in merged.items()
+        }
 
 
 @pytest.fixture
@@ -364,11 +376,11 @@ def test_a_command_never_answered_times_out(edge: StubEdge):
         _tick(ground, 1)
 
 
-def test_every_write_is_recorded_with_its_tag_in_order_and_tlm_reads_the_latest(edge: StubEdge):
-    """Each channel's writes, two at one tag included, land in `tlm/` and `tlm_t/` in order.
+def test_every_downlinked_value_is_recorded_with_its_tag_in_order_and_tlm_reads_the_newest(edge: StubEdge):
+    """Each channel's downlinked values land in `tlm/` and `tlm_t/` in order, the last tick's too.
 
-    `tlm` reads nothing before the first write, then the channel's latest write. A channel never
-    written has no dataset.
+    `tlm` reads nothing before the first value, then the channel's newest. A value downlinked
+    after the ground's last tick is recorded as well. A channel never downlinked has no dataset.
 
     Args:
         edge: the stub edge.
@@ -387,26 +399,55 @@ def test_every_write_is_recorded_with_its_tag_in_order_and_tlm_reads_the_latest(
 
     ground = _ground(edge, procedure)
     edge.writes.append(("mock.offset", NS, np.array([1.0, 2.0, 3.0])))
-    edge.writes.append(("mock.offset", NS, np.array([4.0, 5.0, 6.0])))
     _tick(ground, 1, 2)
-    edge.writes.append(("mock.offset", 3 * NS, np.array([7.0, 8.0, 9.0])))
+    edge.writes.append(("mock.offset", 3 * NS, np.array([4.0, 5.0, 6.0])))
     _tick(ground, 3)
+    edge.writes.append(("mock.offset", 4 * NS, np.array([7.0, 8.0, 9.0])))
 
     datasets = ground.telemetry_datasets()
 
     assert [None if value is None else value.tolist() for value in seen] == [
         None,
+        [1.0, 2.0, 3.0],
+        [1.0, 2.0, 3.0],
         [4.0, 5.0, 6.0],
-        [4.0, 5.0, 6.0],
-        [7.0, 8.0, 9.0],
     ]
     assert sorted(datasets) == ["tlm/mock.offset", "tlm_t/mock.offset"]
     values, units = datasets["tlm/mock.offset"]
     np.testing.assert_array_equal(values, np.arange(1.0, 10.0).reshape(3, 3))
     assert units == "m"
     times, units = datasets["tlm_t/mock.offset"]
-    np.testing.assert_array_equal(times, [1.0, 1.0, 3.0])
+    np.testing.assert_array_equal(times, [1.0, 3.0, 4.0])
     assert units == "s"
+
+
+def test_tlm_reads_a_channel_from_the_newest_downlink_holding_it(edge: StubEdge):
+    """A channel absent from the ticks since its value keeps that value; another channel is its own.
+
+    Args:
+        edge: the stub edge.
+    """
+    seen = []
+
+    async def procedure(ground: Ground) -> None:
+        """Records both channels at every tick.
+
+        Args:
+            ground: the ground running it.
+        """
+        while True:
+            seen.append((ground.tlm("mock.gain"), ground.tlm("mock.mode")))
+            await ground.sleep(1.0)
+
+    ground = _ground(edge, procedure)
+    edge.writes.append(("mock.gain", NS, 0.5))
+    edge.writes.append(("mock.mode", NS, "fast"))
+    _tick(ground, 1)
+    edge.writes.append(("mock.gain", 2 * NS, 0.25))
+    _tick(ground, 2)
+    _tick(ground, 3)
+
+    assert seen == [(None, None), (0.5, "fast"), (0.25, "fast"), (0.25, "fast")]
 
 
 def test_a_period_that_is_not_a_whole_multiple_of_the_flight_software_s_is_refused(edge: StubEdge):
