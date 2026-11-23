@@ -320,7 +320,7 @@ def decoded() -> Callable[[Any], list[tuple[str, int, Any]]]:
         """
         flat = [
             (name, int(t_ns), value)
-            for name, (times, values) in edge.telemetry().items()
+            for name, (times, values) in edge.decode([edge.telemetry()]).items()
             for t_ns, value in zip(times, values, strict=True)
         ]
         return sorted(flat, key=lambda write: write[1])

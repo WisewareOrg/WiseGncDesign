@@ -1,6 +1,6 @@
 """The radio edge: the flight software as the ground sees it, in F´'s names and values."""
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any, Protocol
 
 import numpy as np
@@ -50,8 +50,20 @@ class RadioEdge(Protocol):
         """
         ...
 
-    def telemetry(self) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-        """Every telemetry value downlinked since the last call, each channel in one batch.
+    def telemetry(self) -> Any:
+        """The telemetry downlinked since the last call, in the build's own form.
+
+        Returns:
+            What `decode` takes.
+        """
+        ...
+
+    def decode(self, downlinks: Sequence[Any], names: Collection[str] | None = None) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """Downlinks as each channel's values, in one batch.
+
+        Args:
+            downlinks: as `telemetry` gave them, oldest first.
+            names: the channels to decode, `<instance>.<channel>`; every channel when `None`.
 
         Returns:
             For each channel downlinked, `<instance>.<channel>` to its flight software time tags in

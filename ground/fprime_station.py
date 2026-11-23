@@ -5,7 +5,7 @@ packets, responses come down as `Fw.CmdResponse` names, and each telemetry write
 bytes F´ serialized, which `values` turns into values in one batch.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -104,34 +104,43 @@ class FprimeStation:
         """
         return [(context, self._responses[code], None) for context, code in self._fsw.responses()]
 
-    def telemetry(self) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-        """Every telemetry value downlinked since the last call, each channel decoded in one batch.
+    def telemetry(self) -> tuple[bytes, bytes]:
+        """The deployment's downlink since the last call, raw.
 
-        The deployment's downlink is its telemetry packets, each a big-endian U32 size and then an F´
-        `TlmPacket`: a `FwPacketDescriptorType` holding `FW_PACKET_TELEM`, then entries of a
-        `FwChanIdType`, an `Fw.TimeValue` and the value's bytes, whose size the channel's type gives.
+        Returns:
+            The telemetry packets back to back, oldest first, and each packet's size as native U32.
+        """
+        return self._fsw.telemetry()
+
+    def decode(
+        self, downlinks: Sequence[tuple[bytes, bytes]], names: Collection[str] | None = None
+    ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """Downlinks as each channel's values, every channel decoded in one batch.
+
+        Each packet is an F´ `TlmPacket`: a `FwPacketDescriptorType` holding `FW_PACKET_TELEM`, then
+        entries of a `FwChanIdType`, an `Fw.TimeValue` and the value's bytes, whose size the
+        channel's type gives.
+
+        Args:
+            downlinks: as `telemetry` gave them, oldest first.
+            names: the channels to decode, `<instance>.<channel>`; every channel when `None`.
 
         Returns:
             For each channel downlinked, `<instance>.<channel>` to its F´ time tags in ns, oldest
             first, and its values, as `Channel.from_raw` gives them.
         """
-        data = np.frombuffer(self._fsw.telemetry(), np.uint8)
-        starts, ends = [], []
-        cursor = 0
-        while cursor < data.size:
-            size = int.from_bytes(data[cursor : cursor + 4].tobytes(), "big")
-            starts.append(cursor + 4)
-            ends.append(cursor + 4 + size)
-            cursor += 4 + size
-        if not starts:
+        data = np.frombuffer(b"".join(packets for packets, _ in downlinks), np.uint8)
+        sizes = np.concatenate([np.frombuffer(sizes, np.uint32) for _, sizes in downlinks] or [[]]).astype(np.int64)
+        if not sizes.size:
             return {}
-        starts_a, ends_a = np.array(starts), np.array(ends)
-        descriptors = (data[starts_a].astype(np.int64) << 8) | data[starts_a + 1]
+        ends = np.cumsum(sizes)
+        starts = ends - sizes
+        descriptors = (data[starts].astype(np.int64) << 8) | data[starts + 1]
         assert (descriptors == self._telem_descriptor).all(), "a downlinked packet is not FW_PACKET_TELEM"
         positions, ids = [], []
-        cursors = starts_a + self._descriptor.dtype.itemsize
+        cursors = starts + self._descriptor.dtype.itemsize
         while True:
-            live = cursors < ends_a
+            live = cursors < ends
             if not live.any():
                 break
             at = cursors[live]
@@ -141,6 +150,9 @@ class FprimeStation:
             cursors = cursors.copy()
             cursors[live] = at + self._entry_header + self._sizes[np.searchsorted(self._ids, entry_ids)]
         position, chan = np.concatenate(positions), np.concatenate(ids)
+        if names is not None:
+            wanted = np.isin(chan, [self.dictionary.channel(name).id for name in names])
+            position, chan = position[wanted], chan[wanted]
         order = np.argsort(position, kind="stable")
         position, chan = position[order], chan[order]
         seconds = _be_u32(data, position + self._seconds_at)

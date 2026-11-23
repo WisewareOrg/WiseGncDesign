@@ -21,11 +21,17 @@ class GroundLink final : public GroundLinkComponentBase {
     //! Sends one command packet to the dispatcher under the ground's context.
     void uplink(Fw::ComBuffer& packet, U32 context);
 
-    //! The downlinked bytes since the last drain: each packet as a big-endian U32 size, then the packet.
+    //! The packets downlinked since the last drain, back to back, oldest first.
     const std::vector<U8>& downlinked() const { return this->m_downlink; }
 
+    //! Each downlinked packet's size in bytes, in the order of `downlinked`.
+    const std::vector<U32>& packetSizes() const { return this->m_sizes; }
+
     //! Empties the downlink, keeping its storage.
-    void drained() { this->m_downlink.clear(); }
+    void drained() {
+        this->m_downlink.clear();
+        this->m_sizes.clear();
+    }
 
     //! The responses since the last call, oldest first.
     std::vector<Response> takeResponses();
@@ -36,6 +42,7 @@ class GroundLink final : public GroundLinkComponentBase {
     void downlinkIn_handler(FwIndexType portNum, Fw::ComBuffer& data, U32 context) override;
 
     std::vector<U8> m_downlink;
+    std::vector<U32> m_sizes;
     std::vector<Response> m_responses;
 };
 

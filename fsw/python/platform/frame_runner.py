@@ -9,7 +9,7 @@ wiring and rates, the roles it takes, the dictionary and the base tick. The radi
 CDH's `GroundLink`, which the frame runner forwards to.
 """
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -214,14 +214,35 @@ class FrameRunner:
         """
         return self._link.responses()
 
-    def telemetry(self) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-        """Every value downlinked since the last call, each channel packed in one batch.
+    def telemetry(self) -> dict[str, tuple[list[int], list[Any]]]:
+        """The values downlinked since the last call, as the link drains them.
 
         Returns:
-            For each channel, `<instance>.<channel>` to its time tags in ns and its values, as
-            `Channel.pack_many` gives them.
+            As `GroundLink.telemetry` gives them.
         """
+        return self._link.telemetry()
+
+    def decode(
+        self, downlinks: Sequence[dict[str, tuple[list[int], list[Any]]]], names: Collection[str] | None = None
+    ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """Downlinks as each channel's values, each channel packed in one batch.
+
+        Args:
+            downlinks: as `telemetry` gave them, oldest first.
+            names: the channels to decode, `<instance>.<channel>`; every channel when `None`.
+
+        Returns:
+            For each channel downlinked, `<instance>.<channel>` to its time tags in ns and its
+            values, as `Channel.pack_many` gives them.
+        """
+        merged: dict[str, tuple[list[int], list[Any]]] = {}
+        for downlink in downlinks:
+            for channel, (times, values) in downlink.items():
+                if names is None or channel in names:
+                    into = merged.setdefault(channel, ([], []))
+                    into[0].extend(times)
+                    into[1].extend(values)
         return {
             channel: (np.array(times, dtype=np.int64), self.dictionary.channel(channel).pack_many(values))
-            for channel, (times, values) in self._link.telemetry().items()
+            for channel, (times, values) in merged.items()
         }

@@ -162,12 +162,15 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         "telemetry",
         []() {
             const std::vector<U8>& downlink = WiseFsw::groundLink.downlinked();
-            py::bytes drained(reinterpret_cast<const char*>(downlink.data()), downlink.size());
+            const std::vector<U32>& sizes = WiseFsw::groundLink.packetSizes();
+            py::tuple drained = py::make_tuple(
+                py::bytes(reinterpret_cast<const char*>(downlink.data()), downlink.size()),
+                py::bytes(reinterpret_cast<const char*>(sizes.data()), sizes.size() * sizeof(U32)));
             WiseFsw::groundLink.drained();
             return drained;
         },
-        "Every telemetry packet downlinked since the last call, oldest first, each a big-endian U32 size and then "
-        "the packet the telemetry database sent.");
+        "Every telemetry packet downlinked since the last call, oldest first: (the packets back to back, each "
+        "packet's size as native U32).");
 
     m.def(
         "responses",

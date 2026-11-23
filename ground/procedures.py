@@ -130,8 +130,7 @@ class Ground(sysModel.SysModel):
         self._context = 0
         self._answers: dict[int, tuple[str, str | None]] = {}
         self._waiting = _Tick("its first tick")
-        self._downlinked: dict[str, list[tuple[np.ndarray, np.ndarray]]] = {}
-        self._latest: dict[str, Any] = {}
+        self._downlinks: list[Any] = []
         self.failure = None
         self.command_log = []
 
@@ -232,7 +231,11 @@ class Ground(sysModel.SysModel):
             The value, as the run file records it, or `None` before the channel is written.
         """
         channel = self._edge.dictionary.channel(name)
-        return self._latest.get(channel.name)
+        for downlink in reversed(self._downlinks):
+            decoded = self._edge.decode([downlink], [channel.name])
+            if channel.name in decoded:
+                return decoded[channel.name][1][-1]
+        return None
 
     def truth(self) -> dict[str, np.ndarray]:
         """The vehicle's true state now, the stand-in for tracking.
@@ -270,7 +273,7 @@ class Ground(sysModel.SysModel):
         self._now_ns = CurrentSimNanos
         try:
             self._answers.update((context, (response, reason)) for context, response, reason in self._edge.responses())
-            self._record(self._edge.telemetry())
+            self._downlinks.append(self._edge.telemetry())
             if self._coroutine is not None:
                 try:
                     self._waiting = self._coroutine.send(None)
@@ -292,16 +295,6 @@ class Ground(sysModel.SysModel):
                 f"the flight ended at t = {self.now_s} s with the procedure waiting until {self._waiting.until}"
             )
 
-    def _record(self, downlinked: dict[str, tuple[np.ndarray, np.ndarray]]) -> None:
-        """Keeps a drain's telemetry, each channel's batch as it came, and each channel's latest value.
-
-        Args:
-            downlinked: as `RadioEdge.telemetry` gives it.
-        """
-        for name, (times, values) in downlinked.items():
-            self._downlinked.setdefault(name, []).append((times, values))
-            self._latest[name] = values[-1]
-
     def telemetry_datasets(self) -> dict[str, tuple[np.ndarray, str]]:
         """Every telemetry value of the run, as run-file datasets.
 
@@ -312,13 +305,9 @@ class Ground(sysModel.SysModel):
             For each channel downlinked at least once, `tlm/<instance>.<channel>` to its values and
             units, and `tlm_t/<instance>.<channel>` to each value's flight software time tag in s.
         """
-        self._record(self._edge.telemetry())
+        self._downlinks.append(self._edge.telemetry())
         datasets = {}
-        for name, batches in self._downlinked.items():
-            units = self._edge.dictionary.channel(name).units
-            datasets[f"tlm/{name}"] = (np.concatenate([values for _, values in batches]), units)
-            datasets[f"tlm_t/{name}"] = (
-                np.concatenate([times for times, _ in batches]) / _NANOSECONDS_PER_SECOND,
-                "s",
-            )
+        for name, (times, values) in self._edge.decode(self._downlinks).items():
+            datasets[f"tlm/{name}"] = (values, self._edge.dictionary.channel(name).units)
+            datasets[f"tlm_t/{name}"] = (times / _NANOSECONDS_PER_SECOND, "s")
         return datasets
