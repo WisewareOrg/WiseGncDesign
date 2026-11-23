@@ -28,13 +28,16 @@ RECEIVED = "sink.received"
 
 
 class Build(Protocol):
-    """A radio edge and the downlink it decodes, made from writes.
+    """A radio edge and the downlink it decodes, made from writes."""
 
-    Attributes:
-        edge: the radio edge.
-    """
+    @property
+    def edge(self) -> RadioEdge:
+        """The radio edge.
 
-    edge: RadioEdge
+        Returns:
+            The edge.
+        """
+        ...
 
     def downlink(self, writes: list[Write]) -> object:
         """The raw downlink the build gives for those writes, in one drain.
@@ -54,6 +57,8 @@ class PythonBuild:
     Attributes:
         edge: the frame runner.
     """
+
+    edge: FrameRunner
 
     def __init__(self, edge: FrameRunner) -> None:
         """Holds the frame runner.
@@ -81,6 +86,8 @@ class FprimeBuild:
     Attributes:
         edge: the station.
     """
+
+    edge: FprimeStation
 
     def __init__(self, edge: FprimeStation) -> None:
         """Holds the station and a packer on its dictionary.

@@ -21,6 +21,8 @@ class TlmPacker:
         dictionary: the dictionary that types the packets' fields and their channels.
     """
 
+    dictionary: Dictionary
+
     def __init__(self, dictionary: Dictionary) -> None:
         """Holds the dictionary.
 
