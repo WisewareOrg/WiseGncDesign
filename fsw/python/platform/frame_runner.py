@@ -1,6 +1,6 @@
 """The Python build: one frame per base tick, through its partitions, as a WiseDynamics FSW build.
 
-Each tick is one frame (ADR 0005 rev 2): CDH-in's ground link runs the commands uplinked since the
+Each tick is one frame (ADR 0005 rev 3): CDH-in's ground link runs the commands uplinked since the
 last tick, RIO-in reads each sensor role's message as its bus struct, CDH-in converts it to its GNC
 input, GNC runs the rate groups the base tick fires, CDH-out's ground link logs every telemetry
 write and CDH-out converts each actuator output GNC wrote to its bus struct, and RIO-out returns
@@ -36,14 +36,42 @@ class _Input(NamedTuple):
     Attributes:
         role: the role.
         port: the GNC sub-topology's input port it writes.
-        read: RIO-in's reader of its payload.
+        bind: RIO-in's binding of its payload to its read.
         convert: CDH-in's converter of its bus struct.
     """
 
     role: str
     port: str
-    read: Callable[[Any], Any]
+    bind: Callable[[Any], Callable[[], Any]]
     convert: Callable[[Any], Any]
+
+
+def _cdh_in(read: Callable[[], Any], convert: Callable[[Any], Any]) -> Callable[[], Any]:
+    """A bound sensor role's GNC input: RIO-in's read, converted by CDH-in when it is a new struct.
+
+    Args:
+        read: RIO-in's read of the role's payload.
+        convert: CDH-in's converter of its bus struct.
+
+    Returns:
+        A function reading the payload and giving its GNC input, the same while the read gives the
+        same bus struct, whose arrays the GNC input holds.
+    """
+    last = converted = None
+
+    def tick() -> Any:
+        """Reads the payload.
+
+        Returns:
+            The GNC input.
+        """
+        nonlocal last, converted
+        bus = read()
+        if bus is not last:
+            last, converted = bus, convert(bus)
+        return converted
+
+    return tick
 
 
 class _Output(NamedTuple):
@@ -132,29 +160,35 @@ class FrameRunner:
         )
         self._link = GroundLink(commands.handlers(self.dictionary, self._gnc.algorithms))
         self._driver = RateGroupDriver(self._dividers)
-        self._checked = False
+        self._bound: Mapping[str, Any] | None = None
+        self._reads: tuple[tuple[str, Callable[[], Any]], ...] = ()
 
     def tick(self, t_ns: int, messages_by_role: Mapping[str, Any]) -> dict[str, Any]:
         """Runs one frame.
 
-        The first tick after a boot checks each sensor role's message with
-        `fsw.python.rio.messages.check`, which raises what it refuses.
+        The first tick after a boot, and a tick given another mapping than the last, checks each
+        sensor role's message with `fsw.python.rio.messages.check`, which raises what it refuses,
+        and binds it to RIO-in; a tick given the same mapping reads its payloads as they stand.
 
         Args:
             t_ns: ns, the tick's time.
             messages_by_role: each role's Basilisk message payload, a live view of its message, as
-                `FswHost` gives it.
+                `FswHost` gives it, the same mapping every tick.
 
         Returns:
-            The actuator commands, by role: each a fresh `messaging.<Name>Payload` of the message
-            the role's bus struct mirrors, for each actuator output GNC wrote this frame.
+            The actuator commands, by role: each the role's `messaging.<Name>Payload` of the
+            message its bus struct mirrors, the same object every tick, for each actuator output
+            GNC wrote this frame.
         """
-        if not self._checked:
+        if messages_by_role is not self._bound:
             messages.check(self._sensors, messages_by_role)
-            self._checked = True
+            self._reads = tuple(
+                (port, _cdh_in(bind(messages_by_role[role]), convert)) for role, port, bind, convert in self._inputs
+            )
+            self._bound = messages_by_role
         self._link.run_commands(t_ns)
-        for role, port, read, convert in self._inputs:
-            self._gnc.write(port, convert(read(messages_by_role[role])))
+        for port, read in self._reads:
+            self._gnc.write(port, read())
         frame = self._gnc.run(t_ns / _NANOSECONDS_PER_SECOND, self._driver.tick())
         for member in frame.telemetry:
             self._link.log(member.instance, member.telemetry, t_ns)

@@ -317,6 +317,39 @@ def test_each_role_s_message_reaches_the_step_as_its_icd_struct(
         holds(value, bus_messages[role.bus].values)
 
 
+def test_each_tick_hands_the_step_the_same_inputs_refreshed_in_place(
+    roles_runner: FrameRunner,
+    roles_contract: tuple[Contract, list[Role]],
+    bus_messages: dict[str, Any],
+    holds: Callable[[Any, Mapping[str, Any]], None],
+):
+    """A sensor input is valid for its tick: the next tick refreshes the same ICD struct in place.
+
+    The messages change between the ticks, as the vehicle's do; the second step gets the very
+    objects the first did, holding the second tick's values.
+
+    Args:
+        roles_runner: the frame runner on the rendered mock.
+        roles_contract: the rendered contract and the roles.
+        bus_messages: a message of each bus struct, its members' values distinct.
+        holds: asserts a tuple holds values.
+    """
+    sensors = [role for role in roles_contract[1] if role.sensor]
+    messages = _sensor_messages(roles_contract[1], bus_messages)
+    roles_runner.tick(NS, messages)
+    for payload in messages.values():
+        for field in type(payload).__dtype__.names:
+            setattr(payload, field, [value + 100.0 for value in getattr(payload, field)])
+
+    roles_runner.tick(2 * NS, messages)
+
+    first, second = [entry[3] for entry in LOG if entry[1] == "step"]
+    for role in sensors:
+        assert second[role.role] is first[role.role], role.role
+        payload = messages[role.role]
+        holds(second[role.role], {field: getattr(payload, field) for field in type(payload).__dtype__.names})
+
+
 def test_each_actuator_role_s_command_returns_as_its_message_in_the_ticks_gnc_wrote_it(
     roles_runner: FrameRunner,
     roles_contract: tuple[Contract, list[Role]],

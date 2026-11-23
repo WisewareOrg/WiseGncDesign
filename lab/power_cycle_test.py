@@ -7,6 +7,7 @@ Skipped without the deployment `just fsw` builds.
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,11 @@ NS = 1_000_000_000
 
 
 def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
-    configuration: str, prm: str, parameter_ids: list[int], bus: list[tuple[int, bytes]]
+    configuration: str,
+    prm: str,
+    parameter_ids: list[int],
+    bus: list[tuple[int, bytes]],
+    wire: Callable[..., Callable[..., int]],
 ):
     """A pin called before boot trips an F´ assert, raised in Python with F´'s own text.
 
@@ -32,16 +37,17 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
+        wire: wires a copy to the bus.
     """
     raised = power_cycle(configuration)
 
     with pytest.raises(RuntimeError, match=r'^Assert: ".*:\d+"'):
-        raised.step(t_ns=NS, bus=bus)
+        raised.step(NS)
 
     fresh = power_cycle(configuration)
     assert fresh is not raised
     fresh.boot(prm, parameter_ids)
-    fresh.step(t_ns=NS, bus=bus)
+    wire(fresh, configuration, bus)(NS)
     assert fresh.telemetry()
     assert raised not in sys.modules.values()
     assert fresh not in sys.modules.values()
@@ -54,6 +60,7 @@ def test_two_copies_in_one_process_share_no_state(
     prm: str,
     parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
+    wire: Callable[..., Callable[..., int]],
 ):
     """A copy left mid-flight, a command queued and its link undrained, reaches no later copy.
 
@@ -67,19 +74,21 @@ def test_two_copies_in_one_process_share_no_state(
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
+        wire: wires a copy to the bus.
     """
     assert rate_groups
     earlier, later = power_cycle(configuration), power_cycle(configuration)
     earlier_station = FprimeStation(earlier, dictionary)
     later_station = FprimeStation(later, dictionary)
     earlier.boot(prm, parameter_ids)
+    step_earlier = wire(earlier, configuration, bus)
     earlier_station.uplink("cmdDisp.CMD_NO_OP", {}, 1)
-    earlier.step(t_ns=NS, bus=bus)
+    step_earlier(NS)
     earlier_station.uplink("cmdDisp.CMD_NO_OP", {}, 2)
 
     later.boot(prm, parameter_ids)
-    later.step(t_ns=NS, bus=bus)
-    earlier.step(t_ns=2 * NS, bus=bus)
+    wire(later, configuration, bus)(NS)
+    step_earlier(2 * NS)
 
     def counts(station: FprimeStation) -> dict[str, list[int]]:
         """Drains a station's telemetry and keeps each rate group's `CycleCount` writes.

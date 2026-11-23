@@ -21,10 +21,12 @@ class PayloadLayout(Protocol):
     Attributes:
         names: the payload's fields, in Basilisk's order.
         fields: each field's numpy type and byte offset, by its name.
+        itemsize: the payload's C struct's size in bytes.
     """
 
     names: tuple[str, ...]
     fields: Mapping[str, tuple[np.dtype, int] | tuple[np.dtype, int, Any]]
+    itemsize: int
 
 
 class Payload(Protocol):

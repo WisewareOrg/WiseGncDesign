@@ -16,7 +16,7 @@ algorithms' classes, each named as its FPP component. A keyword-only `contract`,
 defaults to the repository's, `CONTRACT`; a test flies a mock contract through it, and
 `fsw.codegen.fpp_types.load(contract)` generates that contract's tuples beside the repository's.
 Each tick is one frame through the partitions
-of [ADR 0005 rev 2](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md),
+of [ADR 0005 rev 3](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md),
 in `fsw/python/<partition>/`, and FPP gives each its structure:
 
 - **platform** runs the frame. Its `period_s` is the sub-topology's base tick, the FPP constant
@@ -170,7 +170,7 @@ builds are held to one contract. The reasoning is in
 
 The bus structs are in `fsw/fpp/interfaces/Bus.fpp`, and `bus_test.py` beside it holds each to its
 Basilisk message. The reasoning is in
-[ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
+[ADR 0006 rev 2](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
 
 ## The FPP model
 
@@ -189,8 +189,8 @@ compiler internals, so a key the module reads that is missing raises `KeyError`.
 
 `fsw.codegen.fpp_types` is FPP's types as named tuples, generated when it is imported and never
 written in the tree, with `converter` between them. Its docstrings say what each FPP type becomes,
-which tuples an algorithm's component gets, and how fields are converted; RIO reads a Basilisk
-payload as its bus struct:
+which tuples an algorithm's component gets, and how fields are converted; RIO binds a Basilisk
+payload once and reads it as its bus struct:
 
 ```python
 >>> from Basilisk.architecture import messaging
@@ -198,7 +198,8 @@ payload as its bus struct:
 >>> from fsw.python.rio.messages import reader
 >>> payload = messaging.IMUSensorMsgPayload()
 >>> payload.AngVelPlatform = [0.0, 0.0, 1.0e-3]
->>> bus = reader(Bus.ImuSensorMsg)(payload)
+>>> read = reader(Bus.ImuSensorMsg)(payload)
+>>> bus = read()
 >>> reading = converter(Bus.ImuSensorMsg, Gnc.ImuReading)(bus)
 >>> reading.angVelPlatform.tolist()
 [0.0, 0.0, 0.001]
@@ -233,8 +234,11 @@ it works:
   adapter's `boot` boots on the case's `.dat`, made by `ground.parameters.dat` when the adapter is
   constructed.
 - `lab.bus_emulator` writes a sensor's Basilisk message as the bytes F´ serializes its bus struct
-  to, and reads an actuator's bytes back, from `fsw/fpp/interfaces/Bus.fpp`.
-- `LabBusDriver`, in `fsw/fprime/rio/`, takes those bytes into the deployment and out of it.
+  to, and reads an actuator's bytes back, from `fsw/fpp/interfaces/Bus.fpp`: each payload type's
+  copy is planned once, and each payload is bound to its buffer once, so a tick only copies.
+- `LabBusDriver`, in `fsw/fprime/rio/`, takes those bytes into the deployment and out of it,
+  through a fixed receive and transmit buffer per bus port that the adapter's `boot` makes: nothing
+  on the bus is allocated after boot.
 - `Cdh.BusConverter`, which `fsw.codegen.bus_converter` generates, converts each bus struct to its
   GNC struct and back, by the field rule the Python build's converter follows.
 - `fsw.codegen.deployment.render` renders each configuration's deployment, `WiseFsw.<Cfg>Fsw`, from
@@ -252,5 +256,5 @@ every case reproduces its rate-group datasets from the seed, as it does nav's.
 The reasoning is in
 [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
 [ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md),
-[ADR 0005 rev 2](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
-and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
+[ADR 0005 rev 3](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
+and [ADR 0006 rev 2](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).

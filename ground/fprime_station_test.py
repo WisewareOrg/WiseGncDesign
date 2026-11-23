@@ -188,6 +188,7 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_the_gnc_runs_as_u
     prm: str,
     parameter_ids: list[int],
     bus: list[tuple[int, bytes]],
+    wire: Callable[..., Callable[..., int]],
 ):
     """F´ answers a bad packet with its `Fw.CmdResponse`, named, with no reason, and runs nothing.
 
@@ -204,15 +205,16 @@ def test_a_rejected_packet_gets_f_prime_s_response_by_name_and_the_gnc_runs_as_u
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
         bus: every role's bus message on its LabBusDriver port.
+        wire: wires the copy to the bus.
     """
     untouched = power_cycle(configuration)
     untouched.boot(prm, parameter_ids)
-    untouched.step(t_ns=NS, bus=bus)
+    wire(untouched, configuration, bus)(NS)
     expected = _gnc_writes(decoded(FprimeStation(untouched, dictionary)), configuration)
     assert expected
 
     booted.uplink(change(_test_command(dictionary), _unknown_opcode(configuration)), 7)
-    booted.step(t_ns=NS, bus=bus)
+    wire(booted, configuration, bus)(NS)
 
     assert station.responses() == [(7, response, None)]
     assert _gnc_writes(decoded(station), configuration) == expected

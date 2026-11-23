@@ -61,7 +61,9 @@ def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
     station: FprimeStation,
     rate_groups: list[str],
     decoded: Callable[[Any], list[tuple[str, int, Any]]],
+    configuration: str,
     bus: list[tuple[int, bytes]],
+    wire: Callable[..., Callable[..., int]],
 ):
     """Each rate group's writes of two ticks come down in the order written, tagged with each tick.
 
@@ -73,11 +75,14 @@ def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
         station: the station on it.
         rate_groups: the copy's rate groups.
         decoded: drains the station's telemetry as values.
+        configuration: the copy's configuration.
         bus: every role's bus message on its LabBusDriver port.
+        wire: wires the copy to the bus.
     """
     first = NS + 500_000_000 + 7_000
-    booted.step(t_ns=first, bus=bus)
-    booted.step(t_ns=2 * NS, bus=bus)
+    step = wire(booted, configuration, bus)
+    step(first)
+    step(2 * NS)
 
     writes = _health(decoded(station), rate_groups)
 
@@ -94,6 +99,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     configuration: str,
     tmp_path: Path,
     bus: list[tuple[int, bytes]],
+    wire: Callable[..., Callable[..., int]],
 ):
     """Each rate group's `CycleCount` advances by one once every divider ticks, its own divider.
 
@@ -107,6 +113,7 @@ def test_each_rate_group_runs_once_every_divider_ticks(
         configuration: the copy's configuration.
         tmp_path: where the configuration's topology is rendered.
         bus: every role's bus message on its LabBusDriver port.
+        wire: wires the copy to the bus.
     """
     constants = read(fpp_files(configuration, tmp_path)).constants
     dividers = {
@@ -118,8 +125,9 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     ticks = 10 * math.lcm(*dividers.values())
     station.telemetry()
 
+    step = wire(booted, configuration, bus)
     for tick in range(1, ticks + 1):
-        booted.step(t_ns=tick * NS, bus=bus)
+        step(tick * NS)
 
     writes = station.telemetry()
     for group, divider in dividers.items():

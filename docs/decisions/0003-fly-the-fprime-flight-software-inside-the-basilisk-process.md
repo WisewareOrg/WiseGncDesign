@@ -65,7 +65,7 @@ returns. Not covered: an assert thrown through F´ into pybind11.
 - **The binding is a small hand-written pybind11 module**, with no fprime-python dependency.
 - **Each case flies a fresh copy of the extension**, the way a vehicle is power-cycled.
 - **An F´ assert raises in Python; a copy that raised is never reused.**
-- **The build meets the sim through the lab**, a hardware-in-the-loop rig (ADR 0006 rev 1).
+- **The build meets the sim through the lab**, a hardware-in-the-loop rig (ADR 0006 rev 2).
 
 ## Alternatives considered
 
@@ -94,7 +94,7 @@ returns. Not covered: an assert thrown through F´ into pybind11.
 - **`FW_ASSERTIONS_ALWAYS_ABORT`, in place of an assert that raises in Python.** It kills the worker
   and loses the case's failure, where a fault in an in-process F´ must fail the case. Rejected.
 - **A length check in the pins or the bus emulator, in place of the raising assert.** It is per-port
-  glue at the edge, and the emulator is generated from the same struct (ADR 0006 rev 1). Rejected.
+  glue at the edge, and the emulator is generated from the same struct (ADR 0006 rev 2). Rejected.
 
 ## Consequences
 

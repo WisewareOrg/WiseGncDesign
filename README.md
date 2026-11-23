@@ -54,7 +54,7 @@ comes from is in [`fsw/README.md`](fsw/README.md#the-dictionary). Why the F´ bu
 the simulation is in
 [ADR 0003 rev 4](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
 and how it meets the sim in
-[ADR 0006 rev 1](docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md);
+[ADR 0006 rev 2](docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md);
 how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
 [ADR 0004 rev 3](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 

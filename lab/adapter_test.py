@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from Basilisk.architecture.messaging.SCStatesMsgPayload import SCStatesMsgPayload
 
+import lab.adapter as adapter_module
 from fsw.codegen.deployment import (
     REPOSITORY,
-    bus_port,
     configuration_model,
     tick_period,
 )
@@ -47,7 +48,22 @@ def adapter(fprime_configuration: str, prm_record: Path) -> Adapter:
     return adapter
 
 
-def _assert_commands_of_its_actuators(configuration: str, commands: dict[str, Any]) -> None:
+def _clone(payload: Any) -> Any:
+    """A fresh payload of the same class holding the same values.
+
+    Args:
+        payload: a Basilisk payload.
+
+    Returns:
+        The clone.
+    """
+    clone = type(payload)()
+    for field in type(payload).__dtype__.names:
+        setattr(clone, field, getattr(payload, field))
+    return clone
+
+
+def _assert_commands_of_its_actuators(configuration: str, commands: Mapping[str, Any]) -> None:
     """A tick's commands are of the configuration's actuator roles, each its payload class.
 
     Args:
@@ -79,42 +95,97 @@ def test_the_adapter_ticks_at_its_configuration_s_base_tick_and_commands_only_it
         _assert_commands_of_its_actuators(configuration, adapter.tick(k * NS, messages_by_role))
 
 
-def test_the_adapter_delivers_each_role_s_message_on_its_lab_bus_driver_port(
+def test_each_tick_writes_each_role_s_message_as_it_stands_into_its_receive_buffer(
     adapter: Adapter,
+    configuration: str,
     messages_by_role: dict[str, Any],
-    bus: list[tuple[int, bytes]],
+    bus_by_role: dict[str, tuple[int, bytes]],
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """A tick steps the copy with each role's message, as the bus emulator writes it, on its port.
+    """Each tick's receive buffers hold its messages' bytes, as the bus emulator writes them.
+
+    The same mapping's payloads changed in place reach the next tick, as `FswHost`'s live views
+    do, and a tick given another mapping writes that one's.
 
     Args:
         adapter: the configuration's adapter, booted.
+        configuration: the configuration.
         messages_by_role: a message for each sensor role the configuration takes.
-        bus: every sensor role's bus message on its LabBusDriver port.
-        monkeypatch: records the bus each step of the copy takes.
+        bus_by_role: each sensor role's LabBusDriver port and message bytes.
+        monkeypatch: records each receive buffer the next boot's copy makes.
     """
-    stepped = []
-    step = adapter._fsw.step
+    if not bus_by_role:
+        pytest.skip(f"{configuration} takes no sensor role")
+    buffers: dict[int, memoryview] = {}
+    cycle = adapter_module.power_cycle
 
-    def recorded(t_ns: int, bus: list[tuple[int, bytes]]) -> list[tuple[int, bytes]]:
-        """Records the step's bus, then steps the copy.
+    def recorded(configuration: str) -> Any:
+        """A fresh copy whose receive buffers are recorded by port.
 
         Args:
-            t_ns: ns, the step's time.
-            bus: the step's `(port, bytes)` pairs.
+            configuration: the configuration.
 
         Returns:
-            What the step returns: the bytes its GNC sent each actuator port.
+            The copy.
         """
-        stepped.append(list(bus))
-        return step(t_ns=t_ns, bus=bus)
+        fsw = cycle(configuration)
+        make = fsw.receive_buffer
 
-    monkeypatch.setattr(adapter._fsw, "step", recorded)
+        def receive_buffer(port: int, size: int) -> memoryview:
+            """Makes the port's buffer and records it.
+
+            Args:
+                port: the port.
+                size: its bytes.
+
+            Returns:
+                The buffer.
+            """
+            buffers[port] = make(port, size)
+            return buffers[port]
+
+        monkeypatch.setattr(fsw, "receive_buffer", receive_buffer)
+        return fsw
+
+    monkeypatch.setattr(adapter_module, "power_cycle", recorded)
+    adapter.boot()
+    first = dict(bus_by_role.values())
+    others = {role: _clone(payload) for role, payload in messages_by_role.items()}
 
     adapter.tick(NS, messages_by_role)
+    assert {port: bytes(buffer) for port, buffer in buffers.items()} == first
 
-    assert len(stepped) == 1
-    assert sorted(stepped[0]) == sorted(bus)
+    for payload in messages_by_role.values():
+        for field in type(payload).__dtype__.names:
+            setattr(payload, field, [value + 1.0 for value in getattr(payload, field)])
+    adapter.tick(2 * NS, messages_by_role)
+    moved = {port: serialize(messages_by_role[role]) for role, (port, _) in bus_by_role.items()}
+    assert moved != first
+    assert {port: bytes(buffer) for port, buffer in buffers.items()} == moved
+
+    adapter.tick(3 * NS, others)
+    assert {port: bytes(buffer) for port, buffer in buffers.items()} == first
+
+
+def test_a_role_s_message_of_another_class_is_refused_naming_both(
+    configuration: str, messages_by_role: dict[str, Any], adapter: Adapter
+):
+    """A tick whose role's message is not the class its bus struct mirrors names both classes.
+
+    Args:
+        configuration: the configuration.
+        messages_by_role: a message for each sensor role the configuration takes.
+        adapter: the configuration's adapter, booted.
+    """
+    if not messages_by_role:
+        pytest.skip(f"{configuration} takes no sensor role")
+    role = sorted(messages_by_role)[0]
+    wanted = type(messages_by_role[role]).__name__
+
+    with pytest.raises(
+        TypeError, match=f"role {role}'s message is a SCStatesMsgPayload, but its bus struct mirrors {wanted}"
+    ):
+        adapter.tick(NS, {**messages_by_role, role: SCStatesMsgPayload()})
 
 
 def test_each_boot_power_cycles_a_fresh_copy(configuration: str, messages_by_role: dict[str, Any], adapter: Adapter):
@@ -248,8 +319,8 @@ def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(
 ):
     """MockActuation's adapter returns, each tick, the role's payload the Python build makes.
 
-    The test mock sends its command each tick; the adapter reads the bytes back into a fresh
-    `messaging.<Name>Payload` of the role's message, field for field the Python build's.
+    The test mock sends its command each tick; the adapter reads the bytes back into the role's
+    `messaging.<Name>Payload`, field for field the Python build's.
 
     Args:
         mock_actuation: the configuration, its role, the Python build's command and the record.
@@ -266,29 +337,34 @@ def test_each_tick_returns_each_actuator_command_its_gnc_sent_as_its_message(
         holds(tick[role.role], {f: getattr(python, f) for f in type(python).__dtype__.names})
 
 
-def test_a_tick_returns_the_last_command_its_gnc_sent_an_actuator_port(
-    mock_actuation: tuple[str, Role, Any, Path],
-    holds: Callable[[Any, Mapping[str, Any]], None],
-    monkeypatch: pytest.MonkeyPatch,
+def test_a_tick_allocates_nothing(messages_by_role: dict[str, Any], adapter: Adapter, allocated: Callable[..., int]):
+    """After its first, each tick copies alone: no Python or numpy allocation.
+
+    Each tick's time is made beforehand, as `FswHost` makes it, so only the tick is measured.
+
+    Args:
+        messages_by_role: a message for each sensor role the configuration takes.
+        adapter: the configuration's adapter, booted.
+        allocated: measures what a call allocates.
+    """
+    times = iter(list(range(NS, 1_100 * NS, NS)))
+
+    assert allocated(lambda: adapter.tick(next(times), messages_by_role)) == 0
+
+
+def test_a_tick_commanding_an_actuator_allocates_nothing(
+    mock_actuation: tuple[str, Role, Any, Path], allocated: Callable[..., int]
 ):
-    """Two commands on one port in a step give the second, as the message the port carries.
+    """MockActuation's tick, which reads its command back each tick, allocates nothing.
 
     Args:
         mock_actuation: the configuration, its role, the Python build's command and the record.
-        holds: asserts a payload holds values.
-        monkeypatch: makes the copy's step send two commands on the port.
+        allocated: measures what a call allocates.
     """
-    configuration, role, python, record = mock_actuation
+    configuration, _, _, record = mock_actuation
     adapter = Adapter(configuration, record, contract=MOCK)
     adapter.boot()
-    fields = type(python).__dtype__.names
-    later = type(python)()
-    for field in fields:
-        setattr(later, field, [value + 1.0 for value in getattr(python, field)])
-    port = bus_port(configuration, role.output, contract=MOCK)
-    sent = [(port, serialize(python)), (port, serialize(later))]
-    monkeypatch.setattr(adapter._fsw, "step", lambda t_ns, bus: sent)
+    times = iter(list(range(NS, 1_100 * NS, NS)))
+    messages: dict[str, Any] = {}
 
-    tick = adapter.tick(NS, {})
-
-    holds(tick[role.role], {field: getattr(later, field) for field in fields})
+    assert allocated(lambda: adapter.tick(next(times), messages)) == 0

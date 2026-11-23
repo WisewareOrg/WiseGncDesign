@@ -5,7 +5,6 @@
 
 #include <stdexcept>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "Fw/Types/Assert.hpp"
@@ -21,6 +20,21 @@ namespace {
 
 Sim::Cooperative g_cooperative;
 bool g_booted = false;
+bool g_stepped = false;
+
+//! Refuses a buffer on a port LabBusDriver lacks, on one that has one, or after the first step.
+void checkBufferPort(FwIndexType port, bool made, const char* direction) {
+    if (port < 0 || port >= Bus::LabBusDriver::PORTS) {
+        throw py::index_error("port " + std::to_string(port) + " is past LabBusDriver's " +
+                              std::to_string(Bus::LabBusDriver::PORTS) + " ports");
+    }
+    if (made) {
+        throw std::runtime_error("port " + std::to_string(port) + " already has a " + direction + " buffer");
+    }
+    if (g_stepped) {
+        throw std::runtime_error(std::string("a ") + direction + " buffer is made at boot, not after the first step");
+    }
+}
 
 //! Raises an F´ assert in Python as a std::runtime_error carrying F´'s own text.
 class RaisingAssertHook final : public Fw::AssertHook {
@@ -98,29 +112,44 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         "Queues one F´ command packet at the dispatcher under the ground's context; it runs at the next step.");
 
     m.def(
+        "receive_buffer",
+        [](FwIndexType port, FwSizeType size) {
+            checkBufferPort(port, WiseFsw::labBusDriver.hasReceiveBuffer(port), "receive");
+            return py::memoryview::from_memory(WiseFsw::labBusDriver.makeReceiveBuffer(port, size),
+                                               static_cast<py::ssize_t>(size));
+        },
+        py::arg("port"), py::arg("size"),
+        "Makes LabBusDriver.busOut[port]'s receive buffer of size bytes and returns it, writable: each step "
+        "pushes its bytes out on the port. Raises IndexError for a port past the driver's, and RuntimeError for "
+        "a port that already has one or after the first step.");
+
+    m.def(
+        "transmit_buffer",
+        [](FwIndexType port, FwSizeType size) {
+            checkBufferPort(port, WiseFsw::labBusDriver.hasTransmitBuffer(port), "transmit");
+            return py::memoryview::from_memory(static_cast<const void*>(WiseFsw::labBusDriver.makeTransmitBuffer(port, size)),
+                                               static_cast<py::ssize_t>(size));
+        },
+        py::arg("port"), py::arg("size"),
+        "Makes LabBusDriver.busIn[port]'s transmit buffer of size bytes and returns it, read-only: it holds the "
+        "bytes the GNC last sent the port. Bytes of another size sent the port trip F´'s assert. Raises as "
+        "receive_buffer does.");
+
+    m.def(
         "step",
-        [](U64 t_ns, const std::vector<std::pair<FwIndexType, py::bytes>>& bus) {
+        [](U64 t_ns) {
+            g_stepped = true;
             WiseFsw::simTime.set(t_ns);
             g_cooperative.pump();
-            for (const auto& message : bus) {
-                const std::string data = message.second;
-                WiseFsw::labBusDriver.push(message.first, reinterpret_cast<const U8*>(data.data()),
-                                           static_cast<FwSizeType>(data.size()));
-            }
+            WiseFsw::labBusDriver.push();
             WiseFsw::simTime.tick();
-            py::list taken;
-            for (const auto& message : WiseFsw::labBusDriver.take()) {
-                taken.append(py::make_tuple(
-                    message.first,
-                    py::bytes(reinterpret_cast<const char*>(message.second.data()), message.second.size())));
-            }
-            return taken;
+            return WiseFsw::labBusDriver.takeWritten();
         },
-        py::arg("t_ns"), py::arg("bus"),
-        "Sets the clock to t_ns (ns), runs the queued commands, pushes each (port, bytes) of bus out on "
-        "LabBusDriver.busOut[port] in order and ticks the rate groups once. Bytes the connected port does not "
-        "deserialize exactly trip F´'s assert. Returns each (port, bytes) the step's GNC sent to "
-        "LabBusDriver.busIn[port], in arrival order.");
+        py::arg("t_ns"),
+        "Sets the clock to t_ns (ns), runs the queued commands, pushes each receive buffer out on its "
+        "LabBusDriver.busOut port in port order and ticks the rate groups once. A buffer the connected port does "
+        "not deserialize exactly trips F´'s assert. Returns the transmit buffers the step wrote, bit n for "
+        "LabBusDriver.busIn[n].");
 
     m.def(
         "pump", [](int rounds) { g_cooperative.pump(rounds); }, py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},

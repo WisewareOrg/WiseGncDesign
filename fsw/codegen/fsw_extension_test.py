@@ -19,8 +19,8 @@ from lab import power_cycle
 if TYPE_CHECKING:
     from lab.fsw_extension import FswExtension
 
-FIXED = {"boot", "pump", "responses", "step", "telemetry", "uplink"}
-"""The six functions `lab/adapter.py` and `ground/fprime_station.py` call by name.
+FIXED = {"boot", "pump", "receive_buffer", "responses", "step", "telemetry", "transmit_buffer", "uplink"}
+"""The functions `lab/adapter.py` and `ground/fprime_station.py` call by name.
 
 The `bus_*` and `cdh_*` pins are reached only by computed name.
 """
@@ -111,8 +111,8 @@ def test_the_protocol_s_methods_are_the_extension_s_functions(built: Built):
     assert methods == _functions(built.copy), "the protocol's methods differ from the extension's functions"
 
 
-def test_the_extension_has_exactly_the_six_fixed_functions(built: Built):
-    """The extension's functions that are not `bus_*` or `cdh_*` are the six the lab and ground call by name.
+def test_the_extension_has_exactly_the_fixed_functions(built: Built):
+    """The extension's functions that are not `bus_*` or `cdh_*` are those the lab and ground call by name.
 
     Args:
         built: the configuration's extension and rendered stub.

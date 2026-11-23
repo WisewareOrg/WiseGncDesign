@@ -1,9 +1,9 @@
 # 0005 — Partition each build into RIO, CDH, GNC and platform, one frame per tick
 
 **Status:** accepted
-**Decided:** 2026-11-13 (issue 51 two edges design; issue 61 The Python frame runner, on
-WiseDynamics' host module)
-**Rev:** 2
+**Decided:** 2026-11-23 (issue 51 two edges design; issue 61 The Python frame runner, on
+WiseDynamics' host module; issue 106 Profile the F´ build's per-case time)
+**Rev:** 3
 
 ## Revisions
 
@@ -17,12 +17,16 @@ WiseDynamics' host module)
 - **rev 2** — 2026-11-23 — the Python build copies a message's data once each way, in RIO, and CDH
   passes the arrays through, so a sensor input reaches GNC read-only (issue 87 Speed up the Python
   build's frame overhead).
+- **rev 3** — 2026-11-23 — at the hardware edge a frame only copies: each build's RIO binds its
+  buffers and payloads at boot or at the first tick, a tick allocates nothing there, and a sensor
+  input is valid for its tick, so GNC copies what it keeps (issue 106 Profile the F´ build's
+  per-case time).
 
 ## Context
 
 The algorithms are written in Python first and flown with no F´ build, and F´ is good flight
 software in its own right, not a mirror of the Python build. Each build meets the world at two
-edges: the ground (ADR 0004 rev 3) and the sim (ADR 0006 rev 1).
+edges: the ground (ADR 0004 rev 3) and the sim (ADR 0006 rev 2).
 
 At `6f6276e`, one object per build did bus I/O, unit conversion, commands, telemetry and the
 algorithm, wired by hand for one algorithm. A second algorithm had no place to sit, and the glue grew
@@ -39,6 +43,10 @@ way through, partitioned as real flight software is.
   - GNC runs the algorithms;
   - platform is the clock, the tick and the tasks.
 - **GNC touches neither edge.**
+- **At the hardware edge a frame only copies.** Every buffer and payload that carries a reading in
+  or a command out is made at boot or bound at the first tick; a tick copies into it and allocates
+  nothing. A sensor input is valid for its tick, as a sampling port's is: GNC copies what it keeps.
+  ADR 0006 rev 2 holds the lab to the same rule.
 - **Each build has its own CDH**, however thin.
 - **FPP pairs each role's bus struct with the GNC's struct.** A CDH component,
   `Cdh.BusConverter` in `fsw/fpp/interfaces/`, has per role an input `<role>In` and an output
@@ -47,7 +55,7 @@ way through, partitioned as real flight software is.
   declaration.
 - **An algorithm's code lives in `algorithms/<name>/`, and GNC wires it in.** A configuration
   reaches its algorithms only through its GNC sub-topology.
-- **RIO, CDH and platform name no algorithm**; ADR 0006 rev 1 holds the lab and the sim glue to the
+- **RIO, CDH and platform name no algorithm**; ADR 0006 rev 2 holds the lab and the sim glue to the
   same rule.
 - **RIO, CDH and platform live in `fsw/<build>/<partition>/`; GNC is one sub-topology in
   `fsw/fpp/gnc/` that both builds fly.** The Python frame runner is nothing but these partitions.
@@ -69,6 +77,10 @@ way through, partitioned as real flight software is.
 - **The Python build copying a message's data at every partition boundary, as F´ does.** Python
   passes references, so a second copy at CDH protects only memory no one keeps, at a per-tick cost
   that dominates the frame. Rejected for one copy each way, in RIO, with read-only sensor arrays.
+- **A fresh read-only copy of each message every tick, as rev 2 had it.** Each tick allocates the
+  copy, its views and its tuple: RIO-in's largest per-tick cost, about 39 ms of a 5,700-tick Leo500
+  case. A held input that never changes also lets an algorithm keep what a real partition would
+  have to copy. Rejected for a buffer per message, bound once and refreshed in place.
 
 ## Consequences
 
@@ -82,3 +94,8 @@ way through, partitioned as real flight software is.
   RIO and bus struct to GNC struct in CDH for a sensor, and back for an actuator, as the F´ path
   does. Unlike the F´ path, it copies the data once each way, in RIO: CDH passes the arrays through,
   so a sensor input reaches GNC read-only and an algorithm editing it in place raises.
+- An algorithm that keeps a sensor input past its tick copies it; a held reference shows the next
+  tick's values, as the F´ build's ports do.
+- A test traces each build's RIO-in and RIO-out, and the lab's tick, with `tracemalloc` and holds
+  them to no allocation per tick. It sees Python and numpy; F´'s C++ is held to it by its fixed
+  buffers alone.

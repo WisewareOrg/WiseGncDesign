@@ -4,6 +4,7 @@ The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's me
 `bus_messages`: RIO-in reads the sensor roles', and RIO-out builds the actuator roles' payloads.
 """
 
+import functools
 import re
 from collections import namedtuple
 from collections.abc import Callable, Mapping
@@ -121,7 +122,7 @@ def test_each_paired_role_s_message_is_read_as_its_bus_struct(
     for pair, role in zip(PAIRS, ROLES, strict=True):
         _, subscribed = _written(bus_messages[role.bus].payload)
 
-        read_ = reader(pair.bus)(subscribed())
+        read_ = reader(pair.bus)(subscribed())()
 
         assert isinstance(read_, fpp_types.named(role.bus)), role.role
         _assert_holds(holds, read_, bus_messages[role.bus], role.role)
@@ -147,18 +148,19 @@ def test_a_payload_of_another_class_of_the_payload_s_name_reads_alike(
         alias = type(type(payload).__name__, (), {n: getattr(payload, n) for n in [*names, "this"]})()
         assert not hasattr(alias, "__dtype__")
 
-        read_ = reader(pair.bus)(alias)
+        read_ = reader(pair.bus)(alias)()
 
         _assert_holds(holds, read_, bus_messages[role.bus], role.role)
 
 
-def test_a_read_message_keeps_its_values_after_the_next_tick(
+def test_each_read_copies_the_message_as_it_stands_into_the_same_arrays(
     bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
-    """The host's payload is a live view of its message; the conversion copies it.
+    """A read is valid for its tick: the next read refreshes the same arrays in place.
 
-    Each role's message is read, and written again with other values, as the next tick's sensor
-    task does: the bus struct still holds the first tick's values.
+    Each role's message is read, then written again with other values, as the next tick's sensor
+    task does. The first read still holds the first tick's values until RIO reads again; the next
+    read gives the same tuple, its arrays holding the later values.
 
     Args:
         bus_messages: a message of each bus struct.
@@ -167,16 +169,17 @@ def test_a_read_message_keeps_its_values_after_the_next_tick(
     for pair, role in zip(PAIRS, ROLES, strict=True):
         message, subscribed = _written(bus_messages[role.bus].payload)
         payload = subscribed()
-        read_ = reader(pair.bus)(payload)
+        read = reader(pair.bus)(payload)
+        first = read()
         later = type(bus_messages[role.bus].payload)()
         for field in type(later).__dtype__.names:
             setattr(later, field, [v + 100.0 for v in getattr(payload, field)])
 
         message.write(later)
+        _assert_holds(holds, first, bus_messages[role.bus], role.role)
 
-        field = type(later).__dtype__.names[0]
-        assert list(getattr(payload, field)) == list(getattr(later, field)), role.role
-        _assert_holds(holds, read_, bus_messages[role.bus], role.role)
+        assert read() is first, role.role
+        holds(first, {field: getattr(later, field) for field in type(later).__dtype__.names})
 
 
 def test_a_read_message_s_arrays_are_read_only(bus_messages: dict[str, Any]):
@@ -187,7 +190,7 @@ def test_a_read_message_s_arrays_are_read_only(bus_messages: dict[str, Any]):
     """
     for pair, role in zip(PAIRS, ROLES, strict=True):
         _, subscribed = _written(bus_messages[role.bus].payload)
-        read_ = reader(pair.bus)(subscribed())
+        read_ = reader(pair.bus)(subscribed())()
 
         arrays = [v for v in read_ if isinstance(v, np.ndarray)]
         assert arrays, role.role
@@ -207,7 +210,7 @@ def test_each_basilisk_message_reads_as_its_bus_struct_member_for_member(
     """
     assert bus_messages
     for name, message in bus_messages.items():
-        bus = reader(fpp_types.named(name))(message.payload)
+        bus = reader(fpp_types.named(name))(message.payload)()
 
         assert type(bus) is fpp_types.named(name), name
         holds(bus, message.values)
@@ -227,7 +230,7 @@ def test_a_payload_reads_as_read_only_arrays_and_plain_scalars(mock: SimpleNames
     payload.timeTag = 2**40 + 7
     payload.qInrtl2Case = [0.5, -0.5, 0.25, 1.0]
 
-    read_ = reader(mock.STSensorMsg)(payload)
+    read_ = reader(mock.STSensorMsg)(payload)()
     payload.qInrtl2Case = [0.0, 0.0, 0.0, 0.0]
 
     assert read_.timeTag == 2**40 + 7
@@ -237,10 +240,10 @@ def test_a_payload_reads_as_read_only_arrays_and_plain_scalars(mock: SimpleNames
         read_.qInrtl2Case[0] = 1.0
 
 
-def test_a_bus_struct_is_written_to_a_fresh_payload_field_by_field(mock: SimpleNamespace):
-    """A bus struct is written into a fresh payload's memory, each field at its offset.
+def test_a_bus_struct_is_written_into_its_writer_s_payload_field_by_field(mock: SimpleNamespace):
+    """A bus struct is written into the payload its writer made, each field at its offset.
 
-    The struct changed afterwards leaves the payload as it was, and a second write gives another
+    The struct changed afterwards leaves the payload as it was, and a second write writes the same
     payload.
 
     Args:
@@ -255,7 +258,8 @@ def test_a_bus_struct_is_written_to_a_fresh_payload_field_by_field(mock: SimpleN
     assert type(payload) is STSensorMsgPayload
     assert payload.timeTag == 2**40 + 7
     assert list(payload.qInrtl2Case) == [0.5, -0.5, 0.25, 1.0]
-    assert write(source) is not payload
+    assert write(source) is payload
+    assert list(payload.qInrtl2Case) == [0.0, 0.0, 0.0, 0.0]
 
 
 def test_a_bus_struct_whose_field_differs_from_the_payload_s_is_refused_when_planned(mock: SimpleNamespace):
@@ -314,10 +318,10 @@ def test_a_paired_role_s_message_of_another_payload_class_is_refused_naming_both
         check([pair], {pair.role: payload_type("Bus.SCStatesMsg")()})
 
 
-def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_message(
+def test_each_actuator_role_s_bus_struct_is_written_as_a_payload_of_its_message(
     bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
 ):
-    """Each commanded role's bus struct becomes a new `messaging.<Name>Payload`, field by field.
+    """Each commanded role's bus struct is written into its `messaging.<Name>Payload`, field by field.
 
     Each payload field is the bus member of its name, ignoring case; the bus struct changed
     afterwards leaves the payload as it was.
@@ -342,3 +346,19 @@ def test_each_actuator_role_s_bus_struct_is_written_as_a_fresh_payload_of_its_me
         name = role.bus.removeprefix("Bus.")
         assert type(payload) is getattr(messaging, f"{name}Payload"), role.role
         holds(payload, bus_messages[role.bus].values)
+
+
+def test_a_bound_read_and_a_write_allocate_nothing(bus_messages: dict[str, Any], allocated: Callable[..., int]):
+    """Each sensor role's bound read, and each actuator role's write, allocate nothing per call.
+
+    Args:
+        bus_messages: a message of each bus struct.
+        allocated: measures what a call allocates.
+    """
+    for pair, role in zip(PAIRS, ROLES, strict=True):
+        read = reader(pair.bus)(bus_messages[role.bus].payload)
+        assert allocated(read) == 0, role.role
+    for pair, role in zip(COMMANDS, ACTUATORS, strict=True):
+        write = writer(pair.bus)
+        value = pair.bus(**{m: np.array(v) for m, v in bus_messages[role.bus].values.items()})
+        assert allocated(functools.partial(write, value)) == 0, role.role

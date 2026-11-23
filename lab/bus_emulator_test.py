@@ -15,7 +15,7 @@ from Basilisk.architecture.messaging.SCStatesMsgPayload import SCStatesMsgPayloa
 
 from fsw.codegen.fpp_model import Member, Struct
 from lab import bus_emulator
-from lab.bus_emulator import deserialize, serialize
+from lab.bus_emulator import deserialize, from_bus, serialize, size, to_bus
 
 
 def _assert_holds(holds: Callable[[Any, Mapping[str, Any]], None], payload: Any, message: Any, name: str) -> None:
@@ -52,7 +52,7 @@ def test_a_member_outside_the_emulator_s_domain_is_refused_by_name(
 ) -> None:
     """A mock bus struct with a scalar, `bool` or unused-primitive member raises, naming it.
 
-    The mock, `Bus.Mock`, stands in for a bus struct's mirror for the test, and the packers are
+    The mock, `Bus.Mock`, stands in for a bus struct's mirror for the test, and the copies are
     replanned.
 
     Args:
@@ -64,12 +64,12 @@ def test_a_member_outside_the_emulator_s_domain_is_refused_by_name(
     payload = next(iter(bus_messages.values())).payload
     mock = Struct("Bus.Mock", (member,))
     monkeypatch.setitem(bus_emulator._STRUCTS, type(payload), mock)
-    bus_emulator._packer.cache_clear()
+    bus_emulator._plan.cache_clear()
     try:
         with pytest.raises(KeyError, match=rf"Bus\.Mock\.{named}, which the bus emulator"):
             serialize(payload)
     finally:
-        bus_emulator._packer.cache_clear()
+        bus_emulator._plan.cache_clear()
 
 
 def test_the_emulator_writes_the_bytes_f_prime_serializes(fsw: ModuleType, bus_messages: dict[str, Any]) -> None:
@@ -99,3 +99,43 @@ def test_the_emulator_reads_back_the_bytes_f_prime_serializes(
     for name, message in bus_messages.items():
         pin = getattr(fsw, re.sub(r"^Bus\.", "bus_", name))
         _assert_holds(holds, deserialize(name, pin(**message.values)), message, name)
+
+
+def test_a_bound_copy_reads_the_payload_and_the_buffer_as_they_stand_at_each_call(
+    bus_messages: dict[str, Any], holds: Callable[[Any, Mapping[str, Any]], None]
+) -> None:
+    """A payload changed after binding is copied as changed, to the bus and back.
+
+    Each struct's message is bound to a buffer of `size` bytes, then each value moved by one; the
+    copy writes the moved values, `serialize`'s bytes of them, and reads them back into a payload.
+
+    Args:
+        bus_messages: a message of each bus struct.
+        holds: asserts a payload holds values.
+    """
+    for name, message in bus_messages.items():
+        buffer = bytearray(size(name))
+        out = type(message.payload)()
+        write, read = to_bus(message.payload, buffer), from_bus(buffer, out)
+        fields = {field.lower(): field for field in type(message.payload).__dtype__.names}
+        moved = {member: [value + 1.0 for value in values] for member, values in message.values.items()}
+        for member, values in moved.items():
+            setattr(message.payload, fields[member.lower()], values)
+
+        write()
+        read()
+
+        assert bytes(buffer) == serialize(message.payload), name
+        holds(out, moved)
+
+
+def test_bytes_of_another_length_than_the_struct_s_are_refused_naming_both(bus_messages: dict[str, Any]) -> None:
+    """Bytes one short of a struct's, and one over, raise `ValueError` naming the struct.
+
+    Args:
+        bus_messages: a message of each bus struct.
+    """
+    for name in bus_messages:
+        for length in (size(name) - 1, size(name) + 1):
+            with pytest.raises(ValueError, match=rf"{name} is {size(name)} bytes on the bus, not {length}"):
+                deserialize(name, bytes(length))
