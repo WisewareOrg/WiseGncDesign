@@ -157,7 +157,7 @@ def test_the_telemetry_decodes_to_each_channel_s_time_tags_and_values(runner: Fr
 
     decoded = runner.decode([runner.telemetry()])
 
-    assert set(decoded) == {"source.level", "sink.received"}
+    assert list(decoded) == ["source.level", "sink.received"]
     times, levels = decoded["source.level"]
     assert times.dtype == np.int64
     assert times.tolist() == [NS // 2, NS // 2, NS]

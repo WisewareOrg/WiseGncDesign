@@ -192,7 +192,7 @@ def test_a_downlinked_packet_that_is_not_telemetry_is_refused(
     good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
     bad = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)], descriptor)
 
-    with pytest.raises(ValueError, match="not FW_PACKET_TELEM"):
+    with pytest.raises(ValueError, match=rf"downlinked packet 1 is {descriptor}, not FW_PACKET_TELEM"):
         mock.decode([_downlink([good, bad])])
 
 
@@ -208,8 +208,63 @@ def test_an_entry_of_a_channel_the_dictionary_lacks_is_refused_naming_its_id(
     good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
     unknown = good[:2] + (0x7FFF).to_bytes(4, "big") + good[6:]
 
-    with pytest.raises(ValueError, match=r"channel ID 0x7fff .*not in the dictionary"):
-        mock.decode([_downlink([unknown])])
+    with pytest.raises(ValueError, match=r"downlinked packet 1 holds channel ID 0x7fff, not in the dictionary"):
+        mock.decode([_downlink([good, unknown])])
+
+
+def test_a_downlink_whose_packet_sizes_disagree_with_its_bytes_is_refused(
+    mock: FprimeStation, mock_dictionary: Dictionary
+):
+    """Sizes summing to other than the byte count raise `ValueError` naming both.
+
+    Args:
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
+    """
+    packet = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
+    sizes = np.array([len(packet) + 3], np.uint32).tobytes()
+
+    with pytest.raises(ValueError, match=rf"packet sizes sum to {len(packet) + 3} bytes, not its {len(packet)}"):
+        mock.decode([(packet, sizes)])
+
+
+@pytest.mark.parametrize(
+    "cut",
+    [lambda packet: packet[:1], lambda packet: packet[:-1], lambda packet: packet[:-4]],
+    ids=["shorter-than-a-descriptor", "entry-overruns-by-a-byte", "entry-overruns-by-a-field"],
+)
+def test_a_packet_cut_short_is_refused_naming_its_index(
+    mock: FprimeStation, mock_dictionary: Dictionary, cut: Callable[[bytes], bytes]
+):
+    """A packet shorter than a descriptor, or whose last entry overruns its size, raises `ValueError`.
+
+    The packet is the second of two, so the message names index 1.
+
+    Args:
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
+        cut: cuts a good packet short.
+    """
+    good = _packet(mock_dictionary, [("mock.gain", (1, 0), 0.5)])
+
+    with pytest.raises(ValueError, match=r"downlinked packet 1 is cut short"):
+        mock.decode([_downlink([good, cut(good)])])
+
+
+def test_the_channels_come_back_keyed_in_the_order_of_their_first_write(
+    mock: FprimeStation, mock_dictionary: Dictionary
+):
+    """Channels whose IDs sort opposite to their first writes are keyed by first write, across drains.
+
+    Args:
+        mock: the mock's station.
+        mock_dictionary: the mock's dictionary.
+    """
+    first = _downlink([_packet(mock_dictionary, [("mock.offset", (1, 0), [1, 2, 3]), ("mock.gain", (1, 0), 0.5)])])
+    second = _downlink([_packet(mock_dictionary, [("mock.mode", (2, 0), 1), ("mock.offset", (2, 0), [4, 5, 6])])])
+
+    assert list(mock.decode([first, second])) == ["mock.offset", "mock.gain", "mock.mode"]
+    assert list(mock.decode([second, first])) == ["mock.mode", "mock.offset", "mock.gain"]
 
 
 def test_decode_takes_the_named_channels_only(mock: FprimeStation, mock_dictionary: Dictionary):

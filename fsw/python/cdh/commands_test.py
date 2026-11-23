@@ -7,7 +7,6 @@ import pytest
 
 from fsw.codegen import fpp_types
 from fsw.codegen.dictionary import Dictionary
-from fsw.codegen.fpp_types import named
 from fsw.mock import MOCK
 from fsw.mock.mock_gnc import Source
 from fsw.python.cdh import commands
@@ -30,29 +29,30 @@ def dictionary() -> Dictionary:
 
 
 def test_each_command_answers_with_its_f_prime_response(dictionary: Dictionary):
-    """Each `Fw.CmdResponse` a command can get, by name, with the handler's telemetry entry.
+    """Each `Fw.CmdResponse` a command can get, by name, with the handler's telemetry.
 
-    A handler that returns telemetry answers `OK` with its entry, `(instance, time given, the
-    telemetry tuple)`; one that returns none answers `OK` with no entry; one refusing answers
-    `VALIDATION_ERROR` with its reason and no entry; a name not the instance's, or a parameter's
-    set or save command, answers `INVALID_OPCODE` with no entry.
+    A handler that returns answers `OK` with its telemetry's writes, tagged with the time given; one
+    refusing answers `VALIDATION_ERROR` with its reason; a name not the instance's, or a parameter's
+    set or save command, answers `INVALID_OPCODE`.
 
     Args:
         dictionary: the mock's dictionary.
     """
     handlers = commands.handlers(dictionary, {"source": Source(PARAMETERS)})
 
-    dispatched = commands.dispatch(handlers, "source.setLevel", {"level": 2.0}, 7)
-    assert (dispatched.response, dispatched.reason) == ("OK", None)
-    assert dispatched.entry == ("source", 7, named("MockGnc.SourceTelemetry")(level=2.0))
-    assert commands.dispatch(handlers, "source.reset", {}, 7) == ("OK", None, None)
+    assert commands.dispatch(handlers, "source.setLevel", {"level": 2.0}, 7) == (
+        "OK",
+        None,
+        [("source.level", 7, 2.0)],
+    )
+    assert commands.dispatch(handlers, "source.reset", {}, 7) == ("OK", None, [])
     assert commands.dispatch(handlers, "source.setLevel", {"level": -1.0}, 7) == (
         "VALIDATION_ERROR",
         "level -1.0 is negative",
-        None,
+        [],
     )
     for name in ("source.setLevle", "source.GAIN_PRM_SET", "source.GAIN_PRM_SAVE", "other.reset"):
-        assert commands.dispatch(handlers, name, {}, 7) == ("INVALID_OPCODE", None, None)
+        assert commands.dispatch(handlers, name, {}, 7) == ("INVALID_OPCODE", None, [])
 
 
 def test_a_handler_s_other_exception_is_a_bug_and_propagates(dictionary: Dictionary):
