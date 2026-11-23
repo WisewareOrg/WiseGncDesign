@@ -350,6 +350,38 @@ def test_each_tick_hands_the_step_the_same_inputs_refreshed_in_place(
         holds(second[role.role], {field: getattr(payload, field) for field in type(payload).__dtype__.names})
 
 
+def test_a_tick_given_another_mapping_reads_that_one(
+    roles_runner: FrameRunner,
+    roles_contract: tuple[Contract, list[Role]],
+    bus_messages: dict[str, Any],
+    holds: Callable[[Any, Mapping[str, Any]], None],
+):
+    """A tick handed other payloads than the last reads them, not the payloads bound before.
+
+    Args:
+        roles_runner: the frame runner on the rendered mock.
+        roles_contract: the rendered contract and the roles.
+        bus_messages: a message of each bus struct, its members' values distinct.
+        holds: asserts a tuple holds values.
+    """
+    sensors = [role for role in roles_contract[1] if role.sensor]
+    messages = _sensor_messages(roles_contract[1], bus_messages)
+    roles_runner.tick(NS, messages)
+    others = {}
+    for role, payload in messages.items():
+        other = type(payload)()
+        for field in type(payload).__dtype__.names:
+            setattr(other, field, [value + 100.0 for value in getattr(payload, field)])
+        others[role] = other
+
+    roles_runner.tick(2 * NS, others)
+
+    second = [entry[3] for entry in LOG if entry[1] == "step"][-1]
+    for role in sensors:
+        payload = others[role.role]
+        holds(second[role.role], {field: getattr(payload, field) for field in type(payload).__dtype__.names})
+
+
 def test_each_actuator_role_s_command_returns_as_its_message_in_the_ticks_gnc_wrote_it(
     roles_runner: FrameRunner,
     roles_contract: tuple[Contract, list[Role]],

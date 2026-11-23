@@ -144,13 +144,15 @@ def test_a_step_in_which_gnc_sends_no_actuator_command_writes_no_transmit_buffer
     assert step(2 * NS) == 0
 
 
-def test_each_step_returns_the_transmit_buffers_its_gnc_wrote_holding_the_bytes_sent(
+def test_each_step_returns_only_the_transmit_buffers_its_gnc_wrote(
     mock_actuation: tuple[str, Role, Any, Path], boot: Callable[..., tuple[ModuleType, Any]]
 ) -> None:
-    """MockActuation's command lands in its port's transmit buffer, flagged in each step's return.
+    """MockActuation's command lands in its transmit buffer, flagged by each step that sends it.
 
     The bytes are the bus struct F´ serializes for the command, as the Python build's CDH-out and
     RIO-out make it and the bus emulator writes it, on the port the deployment wires the role to.
+    The mock sends every other step; a step that sends nothing returns no bit, and the buffer holds
+    the last command.
 
     Args:
         mock_actuation: the configuration, its role, the Python build's command and the record.
@@ -162,8 +164,8 @@ def test_each_step_returns_the_transmit_buffers_its_gnc_wrote_holding_the_bytes_
     fsw, _ = boot(configuration)
     transmit = fsw.transmit_buffer(port, len(expected))
 
-    for k in (1, 2):
-        assert fsw.step(k * NS) == 1 << port
+    for k, written in ((1, 1 << port), (2, 0), (3, 1 << port)):
+        assert fsw.step(k * NS) == written, k
         assert bytes(transmit) == expected
 
 

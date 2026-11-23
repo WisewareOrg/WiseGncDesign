@@ -7,6 +7,7 @@ deployment `just fsw` builds, as the `fsw` fixture skips.
 
 import gc
 import re
+import struct
 import weakref
 from collections.abc import Callable, Mapping
 from types import ModuleType
@@ -158,3 +159,28 @@ def test_a_bound_copy_keeps_its_payload_alive(bus_messages: dict[str, Any]) -> N
 
         assert alive() is not None, name
         copy()
+
+
+def test_members_out_of_the_payload_s_order_are_copied_as_separate_runs(
+    bus_messages: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bus struct ordering members unlike the payload's C struct is planned as runs, and copied right.
+
+    The mock, `Bus.Mock`, mirrors a bus struct's payload with its last member moved first, so the
+    plan splits into runs, and the bytes are each member's values in the mock's order, big-endian.
+
+    Args:
+        bus_messages: a message of each bus struct.
+        monkeypatch: replaces the payload's mirror for the test.
+    """
+    message = next(m for m in bus_messages.values() if len(m.struct.members) > 1)
+    members = message.struct.members
+    mock = Struct("Bus.Mock", (members[-1], *members[:-1]))
+    expected = [value for member in mock.members for value in message.values[member.name]]
+    monkeypatch.setitem(bus_emulator._STRUCTS, type(message.payload), mock)
+    bus_emulator._plan.cache_clear()
+    try:
+        assert len(bus_emulator._plan(type(message.payload)).runs) == 2
+        assert serialize(message.payload) == struct.pack(f">{len(expected)}d", *expected)
+    finally:
+        bus_emulator._plan.cache_clear()

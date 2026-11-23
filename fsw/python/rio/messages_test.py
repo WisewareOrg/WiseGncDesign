@@ -226,6 +226,8 @@ def test_each_basilisk_message_reads_as_its_bus_struct_member_for_member(
 def test_a_payload_reads_as_read_only_arrays_and_plain_scalars(mock: SimpleNamespace):
     """A payload is read from one copy of its memory: arrays read-only, a scalar a plain number.
 
+    A read holds its tick's values; the next read gives the payload's new scalar.
+
     Args:
         mock: the mock's tuples.
     """
@@ -233,14 +235,17 @@ def test_a_payload_reads_as_read_only_arrays_and_plain_scalars(mock: SimpleNames
     payload.timeTag = 2**40 + 7
     payload.qInrtl2Case = [0.5, -0.5, 0.25, 1.0]
 
-    read_ = reader(mock.STSensorMsg)(payload)()
+    read = reader(mock.STSensorMsg)(payload)
+    read_ = read()
     payload.qInrtl2Case = [0.0, 0.0, 0.0, 0.0]
+    payload.timeTag = 9
 
     assert read_.timeTag == 2**40 + 7
     assert type(read_.timeTag) is int
     assert read_.qInrtl2Case.tolist() == [0.5, -0.5, 0.25, 1.0]
     with pytest.raises(ValueError, match="read-only"):
         read_.qInrtl2Case[0] = 1.0
+    assert read().timeTag == 9
 
 
 def test_a_bus_struct_is_written_into_its_writer_s_payload_field_by_field(mock: SimpleNamespace):
@@ -277,16 +282,23 @@ def test_a_bus_struct_whose_field_differs_from_the_payload_s_is_refused_when_pla
         writer(mock.NavAttMsg)
 
 
-def test_a_value_of_another_shape_than_its_field_is_refused_when_written(mock: SimpleNamespace):
-    """A scalar written to an array field is refused, naming the field, rather than broadcast into it.
+@pytest.mark.parametrize(
+    ("value", "shape"),
+    [(0.5, "()"), (np.zeros(3), "(3,)"), (np.zeros((1, 4)), "(1, 4)")],
+    ids=["scalar", "short-array", "two-dimensional-array"],
+)
+def test_a_value_of_another_shape_than_its_field_is_refused_when_written(mock: SimpleNamespace, value: Any, shape: str):
+    """A value of another shape than its array field is refused, naming the field, not broadcast.
 
     Args:
         mock: the mock's tuples.
+        value: the value written to `qInrtl2Case`, a `(4,)` field.
+        shape: its shape, as the refusal names it.
     """
     write = writer(mock.STSensorMsg)
 
-    with pytest.raises(ValueError, match=re.escape("STSensorMsg.qInrtl2Case is (4,), but its value is ()")):
-        write(mock.STSensorMsg(timeTag=1, qInrtl2Case=0.5))
+    with pytest.raises(ValueError, match=re.escape(f"STSensorMsg.qInrtl2Case is (4,), but its value is {shape}")):
+        write(mock.STSensorMsg(timeTag=1, qInrtl2Case=value))
 
 
 def test_a_value_not_of_the_bus_struct_is_refused_when_written(mock: SimpleNamespace):
@@ -383,3 +395,15 @@ def test_a_bound_read_keeps_its_payload_alive(bus_messages: dict[str, Any]):
 
         assert alive() is not None, role.role
         read()
+
+
+def test_the_allocated_gate_sees_an_allocation_and_passes_none(allocated: Callable[..., int]):
+    """The `allocated` fixture measures a call that allocates an array, and 0 for one that does not.
+
+    Args:
+        allocated: measures what a call allocates.
+    """
+    target, source = np.zeros(4), np.ones(4)
+
+    assert allocated(functools.partial(np.zeros, 4)) > 0
+    assert allocated(functools.partial(np.copyto, target, source)) == 0
