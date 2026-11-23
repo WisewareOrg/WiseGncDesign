@@ -1,6 +1,6 @@
 """The Python build: one frame per base tick, through its partitions, as a WiseDynamics FSW build.
 
-Each tick is one frame (ADR 0005 rev 1): CDH-in's ground link runs the commands uplinked since the
+Each tick is one frame (ADR 0005 rev 2): CDH-in's ground link runs the commands uplinked since the
 last tick, RIO-in reads each sensor role's message as its bus struct, CDH-in converts it to its GNC
 input, GNC runs the rate groups the base tick fires, CDH-out's ground link logs every telemetry
 write and CDH-out converts each actuator output GNC wrote to its bus struct, and RIO-out returns

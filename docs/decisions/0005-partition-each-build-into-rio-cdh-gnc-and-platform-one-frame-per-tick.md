@@ -3,7 +3,7 @@
 **Status:** accepted
 **Decided:** 2026-11-13 (issue 51 two edges design; issue 61 The Python frame runner, on
 WiseDynamics' host module)
-**Rev:** 1
+**Rev:** 2
 
 ## Revisions
 
@@ -14,6 +14,9 @@ WiseDynamics' host module)
   direction the reverse of a sensor's, and a configuration takes only the roles its GNC
   sub-topology exposes (issue 95 Generate the actuator direction and each configuration's role
   wiring, in both builds).
+- **rev 2** — 2026-11-23 — the Python build copies a message's data once each way, in RIO, and CDH
+  passes the arrays through, so a sensor input reaches GNC read-only (issue 87 Speed up the Python
+  build's frame overhead).
 
 ## Context
 
@@ -74,4 +77,5 @@ way through, partitioned as real flight software is.
   more than one input, until an algorithm needs either.
 - The Python build converts each role's message twice per tick, Basilisk payload to bus struct in
   RIO and bus struct to GNC struct in CDH for a sensor, and back for an actuator, as the F´ path
-  does.
+  does. Unlike the F´ path, it copies the data once each way, in RIO: CDH passes the arrays through,
+  so a sensor input reaches GNC read-only and an algorithm editing it in place raises.

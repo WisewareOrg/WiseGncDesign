@@ -16,7 +16,7 @@ algorithms' classes, each named as its FPP component. A keyword-only `contract`,
 defaults to the repository's, `CONTRACT`; a test flies a mock contract through it, and
 `fsw.codegen.fpp_types.load(contract)` generates that contract's tuples beside the repository's.
 Each tick is one frame through the partitions
-of [ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md),
+of [ADR 0005 rev 2](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md),
 in `fsw/python/<partition>/`, and FPP gives each its structure:
 
 - **platform** runs the frame. Its `period_s` is the sub-topology's base tick, the FPP constant
@@ -250,5 +250,5 @@ every case reproduces its rate-group datasets from the seed, as it does nav's.
 The reasoning is in
 [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
 [ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md),
-[ADR 0005 rev 1](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
+[ADR 0005 rev 2](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
 and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).
