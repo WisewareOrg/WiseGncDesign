@@ -63,7 +63,7 @@ write is pushed rather than sampled, is in
 ## Example: fly the dead reckoner against a simulated spacecraft
 
 This example runs in a notebook or at a prompt, with the environment `just pinned` installs. It
-builds WiseDynamics' `Leo500` scenario, which holds its IMU spacecraft at its nominal configuration,
+builds WiseDynamics' `Leo500` scenario on an IMU spacecraft at its nominal configuration,
 writes the case's parameter record from the notebook's `parameters(scenario, vehicle)` under nav's qualified
 instance, as the harness does beside each run file, and boots the `ImuDeadReckoning` configuration's
 Python build idle with the values it reads back from the record, hosted on that vehicle by
@@ -81,8 +81,9 @@ all stepping at 1 Hz. The ground's record is then compared with the vehicle's tr
 >>> from fsw.python import FrameRunner
 >>> from ground.parameters import write
 >>> from ground.procedures import Ground
->>> scenario = Leo500()
->>> isinstance(scenario.vehicle, ImuSpacecraft)
+>>> vehicle = ImuSpacecraft()
+>>> scenario = Leo500(vehicle)
+>>> scenario.vehicle is vehicle
 True
 >>> case = tempfile.TemporaryDirectory()
 >>> path = Path(case.name) / "run_0000.prm.json"
@@ -97,8 +98,8 @@ True
 ...         position=truth["r_N"],
 ...         velocity=truth["v_N"],
 ...     )
->>> ground = Ground(procedure, fsw, scenario.vehicle.tracking(), scenario.stop_ground)
->>> datasets = scenario.run(FswHost(fsw, scenario.vehicle), {}, duration_s=60.0, ground=ground)
+>>> ground = Ground(procedure, fsw, vehicle.tracking(), scenario.stop_ground)
+>>> datasets = scenario.run(FswHost(fsw, vehicle), {}, duration_s=60.0, ground=ground)
 >>> ground.command_log[0]["response"]
 'OK'
 >>> written = ground.telemetry_datasets()
