@@ -9,6 +9,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/lib/fprime/cmake/FPrime.cmake")
 # Every module links into one Python extension, so all of it is position independent.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 fprime_setup_included_code()
+add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/config")
 
 # Eigen, header-only, fetched by git tag into lib/, outside the build cache, so a regenerated cache keeps it.
 include(FetchContent)
