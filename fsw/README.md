@@ -64,7 +64,7 @@ Each build also has `build`, its build identity, which the harness records in th
 [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md)
 records. How commands and telemetry travel between the ground and each build, and why every
 write is pushed rather than sampled, is in
-[ADR 0004 rev 4](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## Example: fly the dead reckoner against a simulated spacecraft
 
@@ -170,7 +170,7 @@ component's alike, instanced alone, for mocks and tests:
 `fsw/codegen/dictionary_test.py` asserts that every algorithm's GNC instance, in its configuration's
 generated dictionary, has WiseFsw's entries, IDs aside, and WiseFsw's parameter IDs, so the two
 builds are held to one contract. The reasoning is in
-[ADR 0004 rev 4](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 The bus structs are in `fsw/fpp/interfaces/Bus.fpp`, and `bus_test.py` beside it holds each to its
 Basilisk message. The reasoning is in
@@ -187,7 +187,7 @@ parameters and general output and input ports with the file that defines it, and
 needs no compiler, no Java and no F´ build, only the model's `.fpp` files, F´'s framework files
 among them from the clone `just pinned` or `just local` fetches. `to-json`'s output is unversioned
 compiler internals, so a key the module reads that is missing raises `KeyError`. The reasoning is in
-[ADR 0004 rev 4](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## FPP types in Python
 
@@ -213,7 +213,7 @@ True
 ```
 
 The reasoning is in
-[ADR 0004 rev 4](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ## The lab adapter
 
@@ -259,6 +259,6 @@ every case reproduces its rate-group datasets from the seed, as it does nav's.
 
 The reasoning is in
 [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
-[ADR 0004 rev 4](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md),
+[ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md),
 [ADR 0005 rev 2](../docs/decisions/0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md)
 and [ADR 0006 rev 1](../docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md).

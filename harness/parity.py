@@ -1,6 +1,6 @@
 """Parity: the Python and F´ builds' flights of one configuration agree on what FPP declares.
 
-See ADR 0004 rev 4, "Parity is an analyzer whose spec is a minimum". Its unit is a twin: one
+See ADR 0004 rev 3, "Parity is an analyzer whose spec is a minimum". Its unit is a twin: one
 flight on each build of the same vehicle, configuration and scenario, case `k` against case `k`.
 Everything it compares is read from the contract, so an algorithm adds nothing here:
 

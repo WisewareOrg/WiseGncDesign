@@ -48,7 +48,7 @@ The little-endian push is the failure the comparison would have shown.
 - **If a real F´ deployment would have it, it is inside `_wise_fsw_<configuration>`.** Each
   stand-in replaces one real thing: LabBusDriver the bus driver, GroundLink the whole comm stack,
   SimTime the clock, its time source and its timer. Anything a real deployment would not have is
-  ground segment (ADR 0004 rev 4) or the lab's own; the lab's pins are compiled in as a test
+  ground segment (ADR 0004 rev 3) or the lab's own; the lab's pins are compiled in as a test
   connector.
 - **Bus structs in FPP mirror Basilisk messages**, each held to the real message by a test.
 - **A bus emulator, generated from the bus structs, turns Basilisk messages into their bytes**, and

@@ -2,14 +2,10 @@
 
 **Status:** accepted
 **Decided:** 2026-11-13 (issue 51 two edges design; issue 52 tooling checks)
-**Rev:** 4
+**Rev:** 3
 
 ## Revisions
 
-- **rev 4** — 2026-11-23 — telemetry crosses the edge packed: the F´ build's ground link packs each
-  write into F´'s own `TlmPacket`, and the Python build logs a component's telemetry tuple once a
-  frame; the raw tuple per write is rejected on its measured per-case cost, and the reopening
-  condition it answered is removed (issue 122 Speed up flying a case with its ground).
 - **rev 3** — 2026-11-22 — `parameters` also takes the case's vehicle, `parameters(scenario, vehicle)`,
   since WiseDynamics' scenario no longer builds the vehicle a notebook reads (issue 19 the org Python
   standard).
@@ -98,9 +94,7 @@ would have shown as equal values.
 
 - **Every telemetry write is logged with the flight software's time tag, in the order written.**
   Nothing on the sim side samples or decimates it.
-- **The recorder keeps the raw downlink during the run, packed,** and types it with the dictionary
-  after it. The F´ build's downlink is F´'s own `TlmPacket`s, so a stock comm stack can replace the
-  tap; the Python build logs each component's telemetry tuple once a frame.
+- **The recorder keeps raw writes during the run** and types them with the dictionary after it.
 - **A vector or quaternion is one channel of an array type**, written in one write.
 
 ### FPP is the contract
@@ -161,13 +155,8 @@ would have shown as equal values.
   needs a compiler before an algorithm flies in Python. Rejected.
 - **Each vector component as a scalar channel.** A quaternion over four channels is not one write.
   Rejected.
-- **Telemetry sampled on the simulation's recording grid.** It lets the sim set the rate and lose
-  writes. Rejected.
-- **A raw tuple per write across the edge.** Its cost showed in the per-case profile: measured on
-  main at 3e5e95d (issue 122), the mean over 460 F´ and 460 Python Leo500 cases of the dead
-  reckoner's parity notebook, flown in one process, was 35.7 ms per case in the F´ build's
-  end-of-run drain and 25.6 ms in the Python link's per-field logging. Rejected for a packed
-  downlink.
+- **Telemetry sampled on the simulation's recording grid, or drained packed per tick.** The first
+  lets the sim set the rate and lose writes; the second measured no gain. Rejected.
 - **FSW telemetry in Basilisk message structs.** It limits the FSW to fields Basilisk defines.
   Rejected.
 
@@ -187,4 +176,5 @@ would have shown as equal values.
 - Telemetry and outputs default to not written, and a parameter has no default unless its FPP
   declaration gives one, so a missing parameter fails both builds alike.
 - Reopened if an F´ release drops the cooperative task routine, a component needs to block, a
-  consumer needs one vector component written apart.
+  consumer needs one vector component written apart, or the per-write log shows in a per-case
+  profile.

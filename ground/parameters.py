@@ -3,7 +3,7 @@
 The record is JSON, `{"<qualified instance>": {"<parameter>": value}}`, written beside the case's
 run file; both builds fly from it. F´'s own `fprime-prm-write` conversion, called in-process,
 makes the `.dat` the F´ build's PrmDb loads, so nothing here parses or writes F´'s binary format.
-Why is in ADR 0004 rev 4.
+Why is in ADR 0004 rev 3.
 """
 
 import contextlib

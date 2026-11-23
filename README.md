@@ -56,7 +56,7 @@ the simulation is in
 and how it meets the sim in
 [ADR 0006 rev 1](docs/decisions/0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md);
 how it is commanded, how its telemetry is recorded and where the dictionary comes from are in
-[ADR 0004 rev 4](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
+[ADR 0004 rev 3](docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
 ### Requirements and missions
 
