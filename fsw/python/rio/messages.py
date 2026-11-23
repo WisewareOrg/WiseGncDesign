@@ -1,13 +1,13 @@
 """The Python build's RIO: each sensor role's Basilisk message read as its bus struct, and back.
 
-Each role's reading is planned once, from the payload class its bus struct mirrors by
-`fsw.payloads.payload_type`, its fields matched by `fsw.codegen.fpp_types.fields`. RIO-in reads a payload into
-a fresh, read-only copy: the host's payload is a live view of its message, which the next dynamics
-step overwrites, and CDH-in passes the copy's arrays to GNC uncopied. SWIG can return the payload as
-another module's class of the same name, such as a simulation module's once that module is imported;
-that class is a proxy of the same C struct, so it reads alike. RIO-out writes each actuator role's
-bus struct into a fresh payload of that class, each field from the bus member of its name, ignoring
-case.
+Each bus struct's reading is planned once, from the payload class it mirrors by
+`fsw.payloads.payload_type`, its fields matched by `fsw.codegen.fpp_types.fields`. RIO-in reads a
+payload into a fresh, read-only copy: the host's payload is a live view of its message, which the
+next dynamics step overwrites, and CDH-in passes the copy's arrays to GNC uncopied. SWIG can return
+the payload as another module's class of the same name, such as a simulation module's once that
+module is imported; that class is a proxy of the same C struct, so it reads alike. RIO-out writes
+each actuator role's bus struct into a fresh payload of that class, each field from the bus member
+of its name, ignoring case.
 """
 
 import ctypes
@@ -112,8 +112,11 @@ def writer(bus: type[Any], payload: type[Any] | None = None) -> Callable[[Any], 
             The payload.
 
         Raises:
+            TypeError: `value` is not of `bus`, naming both.
             ValueError: a field's value is of another shape than the field, naming it.
         """
+        if type(value) is not bus:
+            raise TypeError(f"the value is a {type(value).__name__}, not the bus struct's tuple {bus.__qualname__}")
         written = target()
         record = np.frombuffer((ctypes.c_char * layout.itemsize).from_address(int(written.this)), layout)
         for (member_name, name, shape), field in zip(taken, value, strict=True):

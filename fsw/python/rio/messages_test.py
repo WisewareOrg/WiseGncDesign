@@ -5,6 +5,7 @@ The roles are the contract's `Cdh.BusConverter`'s, each with its bus struct's me
 """
 
 import re
+from collections import namedtuple
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import SimpleNamespace
@@ -280,6 +281,19 @@ def test_a_value_of_another_shape_than_its_field_is_refused_when_written(mock: S
 
     with pytest.raises(ValueError, match=re.escape("StarTracker.qInrtl2Case is (4,), but its value is ()")):
         write(mock.StarTracker(timeTag=1, qInrtl2Case=0.5))
+
+
+def test_a_value_not_of_the_bus_struct_is_refused_when_written(mock: SimpleNamespace):
+    """A bus struct is read by position, so a lookalike tuple, its fields reordered, raises.
+
+    Args:
+        mock: the mock's tuples.
+    """
+    StarTracker = namedtuple("StarTracker", ["qInrtl2Case", "timeTag"])
+    write = writer(mock.StarTracker, STSensorMsgPayload)
+
+    with pytest.raises(TypeError, match="a StarTracker, not the bus struct's tuple RioMock.StarTracker"):
+        write(StarTracker(np.zeros(4), 1))
 
 
 def test_a_paired_role_without_its_message_is_refused_naming_it_and_another_role_is_not_read():
