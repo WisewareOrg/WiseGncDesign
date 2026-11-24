@@ -221,11 +221,15 @@ The F´ flight software takes its memory in initialization and none after it. F�
 from one allocator, `Fw::MemoryAllocation::InitAllocator` in
 `fsw/fprime/config-overrides/MemoryAllocation.hpp`, a fixed arena that the first `step` closes; a
 use of it after that trips F´'s assert. `just fsw` also links each configuration's flight software,
-without the lab's pins, against no C++ library and with libc's allocators undefined, so any other
-call that can allocate fails the build, and the linker names its caller. That refuses
-`dynamic_cast`, `std::chrono`'s clocks and `std::array::at` too, which flight C++ does not use. The
-link cannot see inside libc, whose first `fwrite` to stdout allocates its buffer. A pair of links at
-configure time, one growing a vector, holds it to refusing.
+without the lab's pins, to libm, the compiler's own support and a list of what flight software may
+call outside itself, `wise_fsw_sealed` in `fsw/fprime/deployment/CMakeLists.txt`. The link refuses
+every function not on its list, and names the caller. `dynamic_cast`, `std::chrono`'s clocks and
+`std::array::at` are refused with the C++ library. A component that needs another function adds its
+name, in order, once the function is read not to allocate. A pair of links at configure time, one
+allocating, holds it to refusing. Some on the list are known to allocate inside libc when called a
+certain way: `opendir`, in F´'s directory code, the first `fwrite` to stdout, `getcwd` with no
+buffer, `vsscanf` with `%m` or an overlong number, and `__cxa_atexit` past libc's first block, which
+a function-local static with a destructor reaches at its first call.
 
 What a flight fills is fixed, and filling it further trips F´'s assert rather than dropping: the
 `GroundLink::RESPONSES` command responses held between drains, and the telemetry, `frames` of it

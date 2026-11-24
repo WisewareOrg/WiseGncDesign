@@ -22,12 +22,12 @@ generated or the framework's, so reading or annotating the source cannot hold it
 ## Decision
 
 - **Each configuration's flight software is linked without an allocator as part of its build.** The
-  link has no C++ library and no libc allocator, only the support the language itself needs, so code
-  that can allocate or call into the C++ library does not link, and the linker names the function
-  that does.
-- **F´ sizes what it sizes at initialization from one allocator, over fixed memory, which closes when
-  initialization ends.** The first frame ends it; a use after that trips F´'s assert. It is the
-  only allocator left in the linked flight software.
+  link has no C++ library and no libc, only a named list of what flight software may call outside
+  itself, so code that can allocate or call into the C++ library does not link, and the linker names
+  the function that does.
+- **F´ sizes what it sizes at initialization from one allocator, over fixed memory, which closes
+  when initialization ends.** The first frame ends it; a use after that trips F´'s assert. It is the
+  only allocator in what is linked.
 - **What a flight fills is fixed before it starts, and an overflow trips F´'s assert; it never grows
   and never drops a write.**
 - **The lab's pins are outside the link.** They are the test connector (ADR 0006 rev 1), where Python
@@ -61,8 +61,8 @@ generated or the framework's, so reading or annotating the source cannot hold it
   write and nothing to annotate.
 - Flight C++ gives up what the C++ library provides outside its headers. A component that needs some
   of it must be given fixed memory instead.
-- The link cannot see inside libc: a libc function that allocates for itself is held only if it is
-  named.
+- The link cannot see inside a listed libc function: one that allocates when called a certain way is
+  held only by not being called so.
 - The support the language needs is named, so a compiler that needs more fails the link until it is
   added.
 - A flight longer than the lab sized it for asserts.

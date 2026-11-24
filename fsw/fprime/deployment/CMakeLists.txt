@@ -21,41 +21,53 @@ execute_process(
     COMMAND_ERROR_IS_FATAL ANY)
 string(REPLACE "\n" ";" WISE_CONFIGURATIONS "${WISE_CONFIGURATIONS}")
 
-# `wise_fsw_sealed`: the options that link flight software without an allocator. There is no C++
-# library, libc's allocators are wrapped by functions that do not exist, and only the language's own
-# support is defined, so a call that can allocate is an undefined reference the linker names.
+# `wise_fsw_sealed`: the options that link flight software without an allocator. Nothing is linked but libm
+# and the compiler's own support, libgcc, and what flight software may call outside itself is named below,
+# sorted, so a call to anything else is an undefined reference and the linker names it and its caller.
 if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     add_library(wise_fsw_sealed INTERFACE IMPORTED)
-    target_link_options(wise_fsw_sealed INTERFACE -nostdlib++ LINKER:-z,defs)
-    target_link_libraries(wise_fsw_sealed INTERFACE m)
-    foreach (ALLOCATOR IN ITEMS malloc calloc realloc reallocarray aligned_alloc posix_memalign memalign mmap mmap64
-            strdup strndup __strdup __strndup asprintf vasprintf getline getdelim __getdelim fopen fopen64)
-        target_link_options(wise_fsw_sealed INTERFACE "LINKER:--wrap=${ALLOCATOR}")
+    target_link_options(wise_fsw_sealed INTERFACE -nostdlib LINKER:-z,defs)
+    target_link_libraries(wise_fsw_sealed INTERFACE m gcc)
+    foreach (NAME IN ITEMS
+        _ZTVN10__cxxabiv117__class_type_infoE _ZTVN10__cxxabiv120__si_class_type_infoE
+        _ZTVN10__cxxabiv121__vmi_class_type_infoE _ZdlPvm __cxa_atexit __cxa_deleted_virtual
+        __dso_handle __errno_location __isoc23_strtoll __isoc23_strtoull __isoc23_vsscanf chdir
+        clock_gettime close closedir fcntl fflush fputc fputs fsync fwrite getcwd lseek lstat memcmp
+        memcpy memmove memset mkdir open opendir posix_fallocate pthread_cond_broadcast
+        pthread_cond_destroy pthread_cond_init pthread_cond_signal pthread_cond_wait
+        pthread_mutex_destroy pthread_mutex_init pthread_mutex_lock pthread_mutex_unlock
+        pthread_mutexattr_init pthread_mutexattr_setprotocol pthread_mutexattr_settype read readdir
+        rename rewinddir rmdir sem_destroy sem_init sem_post sem_timedwait sem_trywait sem_wait
+        statvfs stderr stdout strncat strncmp strncpy strtod strtof sysconf sysinfo unlink vsnprintf
+        write)
+        target_link_options(wise_fsw_sealed INTERFACE "LINKER:--defsym=${NAME}=0")
     endforeach ()
-    foreach (SUPPORT IN ITEMS __cxa_deleted_virtual __cxa_pure_virtual _ZdlPvm _ZTVN10__cxxabiv117__class_type_infoE
-            _ZTVN10__cxxabiv120__si_class_type_infoE _ZTVN10__cxxabiv121__vmi_class_type_infoE)
-        target_link_options(wise_fsw_sealed INTERFACE "LINKER:--defsym=${SUPPORT}=0")
-    endforeach ()
-    # One source, linked as it is and with a line that grows a vector: only the growth may be refused.
+    # One source, linked as it is and with lines that allocate: only the allocation may be refused.
     set(WISE_SEAL_SOURCE [[
+#include <cstdlib>
 #include <vector>
 std::vector<int> values;
+void* volatile memory;
 int main() {
-#ifdef GROW
+#ifdef ALLOCATE
     values.push_back(0);
+    memory = std::malloc(1);
 #endif
     return static_cast<int>(values.size());
 }
 ]])
+    set(WISE_SEAL_OPTIONS -fno-exceptions -fPIC)
     try_compile(WISE_SEAL_LINKS SOURCE_FROM_VAR seal.cpp WISE_SEAL_SOURCE NO_CACHE
-        COMPILE_DEFINITIONS -fno-exceptions LINK_LIBRARIES wise_fsw_sealed OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
+        COMPILE_DEFINITIONS ${WISE_SEAL_OPTIONS} LINK_OPTIONS -shared LINK_LIBRARIES wise_fsw_sealed
+        OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
     if (NOT WISE_SEAL_LINKS)
         message(FATAL_ERROR "wise_fsw_sealed refuses code that does not allocate:\n${WISE_SEAL_OUTPUT}")
     endif ()
     try_compile(WISE_SEAL_LINKS SOURCE_FROM_VAR seal.cpp WISE_SEAL_SOURCE NO_CACHE
-        COMPILE_DEFINITIONS -fno-exceptions -DGROW LINK_LIBRARIES wise_fsw_sealed OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
-    if (WISE_SEAL_LINKS OR NOT WISE_SEAL_OUTPUT MATCHES "operator new")
-        message(FATAL_ERROR "wise_fsw_sealed does not refuse a vector's growth, naming operator new:\n${WISE_SEAL_OUTPUT}")
+        COMPILE_DEFINITIONS ${WISE_SEAL_OPTIONS} -DALLOCATE LINK_OPTIONS -shared LINK_LIBRARIES wise_fsw_sealed
+        OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
+    if (WISE_SEAL_LINKS OR NOT WISE_SEAL_OUTPUT MATCHES "operator new" OR NOT WISE_SEAL_OUTPUT MATCHES "`malloc'")
+        message(FATAL_ERROR "wise_fsw_sealed does not refuse operator new and malloc by name:\n${WISE_SEAL_OUTPUT}")
     endif ()
 endif ()
 
