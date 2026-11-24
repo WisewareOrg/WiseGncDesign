@@ -302,8 +302,9 @@ it works:
   its `period_s` from it.
 
 The rate group's health telemetry is recorded with every other channel; the deployment links F´'s
-stub `Os::RawTime`, so its cycle times read 0. Each case flies a fresh copy of the deployment, so
-every case reproduces its rate-group datasets from the seed, as it does nav's.
+stub `Os::RawTime`, so its cycle times read 0, and its stub `Os::Console`, so text a component gives
+`Fw::Logger` is dropped. Each case flies a fresh copy of the deployment, so every case reproduces
+its rate-group datasets from the seed, as it does nav's.
 
 The reasoning is in
 [ADR 0003 rev 4](../docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md),
