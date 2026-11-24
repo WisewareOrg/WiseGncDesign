@@ -41,15 +41,16 @@ _TALLY = "actuator.tally"
 _MARKS = 9
 """The marks a marked tick uplinks, about a frame's bytes."""
 
-_FITS = pytest.mark.parametrize(("frames", "ticks"), [(11, 25), (1_000, 2_066)])
+_FITS = pytest.mark.parametrize(("frames", "ticks"), [(11, 25), (4_300, 8_880)])
 """A downlink's frames, and the most ticks of `_MARKS` marks it holds undrained.
 
-A frame is MockActuation's 9 channels, 243 bytes: each a 4-byte ID, an 11-byte time tag and its
-value. A packet carries 510 bytes of entries, so any two neighbours carry more than 510 between
-them, and `frames` take at most `2 * frames * 243 // 510 + 1` packets. The storage has one more,
-the drain's: 12 packets for 11 frames and 954 for 1,000, each one more than a frame fewer has. The
-flights write 12 and 954 packets. The mock's entries, 55 bytes at most, pack nearly whole packets
-where the bound allows half-full ones, so the flights are twice `frames` ticks long.
+A frame is each channel once: its ID, its time tag and its value. A packet closes only when the next
+entry does not fit, so two neighbours carry more than one holds, and `frames` take at most
+`2 * frames * frame_bytes // packet_bytes + 1` packets, and the storage has one more, the drain's.
+These frames give a packet more than one frame fewer does, so the same flight asserts on that one.
+The ticks are one fewer than the tick a marked flight on `frames` asserts at. They are about twice
+`frames`, since the mock's small entries fill a packet that the bound allows to be half empty. The
+long flight is past any fixed store of a few thousand packets.
 """
 
 
@@ -199,6 +200,9 @@ class TestGroundLink:
     @_FITS
     def test_a_downlink_of_one_frame_fewer_asserts(self, frames: int, ticks: int) -> None:
         """The flight `frames` just hold trips the assert of a downlink of one frame fewer.
+
+        That is no promise of `frames`: it holds `_FITS` to the edge of the sizing, so a larger one
+        means its ticks are derived again.
 
         Args:
             frames: the frames that hold the flight.
