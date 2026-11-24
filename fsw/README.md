@@ -219,7 +219,7 @@ The reasoning is in
 
 The F´ flight software takes its memory in initialization and none after it. F´ sizes its queues
 from one allocator, `Fw::MemoryAllocation::InitAllocator` in
-`fsw/fprime/config/MemoryAllocation.hpp`, a fixed arena that the first `step` closes; a use of it
+`fsw/fprime/config-overrides/MemoryAllocation.hpp`, a fixed arena that the first `step` closes; a use of it
 after that trips F´'s assert. `just fsw` also links each configuration's flight software, without
 the lab's pins, against no C++ library and with libc's allocators undefined, so any other call that
 can allocate fails the build, and the linker names its caller. That refuses `throw`, `dynamic_cast`,
