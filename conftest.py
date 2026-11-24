@@ -278,7 +278,7 @@ def _downlink(configuration: str) -> tuple[list[int], int]:
     from fsw.codegen.dictionary import Dictionary
 
     channels = Dictionary(_dictionary(configuration)).channels_by_id.values()
-    return [channel.type.dtype.itemsize for channel in channels], 8192
+    return [channel.type.dtype.itemsize for channel in channels], 10_000
 
 
 @pytest.fixture
