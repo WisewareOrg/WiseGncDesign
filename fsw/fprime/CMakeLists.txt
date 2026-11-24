@@ -4,6 +4,8 @@
 ####
 cmake_minimum_required(VERSION 3.25)
 project(WiseFsw C CXX)
+# A deprecated CMake command or policy is an error.
+set(CMAKE_ERROR_DEPRECATED ON)
 
 include("${CMAKE_CURRENT_LIST_DIR}/lib/fprime/cmake/FPrime.cmake")
 # Every module links into one Python extension, so all of it is position independent.
