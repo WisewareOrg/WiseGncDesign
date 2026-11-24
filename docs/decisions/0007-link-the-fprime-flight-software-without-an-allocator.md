@@ -29,8 +29,7 @@ generated or the framework's, so reading or annotating the source cannot hold it
   initialization ends.** The first frame ends it; a use after that trips F´'s assert. It is the
   only allocator left in the linked flight software.
 - **What a flight fills is fixed before it starts, and an overflow trips F´'s assert; it never grows
-  and never drops a write.** The lab gives the deployment, when it boots it, the memory of its bus
-  buffers, and of its downlink for the flight's length.
+  and never drops a write.**
 - **The lab's pins are outside the link.** They are the test connector (ADR 0006 rev 1), where Python
   meets the deployment; the frame itself is inside.
 

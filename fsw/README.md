@@ -240,8 +240,8 @@ Every warning is an error, in the F´ library, what FPP generates and what is wr
 every linker warning. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own validation
 set over everything, a wider set over what is written and generated here, and the code-generation
 and link flags stated so that every host compiles the same code. Stack protector, fortify, stack
-clash protection and control-flow protection are stated off: they guard against attack, and none of
-the flight builds surveyed sets them. Flight C++ has no exceptions, so a `throw` is a compile error.
+clash protection and control-flow protection are stated off: they guard against attack. Flight C++
+has no exceptions, so a `throw` is a compile error.
 
 A diagnostic is silenced only here:
 
@@ -256,20 +256,23 @@ copy that asserted is only drained.
 
 ## The lab adapter
 
-`lab.Adapter(configuration, prm_path, *, contract=CONTRACT, frames=8192)` is a configuration's
-WiseFsw F´ deployment as a WiseDynamics FSW build, which `FswHost` hosts in the simulation's
-process, with the parameters of the case's record at `prm_path`. `frames` is the base ticks of
-telemetry the downlink holds undrained, each channel written once a tick; the ground stops draining
-once its procedure returns, so the harness passes the flight's length. `just fsw` builds the
-deployment of each configuration `fsw.codegen.deployment.fprime_configurations` selects, of the
-repository's contract and the test mocks', into `lab` as the extension `_wise_fsw_<configuration>`,
-with the JSON dictionary F´ generates for it alongside, `lab.dictionary_path(configuration)`; its
-CMake target `_wise_fsw` builds them all, and the extension each C++ utility under
-`algorithms/utils/` has for its tests, beside its source. The same build writes the gitignored type
-stubs `fsw/codegen/fpp_types.pyi`, `lab/fsw_extension.pyi` and each utility's `_<name>.pyi`. `just
-pinned` and `just local` run it as part of their sync, and `just test`, `just fly` and `just lab`
-run it first; an adapter built without it says to run `just fsw`. The adapter's `period_s` is the
-configuration's `tickPeriod`, the Python build's, so the two builds fly at one rate.
+`lab.Adapter(configuration, prm_path, *, contract=CONTRACT, frames)` is a configuration's WiseFsw F´
+deployment as a WiseDynamics FSW build, which `FswHost` hosts in the simulation's process, with the
+parameters of the case's record at `prm_path`. `just fsw` builds the deployment of each
+configuration `fsw.codegen.deployment.fprime_configurations` selects, of the repository's contract
+and the test mocks', into `lab` as the extension `_wise_fsw_<configuration>`, with the JSON
+dictionary F´ generates for it alongside, `lab.dictionary_path(configuration)`; its CMake target
+`_wise_fsw` builds them all, and the extension each C++ utility under `algorithms/utils/` has for
+its tests, beside its source. The same build writes the gitignored type stubs `fsw/codegen/fpp_types.pyi`,
+`lab/fsw_extension.pyi` and each utility's `_<name>.pyi`.
+`just pinned` and `just local` run it as part of their sync, and `just test`, `just fly` and
+`just lab` run it first; an adapter built without it says to run `just fsw`. The adapter's
+`period_s` is the configuration's `tickPeriod`, the Python build's, so the two builds fly at one
+rate.
+
+`frames` is the base ticks of telemetry the downlink holds undrained, each channel written once a
+tick; the ground stops draining once its procedure returns, so the harness passes the flight's
+length.
 
 The adapter is lab equipment, as a hardware-in-the-loop rig is, and each piece's docstring says how
 it works:
