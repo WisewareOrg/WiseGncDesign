@@ -8,36 +8,34 @@ namespace Bus {
 
 LabBusDriver::LabBusDriver(const char* compName) : LabBusDriverComponentBase(compName) {}
 
-U8* LabBusDriver::makeReceiveBuffer(FwIndexType port, FwSizeType size) {
+void LabBusDriver::setReceiveBuffer(FwIndexType port, U8* memory, FwSizeType size) {
     FW_ASSERT(port >= 0 && port < PORTS, static_cast<FwAssertArgType>(port));
-    this->m_receive[port].assign(size, 0);
-    return this->m_receive[port].data();
+    this->m_receive[port] = {memory, size};
 }
 
-const U8* LabBusDriver::makeTransmitBuffer(FwIndexType port, FwSizeType size) {
+void LabBusDriver::setTransmitBuffer(FwIndexType port, U8* memory, FwSizeType size) {
     FW_ASSERT(port >= 0 && port < PORTS, static_cast<FwAssertArgType>(port));
-    this->m_transmit[port].assign(size, 0);
-    return this->m_transmit[port].data();
+    this->m_transmit[port] = {memory, size};
 }
 
 bool LabBusDriver::hasReceiveBuffer(FwIndexType port) const {
     FW_ASSERT(port >= 0 && port < PORTS, static_cast<FwAssertArgType>(port));
-    return !this->m_receive[port].empty();
+    return this->m_receive[port].memory != nullptr;
 }
 
 bool LabBusDriver::hasTransmitBuffer(FwIndexType port) const {
     FW_ASSERT(port >= 0 && port < PORTS, static_cast<FwAssertArgType>(port));
-    return !this->m_transmit[port].empty();
+    return this->m_transmit[port].memory != nullptr;
 }
 
 void LabBusDriver::push() {
     for (FwIndexType port = 0; port < PORTS; port++) {
-        std::vector<U8>& receive = this->m_receive[port];
-        if (receive.empty()) {
+        const Buffer& receive = this->m_receive[port];
+        if (receive.memory == nullptr) {
             continue;
         }
-        Fw::ExternalSerializeBuffer wrapper(receive.data(), receive.size());
-        const Fw::SerializeStatus status = wrapper.setBuffLen(receive.size());
+        Fw::ExternalSerializeBuffer wrapper(receive.memory, receive.size);
+        const Fw::SerializeStatus status = wrapper.setBuffLen(receive.size);
         FW_ASSERT(status == Fw::FW_SERIALIZE_OK, static_cast<FwAssertArgType>(status));
         this->busOut_out(port, wrapper);
         FW_ASSERT(wrapper.getDeserializeSizeLeft() == 0, static_cast<FwAssertArgType>(port),
@@ -52,10 +50,10 @@ U32 LabBusDriver::takeWritten() {
 }
 
 void LabBusDriver::busIn_handler(FwIndexType portNum, Fw::LinearBufferBase& buffer) {
-    std::vector<U8>& transmit = this->m_transmit[portNum];
-    FW_ASSERT(buffer.getSize() == transmit.size(), static_cast<FwAssertArgType>(portNum),
-              static_cast<FwAssertArgType>(buffer.getSize()), static_cast<FwAssertArgType>(transmit.size()));
-    std::memcpy(transmit.data(), buffer.getBuffAddr(), transmit.size());
+    const Buffer& transmit = this->m_transmit[portNum];
+    FW_ASSERT(buffer.getSize() == transmit.size, static_cast<FwAssertArgType>(portNum),
+              static_cast<FwAssertArgType>(buffer.getSize()), static_cast<FwAssertArgType>(transmit.size));
+    std::memcpy(transmit.memory, buffer.getBuffAddr(), transmit.size);
     this->m_written |= 1U << portNum;
 }
 

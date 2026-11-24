@@ -1,8 +1,16 @@
 #include "fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopology.hpp"
 
+#include "Fw/Types/Assert.hpp"
+#include "Os/Os.hpp"
+
 namespace WiseFsw {
 
+Sim::Cooperative cooperative;
+
 void setupTopology(const TopologyState& state) {
+    Os::init();
+    Os::Task::registerTaskRegistry(&cooperative);
+    Os::Queue::setRegistry(&cooperative);
     initComponents(state);
     setBaseIds();
     connectComponents();
@@ -11,6 +19,15 @@ void setupTopology(const TopologyState& state) {
     readParameters();
     loadParameters();
     startTasks(state);
+}
+
+U32 step(U64 nanoseconds) {
+    simTime.set(nanoseconds);
+    const Os::Queue* stuck = cooperative.pump();
+    FW_ASSERT(stuck == nullptr, static_cast<FwAssertArgType>(stuck->getMessagesAvailable()));
+    labBusDriver.push();
+    simTime.tick();
+    return labBusDriver.takeWritten();
 }
 
 }  // namespace WiseFsw

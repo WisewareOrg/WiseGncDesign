@@ -3,10 +3,17 @@
 #define WISEFSW_@CONFIGURATION@FSWTOPOLOGY_HPP
 
 #include "fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopologyAc.hpp"
+#include "fsw/fprime/platform/Cooperative.hpp"
 
 namespace WiseFsw {
 
+extern Sim::Cooperative cooperative;
+
+//! Sets the topology up: every component idle.
 void setupTopology(const TopologyState& state);
+
+//! One frame at the time given. Returns the transmit buffers it wrote, a bit per port.
+U32 step(U64 nanoseconds);
 
 }  // namespace WiseFsw
 

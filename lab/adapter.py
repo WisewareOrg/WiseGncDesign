@@ -85,7 +85,9 @@ class Adapter:
     _inputs: tuple[Callable[[], None], ...]
     """Each sensor role's copy of its message into its receive buffer."""
 
-    def __init__(self, configuration: str, prm_path: Path, *, contract: Contract = CONTRACT) -> None:
+    def __init__(
+        self, configuration: str, prm_path: Path, *, contract: Contract = CONTRACT, frames: int = 8192
+    ) -> None:
         """Makes the case's `.dat` beside its record, once `source` has checked the build.
 
         A deployment not built, or rebuilt since this process first checked it, raises as `source`
@@ -95,9 +97,12 @@ class Adapter:
             configuration: the configuration, the name of its GNC sub-topology in the contract.
             prm_path: the case's parameter record, JSON, which `boot` boots the deployment with.
             contract: the contract holding the configuration, the repository's by default.
+            frames: the base ticks of telemetry the downlink holds undrained, each channel written
+                once per tick; telemetry past it trips F´'s assert.
         """
         source(configuration)
         self._configuration = configuration
+        self._frames = frames
         roles = taken(configuration_model(configuration, contract=contract), configuration)
         self._sensors: list[tuple[Role, int]] = [
             (role, bus_port(configuration, role.input, contract=contract)) for role in roles if role.sensor
@@ -122,7 +127,12 @@ class Adapter:
         the `.dat` leaves invalid raises `RuntimeError`, naming each.
         """
         fsw = power_cycle(self._configuration)
-        fsw.boot(str(self._dat.resolve()), sorted(self.dictionary.parameters_by_id))
+        fsw.boot(
+            str(self._dat.resolve()),
+            sorted(self.dictionary.parameters_by_id),
+            [channel.type.dtype.itemsize for channel in self.dictionary.channels_by_id.values()],
+            self._frames,
+        )
         self._receive = {role.role: fsw.receive_buffer(port, size(role.bus)) for role, port in self._sensors}
         outputs = []
         for role, port in self._actuators:

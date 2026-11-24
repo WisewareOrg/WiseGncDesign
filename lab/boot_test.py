@@ -56,19 +56,22 @@ def test_a_case_s_file_boots_every_parameter_valid(
     assert recorded == {p.name for p in dictionary.parameters_by_id.values()}
 
 
-def test_a_missing_file_fails_the_boot(fsw: ModuleType, tmp_path: Path, parameter_ids: list[int]):
+def test_a_missing_file_fails_the_boot(
+    fsw: ModuleType, tmp_path: Path, parameter_ids: list[int], downlink: tuple[list[int], int]
+):
     """No file at the path leaves every parameter invalid, each named.
 
     Args:
         fsw: the test's copy.
         tmp_path: the case's directory.
         parameter_ids: every parameter's ID, which boot holds valid.
+        downlink: the channels' sizes and frames its downlink is made for.
     """
     missing = tmp_path / "run_0000.prm.dat"
     named = ", ".join(map(str, parameter_ids))
 
     with pytest.raises(RuntimeError, match=f"parameters {named} are not valid"):
-        fsw.boot(str(missing), parameter_ids)
+        fsw.boot(str(missing), parameter_ids, *downlink)
 
 
 def test_a_parameter_missing_from_the_record_fails_the_boot(
@@ -77,6 +80,7 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
     dictionary: Dictionary,
     prm_record: Path,
     parameter_ids: list[int],
+    downlink: tuple[list[int], int],
 ):
     """A record without one parameter makes a `.dat` without it; boot names that parameter alone.
 
@@ -86,6 +90,7 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
         dictionary: the copy's dictionary.
         prm_record: the case's parameter record, edited here.
         parameter_ids: every parameter's ID, which boot holds valid.
+        downlink: the channels' sizes and frames its downlink is made for.
     """
     entries = json.loads(prm_record.read_text())
     instance, values = next(iter(entries.items()))
@@ -95,7 +100,7 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
     dropped = _id(dictionary, f"{instance.rsplit('.', 1)[1]}.{parameter}")
 
     with pytest.raises(RuntimeError, match=rf"^parameters {dropped} are not valid"):
-        fsw.boot(str(parameters.dat(prm_record, dictionary_path(configuration))), parameter_ids)
+        fsw.boot(str(parameters.dat(prm_record, dictionary_path(configuration))), parameter_ids, *downlink)
 
 
 def _changed(value: object, counter: Iterator[int]) -> object:
@@ -121,6 +126,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     tmp_path: Path,
     prm_record: Path,
     parameter_ids: list[int],
+    downlink: tuple[list[int], int],
     bus: list[tuple[int, bytes]],
     wire: Callable[..., Callable[..., int]],
 ):
@@ -136,6 +142,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
         tmp_path: where PrmDb's image is decoded.
         prm_record: the case's parameter record, edited here.
         parameter_ids: every parameter's ID, which boot holds valid.
+        downlink: the channels' sizes and frames its downlink is made for.
         bus: every role's bus message on its LabBusDriver port.
         wire: wires the copy to the bus.
     """
@@ -148,7 +155,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     assert edited != entries
     prm_record.write_text(json.dumps(edited))
     dat = parameters.dat(prm_record, dictionary_path(configuration))
-    fsw.boot(str(dat), parameter_ids)
+    fsw.boot(str(dat), parameter_ids, *downlink)
     dat.unlink()
 
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)
@@ -163,16 +170,19 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
 
 
 @pytest.mark.parametrize("path", ["run_0000.prm.dat", "/run_0000.prm.dat"])
-def test_a_relative_path_or_one_in_the_root_is_refused(fsw: ModuleType, path: str, parameter_ids: list[int]):
+def test_a_relative_path_or_one_in_the_root_is_refused(
+    fsw: ModuleType, path: str, parameter_ids: list[int], downlink: tuple[list[int], int]
+):
     """The sandbox is the file's directory, which is never the root, so neither path boots.
 
     Args:
         fsw: the test's copy.
         path: the parameter file's path.
         parameter_ids: every parameter's ID, which boot holds valid.
+        downlink: the channels' sizes and frames its downlink is made for.
     """
     with pytest.raises(ValueError, match="not an absolute path in a directory below the root"):
-        fsw.boot(path, parameter_ids)
+        fsw.boot(path, parameter_ids, *downlink)
 
 
 def _of_length(directory: Path, length: int, fill: str) -> Path:
@@ -197,6 +207,7 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
     tmp_path: Path,
     prm: str,
     parameter_ids: list[int],
+    downlink: tuple[list[int], int],
     configuration: str,
     past: int,
     boots: bool,
@@ -208,6 +219,7 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
         tmp_path: where the path is made.
         prm: the case's parameter file, copied to the path.
         parameter_ids: every parameter's ID, which boot holds valid.
+        downlink: the channels' sizes and frames its downlink is made for.
         configuration: the copy's configuration, whose dictionary gives `FileNameStringSize`.
         past: how many bytes the path runs past the longest F´ holds.
         boots: whether the copy boots on it.
@@ -218,11 +230,11 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
     shutil.copyfile(prm, path)
 
     if boots:
-        fsw.boot(str(path), parameter_ids)
+        fsw.boot(str(path), parameter_ids, *downlink)
     else:
         refusal = f" is {longest + past} bytes, past F´'s limit of {longest} "
         with pytest.raises(ValueError, match=refusal):
-            fsw.boot(str(path), parameter_ids)
+            fsw.boot(str(path), parameter_ids, *downlink)
 
 
 def _load_file(station: FprimeStation, dictionary: Dictionary, path: Path) -> bytes:
@@ -257,6 +269,7 @@ def test_the_sandbox_is_the_case_s_directory(
     tmp_path: Path,
     prm: str,
     parameter_ids: list[int],
+    downlink: tuple[list[int], int],
     monkeypatch: pytest.MonkeyPatch,
     configuration: str,
     bus: list[tuple[int, bytes]],
@@ -271,6 +284,7 @@ def test_the_sandbox_is_the_case_s_directory(
         tmp_path: the test's directory, holding the case's directory `case` and `elsewhere`.
         prm: the case's parameter file, in `case`.
         parameter_ids: every parameter's ID, which boot holds valid.
+        downlink: the channels' sizes and frames its downlink is made for.
         monkeypatch: sets the working directory, which the loaded paths are relative to.
         configuration: the copy's configuration.
         bus: every role's bus message on its LabBusDriver port.
@@ -283,7 +297,7 @@ def test_the_sandbox_is_the_case_s_directory(
     elsewhere.mkdir()
     shutil.copyfile(dat, case / "beside.dat")
     shutil.copyfile(dat, elsewhere / "outside.dat")
-    fsw.boot(prm, parameter_ids)
+    fsw.boot(prm, parameter_ids, *downlink)
     dat.unlink()
 
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)

@@ -291,6 +291,7 @@ class TestStationCodec:
         response: str,
         prm: str,
         parameter_ids: list[int],
+        downlink: tuple[list[int], int],
         bus: list[tuple[int, bytes]],
         wire: Callable[..., Callable[..., int]],
     ):
@@ -308,11 +309,12 @@ class TestStationCodec:
             response: the response F´ gives it.
             prm: the case's parameter file.
             parameter_ids: every parameter's ID, which boot holds valid.
+            downlink: the channels' sizes and frames its downlink is made for.
             bus: every role's bus message on its LabBusDriver port.
             wire: wires the copy to the bus.
         """
         untouched = power_cycle(configuration)
-        untouched.boot(prm, parameter_ids)
+        untouched.boot(prm, parameter_ids, *downlink)
         wire(untouched, configuration, bus)(NS)
         expected = _gnc_writes(decoded(FprimeStation(untouched, dictionary)), configuration)
         assert expected, "a copy with no packet writes GNC telemetry on its step"

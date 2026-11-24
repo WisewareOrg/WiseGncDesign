@@ -5,7 +5,6 @@
 #define BUS_LABBUSDRIVER_HPP
 
 #include <array>
-#include <vector>
 
 #include "fsw/fprime/rio/LabBusDriverComponentAc.hpp"
 
@@ -20,13 +19,11 @@ class LabBusDriver final : public LabBusDriverComponentBase {
 
     explicit LabBusDriver(const char* compName);
 
-    //! Makes busOut[port]'s receive buffer of size bytes, once, before the first push; returns its
-    //! memory, which the lab writes.
-    U8* makeReceiveBuffer(FwIndexType port, FwSizeType size);
+    //! Gives busOut[port] the lab's memory as its receive buffer, once, before the first push; the lab writes it.
+    void setReceiveBuffer(FwIndexType port, U8* memory, FwSizeType size);
 
-    //! Makes busIn[port]'s transmit buffer of size bytes, once, before the first push; returns its
-    //! memory, which the lab reads.
-    const U8* makeTransmitBuffer(FwIndexType port, FwSizeType size);
+    //! Gives busIn[port] the lab's memory as its transmit buffer, once, before the first push; the lab reads it.
+    void setTransmitBuffer(FwIndexType port, U8* memory, FwSizeType size);
 
     //! Whether port has a receive buffer, and a transmit buffer.
     bool hasReceiveBuffer(FwIndexType port) const;
@@ -43,8 +40,14 @@ class LabBusDriver final : public LabBusDriverComponentBase {
     //! Copies the bus struct sent to busIn[portNum] into its transmit buffer, asserting its size.
     void busIn_handler(FwIndexType portNum, Fw::LinearBufferBase& buffer) override;
 
-    std::array<std::vector<U8>, PORTS> m_receive;
-    std::array<std::vector<U8>, PORTS> m_transmit;
+    //! A port's buffer; no memory until the lab gives it.
+    struct Buffer {
+        U8* memory = nullptr;
+        FwSizeType size = 0;
+    };
+
+    std::array<Buffer, PORTS> m_receive;
+    std::array<Buffer, PORTS> m_transmit;
     U32 m_written = 0;
 };
 

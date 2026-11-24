@@ -25,6 +25,7 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
     dictionary: Dictionary,
     prm: str,
     parameter_ids: list[int],
+    downlink: tuple[list[int], int],
     bus: list[tuple[int, bytes]],
     wire: Callable[..., Callable[..., int]],
 ):
@@ -38,6 +39,7 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
         dictionary: its dictionary.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
+        downlink: the channels' sizes and frames its downlink is made for.
         bus: every role's bus message on its LabBusDriver port.
         wire: wires a copy to the bus.
     """
@@ -48,7 +50,7 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
 
     fresh = power_cycle(configuration)
     assert fresh is not raised
-    fresh.boot(prm, parameter_ids)
+    fresh.boot(prm, parameter_ids, *downlink)
     wire(fresh, configuration, bus)(NS)
     assert FprimeStation(fresh, dictionary).decode([fresh.telemetry()])
     assert raised not in sys.modules.values()
@@ -61,6 +63,7 @@ def test_two_copies_in_one_process_share_no_state(
     rate_groups: list[str],
     prm: str,
     parameter_ids: list[int],
+    downlink: tuple[list[int], int],
     bus: list[tuple[int, bytes]],
     wire: Callable[..., Callable[..., int]],
 ):
@@ -75,6 +78,7 @@ def test_two_copies_in_one_process_share_no_state(
         rate_groups: its rate groups.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
+        downlink: the channels' sizes and frames its downlink is made for.
         bus: every role's bus message on its LabBusDriver port.
         wire: wires a copy to the bus.
     """
@@ -82,13 +86,13 @@ def test_two_copies_in_one_process_share_no_state(
     earlier, later = power_cycle(configuration), power_cycle(configuration)
     earlier_station = FprimeStation(earlier, dictionary)
     later_station = FprimeStation(later, dictionary)
-    earlier.boot(prm, parameter_ids)
+    earlier.boot(prm, parameter_ids, *downlink)
     step_earlier = wire(earlier, configuration, bus)
     earlier_station.uplink("cmdDisp.CMD_NO_OP", {}, 1)
     step_earlier(NS)
     earlier_station.uplink("cmdDisp.CMD_NO_OP", {}, 2)
 
-    later.boot(prm, parameter_ids)
+    later.boot(prm, parameter_ids, *downlink)
     wire(later, configuration, bus)(NS)
     step_earlier(2 * NS)
 
@@ -115,19 +119,20 @@ def test_two_copies_in_one_process_share_no_state(
     assert [context for context, _, _ in earlier_station.responses()] == [1, 2]
 
 
-def test_a_copy_boots_once(configuration: str, prm: str, parameter_ids: list[int]):
+def test_a_copy_boots_once(configuration: str, prm: str, parameter_ids: list[int], downlink: tuple[list[int], int]):
     """A second boot of one copy is refused: a copy is powered on once.
 
     Args:
         configuration: the configuration power-cycled.
         prm: the case's parameter file.
         parameter_ids: every parameter's ID, which boot holds valid.
+        downlink: the channels' sizes and frames its downlink is made for.
     """
     copy = power_cycle(configuration)
-    copy.boot(prm, parameter_ids)
+    copy.boot(prm, parameter_ids, *downlink)
 
     with pytest.raises(RuntimeError, match="already booted"):
-        copy.boot(prm, parameter_ids)
+        copy.boot(prm, parameter_ids, *downlink)
 
 
 def test_a_configuration_not_built_is_refused_naming_it():

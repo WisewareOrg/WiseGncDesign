@@ -15,6 +15,7 @@ import functools
 import importlib
 import importlib.util
 import json
+import math
 import os
 import re
 import sys
@@ -37,6 +38,7 @@ from fsw.codegen.deployment import (
     configuration_model,
     configurations,
     fprime_configurations,
+    tick_period,
 )
 from fsw.codegen.fpp_model import Component, Model
 from fsw.codegen.members import members
@@ -426,7 +428,8 @@ def _scenario_test(mission: Mission, scenario_id: str) -> _ScenarioTest:
     marks say how it is flown; the test carries them and the mission's vehicle. The ground writes
     the case's parameter record beside its run file, as `run_<NNNN>.prm.json`, from each member's
     `parameters`, and the build is made on it: the Python build's `FrameRunner`, which is both
-    sides, or the F´ build's `lab.Adapter`, with an `FprimeStation` on its pins as the radio edge.
+    sides, or the F´ build's `lab.Adapter`, its downlink holding the case's every tick, with an
+    `FprimeStation` on its pins as the radio edge.
     WiseDynamics' `FswHost` hosts the build. A `Ground` flies the procedure against the radio edge
     and records the run file. An exception the procedure raised is re-raised whole, and a procedure
     still waiting when the flight ends fails the case.
@@ -482,7 +485,8 @@ def _scenario_test(mission: Mission, scenario_id: str) -> _ScenarioTest:
         if mission.build == "python":
             fsw = radio = FrameRunner(mission.gnc, record, mission._found.classes, contract=mission.contract)
         else:
-            fsw = Adapter(mission.gnc, record, contract=mission.contract)
+            frames = math.ceil(sim_duration_s / tick_period(mission.gnc, contract=mission.contract))
+            fsw = Adapter(mission.gnc, record, contract=mission.contract, frames=frames)
             radio = FprimeStation(fsw, fsw.dictionary)
         _merge_json(sim_test_directory / "flight.json", {"build": fsw.build})
         host = FswHost(fsw, sim_scenario.vehicle)
