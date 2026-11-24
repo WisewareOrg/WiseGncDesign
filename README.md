@@ -42,8 +42,8 @@ to GitHub and GitLab only the first time, or when a tag changes. A lock check or
 GitHub whenever uv rebuilds the F´ toolchain's metadata: with a fresh uv cache or a changed tag.
 Each sync rebuilds the F´ build cache from scratch, which needs no network. The build also writes
 the gitignored type stubs ty reads. The lock takes the F´ toolchain's versions from the
-`requirements.txt` at the F´ tag over the network. Why by tag, and why one pin, is in [ADR 0003 rev
-4](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
+`requirements.txt` at the F´ tag over the network. Why by tag, and why one pin, is in
+[ADR 0003 rev 4](docs/decisions/0003-fly-the-fprime-flight-software-inside-the-basilisk-process.md).
 
 `just test`, `just fly` and `just lab` rebuild the F´ extension first, so an edit to C++ or FPP is
 picked up. That rebuild reuses the existing cache, so after switching branches run `just pinned` or
