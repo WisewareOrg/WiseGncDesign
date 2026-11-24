@@ -41,7 +41,7 @@ jobs:
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
       # ty reads the F´ build's generated stubs and extensions, so the build comes first.
       - run: just _sync
-      - uses: WisewareOrg/wise-ci/check-python@b27c5858566679b604bfcbf56f07ff93aeb5c81f
+      - uses: WisewareOrg/wise-ci/check-python@864f104b0b1d6da356269bcfe26bc5f96b1ce5c2
 
   pytest:
     name: pytest
@@ -118,4 +118,4 @@ jobs:
         with:
           persist-credentials: false
       # docs/decisions/ agrees with its index, and every ADR citation pins the ADR's current rev.
-      - uses: WisewareOrg/wise-ci/check-adrs@b27c5858566679b604bfcbf56f07ff93aeb5c81f
+      - uses: WisewareOrg/wise-ci/check-adrs@864f104b0b1d6da356269bcfe26bc5f96b1ce5c2
