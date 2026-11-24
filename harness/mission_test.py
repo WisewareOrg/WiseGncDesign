@@ -1174,13 +1174,21 @@ harness.mission.Adapter = Recorded
 """
 """Notebook source making each case's `lab.Adapter` write the `frames` it was given, if any, to a file."""
 
+_HALF_SECOND_TICKS = "harness.mission.tick_period = lambda *_, **__: 0.5\n"
+"""Notebook source, after `_RECORDED_ADAPTER`, making the harness read a 0.5 s tick; the flight still ticks at 1 s."""
 
-@pytest.mark.parametrize(("duration_s", "frames"), [(10.0, 10), (2.5, 3)], ids=["whole-ticks", "part-of-a-tick"])
+
+@pytest.mark.parametrize(
+    ("duration_s", "patch", "frames"),
+    [(10.0, "", 10), (2.5, "", 3), (10.0, _HALF_SECOND_TICKS, 20)],
+    ids=["whole-ticks", "part-of-a-tick", "half-second-ticks"],
+)
 def test_a_flight_hands_its_adapter_the_ticks_of_its_duration_as_frames(
     project: pytest.Pytester,
     fly_in_a_subprocess: Callable[..., pytest.RunResult],
     tmp_path: Path,
     duration_s: float,
+    patch: str,
     frames: int,
 ) -> None:
     """The F´ build's adapter is built with `frames`: the scenario's duration over the tick, rounded up.
@@ -1193,7 +1201,8 @@ def test_a_flight_hands_its_adapter_the_ticks_of_its_duration_as_frames(
         fly_in_a_subprocess: runs the project in a subprocess.
         tmp_path: where the flight's adapter writes the `frames` it was given.
         duration_s: s, the scenario's duration.
-        frames: the 1 s ticks that cover it.
+        patch: notebook source changing the tick the harness reads, if any.
+        frames: the ticks that cover the duration.
     """
     if not built("MockActuation"):
         pytest.skip("the F´ build of MockActuation is absent; run `just fsw`")
@@ -1202,7 +1211,7 @@ def test_a_flight_hands_its_adapter_the_ticks_of_its_duration_as_frames(
     project.makepyfile(
         test_flights=flying(
             'gnc="MockActuation", build="fprime", scenarios=("TST901",), contract=MOCK',
-            check=_RECORDED_ADAPTER.format(record=str(record)),
+            check=_RECORDED_ADAPTER.format(record=str(record)) + patch,
             vehicle="imu_wheel_spacecraft",
         )
     )
