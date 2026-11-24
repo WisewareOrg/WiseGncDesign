@@ -16,7 +16,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -30,7 +30,7 @@ from fsw.codegen.deployment import (
 )
 from fsw.codegen.fpp_model import Instance
 
-__all__ = ["Channel", "Command", "Dictionary", "Parameter", "Type"]
+__all__ = ["Channel", "ChannelWrites", "Command", "Dictionary", "Parameter", "Type"]
 
 _INTERFACES = REPOSITORY / "fsw" / "fpp" / "interfaces"
 
@@ -149,6 +149,18 @@ class Parameter:
 
     id: int
     name: str
+
+
+class ChannelWrites(NamedTuple):
+    """One channel's decoded writes, oldest first.
+
+    Attributes:
+        times: the flight software time tags in ns, as int64.
+        values: the values, one row per write, as `Channel.from_raw` or `Channel.pack_many` give them.
+    """
+
+    times: np.ndarray
+    values: np.ndarray
 
 
 @dataclass(frozen=True)

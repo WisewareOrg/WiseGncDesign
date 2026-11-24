@@ -160,16 +160,17 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
     m.def(
         "telemetry",
         []() {
-            py::list writes;
-            for (const auto& write : WiseFsw::groundLink.takeWrites()) {
-                writes.append(py::make_tuple(
-                    write.id, write.ns,
-                    py::bytes(reinterpret_cast<const char*>(write.value.data()), write.value.size())));
-            }
-            return writes;
+            WiseFsw::groundLink.flush();
+            const std::vector<U8>& downlink = WiseFsw::groundLink.downlinked();
+            const std::vector<U32>& sizes = WiseFsw::groundLink.packetSizes();
+            py::tuple drained = py::make_tuple(
+                py::bytes(reinterpret_cast<const char*>(downlink.data()), downlink.size()),
+                py::bytes(reinterpret_cast<const char*>(sizes.data()), sizes.size() * sizeof(U32)));
+            WiseFsw::groundLink.clearDownlink();
+            return drained;
         },
-        "Every telemetry write since the last call, oldest first: (channel ID, F´ time tag in ns, serialized "
-        "value).");
+        "Every telemetry packet downlinked since the last call, oldest first: (the packets back to back, each "
+        "packet's size as native U32).");
 
     m.def(
         "responses",

@@ -55,7 +55,9 @@ say what crosses it.
 The Python build presents the radio edge itself, through its CDH. The F´ build presents it through
 the F´ ground station, `ground.fprime_station.FprimeStation`, on the lab adapter's pins: the only
 F´ packet codec in the repository and the part F´'s real ground data system replaces. F´ packets
-exist only between it and the configuration's extension, `_wise_fsw_<configuration>`.
+exist only between it and the configuration's extension, `_wise_fsw_<configuration>`. The F´ build's
+`Cdh.GroundLink` packs every telemetry write, with its time tag, into F´'s `TlmPacket`s, and the
+station decodes them.
 
 Each build also has `build`, its build identity, which the harness records in the flight's
 `flight.json`, as

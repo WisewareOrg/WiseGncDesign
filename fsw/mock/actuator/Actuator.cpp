@@ -4,7 +4,13 @@ namespace MockGnc {
 
 Actuator::Actuator(const char* compName) : ActuatorComponentBase(compName) {}
 
+void Actuator::mark_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) {
+    this->tlmWrite_tally(++this->m_tally);
+    this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::OK);
+}
+
 void Actuator::schedIn_handler(FwIndexType portNum, U32 context) {
+    this->tlmWrite_tally(++this->m_tally);
     Gnc::WheelCommand command;
     Gnc::WheelCommand::Type_of_motorTorque& torque = command.get_motorTorque();
     for (FwSizeType i = 0; i < sizeof torque / sizeof torque[0]; i++) {

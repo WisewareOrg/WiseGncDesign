@@ -9,7 +9,7 @@ wiring and rates, the roles it takes, the dictionary and the base tick. The radi
 CDH's `GroundLink`, which the frame runner forwards to.
 """
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -17,10 +17,11 @@ import numpy as np
 
 from fsw.codegen import fpp_types
 from fsw.codegen.deployment import CONTRACT, Contract, configuration_model, tick_period
-from fsw.codegen.dictionary import Dictionary
+from fsw.codegen.dictionary import ChannelWrites, Dictionary
 from fsw.codegen.roles import taken
 from fsw.python.cdh import commands, inputs, outputs, parameters
 from fsw.python.cdh.ground_link import GroundLink
+from fsw.python.cdh.telemetry import Entry
 from fsw.python.gnc.partition import GncPartition
 from fsw.python.platform.rates import RateGroupDriver, dividers
 from fsw.python.rio import messages
@@ -213,22 +214,38 @@ class FrameRunner:
         """
         return self._link.responses()
 
-    def telemetry(self) -> list[tuple[str, int, Any]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> list[Entry]:
+        """Every telemetry entry since the last call, in the order written.
 
         Returns:
             As `GroundLink.telemetry` gives them.
         """
         return self._link.telemetry()
 
-    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
-        """The values written to one channel, packed in one batch.
+    def decode(
+        self, downlinks: Sequence[list[Entry]], names: Collection[str] | None = None
+    ) -> dict[str, ChannelWrites]:
+        """Downlinks as each channel's values, each channel packed in one batch.
+
+        Every write is kept, in the order written.
 
         Args:
-            name: `<instance>.<channel>`.
-            raws: its writes' values, as `telemetry` gave them.
+            downlinks: as `telemetry` gave them, oldest first.
+            names: the channels to decode, `<instance>.<channel>`; every channel when `None`.
 
         Returns:
-            As `Channel.pack_many` gives them.
+            For each channel downlinked, `<instance>.<channel>` to its `ChannelWrites`: time tags in ns as
+            int64 and values, as `Channel.pack_many` gives them, keyed in the order of first write.
         """
-        return self.dictionary.channel(name).pack_many(raws)
+        merged: dict[str, tuple[list[int], list[Any]]] = {}
+        for downlink in downlinks:
+            for channels, t_ns, values in downlink:
+                for channel, value in zip(channels, values, strict=True):
+                    if value is not None and (names is None or channel in names):
+                        times, written = merged.setdefault(channel, ([], []))
+                        times.append(t_ns)
+                        written.append(value)
+        return {
+            channel: ChannelWrites(np.array(times, dtype=np.int64), self.dictionary.channel(channel).pack_many(written))
+            for channel, (times, written) in merged.items()
+        }

@@ -1,11 +1,9 @@
 """The radio edge: the flight software as the ground sees it, in F´'s names and values."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any, Protocol
 
-import numpy as np
-
-from fsw.codegen.dictionary import Dictionary
+from fsw.codegen.dictionary import ChannelWrites, Dictionary
 
 __all__ = ["RadioEdge"]
 
@@ -50,22 +48,25 @@ class RadioEdge(Protocol):
         """
         ...
 
-    def telemetry(self) -> list[tuple[str, int, Any]]:
-        """Every telemetry write since the last call, in the order written.
+    def telemetry(self) -> Any:
+        """The build's raw downlink since the last call, in the build's own form.
 
         Returns:
-            `(<instance>.<channel>, time tag in ns, raw)`, the raw write in the build's own form.
+            What `decode` takes.
         """
         ...
 
-    def values(self, name: str, raws: Sequence[Any]) -> np.ndarray:
-        """One channel's raw writes as values, in one batch.
+    def decode(self, downlinks: Sequence[Any], names: Collection[str] | None = None) -> dict[str, ChannelWrites]:
+        """Downlinks as each channel's values, each channel decoded in one batch.
+
+        Every write is kept, in the order written.
 
         Args:
-            name: `<instance>.<channel>`.
-            raws: its raw writes, as `telemetry` gave them.
+            downlinks: as `telemetry` gave them, oldest first.
+            names: the channels to decode, `<instance>.<channel>`; every channel when `None`.
 
         Returns:
-            As `Channel.from_raw` gives them.
+            For each channel downlinked, `<instance>.<channel>` to its `ChannelWrites`: flight software
+            time tags in ns as int64, oldest first, and values, as `Channel.from_raw` gives them.
         """
         ...

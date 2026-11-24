@@ -56,7 +56,7 @@ def test_a_packet_larger_than_f_prime_s_buffer_is_refused_naming_its_size(fsw: M
         fsw.uplink(bytes(10_000), 1)
 
 
-def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
+def test_each_frame_s_rate_group_writes_are_downlinked_within_its_step(
     booted: ModuleType,
     station: FprimeStation,
     rate_groups: list[str],
@@ -65,10 +65,10 @@ def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
     bus: list[tuple[int, bytes]],
     wire: Callable[..., Callable[..., int]],
 ):
-    """Each rate group's writes of two ticks come down in the order written, tagged with each tick.
+    """After each step, its frame's rate group writes are down, each tagged with that frame's time.
 
-    Every write of the first tick comes before every write of the second. The first tick is at
-    1.500007 s, so its writes are tagged with that time in ns, microseconds included.
+    The first frame is at 1.500007 s, so its writes are tagged with that time in ns, microseconds
+    included. Nothing of a frame is left to come down after the step that ran it.
 
     Args:
         booted: the test's copy of the deployment, booted idle on the case's parameters.
@@ -81,15 +81,16 @@ def test_the_rate_groups_writes_come_down_once_in_order_with_their_f_prime_time(
     """
     first = NS + 500_000_000 + 7_000
     step = wire(booted, configuration, bus)
+
     step(first)
-    step(2 * NS)
-
     writes = _health(decoded(station), rate_groups)
-
     assert writes
-    assert [t for _, t, _ in writes] == sorted(t for _, t, _ in writes)
-    assert {t for _, t, _ in writes} <= {first, 2 * NS}
-    assert first in {t for _, t, _ in writes}
+    assert {t for _, t, _ in writes} == {first}
+
+    step(2 * NS)
+    writes = _health(decoded(station), rate_groups)
+    assert writes
+    assert {t for _, t, _ in writes} == {2 * NS}
     assert _health(decoded(station), rate_groups) == []
 
 
@@ -129,10 +130,10 @@ def test_each_rate_group_runs_once_every_divider_ticks(
     for tick in range(1, ticks + 1):
         step(tick * NS)
 
-    writes = station.telemetry()
+    downlinked = station.decode([station.telemetry()])
     for group, divider in dividers.items():
         name = f"{group}.CycleCount"
-        counts = station.values(name, [raw for written, _, raw in writes if written == name])
+        _, counts = downlinked[name]
         assert len(counts) == ticks // divider, group
         assert np.diff(counts).tolist() == [1] * (len(counts) - 1), group
 
