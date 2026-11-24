@@ -290,7 +290,7 @@ class TestStationCodec:
         change: Callable[[bytes, int], bytes],
         response: str,
         prm: str,
-        boot_idle: Callable[[ModuleType, str], None],
+        boot_idle: Callable[..., None],
         bus: list[tuple[int, bytes]],
         wire: Callable[..., Callable[..., int]],
     ):

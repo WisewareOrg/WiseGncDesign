@@ -57,7 +57,7 @@ def test_a_case_s_file_boots_every_parameter_valid(
 
 
 def test_a_missing_file_fails_the_boot(
-    fsw: ModuleType, tmp_path: Path, parameter_ids: list[int], boot_idle: Callable[[ModuleType, str], None]
+    fsw: ModuleType, tmp_path: Path, parameter_ids: list[int], boot_idle: Callable[..., None]
 ):
     """No file at the path leaves every parameter invalid, each named.
 
@@ -79,7 +79,7 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
     configuration: str,
     dictionary: Dictionary,
     prm_record: Path,
-    boot_idle: Callable[[ModuleType, str], None],
+    boot_idle: Callable[..., None],
 ):
     """A record without one parameter makes a `.dat` without it; boot names that parameter alone.
 
@@ -123,7 +123,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     station: FprimeStation,
     tmp_path: Path,
     prm_record: Path,
-    boot_idle: Callable[[ModuleType, str], None],
+    boot_idle: Callable[..., None],
     bus: list[tuple[int, bytes]],
     wire: Callable[..., Callable[..., int]],
 ):
@@ -166,9 +166,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
 
 
 @pytest.mark.parametrize("path", ["run_0000.prm.dat", "/run_0000.prm.dat"])
-def test_a_relative_path_or_one_in_the_root_is_refused(
-    fsw: ModuleType, path: str, boot_idle: Callable[[ModuleType, str], None]
-):
+def test_a_relative_path_or_one_in_the_root_is_refused(fsw: ModuleType, path: str, boot_idle: Callable[..., None]):
     """The sandbox is the file's directory, which is never the root, so neither path boots.
 
     Args:
@@ -201,7 +199,7 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
     fsw: ModuleType,
     tmp_path: Path,
     prm: str,
-    boot_idle: Callable[[ModuleType, str], None],
+    boot_idle: Callable[..., None],
     configuration: str,
     past: int,
     boots: bool,
@@ -261,7 +259,7 @@ def test_the_sandbox_is_the_case_s_directory(
     dictionary: Dictionary,
     tmp_path: Path,
     prm: str,
-    boot_idle: Callable[[ModuleType, str], None],
+    boot_idle: Callable[..., None],
     monkeypatch: pytest.MonkeyPatch,
     configuration: str,
     bus: list[tuple[int, bytes]],

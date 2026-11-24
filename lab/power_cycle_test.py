@@ -9,7 +9,6 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
@@ -25,7 +24,7 @@ def test_an_f_prime_assert_raises_and_the_next_power_cycle_flies_a_fresh_copy(
     configuration: str,
     dictionary: Dictionary,
     prm: str,
-    boot_idle: Callable[[ModuleType, str], None],
+    boot_idle: Callable[..., None],
     bus: list[tuple[int, bytes]],
     wire: Callable[..., Callable[..., int]],
 ):
@@ -61,7 +60,7 @@ def test_two_copies_in_one_process_share_no_state(
     dictionary: Dictionary,
     rate_groups: list[str],
     prm: str,
-    boot_idle: Callable[[ModuleType, str], None],
+    boot_idle: Callable[..., None],
     bus: list[tuple[int, bytes]],
     wire: Callable[..., Callable[..., int]],
 ):
@@ -116,7 +115,7 @@ def test_two_copies_in_one_process_share_no_state(
     assert [context for context, _, _ in earlier_station.responses()] == [1, 2]
 
 
-def test_a_copy_boots_once(configuration: str, prm: str, boot_idle: Callable[[ModuleType, str], None]):
+def test_a_copy_boots_once(configuration: str, prm: str, boot_idle: Callable[..., None]):
     """A second boot of one copy is refused: a copy is powered on once.
 
     Args:
