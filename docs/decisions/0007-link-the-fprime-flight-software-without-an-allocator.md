@@ -23,8 +23,8 @@ generated or the framework's, so reading or annotating the source cannot hold it
 
 - **Each configuration's flight software is linked without an allocator as part of its build.** The
   link has no C++ library and no libc allocator, only the support the language itself needs, so code
-  that can allocate, throw or call into the C++ library does not link, and the linker names the
-  function that does.
+  that can allocate or call into the C++ library does not link, and the linker names the function
+  that does.
 - **F´ sizes what it sizes at initialization from one allocator, over fixed memory, which closes when
   initialization ends.** The first frame ends it; a use after that trips F´'s assert. It is the
   only allocator left in the linked flight software.
@@ -60,8 +60,8 @@ generated or the framework's, so reading or annotating the source cannot hold it
 
 - An allocation added to a component, to F´ or to what FPP generates fails the build, with no test to
   write and nothing to annotate.
-- Flight C++ gives up what the C++ library provides outside its headers, exceptions among it. A
-  component that needs some of it must be given fixed memory instead.
+- Flight C++ gives up what the C++ library provides outside its headers. A component that needs some
+  of it must be given fixed memory instead.
 - The link cannot see inside libc: a libc function that allocates for itself is held only if it is
   named.
 - The support the language needs is named, so a compiler that needs more fails the link until it is
