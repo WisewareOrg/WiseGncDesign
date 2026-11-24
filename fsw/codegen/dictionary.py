@@ -442,6 +442,15 @@ class Dictionary:
                 ]
         return {"commands": commands, "channels": channels}
 
+    @property
+    def channel_sizes(self) -> list[int]:
+        """Each channel's value size in bytes, which a deployment's downlink is made for.
+
+        Returns:
+            The sizes, one per channel.
+        """
+        return [channel.type.dtype.itemsize for channel in self.channels_by_id.values()]
+
     def channel(self, name: str) -> Channel:
         """One channel by its name.
 

@@ -130,7 +130,7 @@ class Adapter:
         fsw.boot(
             str(self._dat.resolve()),
             sorted(self.dictionary.parameters_by_id),
-            [channel.type.dtype.itemsize for channel in self.dictionary.channels_by_id.values()],
+            self.dictionary.channel_sizes,
             self._frames,
         )
         self._receive = {role.role: fsw.receive_buffer(port, size(role.bus)) for role, port in self._sensors}
