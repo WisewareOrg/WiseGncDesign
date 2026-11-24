@@ -227,9 +227,12 @@ can allocate fails the build, and the linker names its caller. That refuses `thr
 inside libc, whose first `fwrite` to stdout allocates its buffer. A pair of links at configure time,
 one growing a vector, holds it to refusing.
 
-What a flight fills is fixed, and filling it further trips F´'s assert rather than dropping: the 256
-command responses held between drains, and the telemetry, `frames` of it
+What a flight fills is fixed, and filling it further trips F´'s assert rather than dropping: the
+`GroundLink::RESPONSES` command responses held between drains, and the telemetry, `frames` of it
 ([the lab adapter](#the-lab-adapter)).
+
+The reasoning is in
+[ADR 0007 rev 1](../docs/decisions/0007-link-the-fprime-flight-software-without-an-allocator.md).
 
 ## The lab adapter
 
