@@ -8,8 +8,11 @@ the 257th trips the assert. Skipped without the deployment `just fsw` builds, as
 skips.
 """
 
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 import pytest
@@ -17,6 +20,9 @@ import pytest
 from fsw.mock import MOCK
 from ground.fprime_station import FprimeStation
 from lab import Adapter
+
+if TYPE_CHECKING:
+    from conftest import MockActuationCase
 
 NS = 1_000_000_000
 """ns per s."""
@@ -30,134 +36,195 @@ _RESPONSES = 256
 _COUNT = "actuationRateGroup.CycleCount"
 """A channel the test mock's rate group writes every other base tick, counting 1, 2, ..."""
 
-_MOCK_ACTUATION = "MockActuation"
+
+class Write(NamedTuple):
+    """One telemetry write of a channel.
+
+    Attributes:
+        t_ns: ns, its time tag.
+        value: its value, as plain lists.
+    """
+
+    t_ns: int
+    value: Any
 
 
-def _flown(record: Path, frames: int) -> tuple[Adapter, FprimeStation]:
-    """MockActuation's adapter booted to hold `frames` ticks of telemetry, and its station.
+Writes = dict[str, list[Write]]
+"""Each channel's writes, in the order downlinked."""
+
+
+class Flight:
+    """A copy of MockActuation and the ground station on it, flown without draining.
+
+    Attributes:
+        ticks: the ticks flown, the last one's number.
+    """
+
+    ticks: int
+
+    def __init__(self, record: Path, frames: int) -> None:
+        """Boots a copy.
+
+        Args:
+            record: the case's parameter record.
+            frames: the base ticks of telemetry its downlink holds undrained.
+        """
+        self._adapter = Adapter("MockActuation", record, contract=MOCK, frames=frames)
+        self._adapter.boot()
+        self._station = FprimeStation(self._adapter, self._adapter.dictionary)
+        self.ticks = 0
+
+    def fly(self, ticks: int) -> None:
+        """Flies more ticks.
+
+        Args:
+            ticks: how many.
+        """
+        for _ in range(ticks):
+            self.ticks += 1
+            self._adapter.tick(self.ticks * NS, {})
+
+    def command(self, contexts: Iterable[int]) -> None:
+        """Uplinks `cmdDisp.CMD_NO_OP` under each context, and flies a tick after each.
+
+        Args:
+            contexts: the ground's numbers for the commands.
+        """
+        for context in contexts:
+            self._station.uplink("cmdDisp.CMD_NO_OP", {}, context)
+            self.fly(1)
+
+    def responses(self) -> list[tuple[int, str, str | None]]:
+        """Drains the command responses.
+
+        Returns:
+            Each response, as the station gives it, oldest first.
+        """
+        return self._station.responses()
+
+    def writes(self) -> Writes:
+        """Drains the telemetry.
+
+        Returns:
+            Each channel's writes.
+        """
+        return {
+            channel: [Write(*write) for write in zip(times.tolist(), np.asarray(values).tolist(), strict=True)]
+            for channel, (times, values) in self._station.decode([self._station.telemetry()]).items()
+        }
+
+
+def _tagged(writes: Writes, wanted: Callable[[int], bool]) -> Writes:
+    """The writes whose time tag is wanted.
 
     Args:
-        record: the case's parameter record.
-        frames: the base ticks of telemetry the downlink holds undrained.
+        writes: each channel's writes.
+        wanted: whether a time tag, ns, is.
 
     Returns:
-        The adapter and the ground station on its pins.
+        Those writes, of each channel that has any.
     """
-    adapter = Adapter(_MOCK_ACTUATION, record, contract=MOCK, frames=frames)
-    adapter.boot()
-    return adapter, FprimeStation(adapter, adapter.dictionary)
+    kept = {channel: [write for write in each if wanted(write.t_ns)] for channel, each in writes.items()}
+    return {channel: each for channel, each in kept.items() if each}
 
 
-@pytest.mark.parametrize("frames", [2, 8, 10_000], ids=["two", "eight", "past-8175"])
-def test_a_flight_held_to_its_frames_loses_no_telemetry_write_undrained(
-    mock_actuation: tuple[str, Any, Any, Path], frames: int
-) -> None:
-    """`frames` ticks flown with no drain between come down whole, every write in order.
-
-    The rate group counts 1, 2, ... once every other tick, so a write lost anywhere in the
-    downlink, or one the storage dropped at its capacity, leaves a gap or a short count. 10,000
-    ticks is past the 8,175 a fixed 4,096 packets held of a flight.
+def _accepted(contexts: Iterable[int]) -> list[tuple[int, str, str | None]]:
+    """The responses of commands accepted.
 
     Args:
-        mock_actuation: the configuration, its role, the Python build's command and the record.
-        frames: the base ticks flown, and the downlink's frames.
+        contexts: the commands' contexts, in order.
+
+    Returns:
+        Each response, as the station gives it.
     """
-    _, _, _, record = mock_actuation
-    adapter, station = _flown(record, frames)
-
-    for k in range(1, frames + 1):
-        adapter.tick(k * NS, {})
-
-    counts = station.decode([station.telemetry()], [_COUNT])[_COUNT].values
-    assert counts.tolist() == list(range(1, frames // 2 + 1))
+    return [(context, "OK", None) for context in contexts]
 
 
-def test_a_downlink_past_its_storage_asserts_without_losing_what_is_stored(
-    mock_actuation: tuple[str, Any, Any, Path],
-) -> None:
-    """With one frame of storage, a flight undrained asserts within 1,000 ticks, keeping every stored write.
+class TestGroundLink:
+    """GroundLink's fixed storage, flown on MockActuation."""
 
-    The assert is F´'s, raised in Python from the tick whose write finds the storage full. One
-    `telemetry` then gives every write of the ticks before the tripping tick T, the open packet's
-    included, as an adapter with room for the whole flight downlinks them, and of the writes tagged
-    T a prefix of that flight's. The tick the assert comes at is not fixed.
+    @pytest.fixture(autouse=True)
+    def _record(self, mock_actuation: MockActuationCase) -> None:
+        """Holds the case's parameter record, on which each flight boots.
 
-    Args:
-        mock_actuation: the configuration, its role, the Python build's command and the record.
-    """
-    _, _, _, record = mock_actuation
-    small, small_station = _flown(record, 1)
-    flown = 0
-    with pytest.raises(RuntimeError, match=_GROUND_LINK):
-        for k in range(1, 1_001):
-            flown = k
-            small.tick(k * NS, {})
-    assert flown > 1
+        Args:
+            mock_actuation: the configuration and its record.
+        """
+        self.record = mock_actuation.record
 
-    kept = small_station.decode([small_station.telemetry()])
-    whole, whole_station = _flown(record, flown)
-    for k in range(1, flown + 1):
-        whole.tick(k * NS, {})
-    expected = whole_station.decode([whole_station.telemetry()])
+    @pytest.mark.parametrize("frames", [2, 8, 10_000])
+    def test_a_flight_held_to_its_frames_loses_no_telemetry_write_undrained(self, frames: int) -> None:
+        """`frames` ticks flown with no drain between come down whole, every write in order.
 
-    tripped = flown * NS
-    for name, reference in expected.items():
-        before = reference.times < tripped
-        at = np.flatnonzero(reference.times == tripped)
-        got = kept.get(name)
-        times = np.empty(0, np.int64) if got is None else got.times
-        values = np.empty((0, *np.asarray(reference.values).shape[1:])) if got is None else np.asarray(got.values)
-        done = int(before.sum())
-        assert times[:done].tolist() == reference.times[:done].tolist(), name
-        assert np.array_equal(values[:done], np.asarray(reference.values)[:done]), name
-        later = len(times) - done
-        assert 0 <= later <= len(at), name
-        assert times[done:].tolist() == reference.times[done : done + later].tolist(), name
-        assert np.array_equal(values[done:], np.asarray(reference.values)[done : done + later]), name
+        The rate group counts 1, 2, ... once every other tick, so a write lost anywhere in the
+        downlink, or one the storage dropped at its capacity, leaves a gap or a short count.
 
+        Args:
+            frames: the base ticks flown, and the downlink's frames.
+        """
+        flight = Flight(self.record, frames)
 
-def _respond(station: FprimeStation, adapter: Adapter, contexts: range) -> None:
-    """Uplinks `cmdDisp.CMD_NO_OP` under each context, a tick after each, draining nothing.
+        flight.fly(frames)
 
-    Args:
-        station: the station on the adapter.
-        adapter: the adapter.
-        contexts: the ground's numbers for the commands, one command and one tick each.
-    """
-    for context in contexts:
-        station.uplink("cmdDisp.CMD_NO_OP", {}, context)
-        adapter.tick((context + 1) * NS, {})
+        counts = [write.value for write in flight.writes()[_COUNT]]
+        assert counts == list(range(1, frames // 2 + 1)), f"{len(counts)} counts of {frames // 2}, or out of order"
 
+    def test_a_downlink_past_its_storage_asserts_without_losing_what_is_stored(self) -> None:
+        """With one frame of storage, a flight undrained asserts within 1,000 ticks, keeping every stored write.
 
-def test_256_command_responses_are_held_undrained_in_order(mock_actuation: tuple[str, Any, Any, Path]) -> None:
-    """256 responses undrained all come down, oldest first, and a drain empties the store.
+        The assert is F´'s, raised in Python from the tick whose write finds the storage full. One
+        drain then gives every write of the ticks before the tripping tick T, the open packet's
+        included, as an adapter with room for the whole flight downlinks them, and of each channel's
+        writes tagged T a prefix of that flight's. The tick the assert comes at is not fixed.
+        """
+        roomy = Flight(self.record, frames=1_000)
+        roomy.fly(1_000)
+        whole = roomy.writes()
+        flight = Flight(self.record, frames=1)
 
-    A second 256 after the drain holds as well, so the store is emptied, not worn out.
+        with pytest.raises(RuntimeError, match=_GROUND_LINK):
+            flight.fly(1_000)
+        kept = flight.writes()
 
-    Args:
-        mock_actuation: the configuration, its role, the Python build's command and the record.
-    """
-    _, _, _, record = mock_actuation
-    adapter, station = _flown(record, 1_000)
+        tripping = flight.ticks * NS
+        before, expected = _tagged(kept, lambda t: t < tripping), _tagged(whole, lambda t: t < tripping)
+        since, at = _tagged(kept, lambda t: t >= tripping), _tagged(whole, lambda t: t == tripping)
+        changed = [channel for channel in expected if before.get(channel) != expected[channel]]
+        unwritten = {channel: each for channel, each in since.items() if each != at.get(channel, [])[: len(each)]}
+        assert flight.ticks > 1, f"the one frame stored trips the assert at tick {flight.ticks}, not after it"
+        assert before == expected, f"{changed} lost or changed a write tagged before tick {flight.ticks}"
+        assert not unwritten, f"the tripping tick keeps {unwritten}, not a prefix of the writes {at}"
 
-    _respond(station, adapter, range(_RESPONSES))
-    assert station.responses() == [(context, "OK", None) for context in range(_RESPONSES)]
-    assert station.responses() == []
+    def test_256_command_responses_are_held_undrained_in_order(self) -> None:
+        """256 responses undrained all come down, oldest first."""
+        flight = Flight(self.record, frames=1_000)
 
-    _respond(station, adapter, range(1_000, 1_000 + _RESPONSES))
-    assert station.responses() == [(context, "OK", None) for context in range(1_000, 1_000 + _RESPONSES)]
+        flight.command(range(_RESPONSES))
 
+        held = flight.responses()
+        assert held == _accepted(range(_RESPONSES)), f"{len(held)} responses of {_RESPONSES}, or out of order"
 
-def test_the_257th_undrained_command_response_asserts(mock_actuation: tuple[str, Any, Any, Path]) -> None:
-    """The response past the 256 held trips F´'s assert in the tick that runs its command.
+    def test_a_drain_of_256_command_responses_makes_room_for_256_more(self) -> None:
+        """A drain empties the store, and the 256 responses after it all come down."""
+        flight = Flight(self.record, frames=1_000)
+        flight.command(range(_RESPONSES))
+        later = range(1_000, 1_000 + _RESPONSES)
 
-    Args:
-        mock_actuation: the configuration, its role, the Python build's command and the record.
-    """
-    _, _, _, record = mock_actuation
-    adapter, station = _flown(record, 1_000)
-    _respond(station, adapter, range(_RESPONSES))
+        flight.responses()
+        left = flight.responses()
+        flight.command(later)
 
-    station.uplink("cmdDisp.CMD_NO_OP", {}, _RESPONSES)
-    with pytest.raises(RuntimeError, match=_GROUND_LINK):
-        adapter.tick((_RESPONSES + 1) * NS, {})
+        held = flight.responses()
+        assert left == [], f"{len(left)} responses are left by a drain"
+        assert held == _accepted(later), f"{len(held)} responses of {_RESPONSES}, or out of order"
+
+    def test_the_257th_undrained_command_response_asserts_without_losing_the_256(self) -> None:
+        """The response past the 256 held trips F´'s assert in the tick that runs its command; the 256 come down."""
+        flight = Flight(self.record, frames=1_000)
+        flight.command(range(_RESPONSES))
+
+        with pytest.raises(RuntimeError, match=_GROUND_LINK):
+            flight.command([_RESPONSES])
+
+        held = flight.responses()
+        assert held == _accepted(range(_RESPONSES)), f"{len(held)} responses of {_RESPONSES}, or out of order"
