@@ -22,7 +22,7 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
         WISE_FSW_TOPOLOGY_HEADER="fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopology.hpp")
     # The platform implementations (Os and the like) F´ chooses at link time, as for a deployment.
     # Its Os::Task has no thread, so the tick runs the active components.
-    set(WISE_IMPLEMENTATIONS Os_Task_Sim Os_RawTime_Stub)
+    set(WISE_IMPLEMENTATIONS Os_Task_Sim Os_RawTime_Stub Os_Console_Stub)
     fprime_target_implementations(_wise_fsw_@CONFIGURATION@ ${WISE_IMPLEMENTATIONS})
     set_target_properties(_wise_fsw_@CONFIGURATION@ PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${FPRIME_PROJECT_ROOT}/lab")

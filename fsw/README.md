@@ -227,9 +227,9 @@ every function not on its list, and names the caller. `dynamic_cast`, `std::chro
 `std::array::at` are refused with the C++ library. A component that needs another function adds its
 name, in order, once the function is read not to allocate. A pair of links at configure time, one
 allocating, holds it to refusing. Some on the list are known to allocate inside libc when called a
-certain way: `opendir`, in F´'s directory code, the first `fwrite` to stdout, `getcwd` with no
-buffer, `vsscanf` with `%m` or an overlong number, and `__cxa_atexit` past libc's first block, which
-a function-local static with a destructor reaches at its first call.
+certain way: `opendir`, in F´'s directory code, `getcwd` with no buffer, `vsscanf` with `%m` or an
+overlong number, and `__cxa_atexit` past libc's first block, which a function-local static with a
+destructor reaches at its first call.
 
 What a flight fills is fixed, and filling it further trips F´'s assert rather than dropping: the
 `GroundLink::RESPONSES` command responses held between drains, and the telemetry, `frames` of it

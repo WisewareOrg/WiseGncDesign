@@ -32,14 +32,13 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
         _ZTVN10__cxxabiv117__class_type_infoE _ZTVN10__cxxabiv120__si_class_type_infoE
         _ZTVN10__cxxabiv121__vmi_class_type_infoE _ZdlPvm __cxa_atexit __cxa_deleted_virtual
         __dso_handle __errno_location __isoc23_strtoll __isoc23_strtoull __isoc23_vsscanf chdir
-        clock_gettime close closedir fcntl fflush fputc fputs fsync fwrite getcwd lseek lstat memcmp
-        memcpy memmove memset mkdir open opendir posix_fallocate pthread_cond_broadcast
+        clock_gettime close closedir fcntl fputc fputs fsync getcwd lseek lstat memcmp memcpy
+        memmove memset mkdir open opendir posix_fallocate pthread_cond_broadcast
         pthread_cond_destroy pthread_cond_init pthread_cond_signal pthread_cond_wait
         pthread_mutex_destroy pthread_mutex_init pthread_mutex_lock pthread_mutex_unlock
         pthread_mutexattr_init pthread_mutexattr_setprotocol pthread_mutexattr_settype read readdir
         rename rewinddir rmdir sem_destroy sem_init sem_post sem_timedwait sem_trywait sem_wait
-        statvfs stderr stdout strncat strncmp strncpy strtod strtof sysconf sysinfo unlink vsnprintf
-        write)
+        statvfs stderr strncat strncmp strncpy strtod strtof sysconf sysinfo unlink vsnprintf write)
         target_link_options(wise_fsw_sealed INTERFACE "LINKER:--defsym=${NAME}=0")
     endforeach ()
     # One source, linked as it is and with lines that allocate: only the allocation may be refused.
