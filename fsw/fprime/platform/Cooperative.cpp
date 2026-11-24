@@ -33,8 +33,8 @@ const Os::Queue* Cooperative::pump(int rounds) {
         if (this->pending() == nullptr) {
             return nullptr;
         }
-        for (FwSizeType task = 0; task < this->m_taskCount; task++) {
-            this->m_tasks[task]->invokeRoutine();
+        for (FwSizeType i = 0; i < this->m_taskCount; i++) {
+            this->m_tasks[i]->invokeRoutine();
         }
     }
     return this->pending();

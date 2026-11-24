@@ -34,13 +34,14 @@ void makeDownlink(const std::vector<FwSizeType>& channel_sizes, FwSizeType frame
     for (const FwSizeType size : channel_sizes) {
         bytes += frames * (sizeof(FwChanIdType) + Fw::Time::SERIALIZED_SIZE + size);
     }
-    // A packet closes only when the next entry does not fit, so two neighbours carry more than one packet's payload.
+    // A packet closes only when the next entry does not fit, so two neighbours carry more than one packet's payload;
+    // one more is an odd packet out, and one is the drain's.
     const FwSizeType payload = FW_COM_BUFFER_MAX_SIZE - sizeof(FwPacketDescriptorType);
-    const FwSizeType packets = 2 * bytes / payload + 2;
+    const FwSizeType packetCount = 2 * bytes / payload + 2;
     // Uninitialized, so a page no packet reaches costs nothing.
-    g_packets.reset(new U8[packets * FW_COM_BUFFER_MAX_SIZE]);
-    g_packetSizes.reset(new U32[packets]);
-    WiseFsw::groundLink.setDownlink(g_packets.get(), g_packetSizes.get(), packets);
+    g_packets.reset(new U8[packetCount * FW_COM_BUFFER_MAX_SIZE]);
+    g_packetSizes.reset(new U32[packetCount]);
+    WiseFsw::groundLink.setDownlink(g_packets.get(), g_packetSizes.get(), packetCount);
 }
 
 //! Refuses a buffer on a port LabBusDriver lacks, on one that has one, or after the first step; the
@@ -55,6 +56,15 @@ void checkBufferPort(FwIndexType port, bool (Bus::LabBusDriver::*has)(FwIndexTyp
     }
     if (Fw::MemoryAllocation::InitAllocator::instance().closed()) {
         throw std::runtime_error(std::string("a ") + direction + " buffer is made at boot, not after the first step");
+    }
+}
+
+//! Raises a queue that did not drain, if there is one, naming it.
+void checkDrained(const Os::Queue* stuck, int rounds) {
+    if (stuck != nullptr) {
+        throw std::runtime_error("queue " + std::string(stuck->getName().toChar()) + " did not drain: messages left " +
+                                 std::to_string(stuck->getMessagesAvailable()) + ", rounds " +
+                                 std::to_string(rounds));
     }
 }
 
@@ -164,23 +174,20 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         "receive_buffer does.");
 
     m.def(
-        "step", &WiseFsw::step, py::arg("t_ns"),
+        "step",
+        [](U64 t_ns) {
+            U32 written = 0;
+            checkDrained(WiseFsw::step(t_ns, written), Sim::Cooperative::MAX_ROUNDS);
+            return written;
+        },
+        py::arg("t_ns"),
         "Sets the clock to t_ns (ns), runs the queued commands, pushes each receive buffer out on its "
         "LabBusDriver.busOut port in port order and ticks the rate groups once. A buffer the connected port does "
         "not deserialize exactly trips F´'s assert. Returns the transmit buffers the step wrote, bit n for "
         "LabBusDriver.busIn[n].");
 
     m.def(
-        "pump",
-        [](int rounds) {
-            const Os::Queue* stuck = WiseFsw::cooperative.pump(rounds);
-            if (stuck != nullptr) {
-                throw std::runtime_error("queue " + std::string(stuck->getName().toChar()) +
-                                         " did not drain: messages left " +
-                                         std::to_string(stuck->getMessagesAvailable()) + ", rounds " +
-                                         std::to_string(rounds));
-            }
-        },
+        "pump", [](int rounds) { checkDrained(WiseFsw::cooperative.pump(rounds), rounds); },
         py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},
         "Runs the active components until no queue holds a message; raises RuntimeError naming a queue that "
         "still does after `rounds` rounds.");
@@ -193,7 +200,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
                 py::bytes(reinterpret_cast<const char*>(WiseFsw::groundLink.downlink()),
                           WiseFsw::groundLink.downlinkSize()),
                 py::bytes(reinterpret_cast<const char*>(WiseFsw::groundLink.packetSizes()),
-                          WiseFsw::groundLink.packets() * sizeof(U32)));
+                          WiseFsw::groundLink.packetCount() * sizeof(U32)));
             WiseFsw::groundLink.clearDownlink();
             return drained;
         },

@@ -39,12 +39,12 @@ class GroundLink final : public GroundLinkComponentBase {
 
     //! Each downlinked packet's size in bytes, in the order of `downlink`, and their count.
     const U32* packetSizes() const { return this->m_sizes; }
-    FwSizeType packets() const { return this->m_packets; }
+    FwSizeType packetCount() const { return this->m_packetCount; }
 
     //! Empties the downlink.
     void clearDownlink() {
         this->m_bytes = 0;
-        this->m_packets = 0;
+        this->m_packetCount = 0;
     }
 
     //! The responses since the last clear, oldest first, and their count.
@@ -66,7 +66,7 @@ class GroundLink final : public GroundLinkComponentBase {
     U32* m_sizes = nullptr;
     FwSizeType m_capacity = 0;
     FwSizeType m_bytes = 0;
-    FwSizeType m_packets = 0;
+    FwSizeType m_packetCount = 0;
     std::array<Response, RESPONSES> m_responses;
     FwSizeType m_responseCount = 0;
 };

@@ -1,6 +1,5 @@
 #include "fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopology.hpp"
 
-#include "Fw/Types/Assert.hpp"
 #include "Os/Os.hpp"
 #include "config/MemoryAllocation.hpp"
 
@@ -22,14 +21,17 @@ void setupTopology(const TopologyState& state) {
     startTasks(state);
 }
 
-U32 step(U64 nanoseconds) {
+const Os::Queue* step(U64 nanoseconds, U32& written) {
     Fw::MemoryAllocation::InitAllocator::instance().close();
     simTime.set(nanoseconds);
     const Os::Queue* stuck = cooperative.pump();
-    FW_ASSERT(stuck == nullptr, static_cast<FwAssertArgType>(stuck->getMessagesAvailable()));
+    if (stuck != nullptr) {
+        return stuck;
+    }
     labBusDriver.push();
     simTime.tick();
-    return labBusDriver.takeWritten();
+    written = labBusDriver.takeWritten();
+    return nullptr;
 }
 
 }  // namespace WiseFsw

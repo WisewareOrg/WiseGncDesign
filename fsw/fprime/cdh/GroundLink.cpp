@@ -24,11 +24,11 @@ void GroundLink::flush() {
     if (this->m_packet.getNumEntries() == 0) {
         return;
     }
-    FW_ASSERT(this->m_packets < this->m_capacity, static_cast<FwAssertArgType>(this->m_packets));
+    FW_ASSERT(this->m_packetCount < this->m_capacity, static_cast<FwAssertArgType>(this->m_packetCount));
     const Fw::ComBuffer& buffer = this->m_packet.getBuffer();
     (void)std::memcpy(&this->m_downlink[this->m_bytes], buffer.getBuffAddr(), buffer.getSize());
     this->m_bytes += buffer.getSize();
-    this->m_sizes[this->m_packets++] = static_cast<U32>(buffer.getSize());
+    this->m_sizes[this->m_packetCount++] = static_cast<U32>(buffer.getSize());
     this->resetPacket();
 }
 
@@ -47,7 +47,8 @@ void GroundLink::cmdResponseIn_handler(FwIndexType portNum, FwOpcodeType opCode,
 void GroundLink::tlmIn_handler(FwIndexType portNum, FwChanIdType id, Fw::Time& timeTag, Fw::TlmBuffer& val) {
     Fw::SerializeStatus status = this->m_packet.addValue(id, timeTag, val);
     if (status == Fw::FW_SERIALIZE_NO_ROOM_LEFT) {
-        FW_ASSERT(this->m_packets + 1 < this->m_capacity, static_cast<FwAssertArgType>(this->m_packets));
+        // The last packet is left for the drain's flush.
+        FW_ASSERT(this->m_packetCount + 1 < this->m_capacity, static_cast<FwAssertArgType>(this->m_packetCount));
         this->flush();
         status = this->m_packet.addValue(id, timeTag, val);
     }

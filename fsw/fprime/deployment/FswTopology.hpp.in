@@ -12,8 +12,9 @@ extern Sim::Cooperative cooperative;
 //! Sets the topology up: every component idle, its memory taken.
 void setupTopology(const TopologyState& state);
 
-//! One frame at the time given; the first ends initialization. Returns the transmit buffers it wrote, a bit per port.
-U32 step(U64 nanoseconds);
+//! One frame at the time given; the first ends initialization. Gives the transmit buffers it wrote in `written`, a
+//! bit per port. Returns nullptr, or the queue that did not drain, and then runs nothing more and leaves `written`.
+const Os::Queue* step(U64 nanoseconds, U32& written);
 
 }  // namespace WiseFsw
 

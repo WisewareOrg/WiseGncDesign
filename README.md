@@ -36,7 +36,7 @@ Tests sit beside the code they test. The suite needs the simulator installed, fr
 ### The F´ build
 
 `just pinned` and `just local` also build the F´ deployment. Besides `uv.lock`, the build needs the
-system C++ compiler and git. The F´ framework and Eigen are fetched by tag into gitignored folders
+system GCC, 13 or later, and git. The F´ framework and Eigen are fetched by tag into gitignored folders
 under `fsw/fprime/lib/`, outside the build cache, so a sync needs network access to GitHub and
 GitLab only the first time, or when a tag changes. A lock check or sync also needs GitHub whenever
 uv rebuilds the F´ toolchain's metadata: with a fresh uv cache or a changed tag. Each sync rebuilds

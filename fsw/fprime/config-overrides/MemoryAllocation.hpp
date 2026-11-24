@@ -25,6 +25,7 @@ class InitAllocator final : public Fw::MemAllocator {
                    FwSizeType& size,
                    bool& recoverable,
                    FwSizeType alignment) override {
+        FW_ASSERT(alignment <= alignof(std::max_align_t), static_cast<FwAssertArgType>(alignment));
         FW_ASSERT(!this->m_closed, static_cast<FwAssertArgType>(identifier), static_cast<FwAssertArgType>(size));
         const FwSizeType start = (this->m_used + alignment - 1) / alignment * alignment;
         FW_ASSERT(start <= ARENA && size <= ARENA - start, static_cast<FwAssertArgType>(identifier),

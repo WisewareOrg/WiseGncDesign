@@ -256,7 +256,7 @@ copy that asserted is only drained.
 
 ## The lab adapter
 
-`lab.Adapter(configuration, prm_path, *, contract=CONTRACT, frames)` is a configuration's WiseFsw F´
+`lab.Adapter(configuration, prm_path, *, contract=CONTRACT, frames=...)` is a configuration's WiseFsw F´
 deployment as a WiseDynamics FSW build, which `FswHost` hosts in the simulation's process, with the
 parameters of the case's record at `prm_path`. `just fsw` builds the deployment of each
 configuration `fsw.codegen.deployment.fprime_configurations` selects, of the repository's contract
