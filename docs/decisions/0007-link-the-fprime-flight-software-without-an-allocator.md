@@ -1,14 +1,13 @@
 # 0007 — Link the F´ flight software without an allocator
 
 **Status:** accepted
-**Decided:** 2026-11-24 (issue 125 Hold the F´ flight software's C++ to no allocation after
-initialization)
+**Decided:** 2026-11-24 (issue 125 Build the F´ flight software as ARINC 653 would)
 **Rev:** 1
 
 ## Revisions
 
-- **rev 1** — 2026-11-24 — first written (issue 125 Hold the F´ flight software's C++ to no
-  allocation after initialization).
+- **rev 1** — 2026-11-24 — first written (issue 125 Build the F´ flight software as ARINC 653
+  would).
 
 ## Context
 
@@ -22,12 +21,12 @@ generated or the framework's, so reading or annotating the source cannot hold it
 ## Decision
 
 - **Each configuration's flight software is linked without an allocator as part of its build.** The
-  link has no C++ library and no libc, only a named list of what flight software may call outside
-  itself, so code that calls an allocator or the C++ library does not link, and the linker names the
-  function that does.
+  link has no C++ library and no libc: only the math library, the compiler's own support and a named
+  list of what flight software may call outside itself. Code that calls an allocator or the C++
+  library does not link, and the linker names the function that does.
 - **F´ sizes what it sizes at initialization from one allocator, over fixed memory, which closes
   when initialization ends.** The first frame ends it; a use after that trips F´'s assert. It is the
-  only allocator the flight software can call.
+  only allocator the link leaves to call by name.
 - **What a flight fills is fixed before it starts, and an overflow trips F´'s assert; it never grows
   and never drops a write.**
 - **The lab's pins are outside the link.** They are the test connector (ADR 0006 rev 1), where Python
@@ -47,7 +46,8 @@ generated or the framework's, so reading or annotating the source cannot hold it
 - **The allocators wrapped while the flight software runs, so an allocation in a frame faults.** It
   sees only the paths a run takes. Wrapped by the extension's link alone it misses an allocation made
   inside the C++ library, which is shared with Python. Rejected for the code; closing F´'s one
-  allocator is this idea where it is complete, since the link leaves no other allocator to call.
+  allocator is this idea where it is complete, since the link leaves no other allocator to call by
+  name.
 - **The allocators refused by name, with the rest of libc allowed.** It refuses the allocators
   someone thought of: another spelling of one, or a libc function that allocates for itself, links
   unnoticed. Rejected for the list of what may be called, which refuses what nobody thought
@@ -65,8 +65,8 @@ generated or the framework's, so reading or annotating the source cannot hold it
   write and nothing to annotate.
 - Flight C++ gives up what the C++ library provides outside its headers. A component that needs some
   of it must be given fixed memory instead.
-- The link cannot see inside a listed libc function: one that allocates when called a certain way is
-  held only by not being called so.
+- The link cannot see inside a listed libc function: one that allocates, on every call or on some, is
+  held only by no frame making that call.
 - A component that calls a libc function not on the list fails the build until the function is added,
   and adding it is when someone reads whether it can allocate.
 - The support the language needs is on the same list, so a compiler or a libc that needs another name
