@@ -240,8 +240,8 @@ Every warning is an error, in the F´ library, what FPP generates and what is wr
 every linker warning. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own validation
 set over everything, a wider set over what is written and generated here, and the code-generation
 and link flags stated so that every host compiles the same code. Stack protector, fortify, stack
-clash protection and control-flow protection are stated off: they guard against attack, and flight
-builds do not set them. Flight C++ has no exceptions, so a `throw` is a compile error.
+clash protection and control-flow protection are stated off: they guard against attack, and none of
+the flight builds surveyed sets them. Flight C++ has no exceptions, so a `throw` is a compile error.
 
 A diagnostic is silenced only here:
 
