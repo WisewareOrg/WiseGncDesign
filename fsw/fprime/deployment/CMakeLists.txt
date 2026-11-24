@@ -29,11 +29,10 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     target_link_options(wise_fsw_sealed INTERFACE -nostdlib++ LINKER:-z,defs)
     target_link_libraries(wise_fsw_sealed INTERFACE m)
     foreach (ALLOCATOR IN ITEMS malloc calloc realloc reallocarray aligned_alloc posix_memalign memalign mmap mmap64
-            strdup strndup __strdup __strndup asprintf vasprintf __asprintf_chk __vasprintf_chk getline getdelim
-            __getdelim fopen fopen64)
+            strdup strndup __strdup __strndup asprintf vasprintf getline getdelim __getdelim fopen fopen64)
         target_link_options(wise_fsw_sealed INTERFACE "LINKER:--wrap=${ALLOCATOR}")
     endforeach ()
-    foreach (SUPPORT IN ITEMS __cxa_deleted_virtual __cxa_pure_virtual _ZdlPvm _ZTVN10__cxxabiv117__class_type_infoE
+    foreach (SUPPORT IN ITEMS __cxa_deleted_virtual __cxa_pure_virtual __cxa_guard_abort __cxa_guard_acquire __cxa_guard_release __gxx_personality_v0 _ZdlPv _ZdlPvm _ZTVN10__cxxabiv117__class_type_infoE
             _ZTVN10__cxxabiv120__si_class_type_infoE _ZTVN10__cxxabiv121__vmi_class_type_infoE)
         target_link_options(wise_fsw_sealed INTERFACE "LINKER:--defsym=${SUPPORT}=0")
     endforeach ()

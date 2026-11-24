@@ -12,7 +12,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # linked, stated so that every host compiles the same code.
 fprime_add_validation_flags()
 add_compile_options(-ffp-contract=off
-    -fstack-protector-strong -fno-stack-clash-protection -fcf-protection=none -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3
+    -fno-stack-protector -fno-stack-clash-protection -fcf-protection=none -U_FORTIFY_SOURCE
     "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions;-fno-threadsafe-statics>")
 add_link_options(LINKER:--fatal-warnings,-z,relro,-z,now,-z,noexecstack)
 fprime_setup_included_code()
