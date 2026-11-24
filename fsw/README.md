@@ -215,13 +215,31 @@ True
 The reasoning is in
 [ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
+## No allocation after initialization
+
+The F´ flight software takes its memory in initialization and none after it. F´ sizes its queues
+from one allocator, `Fw::MemoryAllocation::InitAllocator` in
+`fsw/fprime/config/MemoryAllocation.hpp`, a fixed arena that the first `step` closes; a use of it
+after that trips F´'s assert. `just fsw` also links each configuration's flight software, without
+the lab's pins, against no C++ library and with libc's allocators undefined, so any other call that
+can allocate fails the build, and the linker names its caller. That refuses `throw`, `dynamic_cast`,
+`std::chrono`'s clocks and `std::array::at` too, which flight C++ does not use. The link cannot see
+inside libc, whose first `fwrite` to stdout allocates its buffer. A pair of links at configure time,
+one growing a vector, holds it to refusing.
+
+What a flight fills is fixed, and filling it further trips F´'s assert rather than dropping: the 256
+command responses held between drains, and the telemetry, `frames` of it
+([the lab adapter](#the-lab-adapter)).
+
 ## The lab adapter
 
-`lab.Adapter(configuration, prm_path, *, contract=CONTRACT)` is a configuration's WiseFsw F´
-deployment as a WiseDynamics FSW build, which `FswHost` hosts in the simulation's process, with the
-parameters of the case's record at `prm_path`. `just fsw` builds the deployment of each
-configuration `fsw.codegen.deployment.fprime_configurations` selects, of the repository's contract
-and the test mocks', into `lab` as the extension `_wise_fsw_<configuration>`, with the JSON
+`lab.Adapter(configuration, prm_path, *, contract=CONTRACT, frames=8192)` is a configuration's
+WiseFsw F´ deployment as a WiseDynamics FSW build, which `FswHost` hosts in the simulation's
+process, with the parameters of the case's record at `prm_path`. `frames` is the base ticks of
+telemetry the downlink holds undrained, each channel written once a tick; the ground stops draining
+once its procedure returns, so the harness passes the flight's length. `just fsw` builds the
+deployment of each configuration `fsw.codegen.deployment.fprime_configurations` selects, of the
+repository's contract and the test mocks', into `lab` as the extension `_wise_fsw_<configuration>`, with the JSON
 dictionary F´ generates for it alongside, `lab.dictionary_path(configuration)`; its CMake target
 `_wise_fsw` builds them all, and the extension each C++ utility under `algorithms/utils/` has for
 its tests, beside its source. The same build writes the gitignored type stubs `fsw/codegen/fpp_types.pyi`,
@@ -241,8 +259,8 @@ it works:
   to, and reads an actuator's bytes back, from `fsw/fpp/interfaces/Bus.fpp`: each payload type's
   copy is planned once, and each payload is bound to its buffer once, so a tick only copies.
 - `LabBusDriver`, in `fsw/fprime/rio/`, takes those bytes into the deployment and out of it,
-  through a fixed receive and transmit buffer per bus port that the adapter's `boot` makes: nothing
-  on the bus is allocated after boot.
+  through a fixed receive and transmit buffer per bus port, in memory the extension gives it as the
+  adapter's `boot` makes each.
 - `Cdh.BusConverter`, which `fsw.codegen.bus_converter` generates, converts each bus struct to its
   GNC struct and back, by the field rule the Python build's converter follows.
 - `fsw.codegen.deployment.render` renders each configuration's deployment, `WiseFsw.<Cfg>Fsw`, from
