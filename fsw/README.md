@@ -219,13 +219,13 @@ The reasoning is in
 
 The F´ flight software takes its memory in initialization and none after it. F´ sizes its queues
 from one allocator, `Fw::MemoryAllocation::InitAllocator` in
-`fsw/fprime/config-overrides/MemoryAllocation.hpp`, a fixed arena that the first `step` closes; a use of it
-after that trips F´'s assert. `just fsw` also links each configuration's flight software, without
-the lab's pins, against no C++ library and with libc's allocators undefined, so any other call that
-can allocate fails the build, and the linker names its caller. That refuses `throw`, `dynamic_cast`,
-`std::chrono`'s clocks and `std::array::at` too, which flight C++ does not use. The link cannot see
-inside libc, whose first `fwrite` to stdout allocates its buffer. A pair of links at configure time,
-one growing a vector, holds it to refusing.
+`fsw/fprime/config-overrides/MemoryAllocation.hpp`, a fixed arena that the first `step` closes; a
+use of it after that trips F´'s assert. `just fsw` also links each configuration's flight software,
+without the lab's pins, against no C++ library and with libc's allocators undefined, so any other
+call that can allocate fails the build, and the linker names its caller. That refuses
+`dynamic_cast`, `std::chrono`'s clocks and `std::array::at` too, which flight C++ does not use. The
+link cannot see inside libc, whose first `fwrite` to stdout allocates its buffer. A pair of links at
+configure time, one growing a vector, holds it to refusing.
 
 What a flight fills is fixed, and filling it further trips F´'s assert rather than dropping: the
 `GroundLink::RESPONSES` command responses held between drains, and the telemetry, `frames` of it
@@ -233,6 +233,25 @@ What a flight fills is fixed, and filling it further trips F´'s assert rather t
 
 The reasoning is in
 [ADR 0007 rev 1](../docs/decisions/0007-link-the-fprime-flight-software-without-an-allocator.md).
+
+## Warnings and flags
+
+Every warning is an error, in the F´ library, what FPP generates and what is written here, and so is
+every linker warning. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own validation
+set over everything, a wider set over what is written and generated here, and the code-generation
+and link flags stated so that every host compiles the same code. Flight C++ has no exceptions, so a
+`throw` is a compile error.
+
+A diagnostic is silenced only here:
+
+- `-Wno-unused-parameter` and `-Wno-vla`, everywhere, by F´'s own flags: FPP gives a handler every
+  argument of its port, and `-Wstack-usage` refuses a variable-length array.
+- `-Wno-float-equal`, in FPP-generated sources, whose structs and arrays compare floats.
+- F´'s headers, Eigen, pybind11 and Python are system headers to what is written here.
+- The modules Python loads are built with exceptions and thread-safe statics, which pybind11 needs.
+
+F´'s assert raises in Python by throwing through flight frames, whose destructors do not run, so a
+copy that asserted is only drained.
 
 ## The lab adapter
 
