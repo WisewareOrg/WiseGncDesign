@@ -16,6 +16,7 @@ The `variants` fixture renders the other configurations a test needs from two te
 
 import importlib
 import json
+import math
 import os
 import shutil
 import sys
@@ -1155,3 +1156,58 @@ def test_the_mock_actuator_s_command_spins_the_wheel_through_its_writer_alike_on
         speeds[build] = speed
     if built_fprime:
         assert speeds["fprime"].tobytes() == speeds["python"].tobytes()
+
+
+_RECORDED_ADAPTER = """
+import json
+
+import harness.mission
+from lab import Adapter
+
+
+class Recorded(Adapter):
+    def __init__(self, *args, **kwargs):
+        Path({record!r}).write_text(json.dumps({{k: v for k, v in kwargs.items() if k == "frames"}}))
+        super().__init__(*args, **kwargs)
+
+
+harness.mission.Adapter = Recorded
+"""
+"""Notebook source making each case's `lab.Adapter` write the `frames` it was given, if any, to a file."""
+
+
+@pytest.mark.parametrize("duration_s", [10.0, 2.5], ids=["whole-ticks", "part-of-a-tick"])
+def test_a_flight_hands_its_adapter_the_ticks_of_its_duration_as_frames(
+    project: pytest.Pytester,
+    fly_in_a_subprocess: Callable[..., pytest.RunResult],
+    tmp_path: Path,
+    duration_s: float,
+) -> None:
+    """The F´ build's adapter is built with `frames`: the scenario's duration over the tick, rounded up.
+
+    MockActuation ticks every 1 s, so 10 s is 10 frames and 2.5 s is 3. A scenario's duration is
+    the only length the harness knows before the flight, and the adapter sizes its downlink from it.
+
+    Args:
+        project: the project.
+        fly_in_a_subprocess: runs the project in a subprocess.
+        tmp_path: where the flight's adapter writes the `frames` it was given.
+        duration_s: s, the scenario's duration.
+    """
+    if not built("MockActuation"):
+        pytest.skip("the F´ build of MockActuation is absent; run `just fsw`")
+    record = tmp_path / "frames.json"
+    (project.path / "scenarios" / "alpha.py").write_text(ALPHA.format(duration=duration_s, body="pass"))
+    project.makepyfile(
+        test_flights=flying(
+            'gnc="MockActuation", build="fprime", scenarios=("TST901",), contract=MOCK',
+            check=_RECORDED_ADAPTER.format(record=str(record)),
+            vehicle="imu_wheel_spacecraft",
+        )
+    )
+
+    result = fly_in_a_subprocess(project)
+
+    result.assert_outcomes(passed=1)
+    period_s = 1.0
+    assert json.loads(record.read_text()) == {"frames": math.ceil(duration_s / period_s)}
