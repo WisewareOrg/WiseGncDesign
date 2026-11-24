@@ -226,10 +226,10 @@ call outside itself, `wise_fsw_sealed` in `fsw/fprime/deployment/CMakeLists.txt`
 every function not on its list, and names the caller. `dynamic_cast`, `std::chrono`'s clocks and
 `std::array::at` are refused with the C++ library. A component that needs another function adds its
 name, in order, once the function is read not to allocate. A pair of links at configure time, one
-allocating, holds it to refusing. Some on the list are known to allocate inside libc when called a
-certain way: `opendir`, in F´'s directory code, `getcwd` with no buffer, `vsscanf` with `%m` or an
-overlong number, and `__cxa_atexit` past libc's first block, which a function-local static with a
-destructor reaches at its first call.
+allocating, holds it to refusing. Some listed functions are known to allocate inside libc:
+`opendir`, in F´'s directory code, on every call, and, when called a certain way, `getcwd` with no
+buffer, `vsscanf` with `%m` or an overlong number, and `__cxa_atexit` past libc's first block, which
+a function-local static with a destructor reaches at its first call.
 
 What a flight fills is fixed, and filling it further trips F´'s assert rather than dropping: the
 `GroundLink::RESPONSES` command responses held between drains, and the telemetry, `frames` of it
