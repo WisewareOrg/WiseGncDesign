@@ -8,4 +8,4 @@ requires-python = ">=3.12"
 dev = ["check-reqs"]
 
 [tool.uv.sources]
-check-reqs = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-reqs", rev = "6751b05ed329c2a25bbe946000118ac469e3147f" }
+check-reqs = { git = "https://github.com/WisewareOrg/wise-ci", subdirectory = "check-reqs", rev = "0b6836899ecc8d7a2d850c54edb5152a76bfd582" }
