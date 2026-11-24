@@ -9,10 +9,10 @@ namespace WiseFsw {
 
 extern Sim::Cooperative cooperative;
 
-//! Sets the topology up: every component idle.
+//! Sets the topology up: every component idle, its memory taken.
 void setupTopology(const TopologyState& state);
 
-//! One frame at the time given. Returns the transmit buffers it wrote, a bit per port.
+//! One frame at the time given; the first ends initialization. Returns the transmit buffers it wrote, a bit per port.
 U32 step(U64 nanoseconds);
 
 }  // namespace WiseFsw

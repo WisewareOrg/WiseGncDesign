@@ -11,6 +11,7 @@
 
 #include "Fw/Types/Assert.hpp"
 #include "config/FppConstantsAc.hpp"
+#include "config/MemoryAllocation.hpp"
 #include "fsw/fprime/cdh/BusConverterPins.hpp"
 #include WISE_FSW_TOPOLOGY_HEADER
 
@@ -19,7 +20,6 @@ namespace py = pybind11;
 namespace {
 
 bool g_booted = false;
-bool g_stepped = false;
 
 //! The memory of LabBusDriver's buffers, by port.
 std::array<std::vector<U8>, Bus::LabBusDriver::PORTS> g_receive;
@@ -54,7 +54,7 @@ void checkBufferPort(FwIndexType port, bool (Bus::LabBusDriver::*has)(FwIndexTyp
     if ((WiseFsw::labBusDriver.*has)(port)) {
         throw std::runtime_error("port " + std::to_string(port) + " already has a " + direction + " buffer");
     }
-    if (g_stepped) {
+    if (Fw::MemoryAllocation::InitAllocator::instance().closed()) {
         throw std::runtime_error(std::string("a ") + direction + " buffer is made at boot, not after the first step");
     }
 }
@@ -165,12 +165,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         "receive_buffer does.");
 
     m.def(
-        "step",
-        [](U64 t_ns) {
-            g_stepped = true;
-            return WiseFsw::step(t_ns);
-        },
-        py::arg("t_ns"),
+        "step", &WiseFsw::step, py::arg("t_ns"),
         "Sets the clock to t_ns (ns), runs the queued commands, pushes each receive buffer out on its "
         "LabBusDriver.busOut port in port order and ticks the rate groups once. A buffer the connected port does "
         "not deserialize exactly trips F´'s assert. Returns the transmit buffers the step wrote, bit n for "

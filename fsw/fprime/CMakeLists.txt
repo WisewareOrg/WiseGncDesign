@@ -22,6 +22,7 @@ FetchContent_MakeAvailable(eigen)
 add_library(wise_eigen INTERFACE)
 target_include_directories(wise_eigen SYSTEM INTERFACE "${eigen_SOURCE_DIR}")
 
+add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/config")
 add_fprime_subdirectory("${FPRIME_PROJECT_ROOT}/fsw/fpp/interfaces")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/platform")
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/cdh")
