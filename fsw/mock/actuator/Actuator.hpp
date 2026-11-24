@@ -17,6 +17,9 @@ class Actuator final : public ActuatorComponentBase {
     //! Counts the mark.
     void mark_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) override;
 
+    //! Asks F´'s allocator for memory.
+    void allocate_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) override;
+
     U32 m_tally = 0;
 };
 

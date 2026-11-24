@@ -1,11 +1,21 @@
 #include "fsw/mock/actuator/Actuator.hpp"
 
+#include "Fw/Types/MemAllocator.hpp"
+
 namespace MockGnc {
 
 Actuator::Actuator(const char* compName) : ActuatorComponentBase(compName) {}
 
 void Actuator::mark_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) {
     this->tlmWrite_tally(++this->m_tally);
+    this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::OK);
+}
+
+void Actuator::allocate_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) {
+    FwSizeType size = 1;
+    (void)Fw::MemAllocatorRegistry::getInstance()
+        .getAllocator(Fw::MemoryAllocation::MemoryAllocatorType::SYSTEM)
+        .allocate(static_cast<FwEnumStoreType>(this->getIdBase()), size);
     this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::OK);
 }
 

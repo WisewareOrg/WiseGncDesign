@@ -29,6 +29,10 @@ module MockGnc {
     @ Counts one, as a step does
     sync command mark
 
+    @ Asks F´'s allocator for memory, which it refuses once the deployment has stepped; the Python
+    @ build has no allocator
+    sync command allocate
+
     @ The steps and marks so far
     telemetry tally: U32
 

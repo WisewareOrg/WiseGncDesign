@@ -32,6 +32,9 @@ class Actuator:
         self._tally += 1
         return named("MockGnc.ActuatorTelemetry")(tally=self._tally)
 
+    def allocate(self) -> None:
+        """Does nothing: the Python build has no allocator."""
+
     def step(self, t: float) -> tuple[Any, Any]:
         """Sends the command.
 
