@@ -2,13 +2,13 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Monitor",
         "hooks": [
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-tests.sh",
             "timeout": 15,
-            "statusMessage": "Checking the one-test-run gate"
+            "statusMessage": "Queueing test runs on one lock"
           }
         ]
       }

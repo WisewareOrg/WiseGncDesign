@@ -37,6 +37,7 @@ records.
 ## Running tests beside other sessions
 
 Several Claude Code sessions and agents may share a checkout. `.claude/settings.json` registers
-[`.claude/hooks/guard-tests.sh`](.claude/hooks/guard-tests.sh), which lets one test run through at
-a time on the machine; its header says what counts as a test run and when one is denied. A denied
-run is retried once the other finishes, never worked around.
+[`.claude/hooks/guard-tests.sh`](.claude/hooks/guard-tests.sh), which queues test runs on one lock
+so one runs at a time on the machine; its header says what counts as a test run and how the wait
+works. A queued run starts by itself when the lock frees; one that gives up exits 75 with the reason
+and is retried, never worked around.
