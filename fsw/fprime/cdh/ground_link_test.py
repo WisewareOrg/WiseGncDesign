@@ -77,10 +77,10 @@ def test_a_downlink_past_its_storage_asserts_without_losing_what_is_stored(
 ) -> None:
     """With one frame of storage, a flight undrained asserts within 1,000 ticks, keeping every stored write.
 
-    The assert is F´'s, raised in Python from the tick whose write finds the storage full. What
-    `telemetry` then gives is every write stored before it, as an adapter with room for the whole
-    flight downlinks the same ticks: each channel's writes are that flight's, from its first, none
-    dropped, overwritten or out of order. The tick the assert comes at is not fixed.
+    The assert is F´'s, raised in Python from the tick whose write finds the storage full. One
+    `telemetry` then gives every write of the ticks before the tripping tick T, the open packet's
+    included, as an adapter with room for the whole flight downlinks them, and of the writes tagged
+    T a prefix of that flight's. The tick the assert comes at is not fixed.
 
     Args:
         mock_actuation: the configuration, its role, the Python build's command and the record.
@@ -100,11 +100,20 @@ def test_a_downlink_past_its_storage_asserts_without_losing_what_is_stored(
         whole.tick(k * NS, {})
     expected = whole_station.decode([whole_station.telemetry()])
 
-    assert kept
-    for name, written in kept.items():
-        assert written.times.tolist() == expected[name].times.tolist()[: len(written.times)], name
-        assert np.array_equal(np.asarray(written.values), np.asarray(expected[name].values)[: len(written.times)]), name
-    assert len(kept[_COUNT].times) >= 1
+    tripped = flown * NS
+    for name, reference in expected.items():
+        before = reference.times < tripped
+        at = np.flatnonzero(reference.times == tripped)
+        got = kept.get(name)
+        times = np.empty(0, np.int64) if got is None else got.times
+        values = np.empty((0, *np.asarray(reference.values).shape[1:])) if got is None else np.asarray(got.values)
+        done = int(before.sum())
+        assert times[:done].tolist() == reference.times[:done].tolist(), name
+        assert np.array_equal(values[:done], np.asarray(reference.values)[:done]), name
+        later = len(times) - done
+        assert 0 <= later <= len(at), name
+        assert times[done:].tolist() == reference.times[done : done + later].tolist(), name
+        assert np.array_equal(values[done:], np.asarray(reference.values)[done : done + later]), name
 
 
 def _respond(station: FprimeStation, adapter: Adapter, contexts: range) -> None:
