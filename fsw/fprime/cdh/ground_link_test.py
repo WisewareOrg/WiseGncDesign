@@ -1,11 +1,10 @@
 """`Cdh.GroundLink` holds its downlink and its command responses in storage fixed at boot.
 
 Flown on the test mock `MockActuation` through `lab.Adapter`, whose `frames` is the base ticks of
-telemetry the downlink holds undrained, each channel written once per base tick. A flight held to
-`frames` ticks loses no write, however long; a downlink past its storage trips F´'s assert, which
-raises in Python, and never drops, overwrites or grows. 256 command responses are held undrained;
-the 257th trips the assert. Skipped without the deployment `just fsw` builds, as `mock_actuation`
-skips.
+telemetry the downlink holds undrained, each channel written once per base tick. A flight its
+frames hold loses no write; a downlink past its storage trips F´'s assert, which raises in Python,
+and never drops, overwrites or grows. 256 command responses are held undrained; the 257th trips the
+assert. Skipped without the deployment `just fsw` builds, as `mock_actuation` skips.
 """
 
 from __future__ import annotations
@@ -35,6 +34,23 @@ _RESPONSES = 256
 
 _COUNT = "actuationRateGroup.CycleCount"
 """A channel the test mock's rate group writes every other base tick, counting 1, 2, ..."""
+
+_TALLY = "actuator.tally"
+"""A channel the test mock writes at each step and each `actuator.mark`, counting 1, 2, ..."""
+
+_MARKS = 9
+"""The marks a marked tick uplinks, about a frame's bytes."""
+
+_FITS = pytest.mark.parametrize(("frames", "ticks"), [(11, 25), (1_000, 2_066)])
+"""A downlink's frames, and the most ticks of `_MARKS` marks it holds undrained.
+
+A frame is MockActuation's 9 channels, 243 bytes: each a 4-byte ID, an 11-byte time tag and its
+value. A packet carries 510 bytes of entries, so any two neighbours carry more than 510 between
+them, and `frames` take at most `2 * frames * 243 // 510 + 1` packets. The storage has one more,
+the drain's: 12 packets for 11 frames and 954 for 1,000, each one more than a frame fewer has. The
+flights write 12 and 954 packets. The mock's entries, 55 bytes at most, pack nearly whole packets
+where the bound allows half-full ones, so the flights are twice `frames` ticks long.
+"""
 
 
 class Write(NamedTuple):
@@ -74,15 +90,20 @@ class Flight:
         self._station = FprimeStation(self._adapter, self._adapter.dictionary)
         self.ticks = 0
 
-    def fly(self, ticks: int) -> None:
-        """Flies more ticks.
+    def fly(self, ticks: int, marks: int = 0) -> None:
+        """Flies more ticks, draining the marks' responses alone.
 
         Args:
             ticks: how many.
+            marks: the `actuator.mark` commands uplinked before each.
         """
         for _ in range(ticks):
+            for context in range(marks):
+                self._station.uplink("actuator.mark", {}, context)
             self.ticks += 1
             self._adapter.tick(self.ticks * NS, {})
+            if marks:
+                self._station.responses()
 
     def command(self, contexts: Iterable[int]) -> None:
         """Uplinks `cmdDisp.CMD_NO_OP` under each context, and flies a tick after each.
@@ -152,22 +173,41 @@ class TestGroundLink:
         """
         self.record = mock_actuation.record
 
-    @pytest.mark.parametrize("frames", [2, 8, 10_000])
-    def test_a_flight_held_to_its_frames_loses_no_telemetry_write_undrained(self, frames: int) -> None:
-        """`frames` ticks flown with no drain between come down whole, every write in order.
+    @_FITS
+    def test_the_most_a_downlink_s_frames_hold_comes_down_whole(self, frames: int, ticks: int) -> None:
+        """Every write of the longest marked flight the downlink holds undrained comes down, in order.
 
-        The rate group counts 1, 2, ... once every other tick, so a write lost anywhere in the
-        downlink, or one the storage dropped at its capacity, leaves a gap or a short count.
+        The tally counts the marks and the mock's steps, one every other tick from the first, and
+        the rate group counts its cycles, so a write lost anywhere leaves a gap or a short count.
 
         Args:
-            frames: the base ticks flown, and the downlink's frames.
+            frames: the downlink's frames.
+            ticks: the ticks flown.
         """
         flight = Flight(self.record, frames)
+        steps = (ticks + 1) // 2
 
-        flight.fly(frames)
+        flight.fly(ticks, _MARKS)
 
-        counts = [write.value for write in flight.writes()[_COUNT]]
-        assert counts == list(range(1, frames // 2 + 1)), f"{len(counts)} counts of {frames // 2}, or out of order"
+        writes = flight.writes()
+        tallies = [write.value for write in writes[_TALLY]]
+        counts = [write.value for write in writes[_COUNT]]
+        expected = ticks * _MARKS + steps
+        assert tallies == list(range(1, expected + 1)), f"{len(tallies)} tallies of {expected}, or out of order"
+        assert counts == list(range(1, steps + 1)), f"{len(counts)} counts of {steps}, or out of order"
+
+    @_FITS
+    def test_a_downlink_of_one_frame_fewer_asserts(self, frames: int, ticks: int) -> None:
+        """The flight `frames` just hold trips the assert of a downlink of one frame fewer.
+
+        Args:
+            frames: the frames that hold the flight.
+            ticks: the ticks flown.
+        """
+        flight = Flight(self.record, frames - 1)
+
+        with pytest.raises(RuntimeError, match=_GROUND_LINK):
+            flight.fly(ticks, _MARKS)
 
     def test_a_downlink_past_its_storage_asserts_without_losing_what_is_stored(self) -> None:
         """With one frame of storage, a flight undrained asserts within 1,000 ticks, keeping every stored write.
