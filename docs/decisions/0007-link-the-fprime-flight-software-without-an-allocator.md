@@ -23,11 +23,11 @@ generated or the framework's, so reading or annotating the source cannot hold it
 
 - **Each configuration's flight software is linked without an allocator as part of its build.** The
   link has no C++ library and no libc, only a named list of what flight software may call outside
-  itself, so code that can allocate or call into the C++ library does not link, and the linker names
-  the function that does.
+  itself, so code that calls an allocator or the C++ library does not link, and the linker names the
+  function that does.
 - **F´ sizes what it sizes at initialization from one allocator, over fixed memory, which closes
   when initialization ends.** The first frame ends it; a use after that trips F´'s assert. It is the
-  only allocator in what is linked.
+  only allocator the flight software can call.
 - **What a flight fills is fixed before it starts, and an overflow trips F´'s assert; it never grows
   and never drops a write.**
 - **The lab's pins are outside the link.** They are the test connector (ADR 0006 rev 1), where Python
@@ -47,7 +47,11 @@ generated or the framework's, so reading or annotating the source cannot hold it
 - **The allocators wrapped while the flight software runs, so an allocation in a frame faults.** It
   sees only the paths a run takes. Wrapped by the extension's link alone it misses an allocation made
   inside the C++ library, which is shared with Python. Rejected for the code; closing F´'s one
-  allocator is this idea where it is complete, since nothing else can allocate.
+  allocator is this idea where it is complete, since the link leaves no other allocator to call.
+- **The allocators refused by name, with the rest of libc allowed.** It refuses the allocators
+  someone thought of: another spelling of one, or a libc function that allocates for itself, links
+  unnoticed. Rejected for the list of what may be called, which refuses what nobody thought
+  of.
 - **RealtimeSanitizer.** It needs clang's runtime loaded ahead of Python, and sees only the paths a
   run takes. Rejected.
 - **A test that traces allocations over a flight.** It sees only the paths the test flies, so a new
@@ -63,7 +67,9 @@ generated or the framework's, so reading or annotating the source cannot hold it
   of it must be given fixed memory instead.
 - The link cannot see inside a listed libc function: one that allocates when called a certain way is
   held only by not being called so.
-- The support the language needs is named, so a compiler that needs more fails the link until it is
-  added.
+- A component that calls a libc function not on the list fails the build until the function is added,
+  and adding it is when someone reads whether it can allocate.
+- The support the language needs is on the same list, so a compiler or a libc that needs another name
+  fails the link until it is added.
 - A flight longer than the lab sized it for asserts.
 - Python code is not held by this decision.
