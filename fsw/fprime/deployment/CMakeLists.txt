@@ -29,7 +29,8 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     target_link_options(wise_fsw_sealed INTERFACE -nostdlib++ LINKER:-z,defs)
     target_link_libraries(wise_fsw_sealed INTERFACE m)
     foreach (ALLOCATOR IN ITEMS malloc calloc realloc reallocarray aligned_alloc posix_memalign memalign mmap mmap64
-            strdup strndup asprintf vasprintf getline fopen fopen64)
+            strdup strndup __strdup __strndup asprintf vasprintf __asprintf_chk __vasprintf_chk getline getdelim
+            __getdelim fopen fopen64)
         target_link_options(wise_fsw_sealed INTERFACE "LINKER:--wrap=${ALLOCATOR}")
     endforeach ()
     foreach (SUPPORT IN ITEMS __cxa_deleted_virtual __cxa_pure_virtual __cxa_guard_abort __cxa_guard_acquire
