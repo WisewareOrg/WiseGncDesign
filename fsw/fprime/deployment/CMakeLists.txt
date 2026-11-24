@@ -20,6 +20,46 @@ execute_process(
     OUTPUT_STRIP_TRAILING_WHITESPACE
     COMMAND_ERROR_IS_FATAL ANY)
 string(REPLACE "\n" ";" WISE_CONFIGURATIONS "${WISE_CONFIGURATIONS}")
+
+# `wise_fsw_sealed`: the options that link flight software without an allocator. There is no C++
+# library, libc's allocators are wrapped by functions that do not exist, and only the language's own
+# support is defined, so a call that can allocate is an undefined reference the linker names.
+if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
+    add_library(wise_fsw_sealed INTERFACE IMPORTED)
+    target_link_options(wise_fsw_sealed INTERFACE -nostdlib++ LINKER:-z,defs)
+    target_link_libraries(wise_fsw_sealed INTERFACE m)
+    foreach (ALLOCATOR IN ITEMS malloc calloc realloc reallocarray aligned_alloc posix_memalign memalign mmap mmap64
+            strdup strndup asprintf vasprintf getline fopen fopen64)
+        target_link_options(wise_fsw_sealed INTERFACE "LINKER:--wrap=${ALLOCATOR}")
+    endforeach ()
+    foreach (SUPPORT IN ITEMS __cxa_deleted_virtual __cxa_pure_virtual __cxa_guard_abort __cxa_guard_acquire
+            __cxa_guard_release __gxx_personality_v0 _ZdlPv _ZdlPvm _ZTVN10__cxxabiv117__class_type_infoE
+            _ZTVN10__cxxabiv120__si_class_type_infoE _ZTVN10__cxxabiv121__vmi_class_type_infoE)
+        target_link_options(wise_fsw_sealed INTERFACE "LINKER:--defsym=${SUPPORT}=0")
+    endforeach ()
+    # One source, linked as it is and with a line that grows a vector: only the growth may be refused.
+    set(WISE_SEAL_SOURCE [[
+#include <vector>
+std::vector<int> values;
+int main() {
+#ifdef GROW
+    values.push_back(0);
+#endif
+    return static_cast<int>(values.size());
+}
+]])
+    try_compile(WISE_SEAL_LINKS SOURCE_FROM_VAR seal.cpp WISE_SEAL_SOURCE NO_CACHE
+        LINK_LIBRARIES wise_fsw_sealed OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
+    if (NOT WISE_SEAL_LINKS)
+        message(FATAL_ERROR "wise_fsw_sealed refuses code that does not allocate:\n${WISE_SEAL_OUTPUT}")
+    endif ()
+    try_compile(WISE_SEAL_LINKS SOURCE_FROM_VAR seal.cpp WISE_SEAL_SOURCE NO_CACHE
+        COMPILE_DEFINITIONS -DGROW LINK_LIBRARIES wise_fsw_sealed OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
+    if (WISE_SEAL_LINKS OR NOT WISE_SEAL_OUTPUT MATCHES "operator new")
+        message(FATAL_ERROR "wise_fsw_sealed does not refuse a vector's growth, naming operator new:\n${WISE_SEAL_OUTPUT}")
+    endif ()
+endif ()
+
 foreach (WISE_CONFIGURATION IN LISTS WISE_CONFIGURATIONS)
     string(REPLACE "\t" ";" WISE_CONFIGURATION "${WISE_CONFIGURATION}")
     list(GET WISE_CONFIGURATION 0 CONFIGURATION)

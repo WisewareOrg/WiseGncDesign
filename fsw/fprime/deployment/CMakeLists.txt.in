@@ -25,6 +25,12 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     fprime_target_implementations(_wise_fsw_@CONFIGURATION@ Os_Task_Sim Os_RawTime_Stub)
     set_target_properties(_wise_fsw_@CONFIGURATION@ PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${FPRIME_PROJECT_ROOT}/lab")
+    # The flight software alone, without the lab's pins, linked so that code that can allocate does not
+    # link: `wise_fsw_sealed`, in ../CMakeLists.txt.
+    add_library(_wise_fsw_@CONFIGURATION@_sealed MODULE "${CMAKE_CURRENT_LIST_DIR}/@CONFIGURATION@FswTopology.cpp")
+    target_link_libraries(_wise_fsw_@CONFIGURATION@_sealed PRIVATE fsw_fprime_deployment_@CONFIGURATION@ wise_fsw_sealed)
+    fprime_target_implementations(_wise_fsw_@CONFIGURATION@_sealed Os_Task_Sim Os_RawTime_Stub)
+    add_dependencies(_wise_fsw_@CONFIGURATION@ _wise_fsw_@CONFIGURATION@_sealed)
     # The dictionary ships beside the extension: Python names and decodes the telemetry with it.
     # A target without outputs runs on every build, so the copy tracks the dictionary the build just wrote.
     add_custom_target(wise_fsw_dictionary_@CONFIGURATION@

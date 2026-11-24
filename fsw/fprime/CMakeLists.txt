@@ -2,7 +2,7 @@
 # WiseFsw: the F´ flight software, built as a Python extension the simulation runs in its own process.
 # The project root is the repository root (settings.ini), so components live beside the algorithms they port.
 ####
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.25)
 project(WiseFsw C CXX)
 
 include("${CMAKE_CURRENT_LIST_DIR}/lib/fprime/cmake/FPrime.cmake")
