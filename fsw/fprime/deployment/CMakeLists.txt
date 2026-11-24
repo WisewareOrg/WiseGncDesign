@@ -33,8 +33,7 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
             __getdelim fopen fopen64)
         target_link_options(wise_fsw_sealed INTERFACE "LINKER:--wrap=${ALLOCATOR}")
     endforeach ()
-    foreach (SUPPORT IN ITEMS __cxa_deleted_virtual __cxa_pure_virtual __cxa_guard_abort __cxa_guard_acquire
-            __cxa_guard_release __gxx_personality_v0 _ZdlPv _ZdlPvm _ZTVN10__cxxabiv117__class_type_infoE
+    foreach (SUPPORT IN ITEMS __cxa_deleted_virtual __cxa_pure_virtual _ZdlPvm _ZTVN10__cxxabiv117__class_type_infoE
             _ZTVN10__cxxabiv120__si_class_type_infoE _ZTVN10__cxxabiv121__vmi_class_type_infoE)
         target_link_options(wise_fsw_sealed INTERFACE "LINKER:--defsym=${SUPPORT}=0")
     endforeach ()
@@ -50,12 +49,12 @@ int main() {
 }
 ]])
     try_compile(WISE_SEAL_LINKS SOURCE_FROM_VAR seal.cpp WISE_SEAL_SOURCE NO_CACHE
-        LINK_LIBRARIES wise_fsw_sealed OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
+        COMPILE_DEFINITIONS -fno-exceptions LINK_LIBRARIES wise_fsw_sealed OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
     if (NOT WISE_SEAL_LINKS)
         message(FATAL_ERROR "wise_fsw_sealed refuses code that does not allocate:\n${WISE_SEAL_OUTPUT}")
     endif ()
     try_compile(WISE_SEAL_LINKS SOURCE_FROM_VAR seal.cpp WISE_SEAL_SOURCE NO_CACHE
-        COMPILE_DEFINITIONS -DGROW LINK_LIBRARIES wise_fsw_sealed OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
+        COMPILE_DEFINITIONS -fno-exceptions -DGROW LINK_LIBRARIES wise_fsw_sealed OUTPUT_VARIABLE WISE_SEAL_OUTPUT)
     if (WISE_SEAL_LINKS OR NOT WISE_SEAL_OUTPUT MATCHES "operator new")
         message(FATAL_ERROR "wise_fsw_sealed does not refuse a vector's growth, naming operator new:\n${WISE_SEAL_OUTPUT}")
     endif ()
