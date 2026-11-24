@@ -3,7 +3,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include <array>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -22,8 +21,8 @@ namespace {
 bool g_booted = false;
 
 //! The memory of LabBusDriver's buffers, by port.
-std::array<std::vector<U8>, Bus::LabBusDriver::PORTS> g_receive;
-std::array<std::vector<U8>, Bus::LabBusDriver::PORTS> g_transmit;
+std::vector<U8> g_receive[Bus::LabBusDriver::PORTS];
+std::vector<U8> g_transmit[Bus::LabBusDriver::PORTS];
 
 //! The memory of GroundLink's downlink: its packets, and each one's size.
 std::unique_ptr<U8[]> g_packets;

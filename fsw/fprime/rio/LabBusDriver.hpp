@@ -4,8 +4,6 @@
 #ifndef BUS_LABBUSDRIVER_HPP
 #define BUS_LABBUSDRIVER_HPP
 
-#include <array>
-
 #include "fsw/fprime/rio/LabBusDriverComponentAc.hpp"
 
 namespace Bus {
@@ -14,7 +12,7 @@ class LabBusDriver final : public LabBusDriverComponentBase {
   public:
     //! The serial ports each way, as LabBusDriver.fpp declares them.
     static constexpr FwIndexType PORTS = NUM_BUSOUT_OUTPUT_PORTS;
-    static_assert(NUM_BUSOUT_OUTPUT_PORTS == NUM_BUSIN_INPUT_PORTS, "a port number names both directions");
+    static_assert(PORTS == FwIndexType{NUM_BUSIN_INPUT_PORTS}, "a port number names both directions");
     static_assert(PORTS <= 32, "takeWritten gives each port a bit of a U32");
 
     explicit LabBusDriver(const char* compName);
@@ -46,8 +44,8 @@ class LabBusDriver final : public LabBusDriverComponentBase {
         FwSizeType size = 0;
     };
 
-    std::array<Buffer, PORTS> m_receive;
-    std::array<Buffer, PORTS> m_transmit;
+    Buffer m_receive[PORTS];
+    Buffer m_transmit[PORTS];
     U32 m_written = 0;
 };
 

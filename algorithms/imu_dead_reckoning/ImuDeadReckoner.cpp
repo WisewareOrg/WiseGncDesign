@@ -40,9 +40,7 @@ Vector3d vector(const Gnc::Vector3& v) {
 
 Eigen::Matrix3d matrix(const Gnc::Matrix3& m) {
     Eigen::Matrix3d out;
-    for (FwIndexType row = 0; row < 3; row++) {
-        out.row(row) = vector(m[row]).transpose();
-    }
+    out << vector(m[0]).transpose(), vector(m[1]).transpose(), vector(m[2]).transpose();
     return out;
 }
 
