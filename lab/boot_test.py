@@ -57,7 +57,7 @@ def test_a_case_s_file_boots_every_parameter_valid(
 
 
 def test_a_missing_file_fails_the_boot(
-    fsw: ModuleType, tmp_path: Path, parameter_ids: list[int], downlink: tuple[list[int], int]
+    fsw: ModuleType, tmp_path: Path, parameter_ids: list[int], boot_idle: Callable[[ModuleType, str], None]
 ):
     """No file at the path leaves every parameter invalid, each named.
 
@@ -65,13 +65,13 @@ def test_a_missing_file_fails_the_boot(
         fsw: the test's copy.
         tmp_path: the case's directory.
         parameter_ids: every parameter's ID, which boot holds valid.
-        downlink: the channels' sizes and frames its downlink is made for.
+        boot_idle: boots a copy on its parameter file.
     """
     missing = tmp_path / "run_0000.prm.dat"
     named = ", ".join(map(str, parameter_ids))
 
     with pytest.raises(RuntimeError, match=f"parameters {named} are not valid"):
-        fsw.boot(str(missing), parameter_ids, *downlink)
+        boot_idle(fsw, str(missing))
 
 
 def test_a_parameter_missing_from_the_record_fails_the_boot(
@@ -79,8 +79,7 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
     configuration: str,
     dictionary: Dictionary,
     prm_record: Path,
-    parameter_ids: list[int],
-    downlink: tuple[list[int], int],
+    boot_idle: Callable[[ModuleType, str], None],
 ):
     """A record without one parameter makes a `.dat` without it; boot names that parameter alone.
 
@@ -89,8 +88,7 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
         configuration: the copy's configuration.
         dictionary: the copy's dictionary.
         prm_record: the case's parameter record, edited here.
-        parameter_ids: every parameter's ID, which boot holds valid.
-        downlink: the channels' sizes and frames its downlink is made for.
+        boot_idle: boots a copy on its parameter file.
     """
     entries = json.loads(prm_record.read_text())
     instance, values = next(iter(entries.items()))
@@ -100,7 +98,7 @@ def test_a_parameter_missing_from_the_record_fails_the_boot(
     dropped = _id(dictionary, f"{instance.rsplit('.', 1)[1]}.{parameter}")
 
     with pytest.raises(RuntimeError, match=rf"^parameters {dropped} are not valid"):
-        fsw.boot(str(parameters.dat(prm_record, dictionary_path(configuration))), parameter_ids, *downlink)
+        boot_idle(fsw, str(parameters.dat(prm_record, dictionary_path(configuration))))
 
 
 def _changed(value: object, counter: Iterator[int]) -> object:
@@ -125,8 +123,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     station: FprimeStation,
     tmp_path: Path,
     prm_record: Path,
-    parameter_ids: list[int],
-    downlink: tuple[list[int], int],
+    boot_idle: Callable[[ModuleType, str], None],
     bus: list[tuple[int, bytes]],
     wire: Callable[..., Callable[..., int]],
 ):
@@ -141,8 +138,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
         station: the station on it.
         tmp_path: where PrmDb's image is decoded.
         prm_record: the case's parameter record, edited here.
-        parameter_ids: every parameter's ID, which boot holds valid.
-        downlink: the channels' sizes and frames its downlink is made for.
+        boot_idle: boots a copy on its parameter file.
         bus: every role's bus message on its LabBusDriver port.
         wire: wires the copy to the bus.
     """
@@ -155,7 +151,7 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
     assert edited != entries
     prm_record.write_text(json.dumps(edited))
     dat = parameters.dat(prm_record, dictionary_path(configuration))
-    fsw.boot(str(dat), parameter_ids, *downlink)
+    boot_idle(fsw, str(dat))
     dat.unlink()
 
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)
@@ -171,18 +167,17 @@ def test_prm_db_s_saved_image_decodes_to_the_edited_record(
 
 @pytest.mark.parametrize("path", ["run_0000.prm.dat", "/run_0000.prm.dat"])
 def test_a_relative_path_or_one_in_the_root_is_refused(
-    fsw: ModuleType, path: str, parameter_ids: list[int], downlink: tuple[list[int], int]
+    fsw: ModuleType, path: str, boot_idle: Callable[[ModuleType, str], None]
 ):
     """The sandbox is the file's directory, which is never the root, so neither path boots.
 
     Args:
         fsw: the test's copy.
         path: the parameter file's path.
-        parameter_ids: every parameter's ID, which boot holds valid.
-        downlink: the channels' sizes and frames its downlink is made for.
+        boot_idle: boots a copy on its parameter file.
     """
     with pytest.raises(ValueError, match="not an absolute path in a directory below the root"):
-        fsw.boot(path, parameter_ids, *downlink)
+        boot_idle(fsw, path)
 
 
 def _of_length(directory: Path, length: int, fill: str) -> Path:
@@ -206,8 +201,7 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
     fsw: ModuleType,
     tmp_path: Path,
     prm: str,
-    parameter_ids: list[int],
-    downlink: tuple[list[int], int],
+    boot_idle: Callable[[ModuleType, str], None],
     configuration: str,
     past: int,
     boots: bool,
@@ -218,8 +212,7 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
         fsw: the test's copy.
         tmp_path: where the path is made.
         prm: the case's parameter file, copied to the path.
-        parameter_ids: every parameter's ID, which boot holds valid.
-        downlink: the channels' sizes and frames its downlink is made for.
+        boot_idle: boots a copy on its parameter file.
         configuration: the copy's configuration, whose dictionary gives `FileNameStringSize`.
         past: how many bytes the path runs past the longest F´ holds.
         boots: whether the copy boots on it.
@@ -230,11 +223,11 @@ def test_a_file_s_path_longer_than_f_prime_s_file_names_is_refused_before_loadin
     shutil.copyfile(prm, path)
 
     if boots:
-        fsw.boot(str(path), parameter_ids, *downlink)
+        boot_idle(fsw, str(path))
     else:
         refusal = f" is {longest + past} bytes, past F´'s limit of {longest} "
         with pytest.raises(ValueError, match=refusal):
-            fsw.boot(str(path), parameter_ids, *downlink)
+            boot_idle(fsw, str(path))
 
 
 def _load_file(station: FprimeStation, dictionary: Dictionary, path: Path) -> bytes:
@@ -268,8 +261,7 @@ def test_the_sandbox_is_the_case_s_directory(
     dictionary: Dictionary,
     tmp_path: Path,
     prm: str,
-    parameter_ids: list[int],
-    downlink: tuple[list[int], int],
+    boot_idle: Callable[[ModuleType, str], None],
     monkeypatch: pytest.MonkeyPatch,
     configuration: str,
     bus: list[tuple[int, bytes]],
@@ -283,8 +275,7 @@ def test_the_sandbox_is_the_case_s_directory(
         dictionary: the copy's dictionary.
         tmp_path: the test's directory, holding the case's directory `case` and `elsewhere`.
         prm: the case's parameter file, in `case`.
-        parameter_ids: every parameter's ID, which boot holds valid.
-        downlink: the channels' sizes and frames its downlink is made for.
+        boot_idle: boots a copy on its parameter file.
         monkeypatch: sets the working directory, which the loaded paths are relative to.
         configuration: the copy's configuration.
         bus: every role's bus message on its LabBusDriver port.
@@ -297,7 +288,7 @@ def test_the_sandbox_is_the_case_s_directory(
     elsewhere.mkdir()
     shutil.copyfile(dat, case / "beside.dat")
     shutil.copyfile(dat, elsewhere / "outside.dat")
-    fsw.boot(prm, parameter_ids, *downlink)
+    boot_idle(fsw, prm)
     dat.unlink()
 
     station.uplink("prmDb.PRM_SAVE_FILE", {}, 1)

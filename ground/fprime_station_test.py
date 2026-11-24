@@ -290,8 +290,7 @@ class TestStationCodec:
         change: Callable[[bytes, int], bytes],
         response: str,
         prm: str,
-        parameter_ids: list[int],
-        downlink: tuple[list[int], int],
+        boot_idle: Callable[[ModuleType, str], None],
         bus: list[tuple[int, bytes]],
         wire: Callable[..., Callable[..., int]],
     ):
@@ -308,13 +307,12 @@ class TestStationCodec:
             change: makes the bad packet from a good `cmdDisp.CMD_TEST_CMD_1` and an unknown opcode.
             response: the response F´ gives it.
             prm: the case's parameter file.
-            parameter_ids: every parameter's ID, which boot holds valid.
-            downlink: the channels' sizes and frames its downlink is made for.
+            boot_idle: boots a copy on its parameter file.
             bus: every role's bus message on its LabBusDriver port.
             wire: wires the copy to the bus.
         """
         untouched = power_cycle(configuration)
-        untouched.boot(prm, parameter_ids, *downlink)
+        boot_idle(untouched, prm)
         wire(untouched, configuration, bus)(NS)
         expected = _gnc_writes(decoded(FprimeStation(untouched, dictionary)), configuration)
         assert expected, "a copy with no packet writes GNC telemetry on its step"

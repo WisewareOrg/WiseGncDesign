@@ -144,19 +144,18 @@ def fsw(fprime_configuration: str) -> FswExtension:
 
 
 @pytest.fixture
-def booted(fsw: FswExtension, prm: str, parameter_ids: list[int], downlink: tuple[list[int], int]) -> FswExtension:
+def booted(fsw: FswExtension, prm: str, boot_idle: Callable[[FswExtension, str], None]) -> FswExtension:
     """The test's copy of the deployment, booted idle on the case's parameters.
 
     Args:
         fsw: the test's copy.
         prm: the case's parameter file.
-        parameter_ids: every parameter's ID, which boot holds valid.
-        downlink: the channels' sizes and frames its downlink is made for.
+        boot_idle: boots the copy.
 
     Returns:
         The copy, `fsw` itself.
     """
-    fsw.boot(prm, parameter_ids, *downlink)
+    boot_idle(fsw, prm)
     return fsw
 
 
@@ -266,18 +265,31 @@ def _parameter_ids(configuration: str) -> list[int]:
     return sorted(Dictionary(_dictionary(configuration)).parameters_by_id)
 
 
-def _downlink(configuration: str) -> tuple[list[int], int]:
-    """What a configuration's copy makes its downlink for, as `boot` takes it.
+def _boot(fsw: FswExtension, configuration: str, path: str) -> None:
+    """Boots a copy idle, its downlink made to hold any test's flight undrained.
 
     Args:
-        configuration: the configuration.
-
-    Returns:
-        Each channel's value size in bytes, and the frames held undrained, past any test's flight.
+        fsw: the copy.
+        configuration: the copy's configuration.
+        path: the parameter file.
     """
     from fsw.codegen.dictionary import Dictionary
 
-    return Dictionary(_dictionary(configuration)).channel_sizes, 10_000
+    channel_sizes = Dictionary(_dictionary(configuration)).channel_sizes
+    fsw.boot(path, _parameter_ids(configuration), channel_sizes, frames=10_000)
+
+
+@pytest.fixture
+def boot_idle(fprime_configuration: str) -> Callable[[FswExtension, str], None]:
+    """Boots a copy of the configuration's deployment idle.
+
+    Args:
+        fprime_configuration: the configuration.
+
+    Returns:
+        A function taking the copy and its parameter file's path, as the copy's `boot` takes it.
+    """
+    return lambda fsw, path: _boot(fsw, fprime_configuration, path)
 
 
 @pytest.fixture
@@ -308,7 +320,7 @@ def boot(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., Booted]:
         fsw = _copy(configuration)
         case = tmp_path_factory.mktemp("case")
         record = _write_record({**_zero_parameters(configuration), **parameters}, case)
-        fsw.boot(_dat(record, configuration), _parameter_ids(configuration), *_downlink(configuration))
+        _boot(fsw, configuration, _dat(record, configuration))
         return Booted(fsw, FprimeStation(fsw, Dictionary(_dictionary(configuration))))
 
     return boot_on
@@ -825,19 +837,6 @@ def parameter_ids(fprime_configuration: str) -> list[int]:
         The IDs, sorted.
     """
     return _parameter_ids(fprime_configuration)
-
-
-@pytest.fixture(scope="module")
-def downlink(fprime_configuration: str) -> tuple[list[int], int]:
-    """What the configuration's copy makes its downlink for, as `boot` takes it.
-
-    Args:
-        fprime_configuration: the configuration.
-
-    Returns:
-        Each channel's value size in bytes, and the frames held undrained.
-    """
-    return _downlink(fprime_configuration)
 
 
 def _dictionary(configuration: str) -> Path:
