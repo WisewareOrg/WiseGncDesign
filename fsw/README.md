@@ -222,19 +222,35 @@ so is every linker warning and every deprecated CMake command or policy. Nothing
 CMake and FPP print. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own validation set
 over everything, a wider set over what is written and generated here, the rest over what is written
 here, and the code-generation, hardening and link flags, stated so that every host compiles the same
-code. Flight C++ has no exceptions, so a `throw` is a compile error.
+code. Flight C++ has no exceptions and no RTTI, so a `throw` is a compile error, and an allocation in what
+is written here is a warning. Telemetry packets and command responses of one step are held in fixed
+arrays, `GroundLink::PACKETS` and `GroundLink::RESPONSES`, which the pins copy out after every step; past
+them F´'s assert trips.
 
 A diagnostic is silenced only here:
 
 - `-Wno-unused-parameter` and `-Wno-vla`, in F´ and generated sources, by F´'s own flags: FPP gives a
   handler every argument of its port, and `-Wstack-usage` refuses a variable-length array.
 - `-Wno-float-equal`, in FPP-generated sources, whose structs and arrays compare floats.
-- F´'s headers, Eigen, pybind11, Python and the generated headers are system headers to what is written
+- F´'s headers, Eigen, pybind11, Python and FPP's generated headers are system headers to what is written
   here.
+- The allocation warning, in the pins, which hold what a flight wrote, and in the modules Python loads,
+  whose pybind11 headers allocate.
 
-The modules Python loads are built with exceptions and thread-safe statics, which pybind11 needs. F´'s
-assert raises in Python by throwing through flight frames, whose destructors do not run, so a copy that
-asserted is only drained.
+These are not taken, because each switches off a warning in the set, measured with gcc 15.3 except where
+said:
+
+- `-fno-delete-null-pointer-checks`: `-Wnull-dereference` reports nothing.
+- `-fno-strict-aliasing`: `-Wstrict-aliasing` reports nothing.
+- `-fno-strict-overflow`: gcc's manual makes `-Wstrict-overflow` active only while signed overflow is
+  undefined; not measured.
+
+`-fno-use-cxa-atexit` is not taken: JSF AV rule 8 asks for conforming ISO C++, and gcc documents the
+option as needed for conforming destruction of static objects.
+
+The pybind11 sources are built with exceptions, RTTI and thread-safe statics, which pybind11 needs. The
+pins' other half, `lab/pins/FprimePins.cpp`, has exceptions alone: F´'s assert raises in Python by
+throwing through flight frames, whose destructors do not run, so a copy that asserted is only drained.
 
 ## The lab adapter
 
