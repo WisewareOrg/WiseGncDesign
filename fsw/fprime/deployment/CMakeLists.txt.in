@@ -17,12 +17,19 @@ register_fprime_module(
 if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     pybind11_add_module(_wise_fsw_@CONFIGURATION@ "${FPRIME_PROJECT_ROOT}/lab/pins/WiseFswModule.cpp")
     target_link_libraries(_wise_fsw_@CONFIGURATION@ PRIVATE fsw_fprime_deployment_@CONFIGURATION@)
-    target_compile_definitions(_wise_fsw_@CONFIGURATION@ PRIVATE
-        WISE_FSW_MODULE=_wise_fsw_@CONFIGURATION@
+    target_compile_definitions(_wise_fsw_@CONFIGURATION@ PRIVATE WISE_FSW_MODULE=_wise_fsw_@CONFIGURATION@)
+    # The pins' half over the flight software, compiled as flight code is but for the exceptions its assert hook throws.
+    add_library(_wise_fsw_@CONFIGURATION@_pins STATIC "${FPRIME_PROJECT_ROOT}/lab/pins/FprimePins.cpp")
+    target_link_libraries(_wise_fsw_@CONFIGURATION@_pins PRIVATE fsw_fprime_deployment_@CONFIGURATION@)
+    target_compile_options(_wise_fsw_@CONFIGURATION@_pins PRIVATE -fexceptions)
+    target_compile_definitions(_wise_fsw_@CONFIGURATION@_pins PRIVATE
         WISE_FSW_TOPOLOGY_HEADER="@CONFIGURATION@FswTopology.hpp")
+    target_link_libraries(_wise_fsw_@CONFIGURATION@ PRIVATE _wise_fsw_@CONFIGURATION@_pins)
     # The headers written or generated here, found by name, meet the warnings that FPP's headers beside them do not.
-    target_include_directories(_wise_fsw_@CONFIGURATION@ PRIVATE
-        "$<TARGET_PROPERTY:fsw_fprime_cdh,BINARY_DIR>" "${CMAKE_CURRENT_LIST_DIR}")
+    foreach (TARGET IN ITEMS _wise_fsw_@CONFIGURATION@ _wise_fsw_@CONFIGURATION@_pins)
+        target_include_directories(${TARGET} PRIVATE
+            "$<TARGET_PROPERTY:fsw_fprime_cdh,BINARY_DIR>" "${CMAKE_CURRENT_LIST_DIR}")
+    endforeach ()
     # The platform implementations (Os and the like) F´ chooses at link time, as for a deployment.
     # Its Os::Task has no thread, so the tick runs the active components.
     fprime_target_implementations(_wise_fsw_@CONFIGURATION@ Os_Task_Sim Os_RawTime_Stub)

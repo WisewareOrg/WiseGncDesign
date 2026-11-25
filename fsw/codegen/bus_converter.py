@@ -147,21 +147,32 @@ _PINS = """\
 #ifndef CDH_BUSCONVERTERPINS_HPP
 #define CDH_BUSCONVERTERPINS_HPP
 
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-
 #include <array>
-#include <stdexcept>
 #include <string>
+
+#include "Fw/Types/BasicTypes.h"
+
+namespace Pins {{
+
+{declarations}
+
+}}  // namespace Pins
+
+// The half the flight software is called through, which the pybind11 half includes none of.
+#ifdef CDH_BUSCONVERTERPINS_FLIGHT
+
+#include <stdexcept>
 #include <vector>
 
 #include "BusConverter.hpp"
+
+namespace Pins {{
 
 namespace {{
 
 //! A struct's F´ serialization; raises naming the struct when F´ refuses it.
 template <typename T>
-pybind11::bytes busConverterSerialized(const T& value, const char* name) {{
+std::string busConverterSerialized(const T& value, const char* name) {{
     U8 data[T::SERIALIZED_SIZE];
     Fw::ExternalSerializeBuffer buffer(data, sizeof data);
     const Fw::SerializeStatus status = value.serializeTo(buffer);
@@ -169,8 +180,21 @@ pybind11::bytes busConverterSerialized(const T& value, const char* name) {{
         throw std::runtime_error(std::string(name) + ": F´ serialization failed with status " +
                                  std::to_string(status));
     }}
-    return pybind11::bytes(reinterpret_cast<const char*>(data), buffer.getSize());
+    return std::string(reinterpret_cast<const char*>(data), buffer.getSize());
 }}
+
+}}  // namespace
+
+{functions}
+
+}}  // namespace Pins
+
+#else
+
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+
+namespace {{
 
 void busConverterPins(pybind11::module_& m) {{
 {pins}
@@ -179,43 +203,51 @@ void busConverterPins(pybind11::module_& m) {{
 }}  // namespace
 
 #endif
+
+#endif
+"""
+
+_BUS_FUNCTION = """\
+std::string bus_{name}({parameters}) {{
+    {bus} value;
+{fills}
+    return busConverterSerialized(value, "{qualified}");
+}}
 """
 
 _BUS_PIN = """\
     m.def(
-        "bus_{name}",
-        []({parameters}) {{
-            {bus} value;
-{fills}
-            return busConverterSerialized(value, "{qualified}");
-        }},
+        "bus_{name}", []({parameters}) {{ return pybind11::bytes(Pins::bus_{name}({names})); }},
         {arguments},
         "F´'s serialization of a {qualified} built from its members' values.");
+"""
+
+_ROLE_FUNCTION = """\
+std::string cdh_{role}(const std::string& {argument}) {{
+    std::vector<U8> data({argument}.begin(), {argument}.end());
+    Fw::ExternalSerializeBuffer buffer(data.data(), data.size());
+    buffer.setBuffLen(data.size());
+    {source} msg;
+    const Fw::SerializeStatus status = msg.deserializeFrom(buffer);
+    if (status != Fw::FW_SERIALIZE_OK) {{
+        throw std::runtime_error("cdh_{role}: deserializing {qualified} failed with F´ "
+                                 "status " + std::to_string(status));
+    }}
+    return busConverterSerialized(Cdh::BusConverter::convert_{role}(msg), "cdh_{role}");
+}}
 """
 
 _ROLE_PIN = """\
     m.def(
         "cdh_{role}",
-        [](const pybind11::bytes& {argument}) {{
-            const std::string text = {argument};
-            std::vector<U8> data(text.begin(), text.end());
-            Fw::ExternalSerializeBuffer buffer(data.data(), data.size());
-            buffer.setBuffLen(data.size());
-            {source} msg;
-            const Fw::SerializeStatus status = msg.deserializeFrom(buffer);
-            if (status != Fw::FW_SERIALIZE_OK) {{
-                throw std::runtime_error("cdh_{role}: deserializing {qualified} failed with F´ "
-                                         "status " + std::to_string(status));
-            }}
-            return busConverterSerialized(Cdh::BusConverter::convert_{role}(msg), "cdh_{role}");
-        }},
+        [](const pybind11::bytes& {argument}) {{ return pybind11::bytes(Pins::cdh_{role}({argument})); }},
         pybind11::arg("{argument}"),
         "Role {role}'s {source_var} bytes, deserialized by F´ and converted by Cdh.BusConverter's "
         "generated conversion: F´'s serialization of the {target} it gives.");
 """
 
 
-def _bus_pin(model: Model, qualified: str) -> str:
+def _bus_pin(model: Model, qualified: str) -> tuple[str, str]:
     """The pin building a bus struct from its members' values and returning F´'s serialization.
 
     Args:
@@ -223,7 +255,7 @@ def _bus_pin(model: Model, qualified: str) -> str:
         qualified: the bus struct's qualified name.
 
     Returns:
-        The pin's `m.def` statement.
+        The function over the flight software, and the `m.def` statement calling it.
 
     Raises:
         ValueError: a member is not an inline array of one of `fsw.codegen.fields.STRUCT_PRIMITIVES`,
@@ -240,23 +272,30 @@ def _bus_pin(model: Model, qualified: str) -> str:
             )
         parameters.append(f"const std::array<{member.type}, {member.size}>& {member.name}")
         fills.append(
-            f"            for (FwSizeType i = 0; i < {member.size}; i++) {{\n"
-            f"                value.get_{member.name}()[i] = {member.name}[i];\n"
-            "            }"
+            f"    for (FwSizeType i = 0; i < {member.size}; i++) {{\n"
+            f"        value.get_{member.name}()[i] = {member.name}[i];\n"
+            "    }"
         )
         arguments.append(f'pybind11::arg("{member.name}")')
-    return _BUS_PIN.format(
-        name=qualified.rsplit(".", 1)[-1],
+    name = qualified.rsplit(".", 1)[-1]
+    function = _BUS_FUNCTION.format(
+        name=name, parameters=", ".join(parameters), bus=_cpp(qualified), fills="\n".join(fills), qualified=qualified
+    )
+    pin = _BUS_PIN.format(
+        name=name,
         parameters=", ".join(parameters),
-        bus=_cpp(qualified),
-        fills="\n".join(fills),
+        names=", ".join(member.name for member in bus.members),
         qualified=qualified,
         arguments=", ".join(arguments),
     )
+    return function, pin
 
 
 def _pins(model: Model, found: list[Role]) -> str:
     """The test pins' header: a bus pin per distinct bus struct, and a CDH pin per role.
+
+    A pin is a function over the flight software, in the half the flight software's side of the
+    pins includes, and the `m.def` statement calling it, in the half pybind11's includes.
 
     Args:
         model: the model.
@@ -266,20 +305,23 @@ def _pins(model: Model, found: list[Role]) -> str:
         The header's text.
     """
     buses = dict.fromkeys(role.bus for role in found)
-    pins = [_bus_pin(model, bus) for bus in buses]
+    halves = [_bus_pin(model, bus) for bus in buses]
     for role in found:
         (source, source_var), (target, _) = _ends(role)
-        pins.append(
-            _ROLE_PIN.format(
-                role=role.role,
-                argument=f"{source_var}_bytes",
-                source=_cpp(source),
-                qualified=source,
-                source_var=source_var,
-                target=target,
+        argument = f"{source_var}_bytes"
+        halves.append(
+            (
+                _ROLE_FUNCTION.format(role=role.role, argument=argument, source=_cpp(source), qualified=source),
+                _ROLE_PIN.format(role=role.role, argument=argument, source_var=source_var, target=target),
             )
         )
-    return _PINS.format(component=CONVERTER, pins="\n".join(pins))
+    functions = [function for function, _ in halves]
+    return _PINS.format(
+        component=CONVERTER,
+        declarations="\n".join(function.partition(" {")[0] + ";" for function in functions),
+        functions="\n".join(functions),
+        pins="\n".join(pin for _, pin in halves),
+    )
 
 
 def _usings(component: Component, found: list[Role]) -> str:
