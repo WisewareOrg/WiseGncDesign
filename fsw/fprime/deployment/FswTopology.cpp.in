@@ -1,4 +1,4 @@
-#include "fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopology.hpp"
+#include "@CONFIGURATION@FswTopology.hpp"
 
 namespace WiseFsw {
 

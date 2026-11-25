@@ -10,7 +10,7 @@
 #include "Fw/Types/Assert.hpp"
 #include "Os/Os.hpp"
 #include "config/FppConstantsAc.hpp"
-#include "fsw/fprime/cdh/BusConverterPins.hpp"
+#include "BusConverterPins.hpp"
 #include "fsw/fprime/platform/Cooperative.hpp"
 #include WISE_FSW_TOPOLOGY_HEADER
 
