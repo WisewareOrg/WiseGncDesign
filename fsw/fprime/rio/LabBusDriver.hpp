@@ -44,7 +44,7 @@ class LabBusDriver final : public LabBusDriverComponentBase {
 
     std::vector<U8> m_receive[PORTS];
     std::vector<U8> m_transmit[PORTS];
-    U32 m_written = 0;
+    U64 m_written = 0;
 };
 
 }  // namespace Bus

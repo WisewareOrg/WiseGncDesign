@@ -154,6 +154,7 @@ _PINS = """\
 
 #include <array>
 #include <string>
+#include <vector>
 
 #include "Fw/Types/BasicTypes.h"
 
@@ -164,6 +165,10 @@ namespace Pins {{
 }}  // namespace Pins
 
 namespace {{
+
+pybind11::bytes busConverterBytes(const std::vector<U8>& data) {{
+    return pybind11::bytes(reinterpret_cast<const char*>(data.data()), data.size());
+}}
 
 void busConverterPins(pybind11::module_& m) {{
 {pins}
@@ -191,7 +196,7 @@ namespace {{
 
 //! A struct's F´ serialization; raises naming the struct when F´ refuses it.
 template <typename T>
-std::string busConverterSerialized(const T& value, const char* name) {{
+std::vector<U8> busConverterSerialized(const T& value, const char* name) {{
     U8 data[T::SERIALIZED_SIZE];
     Fw::ExternalSerializeBuffer buffer(data, sizeof data);
     const Fw::SerializeStatus status = value.serializeTo(buffer);
@@ -199,7 +204,7 @@ std::string busConverterSerialized(const T& value, const char* name) {{
         throw std::runtime_error(std::string(name) + ": F´ serialization failed with status " +
                                  std::to_string(static_cast<I32>(status)));
     }}
-    return std::string(reinterpret_cast<const char*>(data), buffer.getSize());
+    return std::vector<U8>(data, data + buffer.getSize());
 }}
 
 }}  // namespace
@@ -219,7 +224,7 @@ _BUS_FUNCTION = """\
 
 _BUS_PIN = """\
     m.def(
-        "bus_{name}", []({parameters}) {{ return pybind11::bytes(Pins::bus_{name}({names})); }},
+        "bus_{name}", []({parameters}) {{ return busConverterBytes(Pins::bus_{name}({names})); }},
         {arguments},
         "F´'s serialization of a {qualified} built from its members' values.");
 """
@@ -242,7 +247,7 @@ _ROLE_FUNCTION = """\
 _ROLE_PIN = """\
     m.def(
         "cdh_{role}",
-        [](const pybind11::bytes& {argument}) {{ return pybind11::bytes(Pins::cdh_{role}({argument})); }},
+        [](const pybind11::bytes& {argument}) {{ return busConverterBytes(Pins::cdh_{role}({argument})); }},
         pybind11::arg("{argument}"),
         "Role {role}'s {source_var} bytes, deserialized by F´ and converted by Cdh.BusConverter's "
         "generated conversion: F´'s serialization of the {target} it gives.");
@@ -294,7 +299,7 @@ def _bus_pin(model: Model, qualified: str) -> _Pin:
         )
         arguments.append(f'pybind11::arg("{member.name}")')
     name = qualified.rsplit(".", 1)[-1]
-    signature = f"std::string bus_{name}({', '.join(parameters)})"
+    signature = f"std::vector<U8> bus_{name}({', '.join(parameters)})"
     function = _BUS_FUNCTION.format(
         signature=signature, bus=_cpp(qualified), fills="\n".join(fills), qualified=qualified
     )
@@ -323,7 +328,7 @@ def _pins(model: Model, found: list[Role]) -> list[_Pin]:
     for role in found:
         (source, source_var), (target, _) = _ends(role)
         argument = f"{source_var}_bytes"
-        signature = f"std::string cdh_{role.role}(const std::string& {argument})"
+        signature = f"std::vector<U8> cdh_{role.role}(const std::string& {argument})"
         function = _ROLE_FUNCTION.format(
             signature=signature, role=role.role, argument=argument, source=_cpp(source), qualified=source
         )

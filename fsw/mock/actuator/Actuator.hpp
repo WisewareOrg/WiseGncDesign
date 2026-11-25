@@ -17,7 +17,7 @@ class Actuator final : public ActuatorComponentBase {
     //! Counts the mark, and writes it wide.
     void mark_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) override;
 
-    U32 m_tally = 0;
+    U64 m_tally = 0;
 };
 
 }  // namespace MockGnc

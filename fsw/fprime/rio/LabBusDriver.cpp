@@ -46,7 +46,7 @@ void LabBusDriver::push() {
 }
 
 U32 LabBusDriver::takeWritten() {
-    const U32 written = this->m_written;
+    const U32 written = static_cast<U32>(this->m_written);
     this->m_written = 0;
     return written;
 }
@@ -56,7 +56,7 @@ void LabBusDriver::busIn_handler(FwIndexType portNum, Fw::LinearBufferBase& buff
     FW_ASSERT(buffer.getSize() == transmit.size(), static_cast<FwAssertArgType>(portNum),
               static_cast<FwAssertArgType>(buffer.getSize()), static_cast<FwAssertArgType>(transmit.size()));
     std::memcpy(transmit.data(), buffer.getBuffAddr(), transmit.size());
-    this->m_written |= 1U << portNum;
+    this->m_written |= U64{1} << portNum;
 }
 
 }  // namespace Bus
