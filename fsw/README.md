@@ -245,9 +245,9 @@ A diagnostic is silenced only here:
 The settings left out, and why, are in
 [ADR 0007 rev 1](../docs/decisions/0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md).
 
-The pybind11 sources are built with exceptions, RTTI and thread-safe statics, which pybind11 needs. The
-pins' other half, `lab/pins/FprimePins.cpp`, has exceptions alone: F´'s assert raises in Python by
-throwing through flight frames, whose destructors do not run, so a copy that asserted is only drained.
+The pybind11 sources are built with exceptions, RTTI and thread-safe statics, which pybind11 needs.
+The pins' other half, `lab/pins/FprimePins.cpp`, has exceptions alone: F´'s assert raises in Python by
+throwing through flight frames, whose destructors do not run.
 
 ## The lab adapter
 
