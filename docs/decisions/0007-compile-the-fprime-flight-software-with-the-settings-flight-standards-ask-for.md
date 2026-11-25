@@ -26,66 +26,54 @@ and by the analyzers (ADR 0008 rev 1).
 
 | Setting | Why, and who states it |
 |---|---|
-| Warnings as errors: F´'s own set over everything; every other warning gcc offers that what is generated here meets, each at its strictest level, over what is written and generated here; and the rest over what is written here, our generators' output included | Power of 10 rule 10, JPL rule 2; F´ applies its set to its own test deployments |
+| Every warning the compiler offers, each at its strictest level, as errors | Power of 10 rule 10, JPL rule 2 |
 | Conversions that lose information, sign changes, double promotion, exact float comparison | JSF AV 180 and 202 |
 | C-style casts | JSF AV 185 |
 | Enumerations in switches, duplicated branches, missing declarations, undefined macros, shadowing, unused parameters | Power of 10 rule 10 |
 | Exceptions off | JSF AV 208; F´ CPP-25 |
 | RTTI off | F´ CPP-25 |
-| Static guards off, floating-point contraction off | F´ ports turn the guards off; contraction would let the same source give different numbers on another build |
+| Static guards off, floating-point contraction off | F´'s embedded ports; contraction would let the same source give different numbers on another build |
 | Warnings about allocation, with fixed-size storage for what they name | JPL rule 5, JSF AV 206, Power of 10 rule 3 |
 | Stack protector, stack-clash protection, control-flow protection, fortified libc, library assertions, zeroed variables, strict flexible arrays and padding | the OpenSSF compiler guide and gcc's own hardened set; stated so that every host compiles the same code |
 | Linker warnings as errors; read-only relocation, immediate binding, no executable stack | the same |
 | CMake deprecations as errors | Power of 10 rule 10, taken to the build itself |
 
-- **The hand-written code, the generated code and F´ are all compiled this way**, but for the
-  warnings the table limits. F´'s and FPP's headers, Eigen and pybind11 are system headers to the
-  hand-written code. A diagnostic raised by F´'s library or FPP's output is suppressed by the name
-  of its flag and its place, with the reason written beside it.
-- **The pins are test equipment.** Both halves keep exceptions, which pybind11 and the assert hook
-  need; the pybind11 half also keeps the RTTI and static guards pybind11 needs. The other half is
-  compiled as flight code and takes no F´ class across its boundary, so the flight software is built
-  without RTTI. What a flight wrote is held in memory that grows, so an allocation there is no
-  warning.
+- **The hand-written code, the generated code and F´ are held to this.** What F´'s library or FPP's
+  output cannot meet is suppressed by the name of its flag and its place, with the reason written
+  beside it.
+- **Test equipment is outside it.**
 
-A setting not taken has its reason here:
+A setting not taken, and why:
 
 | Setting | Reason |
 |---|---|
 | `-Waggregate-return`, `-Wmultiple-inheritance`, `-Wnamespaces`, `-Wtemplates`, `-Wpadded` | They report what the code is made of, not a fault in it |
-| `-Wabi-tag` | It reports the ABI tag of the `std::string` the generated pins return, not a fault in them |
+| `-Wabi-tag` | It reports the ABI tag of a standard library type, not a fault |
 | `-Wsuggest-attribute=const`, `=pure`, `=cold`, `=malloc`, `=format`, `=returns_nonnull` | They ask for GNU attributes, outside ISO C++ (JSF AV 8) |
-| `-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow` | Each switches off a warning taken above that finds the fault: measured for the first two, gcc's manual for the third |
+| `-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow` | Each switches off a warning taken above that finds the fault |
 | `-fno-use-cxa-atexit` | gcc's manual says the default is required for standard-conforming static destruction (JSF AV 8) |
 | `-z nodlopen` | Python loads the extension |
 | `-fanalyzer` | An analyzer (ADR 0008 rev 1) |
 
 ## Alternatives considered
 
-- **F´'s own warning set alone.** It is what F´ holds itself to, and leaves out what the standards
-  ask beyond it, such as sign conversions. Rejected.
+- **F´'s own warning set alone.** It leaves out what the standards ask beyond it. Rejected.
 - **A chosen subset of the compiler's warnings.** Each one left out needs a reason, and a warning
   held back is one nobody sees the findings of. Rejected.
-- **MISRA C++ as a coding standard.** Its text is sold, so it can't be read here; JSF AV C++ and the
-  JPL C standard build on MISRA's C guidelines. Rejected.
-- **AUTOSAR C++14.** An automotive standard, superseded by MISRA C++; "C++20 for flight software"
-  (N7 Space, ESA ADCSS 2024) tailored it for space projects, and no flight program adopting it was
-  found. Rejected.
+- **MISRA C++ as a coding standard.** Its text is sold; JSF AV C++ and the JPL C standard build on
+  MISRA's C guidelines. Rejected.
+- **AUTOSAR C++14.** An automotive standard, superseded by MISRA C++. Rejected.
 - **Turn the warnings on one at a time as the code is cleaned.** The compiler is the first check on
   flight code, and the Power of 10 asks for it from the first day. Rejected.
-- **Hardening left to each host's compiler.** One host's has it on by default and another's does
-  not, so the same source would be built differently. Rejected.
+- **Hardening left to each host's compiler.** Hosts turn on different sets by default, so the same
+  source would be built differently. Rejected.
 - **Hardening off, for its cost in a tick.** Flight code is fast because it is well written.
   Rejected.
-- **Freestanding C++, to take the heap away.** Eigen does not build under it, nor do parts of F´'s
-  host platform. Rejected.
-- **A lower optimisation level.** No standard read asks for one. Rejected.
+- **Freestanding C++, to take the heap away.** Eigen and F´'s host platform need the hosted library.
+  Rejected.
+- **A lower optimisation level.** No adopted standard asks for one. Rejected.
 
 ## Consequences
 
 - A new component meets every setting without listing them, and a warning fails the build.
-- The build needs gcc 15, for `-fzero-init-padding-bits=all`, on x86, for `-fcf-protection`.
-- A compiler update can add warnings and fail the build; the compiler is not pinned here.
-- The two compilers that build this, on a development host and in CI, may disagree about a warning,
-  so both must pass.
 - `-ffp-contract=off` holds the arithmetic the same when a build gains fused multiply-add.
