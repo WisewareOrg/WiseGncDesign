@@ -1,12 +1,12 @@
 # 0007 — Compile the F´ flight software with the settings flight standards ask for
 
 **Status:** accepted
-**Decided:** 2026-11-25 (issue 125 Build the F´ flight software as ARINC 653 would)
+**Decided:** 2026-11-24 (issue 125 Build the F´ flight software as ARINC 653 would)
 **Rev:** 1
 
 ## Revisions
 
-- **rev 1** — 2026-11-25 — first written (issue 125 Build the F´ flight software as ARINC 653
+- **rev 1** — 2026-11-24 — first written (issue 125 Build the F´ flight software as ARINC 653
   would).
 
 ## Context
@@ -58,14 +58,14 @@ and by the analyzers (ADR 0008 rev 1).
 - **Skip the hardening because it costs time.** Flight code is fast because it is well written, not
   because a protection is off. Rejected.
 - **`-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow`.** Each
-  switches off a warning above that finds the fault: `-Wnull-dereference`, `-Wstrict-aliasing` and
-  `-Wstrict-overflow`, which gcc's manual ties to them. Rejected while the warning holds.
+  switches off a warning above that finds the fault: `-Wnull-dereference` and `-Wstrict-aliasing`,
+  measured with gcc 15.3, and `-Wstrict-overflow`, as gcc's manual says. Rejected while the warning
+  holds.
 - **`-fno-use-cxa-atexit`.** It builds and loads here, and the telemetry is the same. JSF AV 8 asks
   for conforming ISO C++, and gcc's manual says the default is required for fully
   standards-compliant handling of static destructors. Rejected.
 - **`-z nodlopen`.** Python loads the extension. Rejected.
-- **`-fanalyzer`.** gcc's manual says it is only suitable for use on C, and it crashes on an Eigen
-  source here. Rejected.
+- **`-fanalyzer`.** An analyzer, rejected in ADR 0008 rev 1.
 - **Freestanding.** Eigen does not build under it, nor do parts of F´'s host platform. Rejected.
 - **A lower optimisation level.** No standard read asks for one. Rejected.
 

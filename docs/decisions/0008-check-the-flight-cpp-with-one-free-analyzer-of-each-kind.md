@@ -1,19 +1,18 @@
 # 0008 — Check the flight C++ with one free analyzer of each kind
 
 **Status:** accepted
-**Decided:** 2026-11-25 (issue 125 Build the F´ flight software as ARINC 653 would)
+**Decided:** 2026-11-24 (issue 125 Build the F´ flight software as ARINC 653 would)
 **Rev:** 1
 
 ## Revisions
 
-- **rev 1** — 2026-11-25 — first written (issue 125 Build the F´ flight software as ARINC 653
+- **rev 1** — 2026-11-24 — first written (issue 125 Build the F´ flight software as ARINC 653
   would).
 
 ## Context
 
-The flight C++ adopts JSF AV C++, the Power of 10, the JPL C standard and F´'s C++ rules as its
-coding standards
-([ADR 0007 rev 1](0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md)).
+The coding standards the flight C++ adopts are in
+[ADR 0007 rev 1](0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md).
 The standards that could be read ask for an activity and for evidence that its results are acted on,
 and name no tool. A NASA Engineering and Safety Center update on flight-termination software reports
 that static analyzers find and miss different defects. The tools have to be free in CI and on a

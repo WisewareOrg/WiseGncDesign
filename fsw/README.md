@@ -242,16 +242,8 @@ A diagnostic is silenced only here:
 - The allocation warning, in the pins, which hold what a flight wrote, and in the modules Python loads,
   whose pybind11 headers allocate.
 
-These are not taken, because each switches off a warning in the set, measured with gcc 15.3 except where
-said:
-
-- `-fno-delete-null-pointer-checks`: `-Wnull-dereference` reports nothing.
-- `-fno-strict-aliasing`: `-Wstrict-aliasing` reports nothing.
-- `-fno-strict-overflow`: gcc's manual makes `-Wstrict-overflow` active only while signed overflow is
-  undefined; not measured.
-
-`-fno-use-cxa-atexit` is not taken: JSF AV rule 8 asks for conforming ISO C++, and gcc documents the
-option as needed for conforming destruction of static objects.
+The settings left out, and why, are in
+[ADR 0007 rev 1](../docs/decisions/0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md).
 
 The pybind11 sources are built with exceptions, RTTI and thread-safe statics, which pybind11 needs. The
 pins' other half, `lab/pins/FprimePins.cpp`, has exceptions alone: F´'s assert raises in Python by
