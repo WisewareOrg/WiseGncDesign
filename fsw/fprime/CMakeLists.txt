@@ -20,12 +20,19 @@ add_link_options(LINKER:--fatal-warnings,-z,relro,-z,now,-z,noexecstack)
 fprime_setup_included_code()
 # What is written and generated here meets more. F´'s headers are system headers to it.
 include_directories(SYSTEM "${CMAKE_CURRENT_LIST_DIR}/lib/fprime" "${CMAKE_BINARY_DIR}/F-Prime")
-add_compile_options(-Walloca -Warith-conversion -Warray-bounds=2 -Wcast-align=strict -Wcast-qual -Wdate-time
-    -Wduplicated-branches -Wduplicated-cond -Wfloat-equal -Wformat=2 -Wformat-overflow=2 -Wformat-signedness
-    -Wformat-truncation=2 -Wimplicit-fallthrough=5 -Wlogical-op -Wmissing-declarations -Wmissing-include-dirs
-    -Wnull-dereference -Wredundant-decls -Wsign-conversion -Wstack-usage=65536 -Wstrict-overflow=2
-    -Wstringop-overflow=4 -Wswitch-default -Wswitch-enum -Wtrampolines -Wundef -Wunused-const-variable=2
-    "$<$<COMPILE_LANGUAGE:CXX>:-Wcatch-value=3;-Wctor-dtor-privacy;-Wdeprecated-copy-dtor;-Wextra-semi;-Wnon-virtual-dtor;-Woverloaded-virtual=2;-Wzero-as-null-pointer-constant>")
+add_compile_options(-Wabi -Walloc-zero -Walloca -Warith-conversion -Warray-bounds=2 -Wattribute-alias=2
+    -Wbidi-chars=any -Wcast-align=strict -Wcast-qual -Wdate-time -Wdisabled-optimization -Wduplicated-branches
+    -Wduplicated-cond -Wflex-array-member-not-at-end -Wfloat-equal -Wformat=2 -Wformat-overflow=2 -Wformat-signedness
+    -Wformat-truncation=2 -Wimplicit-fallthrough=5 -Winit-self -Winline -Winvalid-pch -Winvalid-utf8 -Wlogical-op
+    -Wleading-whitespace=spaces -Wlong-long -Wmissing-declarations -Wmissing-include-dirs -Wmultichar
+    -Wnormalized=nfkc -Wnull-dereference -Wopenacc-parallelism -Woverlength-strings -Wpacked -Wpointer-arith
+    -Wredundant-decls -Wshift-overflow=2 -Wsign-conversion -Wstack-protector -Wstack-usage=65536 -Wstrict-aliasing=1
+    -Wstrict-flex-arrays -Wstrict-overflow=5 -Wstringop-overflow=4 -Wsuggest-attribute=cold -Wsuggest-attribute=format
+    -Wsuggest-attribute=malloc -Wsuggest-attribute=noreturn -Wsuggest-attribute=returns_nonnull -Wswitch-default
+    -Wswitch-enum -Wtrailing-whitespace=any -Wtrampolines -Wtrivial-auto-var-init -Wundef -Wunsafe-loop-optimizations
+    -Wunused-const-variable=2 -Wunused-macros -Wuse-after-free=3 -Wvariadic-macros -Wvector-operation-performance
+    -Wwrite-strings
+    "$<$<COMPILE_LANGUAGE:CXX>:-Wcatch-value=3;-Wcomma-subscript;-Wconditionally-supported;-Wctad-maybe-unsupported;-Wctor-dtor-privacy;-Wdangling-reference;-Wdeprecated-copy-dtor;-Wdeprecated-enum-enum-conversion;-Wdeprecated-enum-float-conversion;-Wdeprecated-variadic-comma-omission;-Wextra-semi;-Wnoexcept;-Wnon-virtual-dtor;-Wnrvo;-Woverloaded-virtual=2;-Wplacement-new=2;-Wsign-promo;-Wstrict-null-sentinel;-Wvirtual-inheritance;-Wvolatile;-Wzero-as-null-pointer-constant>")
 
 # Eigen, header-only, fetched by git tag into lib/, outside the build cache, so a regenerated cache keeps it.
 include(FetchContent)
@@ -109,26 +116,28 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
 endif()
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/deployment")
 
-# What is written here meets the rest, and undoes F´'s own -Wno-unused-parameter and -Wno-vla. FPP's generated
-# sources compare a struct's or array's floats for equality.
+# What is written here, our generators' output included, meets the rest, and undoes F´'s own -Wno-unused-parameter and
+# -Wno-vla. FPP's generated sources compare a struct's or array's floats for equality.
 set(WISE_WRITTEN_OPTIONS "-isystem${CMAKE_BINARY_DIR}" -Weffc++ -Wmismatched-tags -Wredundant-tags
-    -Wsuggest-override -Wunused-parameter -Wuseless-cast -Wvla)
+    -Wsuggest-attribute=pure -Wsuggest-final-methods -Wsuggest-final-types -Wsuggest-override -Wunused-parameter
+    -Wuseless-cast -Wvla)
 function(wise_source_options DIRECTORY)
     get_property(TARGETS DIRECTORY "${DIRECTORY}" PROPERTY BUILDSYSTEM_TARGETS)
     foreach (TARGET IN LISTS TARGETS)
         get_target_property(SOURCES "${TARGET}" SOURCES)
         foreach (SOURCE IN LISTS SOURCES)
+            cmake_path(ABSOLUTE_PATH SOURCE BASE_DIRECTORY "${DIRECTORY}")
             cmake_path(IS_PREFIX FPRIME_PROJECT_ROOT "${SOURCE}" OURS)
             cmake_path(IS_PREFIX CMAKE_BINARY_DIR "${SOURCE}" BUILT)
             cmake_path(IS_PREFIX FPRIME_FRAMEWORK_PATH "${SOURCE}" FRAMEWORK)
             if (SOURCE MATCHES "Ac\\.cpp$")
                 set(OPTIONS -Wno-float-equal)
-            elseif (SOURCE MATCHES "FswTopology\\.cpp$" OR (SOURCE MATCHES "\\.cpp$" AND OURS AND NOT BUILT AND NOT FRAMEWORK))
+            elseif (SOURCE MATCHES "(FswTopology|/BusConverter|/BusConverterPins)\\.cpp$" OR (SOURCE MATCHES "\\.cpp$" AND OURS AND NOT BUILT AND NOT FRAMEWORK))
                 set(OPTIONS ${WISE_WRITTEN_OPTIONS})
                 # An allocation is a warning in flight code; the pins hold what a flight wrote, in memory that grows, and
                 # pybind11's own headers allocate in a module Python loads.
                 get_target_property(TYPE "${TARGET}" TYPE)
-                if (NOT SOURCE MATCHES "/lab/pins/" AND NOT TYPE STREQUAL "MODULE_LIBRARY")
+                if (NOT SOURCE MATCHES "/lab/pins/|/BusConverterPins\\.cpp$" AND NOT TYPE STREQUAL "MODULE_LIBRARY")
                     list(APPEND OPTIONS -Walloc-size-larger-than=0)
                 endif ()
             else ()

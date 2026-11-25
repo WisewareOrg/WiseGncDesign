@@ -14,8 +14,7 @@ class GroundLink final : public GroundLinkComponentBase {
     //! holds the commands. One more asserts.
     static constexpr FwSizeType RESPONSES = 10;
 
-    //! The telemetry packets one step can close, between drains, the drain's own included: a tick and each of
-    //! RESPONSES commands writing every channel once. One more asserts.
+    //! Room for the telemetry packets of a step, between drains, the drain's own included. One more asserts.
     static constexpr FwSizeType PACKETS = 32;
 
     //! One command's response: the ground's context and the Fw::CmdResponse value.
