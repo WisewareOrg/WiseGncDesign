@@ -40,9 +40,9 @@ and by the analyzers (ADR 0008 rev 1).
 | CMake deprecations as errors | Power of 10 rule 10, taken to the build itself |
 
 - **The hand-written code, the generated code and F´ are all compiled this way**, but for the
-  warnings the table limits. What F´'s library or FPP's output cannot meet is suppressed by the name
-  of its flag and its place, with the reason written beside it; F´'s headers, Eigen and pybind11 are
-  system headers to our code.
+  warnings the table limits. A diagnostic raised by F´'s library or FPP's output is suppressed by
+  the name of its flag and its place, with the reason written beside it; F´'s headers, Eigen and
+  pybind11 are system headers to our code.
 - **The pins are test equipment.** Both halves keep exceptions, which pybind11 and the assert hook
   need; the pybind11 half also keeps the RTTI and static guards pybind11 needs. The other half is
   compiled as flight code and takes no F´ class across its boundary, so the flight software is built

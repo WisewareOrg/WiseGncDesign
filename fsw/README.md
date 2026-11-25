@@ -220,7 +220,7 @@ The reasoning is in
 The flight C++ adopts JSF AV C++, the Power of 10, the JPL C standard and F´'s C++ rules as its coding
 standards, in
 [ADR 0007 rev 1](../docs/decisions/0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md)
-and [ADR 0008 rev 1](../docs/decisions/0008-hold-the-flight-cpp-to-stock-free-static-analyzers.md).
+and [ADR 0008 rev 1](../docs/decisions/0008-check-the-flight-cpp-with-one-free-analyzer-of-each-kind.md).
 
 Every compiler warning is an error, in the F´ library, what FPP generates and what is written here, and
 so is every linker warning and every deprecated CMake command or policy. Nothing gates the rest of what

@@ -47,7 +47,7 @@ decision and its reasoning, not who ruled it.
 | [0005](0005-partition-each-build-into-rio-cdh-gnc-and-platform-one-frame-per-tick.md) | 2 | 2026-11-13 | Partition each build into RIO, CDH, GNC and platform, one frame per tick |
 | [0006](0006-meet-the-sim-as-a-hardware-in-the-loop-rig-on-bus-bytes.md) | 1 | 2026-11-14 | Meet the sim as a hardware-in-the-loop rig, on bus bytes |
 | [0007](0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md) | 1 | 2026-11-25 | Compile the F´ flight software with the settings flight standards ask for |
-| [0008](0008-hold-the-flight-cpp-to-stock-free-static-analyzers.md) | 1 | 2026-11-24 | Hold the flight C++ to stock, free static analyzers |
+| [0008](0008-check-the-flight-cpp-with-one-free-analyzer-of-each-kind.md) | 1 | 2026-11-25 | Check the flight C++ with one free analyzer of each kind |
 
 ## Revisions
 
