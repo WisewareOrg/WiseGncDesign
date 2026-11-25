@@ -55,7 +55,7 @@ A setting not taken has its reason here:
 | `-Waggregate-return`, `-Wmultiple-inheritance`, `-Wnamespaces`, `-Wtemplates`, `-Wpadded` | They report what the code is made of, not a fault in it |
 | `-Wabi-tag` | It reports the ABI tag of the `std::string` the generated pins return, not a fault in them |
 | `-Wsuggest-attribute=const`, `=pure`, `=cold`, `=malloc`, `=format`, `=returns_nonnull` | They ask for GNU attributes, outside ISO C++ (JSF AV 8) |
-| `-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow` | Each switches off a warning taken above that finds the fault |
+| `-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow` | Each switches off a warning taken above that finds the fault: measured for the first two, gcc's manual for the third |
 | `-fno-use-cxa-atexit` | gcc's manual says the default is required for standard-conforming static destruction (JSF AV 8) |
 | `-z nodlopen` | Python loads the extension |
 | `-fanalyzer` | An analyzer (ADR 0008 rev 1) |
