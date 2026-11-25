@@ -42,13 +42,13 @@ std::vector<GroundLink::Response> GroundLink::takeResponses() {
     return responses;
 }
 
-void GroundLink::cmdResponseIn_handler(FwIndexType portNum, FwOpcodeType opCode, U32 cmdSeq,
+void GroundLink::cmdResponseIn_handler(FwIndexType /*portNum*/, FwOpcodeType /*opCode*/, U32 cmdSeq,
                                        const Fw::CmdResponse& response) {
     // The dispatcher returns the uplink's context in place of its own sequence number.
     this->m_responses.push_back({cmdSeq, static_cast<I32>(response.e)});
 }
 
-void GroundLink::tlmIn_handler(FwIndexType portNum, FwChanIdType id, Fw::Time& timeTag, Fw::TlmBuffer& val) {
+void GroundLink::tlmIn_handler(FwIndexType /*portNum*/, FwChanIdType id, Fw::Time& timeTag, Fw::TlmBuffer& val) {
     Fw::SerializeStatus status = this->m_packet.addValue(id, timeTag, val);
     if (status == Fw::FW_SERIALIZE_NO_ROOM_LEFT) {
         this->flush();

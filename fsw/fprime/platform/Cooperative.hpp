@@ -27,8 +27,8 @@ class Cooperative final : public Os::TaskRegistry, public Os::QueueRegistry {
   private:
     const Os::Queue* pending() const;
 
-    std::vector<Os::Task*> m_tasks;
-    std::vector<Os::Queue*> m_queues;
+    std::vector<Os::Task*> m_tasks{};
+    std::vector<Os::Queue*> m_queues{};
 };
 
 }  // namespace Sim

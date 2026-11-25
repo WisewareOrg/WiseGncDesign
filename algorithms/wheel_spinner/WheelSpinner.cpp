@@ -5,7 +5,7 @@ namespace Gnc {
 
 WheelSpinner::WheelSpinner(const char* compName) : WheelSpinnerComponentBase(compName) {}
 
-void WheelSpinner::schedIn_handler(FwIndexType portNum, U32 context) {
+void WheelSpinner::schedIn_handler(FwIndexType /*portNum*/, U32 /*context*/) {
     Fw::ParamValid valid;
     const F64 torque = this->paramGet_motorTorque(valid);
     FW_ASSERT(valid == Fw::ParamValid::VALID, valid.e);

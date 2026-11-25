@@ -24,7 +24,7 @@ Vector4d wxyz(const Quaterniond& q) {
 
 //! dx/dt: dq/dt = 1/2 q (x) (0, omega), dr/dt = v, dv/dt = [NB](q) accel - mu r / |r|^3, [NB] of q as it
 //! stands.
-State derivative(F64 t, const State& x, const Vector3d& omega, const Vector3d& accel, F64 mu) {
+State derivative(F64 /*t*/, const State& x, const Vector3d& omega, const Vector3d& accel, F64 mu) {
     const Quaterniond rotation = quaternion(x.head<4>());
     const Vector3d r = x.segment<3>(4);
     const Quaterniond qdot = rotation * Quaterniond(0.0, omega.x(), omega.y(), omega.z());
@@ -66,12 +66,12 @@ void ImuDeadReckoner::initNavState_cmdHandler(FwOpcodeType opCode, U32 cmdSeq, F
     this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::OK);
 }
 
-void ImuDeadReckoner::imuIn_handler(FwIndexType portNum, const Gnc::ImuReading& reading) {
+void ImuDeadReckoner::imuIn_handler(FwIndexType /*portNum*/, const Gnc::ImuReading& reading) {
     this->m_omega_P = vector(reading.get_angVelPlatform());
     this->m_accel_P = vector(reading.get_accelPlatform());
 }
 
-void ImuDeadReckoner::schedIn_handler(FwIndexType portNum, U32 context) {
+void ImuDeadReckoner::schedIn_handler(FwIndexType /*portNum*/, U32 /*context*/) {
     const F64 t = this->now();
     if (this->m_navState == NavState::idle) {
         this->writeTelemetry();

@@ -48,10 +48,10 @@ class GroundLink final : public GroundLinkComponentBase {
 
     void resetPacket();
 
-    Fw::TlmPacket m_packet;
-    std::vector<U8> m_downlink;
-    std::vector<U32> m_sizes;
-    std::vector<Response> m_responses;
+    Fw::TlmPacket m_packet{};
+    std::vector<U8> m_downlink{};
+    std::vector<U32> m_sizes{};
+    std::vector<Response> m_responses{};
 };
 
 }  // namespace Cdh

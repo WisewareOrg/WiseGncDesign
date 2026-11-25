@@ -54,7 +54,7 @@ class RaisingAssertHook final : public Fw::AssertHook {
     void doAssert() override { throw std::runtime_error(this->m_text); }
 
   private:
-    std::string m_text;
+    std::string m_text{};
 };
 
 RaisingAssertHook g_assertHook;
@@ -112,7 +112,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         [](const py::bytes& packet, U32 context) {
             const std::string data = packet;
             Fw::ComBuffer buffer;
-            if (buffer.setBuff(reinterpret_cast<const U8*>(data.data()), static_cast<FwSizeType>(data.size())) !=
+            if (buffer.setBuff(reinterpret_cast<const U8*>(data.data()), data.size()) !=
                 Fw::FW_SERIALIZE_OK) {
                 throw py::value_error("a command packet of " + std::to_string(data.size()) + " bytes exceeds the " +
                                       std::to_string(buffer.getCapacity()) + "-byte buffer");

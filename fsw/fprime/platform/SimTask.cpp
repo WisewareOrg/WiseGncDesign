@@ -11,11 +11,11 @@ Os::TaskInterface::Status SimTask::join() {
     return Status::OP_OK;
 }
 
-void SimTask::suspend(SuspensionType suspensionType) {}
+void SimTask::suspend(SuspensionType /*suspensionType*/) {}
 
 void SimTask::resume() {}
 
-Os::TaskInterface::Status SimTask::_delay(const Fw::TimeInterval& interval) {
+Os::TaskInterface::Status SimTask::_delay(const Fw::TimeInterval& /*interval*/) {
     FW_ASSERT(false);
     return Status::NOT_SUPPORTED;
 }
@@ -28,7 +28,7 @@ Os::TaskHandle* SimTask::getHandle() {
     return nullptr;
 }
 
-Os::TaskInterface::Status SimTask::start(const Arguments& arguments) {
+Os::TaskInterface::Status SimTask::start(const Arguments& /*arguments*/) {
     return Status::OP_OK;
 }
 
