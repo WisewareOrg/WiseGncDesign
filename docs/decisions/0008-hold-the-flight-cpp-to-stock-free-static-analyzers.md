@@ -1,4 +1,4 @@
-# 0007 — Hold the flight C++ to stock, free static analyzers
+# 0008 — Hold the flight C++ to stock, free static analyzers
 
 **Status:** accepted
 **Decided:** 2026-11-24 (issue 125 Build the F´ flight software as ARINC 653 would)
@@ -10,6 +10,9 @@
   would).
 
 ## Context
+
+The flight C++ adopts JSF AV C++, the Power of 10, the JPL C standard and F´'s own C++ rules as the
+direction it follows (ADR 0007 rev 1).
 
 Flight C++ has to be held to the rules flight projects write: no warnings, no heap after
 initialization, no exceptions, no recursion, every return checked. A compiler warning does not see

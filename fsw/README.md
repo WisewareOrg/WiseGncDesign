@@ -217,6 +217,11 @@ The reasoning is in
 
 ## Warnings and flags
 
+The flight C++ adopts JSF AV C++, the Power of 10, the JPL C standard and F´'s C++ rules as its coding
+standards, in
+[ADR 0007 rev 1](../docs/decisions/0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md)
+and [ADR 0008 rev 1](../docs/decisions/0008-hold-the-flight-cpp-to-stock-free-static-analyzers.md).
+
 Every compiler warning is an error, in the F´ library, what FPP generates and what is written here, and
 so is every linker warning and every deprecated CMake command or policy. Nothing gates the rest of what
 CMake and FPP print. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own validation set
