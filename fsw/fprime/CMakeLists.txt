@@ -4,11 +4,28 @@
 ####
 cmake_minimum_required(VERSION 3.24)
 project(WiseFsw C CXX)
+# A deprecated CMake command or policy is an error.
+set(CMAKE_ERROR_DEPRECATED ON)
 
 include("${CMAKE_CURRENT_LIST_DIR}/lib/fprime/cmake/FPrime.cmake")
 # Every module links into one Python extension, so all of it is position independent.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# F´'s own validation set, warnings as errors, over F´ and everything here, then how it is all compiled and
+# linked, stated so that every host compiles the same code.
+fprime_add_validation_flags()
+add_compile_options(-ffp-contract=off
+    -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3
+    "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions;-fno-threadsafe-statics>")
+add_link_options(LINKER:--fatal-warnings,-z,relro,-z,now,-z,noexecstack)
 fprime_setup_included_code()
+# What is written and generated here meets more. F´'s headers are system headers to it.
+include_directories(SYSTEM "${CMAKE_CURRENT_LIST_DIR}/lib/fprime" "${CMAKE_BINARY_DIR}/F-Prime")
+add_compile_options(-Walloca -Warith-conversion -Warray-bounds=2 -Wcast-align=strict -Wcast-qual -Wdate-time
+    -Wduplicated-branches -Wduplicated-cond -Wfloat-equal -Wformat=2 -Wformat-overflow=2 -Wformat-signedness
+    -Wformat-truncation=2 -Wimplicit-fallthrough=5 -Wlogical-op -Wmissing-declarations -Wmissing-include-dirs
+    -Wnull-dereference -Wredundant-decls -Wsign-conversion -Wstack-usage=65536 -Wstrict-overflow=2
+    -Wstringop-overflow=4 -Wswitch-default -Wswitch-enum -Wtrampolines -Wundef -Wunused-const-variable=2
+    "$<$<COMPILE_LANGUAGE:CXX>:-Wcatch-value=3;-Wctor-dtor-privacy;-Wdeprecated-copy-dtor;-Wextra-semi;-Wnon-virtual-dtor;-Woverloaded-virtual=2;-Wzero-as-null-pointer-constant>")
 
 # Eigen, header-only, fetched by git tag into lib/, outside the build cache, so a regenerated cache keeps it.
 include(FetchContent)
@@ -56,6 +73,8 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     execute_process(COMMAND "${Python_EXECUTABLE}" -m pybind11 --cmakedir
         OUTPUT_VARIABLE WISE_PYBIND11_CMAKEDIR OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
     find_package(pybind11 CONFIG REQUIRED PATHS "${WISE_PYBIND11_CMAKEDIR}")
+    # The modules Python loads are test equipment, and pybind11 needs both.
+    set_property(TARGET pybind11::pybind11 APPEND PROPERTY INTERFACE_COMPILE_OPTIONS -fexceptions -fthreadsafe-statics)
     add_custom_target(_wise_fsw)
     # Every algorithm utility with C++: the directories under algorithms/utils/ with a CMakeLists.txt,
     # each building `_<name>`, the extension its tests reach the C++ through.
@@ -87,3 +106,20 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     add_dependencies(_wise_fsw wise_fpp_types_stub)
 endif()
 add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/deployment")
+
+# FPP's generated sources compare a struct's or array's floats for equality.
+function(wise_generated_options DIRECTORY)
+    get_property(TARGETS DIRECTORY "${DIRECTORY}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach (TARGET IN LISTS TARGETS)
+        get_target_property(SOURCES "${TARGET}" SOURCES)
+        list(FILTER SOURCES INCLUDE REGEX "Ac\\.cpp$")
+        if (SOURCES)
+            set_source_files_properties(${SOURCES} TARGET_DIRECTORY "${TARGET}" PROPERTIES COMPILE_OPTIONS -Wno-float-equal)
+        endif ()
+    endforeach ()
+    get_property(CHILDREN DIRECTORY "${DIRECTORY}" PROPERTY SUBDIRECTORIES)
+    foreach (CHILD IN LISTS CHILDREN)
+        wise_generated_options("${CHILD}")
+    endforeach ()
+endfunction()
+wise_generated_options("${CMAKE_CURRENT_SOURCE_DIR}")
