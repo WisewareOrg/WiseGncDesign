@@ -217,41 +217,12 @@ The reasoning is in
 
 ## Warnings and flags
 
-The flight C++ adopts JSF AV C++, the Power of 10, the JPL C standard and F´'s C++ rules as its coding
-standards, in
-[ADR 0007 rev 1](../docs/decisions/0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md)
-and [ADR 0008 rev 1](../docs/decisions/0008-check-the-flight-cpp-with-one-free-analyzer-of-each-kind.md).
-
-Every compiler warning is an error, in the F´ library, what FPP generates and what is written here,
-and so is every linker warning and every deprecated CMake command or policy. Nothing gates the rest of
-what CMake and FPP print. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own
-validation set over everything, every other warning gcc offers that the generated code meets over what
-is written and generated here, the rest over what is written here, and the code-generation,
-hardening and link flags. Flight C++ has no exceptions and no RTTI, so a `throw` is a compile error.
-
-An allocation whose size gcc can bound is an error: `push_back`, `resize`, `std::string`, `new` of a
-fixed size. One whose size it knows only at run time, as `new U8[n]`, `malloc(n)` and
-`vector::assign(n, 0)` are, compiles; the analyzers look for those
-([ADR 0008 rev 1](../docs/decisions/0008-check-the-flight-cpp-with-one-free-analyzer-of-each-kind.md)).
-One step's telemetry packets and command responses are held in fixed arrays, `GroundLink::PACKETS` and
-`GroundLink::RESPONSES`, which the pins copy out after every step; past them F´'s assert trips.
-
-A diagnostic is silenced only here:
-
-- `-Wno-unused-parameter` and `-Wno-vla`, in F´ and generated sources, by F´'s own flags: FPP gives a
-  handler every argument of its port, and `-Wstack-usage` refuses a variable-length array.
-- `-Wno-float-equal`, in FPP-generated sources, whose structs and arrays compare floats.
-- F´'s headers, Eigen, pybind11, Python and FPP's generated headers are system headers to what is written
-  here.
-- The allocation warning, in the pins, which hold what a flight wrote, and in the modules Python loads,
-  whose pybind11 headers allocate.
-
-The settings left out, and why, are in
-[ADR 0007 rev 1](../docs/decisions/0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md).
-
-The pybind11 sources are built with exceptions, RTTI and thread-safe statics, which pybind11 needs.
-The pins' other half, `lab/pins/FprimePins.cpp`, has exceptions alone: F´'s assert raises in Python by
-throwing through flight frames, whose destructors do not run.
+The flight C++ is written to the standards adopted in
+[ADR 0007 rev 1](../docs/decisions/0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md);
+[ADR 0008 rev 1](../docs/decisions/0008-check-the-flight-cpp-with-one-free-analyzer-of-each-kind.md)
+chooses its analyzers. Every compiler, linker and CMake-deprecation warning fails the build; the flags,
+and the suppressions with their reasons, are in `fsw/fprime/CMakeLists.txt`. An allocation whose size
+gcc can see is an error; one of run-time size, as `new U8[n]` is, compiles.
 
 ## The lab adapter
 
