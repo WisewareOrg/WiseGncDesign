@@ -27,6 +27,9 @@ std::vector<U8> g_downlink;
 std::vector<U32> g_packetSizes;
 std::vector<Cdh::GroundLink::Response> g_responses;
 
+//! The packets reserved at boot: a performance hint, not a limit.
+constexpr std::size_t PACKETS_RESERVE = 4096;
+
 //! Copies GroundLink's closed packets and responses out and empties it.
 void drain() {
     Cdh::GroundLink& link = WiseFsw::groundLink;
@@ -101,6 +104,8 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
                                       " (FileNameStringSize less its terminator)");
             }
             g_booted = true;
+            g_downlink.reserve(PACKETS_RESERVE * FW_COM_BUFFER_MAX_SIZE);
+            g_packetSizes.reserve(PACKETS_RESERVE);
             Os::init();
             Os::Task::registerTaskRegistry(&g_cooperative);
             Os::Queue::setRegistry(&g_cooperative);
@@ -126,11 +131,11 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
     m.def(
         "uplink",
         [](const py::bytes& packet, U32 context) {
-            const std::string data = packet;
+            const auto* data = reinterpret_cast<const U8*>(PyBytes_AS_STRING(packet.ptr()));
+            const FwSizeType size = py::len(packet);
             Fw::ComBuffer buffer;
-            if (buffer.setBuff(reinterpret_cast<const U8*>(data.data()), data.size()) !=
-                Fw::FW_SERIALIZE_OK) {
-                throw py::value_error("a command packet of " + std::to_string(data.size()) + " bytes exceeds the " +
+            if (buffer.setBuff(data, size) != Fw::FW_SERIALIZE_OK) {
+                throw py::value_error("a command packet of " + std::to_string(size) + " bytes exceeds the " +
                                       std::to_string(buffer.getCapacity()) + "-byte buffer");
             }
             WiseFsw::groundLink.uplink(buffer, context);
