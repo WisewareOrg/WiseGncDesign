@@ -27,10 +27,11 @@ class Actuator:
         """Counts one.
 
         Returns:
-            The tally, written.
+            The tally and the wide value, written.
         """
         self._tally += 1
-        return named("MockGnc.ActuatorTelemetry")(tally=self._tally)
+        wide = 1000.0 * self._tally + np.arange(50)
+        return named("MockGnc.ActuatorTelemetry")(tally=self._tally, wide=wide)
 
     def step(self, t: float) -> tuple[Any, Any]:
         """Sends the command.

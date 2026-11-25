@@ -6,6 +6,11 @@ Actuator::Actuator(const char* compName) : ActuatorComponentBase(compName) {}
 
 void Actuator::mark_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) {
     this->tlmWrite_tally(++this->m_tally);
+    Wide wide;
+    for (FwSizeType i = 0; i < Wide::SIZE; i++) {
+        wide[i] = 1000.0 * this->m_tally + static_cast<F64>(i);
+    }
+    this->tlmWrite_wide(wide);
     this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::OK);
 }
 

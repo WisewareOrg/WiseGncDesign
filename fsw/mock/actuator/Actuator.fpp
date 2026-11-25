@@ -1,5 +1,8 @@
 module MockGnc {
 
+  @ Values that fill most of a telemetry packet
+  array Wide = [50] F64
+
   @ A test mock both builds fly as an actuator: each step it sends one fixed wheel command and
   @ counts the step; a command counts too, so one frame can write the tally twice
   @ provides: SYS901
@@ -31,6 +34,9 @@ module MockGnc {
 
     @ The steps and marks so far
     telemetry tally: U32
+
+    @ Each mark's tally in thousands plus the element's index; written by a mark, not by a step
+    telemetry wide: Wide
 
   }
 

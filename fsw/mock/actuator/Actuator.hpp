@@ -14,7 +14,7 @@ class Actuator final : public ActuatorComponentBase {
     //! Counts the step, then sends the command, as actuator.py's.
     void schedIn_handler(FwIndexType portNum, U32 context) override;
 
-    //! Counts the mark.
+    //! Counts the mark, and writes it wide.
     void mark_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) override;
 
     U32 m_tally = 0;
