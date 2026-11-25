@@ -2,24 +2,30 @@
 
 #include <algorithm>
 
+#include "Fw/Types/Assert.hpp"
+
 namespace Sim {
 
 void Cooperative::addTask(Os::Task* task) {
-    this->m_tasks.push_back(task);
+    FW_ASSERT(this->m_taskCount < CAPACITY);
+    this->m_tasks[this->m_taskCount++] = task;
 }
 
 void Cooperative::removeTask(Os::Task* task) {
-    this->m_tasks.erase(std::remove(this->m_tasks.begin(), this->m_tasks.end(), task), this->m_tasks.end());
+    const auto end = this->m_tasks.begin() + this->m_taskCount;
+    this->m_taskCount = static_cast<FwSizeType>(std::remove(this->m_tasks.begin(), end, task) - this->m_tasks.begin());
 }
 
 void Cooperative::registerQueue(Os::Queue* queue) {
-    this->m_queues.push_back(queue);
+    FW_ASSERT(this->m_queueCount < CAPACITY);
+    this->m_queues[this->m_queueCount++] = queue;
 }
 
 const Os::Queue* Cooperative::pending() const {
-    const auto queue = std::find_if(this->m_queues.begin(), this->m_queues.end(),
-                                    [](const Os::Queue* q) { return q->getMessagesAvailable() > 0; });
-    return queue == this->m_queues.end() ? nullptr : *queue;
+    const auto end = this->m_queues.begin() + this->m_queueCount;
+    const auto queue =
+        std::find_if(this->m_queues.begin(), end, [](const Os::Queue* q) { return q->getMessagesAvailable() > 0; });
+    return queue == end ? nullptr : *queue;
 }
 
 const Os::Queue* Cooperative::pump(int rounds) {
@@ -27,8 +33,8 @@ const Os::Queue* Cooperative::pump(int rounds) {
         if (this->pending() == nullptr) {
             return nullptr;
         }
-        for (Os::Task* task : this->m_tasks) {
-            task->invokeRoutine();
+        for (FwSizeType i = 0; i < this->m_taskCount; i++) {
+            this->m_tasks[i]->invokeRoutine();
         }
     }
     return this->pending();
