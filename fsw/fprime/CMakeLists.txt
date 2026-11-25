@@ -74,6 +74,8 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     execute_process(COMMAND "${Python_EXECUTABLE}" -m pybind11 --cmakedir
         OUTPUT_VARIABLE WISE_PYBIND11_CMAKEDIR OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
     find_package(pybind11 CONFIG REQUIRED PATHS "${WISE_PYBIND11_CMAKEDIR}")
+    # pybind11 turns link-time optimization on unless this is set; it would hold back the warnings optimization finds.
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
     # The modules Python loads are test equipment, and pybind11 needs all three.
     set_property(TARGET pybind11::pybind11 APPEND PROPERTY INTERFACE_COMPILE_OPTIONS -fexceptions -frtti -fthreadsafe-statics)
     add_custom_target(_wise_fsw)
@@ -124,8 +126,10 @@ function(wise_source_options DIRECTORY)
                 set(OPTIONS -Wno-float-equal)
             elseif (SOURCE MATCHES "FswTopology\\.cpp$" OR (SOURCE MATCHES "\\.cpp$" AND OURS AND NOT BUILT AND NOT FRAMEWORK))
                 set(OPTIONS ${WISE_WRITTEN_OPTIONS})
-                # An allocation is a warning in flight code; the pins hold what a flight wrote, in memory that grows.
-                if (NOT SOURCE MATCHES "/lab/pins/")
+                # An allocation is a warning in flight code; the pins hold what a flight wrote, in memory that grows, and
+                # pybind11's own headers allocate in a module Python loads.
+                get_target_property(TYPE "${TARGET}" TYPE)
+                if (NOT SOURCE MATCHES "/lab/pins/" AND NOT TYPE STREQUAL "MODULE_LIBRARY")
                     list(APPEND OPTIONS -Walloc-size-larger-than=0)
                 endif ()
             else ()
