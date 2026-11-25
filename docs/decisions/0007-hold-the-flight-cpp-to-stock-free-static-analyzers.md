@@ -46,11 +46,13 @@ The rules, from the standards that state them, and what holds each here:
 - **IKOS runs in CI last, once flight code is static.** It looks for out-of-range indexes, null and
   uninitialised values and integer faults, and it ignores floating point, so it does not check an
   algorithm's arithmetic. Its alarms are cleared in the change that adds it, by a fix or by IKOS's
-  own `__ikos_assume`, whose reason is written beside it.
+  own `__ikos_assume`, whose reason is written beside it. It alone of these reported a null
+  dereference put into the code on purpose, and it does not yet complete on the missions.
 - **Static storage carries the no-heap rule.** No analyzer tells an allocation at initialization
-  from one after it, and none sees a vector inside an array. Flight code uses fixed-size F´ types,
-  and the analyzers check that nobody adds a container back. F´'s own allocation at initialization
-  is allowed.
+  from one after it, and none sees a vector inside an array. The rule is that flight code uses
+  fixed-size F´ types; code that does not is converted in the change that adds the check, and the
+  analyzers check that nobody adds a container back. F´'s own allocation at initialization is
+  allowed.
 
 ## Alternatives considered
 
@@ -72,7 +74,7 @@ The rules, from the standards that state them, and what holds each here:
   with no heap refuses F´'s own allocation at initialization. Rejected.
 - **Clang's function-effect attributes.** Every function a frame calls must carry one, including
   generated and F´ code. Rejected.
-- **An allocator of our own, or a link that lists what flight code may call.** Built and withdrawn:
+- **An allocator of our own, or a link that lists what flight code may call.** Tried, and not taken:
   a rule written here has to be checked here, and each needed more of our own code to check it.
   Rejected.
 - **A review checklist alone.** F´ holds its own heap rule by review; a rule no tool checks depends
@@ -80,10 +82,10 @@ The rules, from the standards that state them, and what holds each here:
 
 ## Consequences
 
-- A finding is fixed where it is found, or allowed by name with a reason; it is never suppressed for
-  a whole file.
+- A finding is fixed where it is found, or allowed by name with a reason; a suppression names the
+  flag, the place and the reason; generated code and F´ carry the few they need.
 - The analyzers disagree in places and repeat each other in others; each earns its place by what it
   alone reports.
 - CodeQL is free here only while this repository is public and under an open-source licence.
-- None of them proves that nothing allocates after initialization. Static storage does that for the
-  code written here, and a component that needs a container must be given a fixed size.
+- None of them proves that nothing allocates after initialization. A component that needs a
+  container must be given a fixed size.
