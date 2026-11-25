@@ -2,6 +2,9 @@
 
 namespace WiseFsw {
 
+static_assert(Cdh::GroundLink::RESPONSES >= FwSizeType{QueueSizes::WiseFsw_cmdDisp},
+              "GroundLink holds a response to every command the dispatcher's queue holds");
+
 void setupTopology(const TopologyState& state) {
     initComponents(state);
     setBaseIds();

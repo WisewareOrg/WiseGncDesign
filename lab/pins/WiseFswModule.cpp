@@ -22,6 +22,21 @@ Sim::Cooperative g_cooperative;
 bool g_booted = false;
 bool g_stepped = false;
 
+//! What the flight downlinked and answered since Python last took it, copied from GroundLink as it fills.
+std::vector<U8> g_downlink;
+std::vector<U32> g_packetSizes;
+std::vector<Cdh::GroundLink::Response> g_responses;
+
+//! Copies GroundLink's closed packets and responses out and empties it.
+void drain() {
+    Cdh::GroundLink& link = WiseFsw::groundLink;
+    g_downlink.insert(g_downlink.end(), link.downlinked(), link.downlinked() + link.downlinkedSize());
+    g_packetSizes.insert(g_packetSizes.end(), link.packetSizes(), link.packetSizes() + link.packetCount());
+    link.clearDownlink();
+    g_responses.insert(g_responses.end(), link.responses(), link.responses() + link.responseCount());
+    link.clearResponses();
+}
+
 //! Refuses a buffer on a port LabBusDriver lacks, on one that has one, or after the first step; the
 //! range is checked before the driver is asked about the port.
 void checkBufferPort(FwIndexType port, bool (Bus::LabBusDriver::*has)(FwIndexType) const, const char* direction) {
@@ -100,6 +115,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
             if (!invalid.empty()) {
                 throw std::runtime_error("parameters " + invalid + " are not valid after loading " + prm_path);
             }
+            drain();
         },
         py::arg("prm_path"), py::arg("parameter_ids"),
         "Sets the topology up and boots it at t = 0 s, every component idle: PrmDb loads prm_path, an absolute "
@@ -154,6 +170,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
             pump();
             WiseFsw::labBusDriver.push();
             WiseFsw::simTime.tick();
+            drain();
             return WiseFsw::labBusDriver.takeWritten();
         },
         py::arg("t_ns"),
@@ -163,20 +180,25 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         "LabBusDriver.busIn[n].");
 
     m.def(
-        "pump", [](int rounds) { pump(rounds); }, py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},
+        "pump",
+        [](int rounds) {
+            pump(rounds);
+            drain();
+        }, py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},
         "Runs the active components until no queue holds a message; raises RuntimeError naming a queue that "
         "still does after `rounds` rounds.");
 
     m.def(
         "telemetry",
         []() {
+            drain();
             WiseFsw::groundLink.flush();
-            const std::vector<U8>& downlink = WiseFsw::groundLink.downlinked();
-            const std::vector<U32>& sizes = WiseFsw::groundLink.packetSizes();
+            drain();
             py::tuple drained = py::make_tuple(
-                py::bytes(reinterpret_cast<const char*>(downlink.data()), downlink.size()),
-                py::bytes(reinterpret_cast<const char*>(sizes.data()), sizes.size() * sizeof(U32)));
-            WiseFsw::groundLink.clearDownlink();
+                py::bytes(reinterpret_cast<const char*>(g_downlink.data()), g_downlink.size()),
+                py::bytes(reinterpret_cast<const char*>(g_packetSizes.data()), g_packetSizes.size() * sizeof(U32)));
+            g_downlink.clear();
+            g_packetSizes.clear();
             return drained;
         },
         "Every telemetry packet downlinked since the last call, oldest first: (the packets back to back, each "
@@ -185,10 +207,12 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
     m.def(
         "responses",
         []() {
+            drain();
             py::list responses;
-            for (const auto& response : WiseFsw::groundLink.takeResponses()) {
+            for (const auto& response : g_responses) {
                 responses.append(py::make_tuple(response.context, response.response));
             }
+            g_responses.clear();
             return responses;
         },
         "Every command response since the last call, oldest first: (context, Fw.CmdResponse value).");
