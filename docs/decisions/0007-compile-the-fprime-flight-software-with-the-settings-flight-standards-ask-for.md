@@ -1,13 +1,13 @@
 # 0007 — Compile the F´ flight software with the settings flight standards ask for
 
 **Status:** accepted
-**Decided:** 2026-11-24 (issue 125 Build the F´ flight software as ARINC 653 would)
+**Decided:** 2026-11-24 (issue 125 Build the F´ flight software to flight standards: every warning on and none left, and choose its analyzers)
 **Rev:** 1
 
 ## Revisions
 
-- **rev 1** — 2026-11-24 — first written (issue 125 Build the F´ flight software as ARINC 653
-  would).
+- **rev 1** — 2026-11-24 — first written (issue 125 Build the F´ flight software to flight standards:
+  every warning on and none left, and choose its analyzers).
 
 ## Context
 
@@ -27,7 +27,7 @@ and by the analyzers (ADR 0008 rev 1).
 
 | Setting | Why, and who states it |
 |---|---|
-| Warnings as errors: F´'s own set over everything, a wider set over what is written and generated here, and the rest over what is written here | Power of 10 rule 10, JPL rule 2; F´ applies its set to its own test deployments |
+| Warnings as errors: F´'s own set over everything; every other warning gcc offers that what is generated here meets, at its top level, over what is written and generated here; and the rest over what is written here, our generators' output included | Power of 10 rule 10, JPL rule 2; F´ applies its set to its own test deployments |
 | Conversions that lose information, sign changes, double promotion, exact float comparison | JSF AV 180 and 202 |
 | C-style casts | JSF AV 185 |
 | Enumerations in switches, duplicated branches, missing declarations, undefined macros, shadowing, unused parameters | Power of 10 rule 10 |
@@ -40,9 +40,9 @@ and by the analyzers (ADR 0008 rev 1).
 | CMake deprecations as errors | Power of 10 rule 10, taken to the build itself |
 
 - **The hand-written code, the generated code and F´ are all compiled this way**, but for the
-  warnings the table limits. A diagnostic raised by F´'s library or FPP's output is suppressed by
-  the name of its flag and its place, with the reason written beside it; F´'s headers, Eigen and
-  pybind11 are system headers to our code.
+  warnings the table limits. F´'s and FPP's headers, Eigen and pybind11 are system headers to the
+  hand-written code. A diagnostic raised by F´'s library or FPP's output is suppressed by the name
+  of its flag and its place, with the reason written beside it.
 - **The pins are test equipment.** Both halves keep exceptions, which pybind11 and the assert hook
   need; the pybind11 half also keeps the RTTI and static guards pybind11 needs. The other half is
   compiled as flight code and takes no F´ class across its boundary, so the flight software is built
@@ -57,6 +57,14 @@ and by the analyzers (ADR 0008 rev 1).
   does not, so the same source would be built differently. Rejected.
 - **Skip the hardening because it costs time.** Flight code is fast because it is well written, not
   because a protection is off. Rejected.
+- **`-Waggregate-return`, `-Wmultiple-inheritance`, `-Wnamespaces`, `-Wtemplates`.** They report
+  what the code is made of: functions returning values, `Cooperative`'s two F´ interfaces, F´'s
+  namespaces, and `Rk4`'s template. Rejected.
+- **`-Wpadded`.** It reports the layout of structs the compiler pads. Rejected.
+- **`-Wabi-tag`.** It reports functions whose `std::string` carries an ABI tag, which the generated
+  pins return. Rejected.
+- **`-Wsuggest-attribute=const`.** It asks for a GNU attribute on constant functions, outside ISO
+  C++ (JSF AV 8). Rejected.
 - **`-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow`.** Each
   switches off a warning above that finds the fault: `-Wnull-dereference` and `-Wstrict-aliasing`,
   measured with gcc 15.3, and `-Wstrict-overflow`, as gcc's manual says. Rejected while the warning
@@ -72,6 +80,7 @@ and by the analyzers (ADR 0008 rev 1).
 ## Consequences
 
 - A new component meets every setting without listing them, and a warning fails the build.
+- The build needs gcc 15, for `-fzero-init-padding-bits=all`, on x86, for `-fcf-protection`.
 - A compiler update can add warnings and fail the build; the compiler is not pinned here.
 - The two compilers that build this, on a development host and in CI, may disagree about a warning,
   so both must pass.

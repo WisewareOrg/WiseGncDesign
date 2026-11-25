@@ -222,15 +222,19 @@ standards, in
 [ADR 0007 rev 1](../docs/decisions/0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md)
 and [ADR 0008 rev 1](../docs/decisions/0008-check-the-flight-cpp-with-one-free-analyzer-of-each-kind.md).
 
-Every compiler warning is an error, in the F´ library, what FPP generates and what is written here, and
-so is every linker warning and every deprecated CMake command or policy. Nothing gates the rest of what
-CMake and FPP print. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own validation set
-over everything, a wider set over what is written and generated here, the rest over what is written
-here, and the code-generation, hardening and link flags, stated so that every host compiles the same
-code. Flight C++ has no exceptions and no RTTI, so a `throw` is a compile error, and an allocation in what
-is written here is a warning. Telemetry packets and command responses of one step are held in fixed
-arrays, `GroundLink::PACKETS` and `GroundLink::RESPONSES`, which the pins copy out after every step; past
-them F´'s assert trips.
+Every compiler warning is an error, in the F´ library, what FPP generates and what is written here,
+and so is every linker warning and every deprecated CMake command or policy. Nothing gates the rest of
+what CMake and FPP print. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own
+validation set over everything, every other warning gcc offers that the generated code meets over what
+is written and generated here, the rest over what is written here, and the code-generation,
+hardening and link flags. Flight C++ has no exceptions and no RTTI, so a `throw` is a compile error.
+
+An allocation whose size gcc can bound is an error: `push_back`, `resize`, `std::string`, `new` of a
+fixed size. One whose size it knows only at run time, as `new U8[n]`, `malloc(n)` and
+`vector::assign(n, 0)` are, compiles; the analyzers look for those
+([ADR 0008 rev 1](../docs/decisions/0008-check-the-flight-cpp-with-one-free-analyzer-of-each-kind.md)).
+One step's telemetry packets and command responses are held in fixed arrays, `GroundLink::PACKETS` and
+`GroundLink::RESPONSES`, which the pins copy out after every step; past them F´'s assert trips.
 
 A diagnostic is silenced only here:
 

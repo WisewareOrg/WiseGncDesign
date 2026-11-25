@@ -1,13 +1,13 @@
 # 0008 — Check the flight C++ with one free analyzer of each kind
 
 **Status:** accepted
-**Decided:** 2026-11-24 (issue 125 Build the F´ flight software as ARINC 653 would)
+**Decided:** 2026-11-24 (issue 125 Build the F´ flight software to flight standards: every warning on and none left, and choose its analyzers)
 **Rev:** 1
 
 ## Revisions
 
-- **rev 1** — 2026-11-24 — first written (issue 125 Build the F´ flight software as ARINC 653
-  would).
+- **rev 1** — 2026-11-24 — first written (issue 125 Build the F´ flight software to flight standards:
+  every warning on and none left, and choose its analyzers).
 
 ## Context
 
