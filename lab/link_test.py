@@ -188,8 +188,10 @@ class TestOneStepOfSeveralPackets:
         assert len(np.frombuffer(sizes, np.uint32)) >= 3, "the step fills several packets"
         writes = self.station.decode([downlink], ["actuator.tally", "actuator.wide"])
         wide, tally = writes["actuator.wide"], writes["actuator.tally"]
-        assert wide.values.tolist() == [(1000.0 * mark + np.arange(50)).tolist() for mark in range(1, self.MARKS + 1)], (
-            "each mark's wide value comes down once, in order"
+        assert wide.values.tolist() == [
+            (1000.0 * mark + np.arange(50)).tolist() for mark in range(1, self.MARKS + 1)
+        ], "each mark's wide value comes down once, in order"
+        assert tally.values.tolist() == list(range(1, self.MARKS + 2)), (
+            "the marks' tallies and the step's keep their order"
         )
-        assert tally.values.tolist() == list(range(1, self.MARKS + 2)), "the marks' tallies and the step's keep their order"
-        assert wide.times.tolist() == [NS] * self.MARKS, "every write carries the step's time"
+        assert wide.times.tolist() == [NS] * self.MARKS, "each wide write carries the step's time"
