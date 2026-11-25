@@ -18,7 +18,7 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     pybind11_add_module(_wise_fsw_@CONFIGURATION@ "${FPRIME_PROJECT_ROOT}/lab/pins/WiseFswModule.cpp")
     target_link_libraries(_wise_fsw_@CONFIGURATION@ PRIVATE fsw_fprime_deployment_@CONFIGURATION@)
     target_compile_definitions(_wise_fsw_@CONFIGURATION@ PRIVATE WISE_FSW_MODULE=_wise_fsw_@CONFIGURATION@)
-    # The pins' half over the flight software, compiled as flight code is but for the exceptions its assert hook throws.
+    # The pins' half over the flight software; its assert hook throws.
     add_library(_wise_fsw_@CONFIGURATION@_pins STATIC "${FPRIME_PROJECT_ROOT}/lab/pins/FprimePins.cpp")
     target_link_libraries(_wise_fsw_@CONFIGURATION@_pins PRIVATE fsw_fprime_deployment_@CONFIGURATION@)
     target_compile_options(_wise_fsw_@CONFIGURATION@_pins PRIVATE -fexceptions)

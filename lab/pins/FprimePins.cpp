@@ -23,7 +23,7 @@ std::vector<U8> g_downlink;
 std::vector<U32> g_packetSizes;
 std::vector<Response> g_responses;
 
-//! The packets reserved at boot: a performance hint, not a limit.
+//! The packets boot reserves room for; more grow it.
 constexpr std::size_t PACKETS_RESERVE = 4096;
 
 //! Copies GroundLink's closed packets and responses out and empties it.
@@ -43,7 +43,7 @@ void drain() {
 void checkBufferPort(FwIndexType port, bool (Bus::LabBusDriver::*has)(FwIndexType) const, const char* direction) {
     if (port < 0 || port >= Bus::LabBusDriver::PORTS) {
         throw std::out_of_range("port " + std::to_string(port) + " is past LabBusDriver's " +
-                              std::to_string(Bus::LabBusDriver::PORTS) + " ports");
+                                std::to_string(Bus::LabBusDriver::PORTS) + " ports");
     }
     if ((WiseFsw::labBusDriver.*has)(port)) {
         throw std::runtime_error("port " + std::to_string(port) + " already has a " + direction + " buffer");
@@ -63,7 +63,6 @@ void pumpOrRaise(int rounds = Sim::Cooperative::MAX_ROUNDS) {
     }
 }
 
-//! Raises an F´ assert in Python as a std::runtime_error carrying F´'s own text.
 class RaisingAssertHook final : public Fw::AssertHook {
   public:
     void printAssert(const CHAR* msg) override { this->m_text = msg; }

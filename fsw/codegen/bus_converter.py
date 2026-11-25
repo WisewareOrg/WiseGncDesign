@@ -158,7 +158,7 @@ namespace Pins {{
 
 }}  // namespace Pins
 
-// The half the flight software is called through, which the pybind11 half includes none of.
+// The half the flight software is called through.
 #ifdef CDH_BUSCONVERTERPINS_FLIGHT
 
 #include <stdexcept>

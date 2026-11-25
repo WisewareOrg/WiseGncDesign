@@ -10,8 +10,7 @@ set(CMAKE_ERROR_DEPRECATED ON)
 include("${CMAKE_CURRENT_LIST_DIR}/lib/fprime/cmake/FPrime.cmake")
 # Every module links into one Python extension, so all of it is position independent.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-# F´'s own validation set, warnings as errors, over F´ and everything here, then how it is all compiled and
-# linked, stated so that every host compiles the same code.
+# F´'s own validation set, warnings as errors, over F´ and everything here, then how it is all compiled and linked.
 fprime_add_validation_flags()
 add_compile_options(-ffp-contract=off
     -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3
@@ -76,7 +75,7 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     find_package(pybind11 CONFIG REQUIRED PATHS "${WISE_PYBIND11_CMAKEDIR}")
     # pybind11 turns link-time optimization on unless this is set; it would hold back the warnings optimization finds.
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
-    # The modules Python loads are test equipment, and pybind11 needs all three.
+    # pybind11 needs all three.
     set_property(TARGET pybind11::pybind11 APPEND PROPERTY INTERFACE_COMPILE_OPTIONS -fexceptions -frtti -fthreadsafe-statics)
     add_custom_target(_wise_fsw)
     # Every algorithm utility with C++: the directories under algorithms/utils/ with a CMakeLists.txt,

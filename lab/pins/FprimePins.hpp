@@ -19,7 +19,7 @@ struct Response {
 //! The rounds pump() runs by default before it gives up on a queue.
 int defaultRounds();
 
-//! Raises an F´ assert in Python as a std::runtime_error carrying F´'s own text, from here on.
+//! Raises an F´ assert in Python as a std::runtime_error carrying F´'s own text.
 void registerAssertHook();
 
 //! The pins of the same names, whose docstrings say what they do; a bad argument throws as it raises in Python.
