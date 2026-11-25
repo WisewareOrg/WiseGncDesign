@@ -23,7 +23,7 @@ development host.
 | Kind of check | Who asks for it | Tool |
 |---|---|---|
 | Compiler at every warning, none left | Power of 10 rule 10, JPL rule 2 | gcc (ADR 0007 rev 1) |
-| Coding-standard checker | NASA SWE-061 and SWE-185, ECSS-Q-ST-80C 6.3.4, MISRA Compliance | CodeQL, with its JSF AV, JPL and Power of 10 rules and its coding-standards pack's MISRA C++ rules |
+| Coding-standard checker | NASA SWE-061 and SWE-185, ECSS-Q-ST-80C 6.3.4, MISRA Compliance | CodeQL, with its JSF AV, JPL and Power of 10 rules and its coding-standards pack's MISRA C++ rules, checked because CodeQL ships them; MISRA C++ is not adopted as a standard (ADR 0007 rev 1) |
 | Bug finder | NASA SWE-135; NASA's IKOS tutorial starts with a lightweight analyzer | clang-tidy, with the Clang analyzer, run in the build |
 | Bug finder from another engine | the same NASA update, which says running several tools gives better results | cppcheck, with F´'s options |
 | Sound check for run-time errors | ECSS-E-ST-40C 5.8.3.5 and its informative Annex U list the errors, without asking for soundness; the formal-methods supplement to DO-178C, read through a secondary source, is the route for it | IKOS |
