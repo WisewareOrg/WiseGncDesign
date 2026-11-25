@@ -16,8 +16,7 @@ asks for every warning at the compiler's most pedantic setting and none left, fr
 the JPL C standard's rule 2 asks the same, and asks for the code to be rewritten when a warning is a
 false one. The rest is a language subset and settings that make the build the same wherever it is
 built. A setting a standard or the compiler's own documentation recommends is taken; one is left out
-only where it breaks the build, switches off a warning already taken, or departs from standard C++,
-and then the reason is here.
+only with its reason, in the Decision.
 
 ## Decision
 
@@ -49,33 +48,35 @@ and by the analyzers (ADR 0008 rev 1).
   without RTTI. What a flight wrote is held in memory that grows, so an allocation there is no
   warning.
 
+A setting not taken has its reason here:
+
+| Setting | Reason |
+|---|---|
+| `-Waggregate-return`, `-Wmultiple-inheritance`, `-Wnamespaces`, `-Wtemplates`, `-Wpadded`, `-Wabi-tag` | They report what the code is made of, not a fault in it |
+| `-Wsuggest-attribute=const`, `=pure`, `=cold`, `=malloc`, `=format`, `=returns_nonnull` | They ask for GNU attributes, outside ISO C++ (JSF AV 8) |
+| `-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow` | Each switches off a warning taken above that finds the fault |
+| `-fno-use-cxa-atexit` | gcc's manual says the default is required for standard-conforming static destruction (JSF AV 8) |
+| `-z nodlopen` | Python loads the extension |
+| `-fanalyzer` | An analyzer (ADR 0008 rev 1) |
+
 ## Alternatives considered
 
-- **Turn warnings on one at a time, as they are fixed.** A setting held back is one nobody sees the
-  findings of. Rejected.
-- **Leave hardening to the distribution.** One host's compiler has it on by default and another's
-  does not, so the same source would be built differently. Rejected.
-- **Skip the hardening because it costs time.** Flight code is fast because it is well written, not
-  because a protection is off. Rejected.
-- **`-Waggregate-return`, `-Wmultiple-inheritance`, `-Wnamespaces`, `-Wtemplates`.** They report
-  what the code is made of: functions returning values, `Cooperative`'s two F´ interfaces, F´'s
-  namespaces, and `Rk4`'s template. Rejected.
-- **`-Wpadded`.** It reports the layout of structs the compiler pads. Rejected.
-- **`-Wabi-tag`.** It reports functions whose `std::string` carries an ABI tag, which the generated
-  pins return. Rejected.
-- **`-Wsuggest-attribute=const`, `=pure`, `=cold`, `=malloc`, `=format` and `=returns_nonnull`.**
-  They ask for GNU attributes, optimisation hints but for `=format`, which checks arguments, outside
-  ISO C++ (JSF AV 8). Rejected.
-- **`-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow`.** Each
-  switches off a warning above that finds the fault: `-Wnull-dereference` and `-Wstrict-aliasing`,
-  measured with gcc 15.3, and `-Wstrict-overflow`, as gcc's manual says. Rejected while the warning
-  holds.
-- **`-fno-use-cxa-atexit`.** It builds and loads here, and the telemetry is the same. JSF AV 8 asks
-  for conforming ISO C++, and gcc's manual says the default is required for fully
-  standards-compliant handling of static destructors. Rejected.
-- **`-z nodlopen`.** Python loads the extension. Rejected.
-- **`-fanalyzer`.** An analyzer, rejected in ADR 0008 rev 1.
-- **Freestanding.** Eigen does not build under it, nor do parts of F´'s host platform. Rejected.
+- **F´'s own warning set alone.** It is what F´ holds itself to, and leaves out what the standards
+  ask beyond it, such as sign conversions. Rejected.
+- **A chosen subset of the compiler's warnings.** Each one left out needs a reason, and a warning
+  held back is one nobody sees the findings of. Rejected.
+- **MISRA C++ or AUTOSAR C++ as the coding standard.** MISRA C++:2023 is written for C++17 and F´
+  builds as C++14, so it cannot be met whole; AUTOSAR C++14 has been merged into it. Neither has
+  been read here whole. JSF AV C++, the Power of 10, the JPL C standard and F´'s rules state what is
+  adopted. Rejected.
+- **Turn the warnings on one at a time as the code is cleaned.** The compiler is the first check on
+  flight code, and the Power of 10 asks for it from the first day. Rejected.
+- **Hardening left to each host's compiler.** One host's has it on by default and another's does
+  not, so the same source would be built differently. Rejected.
+- **Hardening off, for its cost in a tick.** Flight code is fast because it is well written.
+  Rejected.
+- **Freestanding C++, to take the heap away.** Eigen does not build under it, nor do parts of F´'s
+  host platform. Rejected.
 - **A lower optimisation level.** No standard read asks for one. Rejected.
 
 ## Consequences
