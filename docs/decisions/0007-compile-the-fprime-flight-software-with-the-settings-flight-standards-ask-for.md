@@ -27,7 +27,7 @@ and by the analyzers (ADR 0008 rev 1).
 
 | Setting | Why, and who states it |
 |---|---|
-| Warnings as errors: F´'s own set over everything; every other warning gcc offers that what is generated here meets, at its top level, over what is written and generated here; and the rest over what is written here, our generators' output included | Power of 10 rule 10, JPL rule 2; F´ applies its set to its own test deployments |
+| Warnings as errors: F´'s own set over everything; every other warning gcc offers that what is generated here meets, each at its strictest level, over what is written and generated here; and the rest over what is written here, our generators' output included | Power of 10 rule 10, JPL rule 2; F´ applies its set to its own test deployments |
 | Conversions that lose information, sign changes, double promotion, exact float comparison | JSF AV 180 and 202 |
 | C-style casts | JSF AV 185 |
 | Enumerations in switches, duplicated branches, missing declarations, undefined macros, shadowing, unused parameters | Power of 10 rule 10 |
