@@ -40,21 +40,28 @@ and by the analyzers (ADR 0008 rev 1).
 | CMake deprecations as errors | Power of 10 rule 10, taken to the build itself |
 
 - **The code written and generated here is held to every setting. F´'s library and FPP's output are
-  held to F´'s own set.** What they can't meet is suppressed by name and place, with the reason
-  written beside it.
-- **Test equipment is outside it.**
+  held to every warning they meet.** What they can't meet is suppressed by name and place, with the
+  reason written beside it, because that code is not changed here.
+- **Test equipment is outside the flight software: it may use exceptions and RTTI, hold memory that
+  grows, and is exempt only where that needs it.**
 
 A setting not taken, and why:
 
 | Setting | Reason |
 |---|---|
-| `-Waggregate-return`, `-Wmultiple-inheritance`, `-Wnamespaces`, `-Wtemplates`, `-Wpadded` | They report what the code is made of, not a fault in it |
-| `-Wabi-tag` | It reports the ABI tag of a standard library type, not a fault |
-| `-Wsuggest-attribute=const`, `=pure`, `=cold`, `=malloc`, `=format`, `=returns_nonnull` | They ask for GNU attributes, outside ISO C++ (JSF AV 8) |
+| `-Waggregate-return` | JSF AV 112, Appendix A: "Returning an object by value is a simple method that does not obscure ownership issues." |
+| `-Wmultiple-inheritance` | JSF AV 88: "Multiple inheritance shall only be allowed in the following restricted form: n interfaces plus m private implementations, plus at most one protected implementation." |
+| `-Wnamespaces` | JSF AV 98: "Every nonlocal name, except main(), should be placed in some namespace." |
+| `-Wtemplates` | F´ CPP-7: "Templates are allowed but simple"; JSF AV 101 to 106 rule on them and do not forbid them |
+| `-Wsuggest-attribute=const`, `=pure`, `=cold`, `=malloc`, `=format`, `=returns_nonnull` | JSF AV 8: "Any language extensions or variations from ISO/IEC 14882 shall not be allowed"; they ask for GNU attributes |
+| `-Wlarger-than=` | It needs a limit, and no source states one |
+| `-Wframe-larger-than=`, `-Walloca-larger-than=`, `-Wvla-larger-than=` | `-Wstack-usage`, `-Walloca` and `-Wvla` cover them |
+| `-Wsystem-headers` | gcc's manual: such warnings "usually do not indicate real problems" |
 | `-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow` | Each switches off a warning taken above that finds the fault |
 | `-fno-use-cxa-atexit` | gcc's manual says the default is required for standard-conforming static destruction (JSF AV 8) |
-| `-z nodlopen` | Python loads the extension |
-| `-fanalyzer` | An analyzer (ADR 0008 rev 1) |
+| `-z nodlopen` | A host process loads the flight software as a shared object |
+| `--warn-section-align` | The linker's own default layout raises it, on an empty program |
+| `-fanalyzer` | An analyzer; ADR 0008 rev 1 chooses those |
 
 ## Alternatives considered
 
