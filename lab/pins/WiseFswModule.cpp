@@ -19,7 +19,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
 
     m.def(
         "boot",
-        [](const std::string& prm_path, const std::vector<U32>& parameter_ids) { Pins::boot(prm_path, parameter_ids); },
+        [](const std::string& prm_path, const std::vector<FwPrmIdType>& parameter_ids) { Pins::boot(prm_path, parameter_ids); },
         py::arg("prm_path"), py::arg("parameter_ids"),
         "Sets the topology up and boots it at t = 0 s, every component idle: PrmDb loads prm_path, an absolute "
         "path whose directory is its sandbox. Raises ValueError for a relative path, one in the root directory or "
@@ -36,7 +36,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
 
     m.def(
         "receive_buffer",
-        [](I16 port, U64 size) {
+        [](FwIndexType port, FwSizeType size) {
             return py::memoryview::from_memory(Pins::receiveBuffer(port, size), static_cast<py::ssize_t>(size));
         },
         py::arg("port"), py::arg("size"),
@@ -46,7 +46,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
 
     m.def(
         "transmit_buffer",
-        [](I16 port, U64 size) {
+        [](FwIndexType port, FwSizeType size) {
             return py::memoryview::from_memory(static_cast<const void*>(Pins::transmitBuffer(port, size)),
                                                static_cast<py::ssize_t>(size));
         },
@@ -72,6 +72,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
     m.def(
         "telemetry",
         []() {
+            Pins::closePacket();
             const std::vector<U8>& downlink = Pins::downlink();
             const std::vector<U32>& sizes = Pins::packetSizes();
             py::tuple drained = py::make_tuple(

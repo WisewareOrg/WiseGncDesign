@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "Fw/Types/BasicTypes.h"
+#include "Fw/FPrimeBasicTypes.h"
 
 namespace Pins {
 
@@ -23,15 +23,18 @@ int defaultRounds();
 void registerAssertHook();
 
 //! The pins of the same names, whose docstrings say what they do; a bad argument throws as it raises in Python.
-void boot(const std::string& prm_path, const std::vector<U32>& parameter_ids);
-void uplink(const U8* packet, U64 size, U32 context);
-U8* receiveBuffer(I16 port, U64 size);
-const U8* transmitBuffer(I16 port, U64 size);
+void boot(const std::string& prm_path, const std::vector<FwPrmIdType>& parameter_ids);
+void uplink(const U8* packet, FwSizeType size, U32 context);
+U8* receiveBuffer(FwIndexType port, FwSizeType size);
+const U8* transmitBuffer(FwIndexType port, FwSizeType size);
 U32 step(U64 t_ns);
 void pump(int rounds);
 
+//! Closes the packet being filled, so the downlink holds every write so far.
+void closePacket();
+
 //! What the flight downlinked and answered since the last clear, oldest first: the packets back to back, each one's
-//! size, and the responses. `downlink` closes the packet being filled.
+//! size, and the responses.
 const std::vector<U8>& downlink();
 const std::vector<U32>& packetSizes();
 void clearDownlink();

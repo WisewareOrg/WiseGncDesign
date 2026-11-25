@@ -5,8 +5,6 @@
 #include "Fw/Types/Assert.hpp"
 #include "Os/Os.hpp"
 #include "config/FppConstantsAc.hpp"
-#define CDH_BUSCONVERTERPINS_FLIGHT
-#include "BusConverterPins.hpp"
 #include "fsw/fprime/platform/Cooperative.hpp"
 #include WISE_FSW_TOPOLOGY_HEADER
 
@@ -84,7 +82,7 @@ void registerAssertHook() {
     g_assertHook.registerHook();
 }
 
-void boot(const std::string& prm_path, const std::vector<U32>& parameter_ids) {
+void boot(const std::string& prm_path, const std::vector<FwPrmIdType>& parameter_ids) {
     if (g_booted) {
         throw std::runtime_error("already booted: power-cycle by loading a fresh copy");
     }
@@ -120,7 +118,7 @@ void boot(const std::string& prm_path, const std::vector<U32>& parameter_ids) {
     drain();
 }
 
-void uplink(const U8* packet, U64 size, U32 context) {
+void uplink(const U8* packet, FwSizeType size, U32 context) {
     Fw::ComBuffer buffer;
     if (buffer.setBuff(packet, size) != Fw::FW_SERIALIZE_OK) {
         throw std::invalid_argument("a command packet of " + std::to_string(size) + " bytes exceeds the " +
@@ -129,12 +127,12 @@ void uplink(const U8* packet, U64 size, U32 context) {
     WiseFsw::groundLink.uplink(buffer, context);
 }
 
-U8* receiveBuffer(I16 port, U64 size) {
+U8* receiveBuffer(FwIndexType port, FwSizeType size) {
     checkBufferPort(port, &Bus::LabBusDriver::hasReceiveBuffer, "receive");
     return WiseFsw::labBusDriver.makeReceiveBuffer(port, size);
 }
 
-const U8* transmitBuffer(I16 port, U64 size) {
+const U8* transmitBuffer(FwIndexType port, FwSizeType size) {
     checkBufferPort(port, &Bus::LabBusDriver::hasTransmitBuffer, "transmit");
     return WiseFsw::labBusDriver.makeTransmitBuffer(port, size);
 }
@@ -154,10 +152,14 @@ void pump(int rounds) {
     drain();
 }
 
-const std::vector<U8>& downlink() {
+void closePacket() {
+    // A step that threw left its packets in GroundLink; they come out first, so the flush has room.
     drain();
     WiseFsw::groundLink.flush();
     drain();
+}
+
+const std::vector<U8>& downlink() {
     return g_downlink;
 }
 

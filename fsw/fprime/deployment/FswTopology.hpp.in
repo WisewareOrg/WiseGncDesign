@@ -2,6 +2,7 @@
 #ifndef WISEFSW_@CONFIGURATION@FSWTOPOLOGY_HPP
 #define WISEFSW_@CONFIGURATION@FSWTOPOLOGY_HPP
 
+#include "@CONFIGURATION@FswTopologyDefs.hpp"
 #include "fsw/fprime/deployment/@CONFIGURATION@/@CONFIGURATION@FswTopologyAc.hpp"
 
 namespace WiseFsw {
