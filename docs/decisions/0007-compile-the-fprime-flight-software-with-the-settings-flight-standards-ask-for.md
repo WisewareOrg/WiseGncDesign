@@ -66,10 +66,11 @@ A setting not taken has its reason here:
   ask beyond it, such as sign conversions. Rejected.
 - **A chosen subset of the compiler's warnings.** Each one left out needs a reason, and a warning
   held back is one nobody sees the findings of. Rejected.
-- **MISRA C++ or AUTOSAR C++ as the coding standard.** MISRA C++:2023 is written for C++17 and F´
-  builds as C++14, so it cannot be met whole; AUTOSAR C++14 has been merged into it. Neither has
-  been read here whole. JSF AV C++, the Power of 10, the JPL C standard and F´'s rules state what is
-  adopted. Rejected.
+- **MISRA C++ as a coding standard.** Its text is sold, so it can't be read here; JSF AV C++ and the
+  JPL C standard build on MISRA's C guidelines. Rejected.
+- **AUTOSAR C++14.** An automotive standard, no longer developed and merged into MISRA C++; a talk
+  at an ESA workshop tailored it for space projects, and no flight program adopting it was found.
+  Rejected.
 - **Turn the warnings on one at a time as the code is cleaned.** The compiler is the first check on
   flight code, and the Power of 10 asks for it from the first day. Rejected.
 - **Hardening left to each host's compiler.** One host's has it on by default and another's does
