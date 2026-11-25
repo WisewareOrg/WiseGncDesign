@@ -16,7 +16,7 @@ fprime_add_validation_flags()
 add_compile_options(-ffp-contract=off
     -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3
     -D_GLIBCXX_ASSERTIONS -ftrivial-auto-var-init=zero -fstrict-flex-arrays=3 -fzero-init-padding-bits=all
-    "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions;-fno-threadsafe-statics>")
+    "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions;-fno-rtti;-fno-threadsafe-statics>")
 add_link_options(LINKER:--fatal-warnings,-z,relro,-z,now,-z,noexecstack)
 fprime_setup_included_code()
 # What is written and generated here meets more. F´'s headers are system headers to it.
@@ -74,8 +74,8 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
     execute_process(COMMAND "${Python_EXECUTABLE}" -m pybind11 --cmakedir
         OUTPUT_VARIABLE WISE_PYBIND11_CMAKEDIR OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
     find_package(pybind11 CONFIG REQUIRED PATHS "${WISE_PYBIND11_CMAKEDIR}")
-    # The modules Python loads are test equipment, and pybind11 needs both.
-    set_property(TARGET pybind11::pybind11 APPEND PROPERTY INTERFACE_COMPILE_OPTIONS -fexceptions -fthreadsafe-statics)
+    # The modules Python loads are test equipment, and pybind11 needs all three.
+    set_property(TARGET pybind11::pybind11 APPEND PROPERTY INTERFACE_COMPILE_OPTIONS -fexceptions -frtti -fthreadsafe-statics)
     add_custom_target(_wise_fsw)
     # Every algorithm utility with C++: the directories under algorithms/utils/ with a CMakeLists.txt,
     # each building `_<name>`, the extension its tests reach the C++ through.
@@ -110,7 +110,7 @@ add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/deployment")
 
 # What is written here meets the rest, and undoes F´'s own -Wno-unused-parameter and -Wno-vla. FPP's generated
 # sources compare a struct's or array's floats for equality.
-set(WISE_WRITTEN_OPTIONS "-isystem${CMAKE_BINARY_DIR}" -Walloc-size-larger-than=0 -Weffc++ -Wmismatched-tags -Wredundant-tags
+set(WISE_WRITTEN_OPTIONS "-isystem${CMAKE_BINARY_DIR}" -Weffc++ -Wmismatched-tags -Wredundant-tags
     -Wsuggest-override -Wunused-parameter -Wuseless-cast -Wvla)
 function(wise_source_options DIRECTORY)
     get_property(TARGETS DIRECTORY "${DIRECTORY}" PROPERTY BUILDSYSTEM_TARGETS)
@@ -124,6 +124,10 @@ function(wise_source_options DIRECTORY)
                 set(OPTIONS -Wno-float-equal)
             elseif (SOURCE MATCHES "FswTopology\\.cpp$" OR (SOURCE MATCHES "\\.cpp$" AND OURS AND NOT BUILT AND NOT FRAMEWORK))
                 set(OPTIONS ${WISE_WRITTEN_OPTIONS})
+                # An allocation is a warning in flight code; the pins hold what a flight wrote, in memory that grows.
+                if (NOT SOURCE MATCHES "/lab/pins/")
+                    list(APPEND OPTIONS -Walloc-size-larger-than=0)
+                endif ()
             else ()
                 continue()
             endif ()
