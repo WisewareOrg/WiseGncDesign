@@ -110,7 +110,7 @@ add_fprime_subdirectory("${CMAKE_CURRENT_LIST_DIR}/deployment")
 
 # What is written here meets the rest, and undoes F´'s own -Wno-unused-parameter and -Wno-vla. FPP's generated
 # sources compare a struct's or array's floats for equality.
-set(WISE_WRITTEN_OPTIONS "-isystem${CMAKE_BINARY_DIR}" -Weffc++ -Wmismatched-tags -Wredundant-tags
+set(WISE_WRITTEN_OPTIONS "-isystem${CMAKE_BINARY_DIR}" -Walloc-size-larger-than=0 -Weffc++ -Wmismatched-tags -Wredundant-tags
     -Wsuggest-override -Wunused-parameter -Wuseless-cast -Wvla)
 function(wise_source_options DIRECTORY)
     get_property(TARGETS DIRECTORY "${DIRECTORY}" PROPERTY BUILDSYSTEM_TARGETS)
