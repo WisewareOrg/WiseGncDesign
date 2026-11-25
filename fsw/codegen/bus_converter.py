@@ -199,8 +199,8 @@ _ROLE_PIN = """\
         [](const pybind11::bytes& {argument}) {{
             const std::string text = {argument};
             std::vector<U8> data(text.begin(), text.end());
-            Fw::ExternalSerializeBuffer buffer(data.data(), static_cast<FwSizeType>(data.size()));
-            buffer.setBuffLen(static_cast<FwSizeType>(data.size()));
+            Fw::ExternalSerializeBuffer buffer(data.data(), data.size());
+            buffer.setBuffLen(data.size());
             {source} msg;
             const Fw::SerializeStatus status = msg.deserializeFrom(buffer);
             if (status != Fw::FW_SERIALIZE_OK) {{
