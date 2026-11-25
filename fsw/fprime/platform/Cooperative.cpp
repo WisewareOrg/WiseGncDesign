@@ -1,8 +1,6 @@
 #include "fsw/fprime/platform/Cooperative.hpp"
 
 #include <algorithm>
-#include <stdexcept>
-#include <string>
 
 namespace Sim {
 
@@ -24,21 +22,16 @@ const Os::Queue* Cooperative::pending() const {
     return queue == this->m_queues.end() ? nullptr : *queue;
 }
 
-void Cooperative::pump(int rounds) {
+const Os::Queue* Cooperative::pump(int rounds) {
     for (int round = 0; round < rounds; round++) {
         if (this->pending() == nullptr) {
-            return;
+            return nullptr;
         }
         for (Os::Task* task : this->m_tasks) {
             task->invokeRoutine();
         }
     }
-    const Os::Queue* stuck = this->pending();
-    if (stuck != nullptr) {
-        throw std::runtime_error("queue " + std::string(stuck->getName().toChar()) + " did not drain: messages left " +
-                                 std::to_string(stuck->getMessagesAvailable()) + ", rounds " +
-                                 std::to_string(rounds));
-    }
+    return this->pending();
 }
 
 }  // namespace Sim

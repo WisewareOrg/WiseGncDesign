@@ -37,6 +37,16 @@ void checkBufferPort(FwIndexType port, bool (Bus::LabBusDriver::*has)(FwIndexTyp
     }
 }
 
+//! Runs the active components for `rounds` rounds, and raises a queue that did not drain, naming it.
+void pump(int rounds = Sim::Cooperative::MAX_ROUNDS) {
+    const Os::Queue* stuck = g_cooperative.pump(rounds);
+    if (stuck != nullptr) {
+        throw std::runtime_error("queue " + std::string(stuck->getName().toChar()) + " did not drain: messages left " +
+                                 std::to_string(stuck->getMessagesAvailable()) + ", rounds " +
+                                 std::to_string(rounds));
+    }
+}
+
 //! Raises an F´ assert in Python as a std::runtime_error carrying F´'s own text.
 class RaisingAssertHook final : public Fw::AssertHook {
   public:
@@ -141,7 +151,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         [](U64 t_ns) {
             g_stepped = true;
             WiseFsw::simTime.set(t_ns);
-            g_cooperative.pump();
+            pump();
             WiseFsw::labBusDriver.push();
             WiseFsw::simTime.tick();
             return WiseFsw::labBusDriver.takeWritten();
@@ -153,7 +163,7 @@ PYBIND11_MODULE(WISE_FSW_MODULE, m) {
         "LabBusDriver.busIn[n].");
 
     m.def(
-        "pump", [](int rounds) { g_cooperative.pump(rounds); }, py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},
+        "pump", [](int rounds) { pump(rounds); }, py::arg("rounds") = int{Sim::Cooperative::MAX_ROUNDS},
         "Runs the active components until no queue holds a message; raises RuntimeError naming a queue that "
         "still does after `rounds` rounds.");
 

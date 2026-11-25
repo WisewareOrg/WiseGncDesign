@@ -21,8 +21,8 @@ class Cooperative final : public Os::TaskRegistry, public Os::QueueRegistry {
     void registerQueue(Os::Queue* queue) override;
 
     //! Runs every task's routine, round by round, until no registered queue holds a message.
-    //! Throws std::runtime_error naming a queue that still holds messages after `rounds` rounds.
-    void pump(int rounds = MAX_ROUNDS);
+    //! Returns a queue that still holds messages after `rounds` rounds, else nullptr.
+    const Os::Queue* pump(int rounds = MAX_ROUNDS);
 
   private:
     const Os::Queue* pending() const;
