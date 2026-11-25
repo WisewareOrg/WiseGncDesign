@@ -23,6 +23,9 @@ from lab import Adapter
 NS = 1_000_000_000
 """ns per s."""
 
+MARKS = 8
+"""The marks `TestOneStepOfSeveralPackets` uplinks before its step."""
+
 
 def _health(writes: list[tuple[str, int, Any]], rate_groups: list[str]) -> list[tuple[str, int, Any]]:
     """The rate groups' writes among drained ones.
@@ -163,8 +166,6 @@ def test_the_pump_raises_naming_a_queue_its_bound_leaves_holding_messages(
 class TestOneStepOfSeveralPackets:
     """One step in which eight marks each write a channel nearly a packet wide."""
 
-    MARKS = 8
-
     @pytest.fixture(autouse=True)
     def _booted(self, mock_actuation: Any) -> None:
         """Boots `MockActuation`, and a station on it.
@@ -178,7 +179,7 @@ class TestOneStepOfSeveralPackets:
 
     def test_every_write_comes_down_once_in_the_order_written(self):
         """The step closes at least three packets, and the marks' writes come down whole, first to last."""
-        for mark in range(1, self.MARKS + 1):
+        for mark in range(1, MARKS + 1):
             self.station.uplink("actuator.mark", {}, mark)
 
         self.adapter.tick(NS, {})
@@ -188,10 +189,8 @@ class TestOneStepOfSeveralPackets:
         assert len(np.frombuffer(sizes, np.uint32)) >= 3, "the step fills several packets"
         writes = self.station.decode([downlink], ["actuator.tally", "actuator.wide"])
         wide, tally = writes["actuator.wide"], writes["actuator.tally"]
-        assert wide.values.tolist() == [
-            (1000.0 * mark + np.arange(50)).tolist() for mark in range(1, self.MARKS + 1)
-        ], "each mark's wide value comes down once, in order"
-        assert tally.values.tolist() == list(range(1, self.MARKS + 2)), (
-            "the marks' tallies and the step's keep their order"
+        assert wide.values.tolist() == [(1000.0 * mark + np.arange(50)).tolist() for mark in range(1, MARKS + 1)], (
+            "each mark's wide value comes down once, in order"
         )
-        assert wide.times.tolist() == [NS] * self.MARKS, "each wide write carries the step's time"
+        assert tally.values.tolist() == list(range(1, MARKS + 2)), "the marks' tallies and the step's keep their order"
+        assert wide.times.tolist() == [NS] * MARKS, "each wide write carries the step's time"
