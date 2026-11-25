@@ -32,15 +32,16 @@ and by the analyzers (ADR 0008 rev 1).
 | Enumerations in switches, duplicated branches, missing declarations, undefined macros, shadowing, unused parameters | Power of 10 rule 10 |
 | Exceptions off | JSF AV 208; F´ CPP-25 |
 | RTTI off | F´ CPP-25 |
-| Static guards off, floating-point contraction off | F´'s embedded ports; contraction would let the same source give different numbers on another build |
+| Static guards off | One thread runs the deployment (ADR 0003 rev 4), so a function-local static has one initialiser |
+| Floating-point contraction off | It would let the same source give different numbers on another build |
 | Warnings about allocation, with fixed-size storage for what they name | JPL rule 5, JSF AV 206, Power of 10 rule 3 |
 | Stack protector, stack-clash protection, control-flow protection, fortified libc, library assertions, zeroed variables, strict flexible arrays and padding | the OpenSSF compiler guide and gcc's own hardened set; stated so that every host compiles the same code |
 | Linker warnings as errors; read-only relocation, immediate binding, no executable stack | the same |
 | CMake deprecations as errors | Power of 10 rule 10, taken to the build itself |
 
-- **The hand-written code, the generated code and F´ are held to this.** What F´'s library or FPP's
-  output cannot meet is suppressed by the name of its flag and its place, with the reason written
-  beside it.
+- **The code written and generated here is held to every setting. F´'s library and FPP's output are
+  held to F´'s own set.** What they can't meet is suppressed by name and place, with the reason
+  written beside it.
 - **Test equipment is outside it.**
 
 A setting not taken, and why:
@@ -69,8 +70,8 @@ A setting not taken, and why:
   source would be built differently. Rejected.
 - **Hardening off, for its cost in a tick.** Flight code is fast because it is well written.
   Rejected.
-- **Freestanding C++, to take the heap away.** Eigen and F´'s host platform need the hosted library.
-  Rejected.
+- **Freestanding C++, to take the heap away.** Eigen does not build under it, nor do parts of F´'s
+  host platform. Rejected.
 - **A lower optimisation level.** No adopted standard asks for one. Rejected.
 
 ## Consequences

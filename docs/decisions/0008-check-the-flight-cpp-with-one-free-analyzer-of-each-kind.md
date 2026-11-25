@@ -39,11 +39,10 @@ the reason.
   Rejected.
 - **A commercial analyzer.** A NASA Engineering and Safety Center report recommends at least one,
   with a strict rule set on every build. The tools have to be free. Rejected.
-- **No sound analyzer, for the floating point IKOS ignores.** A bug finder looks for run-time
-  errors; a sound analyzer shows where there are none. Rejected.
+- **No sound analyzer, for the floating point IKOS ignores.** A bug finder looks for errors; a sound
+  analyzer reports that there are none. Rejected.
 - **Infer and Cobra.** Infer is a bug finder, as clang-tidy and cppcheck are; Cobra checks patterns
   in the text. Rejected.
-- **gcc's `-fanalyzer`.** gcc's manual documents it for C. Rejected.
 
 ## Consequences
 
