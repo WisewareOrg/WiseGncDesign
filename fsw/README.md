@@ -221,8 +221,8 @@ Every compiler warning is an error, in the F´ library, what FPP generates and w
 so is every linker warning and every deprecated CMake command or policy. Nothing gates the rest of what
 CMake and FPP print. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own validation set
 over everything, a wider set over what is written and generated here, the rest over what is written
-here, and the code-generation, hardening and link flags, stated so that every host compiles the same code. Flight C++ has no exceptions, so a
-`throw` is a compile error.
+here, and the code-generation, hardening and link flags, stated so that every host compiles the same
+code. Flight C++ has no exceptions, so a `throw` is a compile error.
 
 A diagnostic is silenced only here:
 
