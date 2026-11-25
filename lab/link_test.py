@@ -1,7 +1,8 @@
 """The deployment's pins through the ground station: commands up, responses and telemetry down.
 
 The command is F´'s own `cmdDisp.CMD_NO_OP`, and the writes are each `Svc.PassiveRateGroup`'s
-health channels, which every deployment has. Skipped without the deployment `just fsw` builds.
+health channels, which every deployment has. `TestOneStepOfSeveralPackets` flies the test mock's
+configuration `MockActuation`. Skipped without the deployment `just fsw` builds.
 """
 
 import math
@@ -15,7 +16,6 @@ import pytest
 
 from fsw.codegen.deployment import fpp_files
 from fsw.codegen.fpp_model import read
-from fsw.codegen.roles import Role
 from fsw.mock import MOCK
 from ground.fprime_station import FprimeStation
 from lab import Adapter
@@ -166,31 +166,30 @@ class TestOneStepOfSeveralPackets:
     MARKS = 8
 
     @pytest.fixture(autouse=True)
-    def _step(self, mock_actuation: tuple[str, Role, Any, Path]) -> None:
-        """Steps `MockActuation` once with every mark uplinked, and drains it.
+    def _booted(self, mock_actuation: Any) -> None:
+        """Boots `MockActuation`, and a station on it.
 
         Args:
-            mock_actuation: the configuration, its role, the Python build's command and the record.
+            mock_actuation: the configuration and the record it boots on.
         """
-        configuration, _, _, record = mock_actuation
-        adapter = Adapter(configuration, record, contract=MOCK)
-        adapter.boot()
-        self.station = FprimeStation(adapter, adapter.dictionary)
-        for mark in range(1, self.MARKS + 1):
-            self.station.uplink("actuator.mark", {}, mark)
-        adapter.tick(NS, {})
-        self.downlink = adapter.telemetry()
+        self.adapter = Adapter(mock_actuation.configuration, mock_actuation.record, contract=MOCK)
+        self.adapter.boot()
+        self.station = FprimeStation(self.adapter, self.adapter.dictionary)
 
     def test_every_write_comes_down_once_in_the_order_written(self):
         """The step closes at least three packets, and the marks' writes come down whole, first to last."""
-        _, sizes = self.downlink
-        assert len(np.frombuffer(sizes, np.uint32)) >= 3, "the step fills several packets"
+        for mark in range(1, self.MARKS + 1):
+            self.station.uplink("actuator.mark", {}, mark)
 
-        writes = self.station.decode([self.downlink], ["actuator.tally", "actuator.wide"])
-        times, wide = writes["actuator.wide"]
-        _, tallies = writes["actuator.tally"]
-        assert wide.tolist() == [(1000.0 * mark + np.arange(50)).tolist() for mark in range(1, self.MARKS + 1)], (
+        self.adapter.tick(NS, {})
+        downlink = self.adapter.telemetry()
+
+        _, sizes = downlink
+        assert len(np.frombuffer(sizes, np.uint32)) >= 3, "the step fills several packets"
+        writes = self.station.decode([downlink], ["actuator.tally", "actuator.wide"])
+        wide, tally = writes["actuator.wide"], writes["actuator.tally"]
+        assert wide.values.tolist() == [(1000.0 * mark + np.arange(50)).tolist() for mark in range(1, self.MARKS + 1)], (
             "each mark's wide value comes down once, in order"
         )
-        assert tallies.tolist() == list(range(1, self.MARKS + 2)), "the marks' tallies and the step's keep their order"
-        assert times.tolist() == [NS] * self.MARKS, "every write carries the step's time"
+        assert tally.values.tolist() == list(range(1, self.MARKS + 2)), "the marks' tallies and the step's keep their order"
+        assert wide.times.tolist() == [NS] * self.MARKS, "every write carries the step's time"

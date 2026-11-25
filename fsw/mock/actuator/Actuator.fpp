@@ -29,7 +29,7 @@ module MockGnc {
     @ Command responses
     command resp port cmdResponseOut
 
-    @ Counts one, as a step does
+    @ Counts one, as a step does, and writes `wide`
     sync command mark
 
     @ The steps and marks so far
