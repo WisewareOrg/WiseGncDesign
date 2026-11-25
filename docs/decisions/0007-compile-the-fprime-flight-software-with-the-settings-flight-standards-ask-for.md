@@ -63,8 +63,8 @@ and by the analyzers (ADR 0008 rev 1).
 - **`-Wpadded`.** It reports the layout of structs the compiler pads. Rejected.
 - **`-Wabi-tag`.** It reports functions whose `std::string` carries an ABI tag, which the generated
   pins return. Rejected.
-- **`-Wsuggest-attribute=const`.** It asks for a GNU attribute on constant functions, outside ISO
-  C++ (JSF AV 8). Rejected.
+- **`-Wsuggest-attribute=const`, `=pure`, `=cold`, `=malloc`, `=format` and `=returns_nonnull`.**
+  They ask for GNU attributes that hint at optimisation, outside ISO C++ (JSF AV 8). Rejected.
 - **`-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow`.** Each
   switches off a warning above that finds the fault: `-Wnull-dereference` and `-Wstrict-aliasing`,
   measured with gcc 15.3, and `-Wstrict-overflow`, as gcc's manual says. Rejected while the warning
