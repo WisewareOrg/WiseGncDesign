@@ -220,16 +220,17 @@ The reasoning is in
 Every compiler warning is an error, in the F´ library, what FPP generates and what is written here, and
 so is every linker warning and every deprecated CMake command or policy. Nothing gates the rest of what
 CMake and FPP print. `fsw/fprime/CMakeLists.txt` holds the flags in one place: F´'s own validation set
-over everything, a wider set over what is written and generated here, and the code-generation, hardening
-and link flags, stated so that every host compiles the same code. Flight C++ has no exceptions, so a
+over everything, a wider set over what is written and generated here, the rest over what is written
+here, and the code-generation, hardening and link flags, stated so that every host compiles the same code. Flight C++ has no exceptions, so a
 `throw` is a compile error.
 
 A diagnostic is silenced only here:
 
-- `-Wno-unused-parameter` and `-Wno-vla`, everywhere, by F´'s own flags: FPP gives a handler every
-  argument of its port, and `-Wstack-usage` refuses a variable-length array.
+- `-Wno-unused-parameter` and `-Wno-vla`, in F´ and generated sources, by F´'s own flags: FPP gives a
+  handler every argument of its port, and `-Wstack-usage` refuses a variable-length array.
 - `-Wno-float-equal`, in FPP-generated sources, whose structs and arrays compare floats.
-- F´'s headers, Eigen, pybind11 and Python are system headers to what is written here.
+- F´'s headers, Eigen, pybind11, Python and the generated headers are system headers to what is written
+  here.
 
 The modules Python loads are built with exceptions and thread-safe statics, which pybind11 needs. F´'s
 assert raises in Python by throwing through flight frames, whose destructors do not run, so a copy that
