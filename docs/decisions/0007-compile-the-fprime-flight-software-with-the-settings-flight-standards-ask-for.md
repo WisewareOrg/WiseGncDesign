@@ -52,7 +52,8 @@ A setting not taken has its reason here:
 
 | Setting | Reason |
 |---|---|
-| `-Waggregate-return`, `-Wmultiple-inheritance`, `-Wnamespaces`, `-Wtemplates`, `-Wpadded`, `-Wabi-tag` | They report what the code is made of, not a fault in it |
+| `-Waggregate-return`, `-Wmultiple-inheritance`, `-Wnamespaces`, `-Wtemplates`, `-Wpadded` | They report what the code is made of, not a fault in it |
+| `-Wabi-tag` | It reports the ABI tag of the `std::string` the generated pins return, not a fault in them |
 | `-Wsuggest-attribute=const`, `=pure`, `=cold`, `=malloc`, `=format`, `=returns_nonnull` | They ask for GNU attributes, outside ISO C++ (JSF AV 8) |
 | `-fno-delete-null-pointer-checks`, `-fno-strict-aliasing`, `-fno-strict-overflow` | Each switches off a warning taken above that finds the fault |
 | `-fno-use-cxa-atexit` | gcc's manual says the default is required for standard-conforming static destruction (JSF AV 8) |
