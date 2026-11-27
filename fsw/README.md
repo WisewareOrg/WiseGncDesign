@@ -215,6 +215,15 @@ True
 The reasoning is in
 [ADR 0004 rev 3](../docs/decisions/0004-hold-both-builds-to-one-fpp-contract-spoken-in-fprime-s-names.md).
 
+## Warnings and flags
+
+The flight C++ is written to the standards adopted in
+[ADR 0007 rev 1](../docs/decisions/0007-compile-the-fprime-flight-software-with-the-settings-flight-standards-ask-for.md);
+[ADR 0008 rev 1](../docs/decisions/0008-check-the-flight-cpp-with-one-free-analyzer-of-each-kind.md)
+chooses its analyzers. Every compiler, linker and CMake-deprecation warning fails the build; the flags,
+and the suppressions with their reasons, are in `fsw/fprime/CMakeLists.txt`. An allocation whose size
+gcc can see is an error; one of run-time size, as `new U8[n]` is, compiles.
+
 ## The lab adapter
 
 `lab.Adapter(configuration, prm_path, *, contract=CONTRACT)` is a configuration's WiseFsw F´

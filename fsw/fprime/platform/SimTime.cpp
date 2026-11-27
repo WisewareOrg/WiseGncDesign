@@ -15,7 +15,7 @@ void SimTime::tick() {
     this->CycleOut_out(0, t);
 }
 
-void SimTime::timeGetPort_handler(FwIndexType portNum, Fw::Time& time) {
+void SimTime::timeGetPort_handler(FwIndexType /*portNum*/, Fw::Time& time) {
     time.set(TimeBase::TB_PROC_TIME, 0, this->m_seconds, this->m_useconds);
 }
 

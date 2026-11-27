@@ -1,7 +1,8 @@
 """The deployment's pins through the ground station: commands up, responses and telemetry down.
 
 The command is F´'s own `cmdDisp.CMD_NO_OP`, and the writes are each `Svc.PassiveRateGroup`'s
-health channels, which every deployment has. Skipped without the deployment `just fsw` builds.
+health channels, which every deployment has. `TestOneStepOfSeveralPackets` flies the test mock's
+configuration `MockActuation`. Skipped without the deployment `just fsw` builds.
 """
 
 import math
@@ -15,10 +16,15 @@ import pytest
 
 from fsw.codegen.deployment import fpp_files
 from fsw.codegen.fpp_model import read
+from fsw.mock import MOCK
 from ground.fprime_station import FprimeStation
+from lab import Adapter
 
 NS = 1_000_000_000
 """ns per s."""
+
+MARKS = 8
+"""The marks `TestOneStepOfSeveralPackets` uplinks before its step."""
 
 
 def _health(writes: list[tuple[str, int, Any]], rate_groups: list[str]) -> list[tuple[str, int, Any]]:
@@ -155,3 +161,36 @@ def test_the_pump_raises_naming_a_queue_its_bound_leaves_holding_messages(
     booted.pump()
 
     assert _responses(station) == [(3, "OK")]
+
+
+class TestOneStepOfSeveralPackets:
+    """One step in which eight marks each write a channel nearly a packet wide."""
+
+    @pytest.fixture(autouse=True)
+    def _booted(self, mock_actuation: Any) -> None:
+        """Boots `MockActuation`, and a station on it.
+
+        Args:
+            mock_actuation: the configuration and the record it boots on.
+        """
+        self.adapter = Adapter(mock_actuation.configuration, mock_actuation.record, contract=MOCK)
+        self.adapter.boot()
+        self.station = FprimeStation(self.adapter, self.adapter.dictionary)
+
+    def test_every_write_comes_down_once_in_the_order_written(self):
+        """The step closes at least three packets, and the marks' writes come down whole, first to last."""
+        for mark in range(1, MARKS + 1):
+            self.station.uplink("actuator.mark", {}, mark)
+
+        self.adapter.tick(NS, {})
+        downlink = self.adapter.telemetry()
+
+        _, sizes = downlink
+        assert len(np.frombuffer(sizes, np.uint32)) >= 3, "the step fills several packets"
+        writes = self.station.decode([downlink], ["actuator.tally", "actuator.wide"])
+        wide, tally = writes["actuator.wide"], writes["actuator.tally"]
+        assert wide.values.tolist() == [(1000.0 * mark + np.arange(50)).tolist() for mark in range(1, MARKS + 1)], (
+            "each mark's wide value comes down once, in order"
+        )
+        assert tally.values.tolist() == list(range(1, MARKS + 2)), "the marks' tallies and the step's keep their order"
+        assert wide.times.tolist() == [NS] * MARKS, "each wide write carries the step's time"

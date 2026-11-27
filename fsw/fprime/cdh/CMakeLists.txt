@@ -22,6 +22,7 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
             "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.hpp"
             "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.cpp"
             "${CMAKE_CURRENT_BINARY_DIR}/BusConverterPins.hpp"
+            "${CMAKE_CURRENT_BINARY_DIR}/BusConverterPins.cpp"
         COMMAND "${Python_EXECUTABLE}" -m fsw.codegen.bus_converter "${CMAKE_CURRENT_BINARY_DIR}"
         WORKING_DIRECTORY "${FPRIME_PROJECT_ROOT}"
         DEPENDS ${WISE_CDH_INPUTS})
@@ -29,4 +30,8 @@ if (NOT DEFINED FPRIME_SUB_BUILD_TARGETS)
         "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.hpp"
         "${CMAKE_CURRENT_BINARY_DIR}/BusConverter.cpp"
         "${CMAKE_CURRENT_BINARY_DIR}/BusConverterPins.hpp")
+    # The functions of the generated test pins, whose refusals throw.
+    add_library(fsw_fprime_cdh_pins STATIC "${CMAKE_CURRENT_BINARY_DIR}/BusConverterPins.cpp")
+    target_link_libraries(fsw_fprime_cdh_pins PRIVATE fsw_fprime_cdh)
+    target_compile_options(fsw_fprime_cdh_pins PRIVATE -fexceptions)
 endif ()

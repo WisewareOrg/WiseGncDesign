@@ -69,7 +69,7 @@ filterwarnings = [
 ]
 # The F´ framework clone and the F´ build cache carry F´'s own tests, which are not this project's.
 addopts = [
-    "--import-mode=importlib", "-n", "auto", "-p", "pytester",
+    "--import-mode=importlib", "-n", "logical", "-p", "pytester",
     "--ignore=fsw/fprime/lib", "--ignore-glob=fsw/fprime/build-fprime-*",
 ]
 

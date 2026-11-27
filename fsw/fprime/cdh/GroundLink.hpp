@@ -3,8 +3,6 @@
 #ifndef CDH_GROUNDLINK_HPP
 #define CDH_GROUNDLINK_HPP
 
-#include <vector>
-
 #include "Fw/Tlm/TlmPacket.hpp"
 #include "fsw/fprime/cdh/GroundLinkComponentAc.hpp"
 
@@ -12,6 +10,13 @@ namespace Cdh {
 
 class GroundLink final : public GroundLinkComponentBase {
   public:
+    //! The command responses one step can give, between drains: each is a command's, and the dispatcher's queue
+    //! holds the commands. One more asserts.
+    static constexpr FwSizeType RESPONSES = 10;
+
+    //! Room for the telemetry packets of a step, between drains, the drain's own included. One more asserts.
+    static constexpr FwSizeType PACKETS = 32;
+
     //! One command's response: the ground's context and the Fw::CmdResponse value.
     struct Response {
         U32 context;
@@ -26,20 +31,26 @@ class GroundLink final : public GroundLinkComponentBase {
     //! Closes the packet being filled, so the downlink holds every write so far.
     void flush();
 
-    //! The packets downlinked since the last drain, back to back, oldest first.
-    const std::vector<U8>& downlinked() const { return this->m_downlink; }
+    //! The packets downlinked since the last drain, back to back, oldest first, and their bytes.
+    const U8* downlinked() const { return this->m_downlink; }
+    FwSizeType downlinkedSize() const { return this->m_bytes; }
 
-    //! Each downlinked packet's size in bytes, in the order of `downlinked`.
-    const std::vector<U32>& packetSizes() const { return this->m_sizes; }
+    //! Each downlinked packet's size in bytes, in the order of `downlinked`, and their count.
+    const U32* packetSizes() const { return this->m_sizes; }
+    FwSizeType packetCount() const { return this->m_packetCount; }
 
-    //! Empties the downlink, keeping its storage.
+    //! Empties the downlink.
     void clearDownlink() {
-        this->m_downlink.clear();
-        this->m_sizes.clear();
+        this->m_bytes = 0;
+        this->m_packetCount = 0;
     }
 
-    //! The responses since the last call, oldest first.
-    std::vector<Response> takeResponses();
+    //! The responses since the last clear, oldest first, and their count.
+    const Response* responses() const { return this->m_responses; }
+    FwSizeType responseCount() const { return this->m_responseCount; }
+
+    //! Empties the responses.
+    void clearResponses() { this->m_responseCount = 0; }
 
   private:
     void cmdResponseIn_handler(FwIndexType portNum, FwOpcodeType opCode, U32 cmdSeq,
@@ -48,10 +59,13 @@ class GroundLink final : public GroundLinkComponentBase {
 
     void resetPacket();
 
-    Fw::TlmPacket m_packet;
-    std::vector<U8> m_downlink;
-    std::vector<U32> m_sizes;
-    std::vector<Response> m_responses;
+    Fw::TlmPacket m_packet{};
+    U8 m_downlink[PACKETS * FW_COM_BUFFER_MAX_SIZE]{};
+    FwSizeType m_bytes = 0;
+    U32 m_sizes[PACKETS]{};
+    FwSizeType m_packetCount = 0;
+    Response m_responses[RESPONSES]{};
+    FwSizeType m_responseCount = 0;
 };
 
 }  // namespace Cdh

@@ -51,20 +51,22 @@ def test_each_role_has_a_cdh_pin_and_each_bus_struct_one_bus_pin(
     Args:
         converter_mock: reads the mock, edited.
     """
-    pins = render(
+    files = render(
         converter_mock(
             (
                 "    sync input port bIn",
                 "    sync input port cIn: Bus.A\n    output port cOut: Gnc.AIcd\n    sync input port bIn",
             ),
         )
-    )["BusConverterPins.hpp"]
+    )
+    pins = files["BusConverterPins.hpp"]
+    functions = files["BusConverterPins.cpp"]
     assert pins.count('"bus_A"') == 1
     assert pins.count('"bus_B"') == 1
     for role, bus in (("a", "Bus::A"), ("c", "Bus::A"), ("b", "Bus::B")):
         assert f'"cdh_{role}"' in pins
-        assert f"{bus} msg;" in pins
-        assert f"Cdh::BusConverter::convert_{role}(msg)" in pins
+        assert f"{bus} msg;" in functions
+        assert f"Cdh::BusConverter::convert_{role}(msg)" in functions
 
 
 @pytest.mark.parametrize(
